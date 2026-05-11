@@ -1,0 +1,59 @@
+// Copyright Epic Games, Inc. All Rights Reserved.
+
+#pragma once
+
+#include "CoreMinimal.h"
+#include "GameFramework/Actor.h"
+#include "UOUUmbrellaRainArea.generated.h"
+
+class UBoxComponent;
+class UMaterialInterface;
+class USceneComponent;
+class UStaticMeshComponent;
+
+// 이 클래스는 우산 플레이어가 들어가면 시간당 비 노출과 물 받기를 적용하는 테스트용 비 영역을 담당한다.
+UCLASS(meta=(DisplayName="UOU Umbrella Rain Area"))
+class AUOUUmbrellaRainArea : public AActor
+{
+	GENERATED_BODY()
+
+public:
+	AUOUUmbrellaRainArea();
+
+protected:
+	virtual void BeginPlay() override;
+	virtual void Tick(float DeltaSeconds) override;
+	virtual void OnConstruction(const FTransform& Transform) override;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Rain")
+	TObjectPtr<USceneComponent> RootScene = nullptr;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Rain")
+	TObjectPtr<UBoxComponent> RainVolume = nullptr;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Rain|Preview")
+	TObjectPtr<UStaticMeshComponent> PreviewVolumeMesh = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Preview")
+	bool bShowEditorPreview = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Preview")
+	bool bShowPreviewInGame = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Preview")
+	FVector PreviewScaleMultiplier = FVector(1.0f, 1.0f, 1.0f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Preview")
+	bool bAutoFitPreviewScaleToRainVolume = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Preview", meta = (EditCondition = "!bAutoFitPreviewScaleToRainVolume"))
+	FVector ManualPreviewRelativeScale = FVector::OneVector;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Preview")
+	TObjectPtr<UMaterialInterface> PreviewMaterial = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain", meta = (ClampMin = "0.0"))
+	float RainFillRate = 1.0f;
+
+	void ApplyPreviewSettings();
+};
