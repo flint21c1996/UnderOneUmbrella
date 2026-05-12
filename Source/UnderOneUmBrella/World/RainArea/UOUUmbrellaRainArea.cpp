@@ -54,6 +54,8 @@ void AUOUUmbrellaRainArea::BeginPlay()
 {
 	Super::BeginPlay();
 	RainFillRate = FMath::Max(0.0f, RainFillRate);
+	RainVisualIntensity = FMath::Clamp(RainVisualIntensity, 0.0f, 1.0f);
+	GroundSplashIntensityMultiplier = FMath::Max(0.0f, GroundSplashIntensityMultiplier);
 	ApplyPreviewSettings();
 	ApplyVisualEffectSettings();
 	ApplyNiagaraParameters();
@@ -64,6 +66,8 @@ void AUOUUmbrellaRainArea::OnConstruction(const FTransform& Transform)
 	Super::OnConstruction(Transform);
 
 	RainFillRate = FMath::Max(0.0f, RainFillRate);
+	RainVisualIntensity = FMath::Clamp(RainVisualIntensity, 0.0f, 1.0f);
+	GroundSplashIntensityMultiplier = FMath::Max(0.0f, GroundSplashIntensityMultiplier);
 	ApplyPreviewSettings();
 	ApplyVisualEffectSettings();
 	ApplyNiagaraParameters();
@@ -151,9 +155,22 @@ void AUOUUmbrellaRainArea::ApplyNiagaraParameters()
 		RainEffect->SetVariableVec2(RainAreaSizeParameterName, AreaSize);
 	}
 
+	if (RainEffect != nullptr && !RainIntensityParameterName.IsNone())
+	{
+		RainEffect->SetVariableFloat(
+			RainIntensityParameterName,
+			FMath::Clamp(RainVisualIntensity, 0.0f, 1.0f));
+	}
+
 	if (GroundSplashEffect != nullptr && !GroundSplashAreaSizeParameterName.IsNone())
 	{
 		GroundSplashEffect->SetVariableVec2(GroundSplashAreaSizeParameterName, AreaSize);
+	}
+
+	if (GroundSplashEffect != nullptr && !GroundSplashIntensityParameterName.IsNone())
+	{
+		const float GroundSplashIntensity = FMath::Clamp(RainVisualIntensity * GroundSplashIntensityMultiplier, 0.0f, 1.0f);
+		GroundSplashEffect->SetVariableFloat(GroundSplashIntensityParameterName, GroundSplashIntensity);
 	}
 }
 
