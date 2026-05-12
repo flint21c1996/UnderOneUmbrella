@@ -48,6 +48,7 @@ void AUOUUmbrellaRainArea::BeginPlay()
 	RainFillRate = FMath::Max(0.0f, RainFillRate);
 	RainVisualIntensity = FMath::Clamp(RainVisualIntensity, 0.0f, 1.0f);
 	GroundSplashIntensityMultiplier = FMath::Max(0.0f, GroundSplashIntensityMultiplier);
+	ResolveEnvironmentVisual();
 	ApplyPreviewSettings();
 	ApplyEnvironmentVisualGeometry();
 	ApplyEnvironmentVisualState();
@@ -60,6 +61,7 @@ void AUOUUmbrellaRainArea::OnConstruction(const FTransform& Transform)
 	RainFillRate = FMath::Max(0.0f, RainFillRate);
 	RainVisualIntensity = FMath::Clamp(RainVisualIntensity, 0.0f, 1.0f);
 	GroundSplashIntensityMultiplier = FMath::Max(0.0f, GroundSplashIntensityMultiplier);
+	ResolveEnvironmentVisual();
 	ApplyPreviewSettings();
 	ApplyEnvironmentVisualGeometry();
 	ApplyEnvironmentVisualState();
@@ -87,6 +89,26 @@ void AUOUUmbrellaRainArea::Tick(float DeltaSeconds)
 		if (UUOUUmbrellaComponent* UmbrellaComponent = OverlappingActor->FindComponentByClass<UUOUUmbrellaComponent>())
 		{
 			UmbrellaComponent->ApplyRainExposure(RainFillRate * DeltaSeconds);
+		}
+	}
+}
+
+void AUOUUmbrellaRainArea::ResolveEnvironmentVisual()
+{
+	if (EnvironmentVisual != nullptr)
+	{
+		return;
+	}
+
+	TArray<AActor*> AttachedActors;
+	GetAttachedActors(AttachedActors, true, true);
+
+	for (AActor* AttachedActor : AttachedActors)
+	{
+		if (AUOUEnvironmentVisualActor* VisualActor = Cast<AUOUEnvironmentVisualActor>(AttachedActor))
+		{
+			EnvironmentVisual = VisualActor;
+			return;
 		}
 	}
 }

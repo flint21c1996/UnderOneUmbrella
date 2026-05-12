@@ -75,6 +75,7 @@ protected:
 	float GroundSplashHeightOffset = 5.0f;
 
 	void ApplyPreviewSettings();
+	void ResolveEnvironmentVisual();
 	void ApplyEnvironmentVisualGeometry();
 	void ApplyEnvironmentVisualState();
 };
