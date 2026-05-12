@@ -35,7 +35,6 @@ public:
 protected:
 	virtual void BeginPlay() override;
 	virtual void OnConstruction(const FTransform& Transform) override;
-	virtual void Tick(float DeltaSeconds) override;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Environment Visual")
 	TObjectPtr<USceneComponent> RootScene = nullptr;
@@ -48,9 +47,6 @@ protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual")
 	bool bEnableVisuals = true;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual")
-	bool bKeepActiveEffectsAlive = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual")
 	TObjectPtr<UNiagaraSystem> PrimarySystem = nullptr;

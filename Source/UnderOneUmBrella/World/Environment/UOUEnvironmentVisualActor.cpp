@@ -7,8 +7,7 @@
 
 AUOUEnvironmentVisualActor::AUOUEnvironmentVisualActor()
 {
-	PrimaryActorTick.bCanEverTick = true;
-	PrimaryActorTick.bStartWithTickEnabled = true;
+	PrimaryActorTick.bCanEverTick = false;
 
 	RootScene = CreateDefaultSubobject<USceneComponent>(TEXT("RootScene"));
 	SetRootComponent(RootScene);
@@ -44,16 +43,6 @@ void AUOUEnvironmentVisualActor::SetVisualIntensities(float PrimaryIntensity, fl
 
 	ApplyNiagaraParameters();
 	RefreshNiagaraActivation();
-}
-
-void AUOUEnvironmentVisualActor::Tick(float DeltaSeconds)
-{
-	Super::Tick(DeltaSeconds);
-
-	if (bKeepActiveEffectsAlive)
-	{
-		RefreshNiagaraActivation();
-	}
 }
 
 void AUOUEnvironmentVisualActor::SetVisualsEnabled(bool bNewEnabled)
