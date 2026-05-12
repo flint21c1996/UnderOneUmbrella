@@ -105,12 +105,26 @@ void AUOUUmbrellaRainArea::ApplyVisualEffectSettings()
 {
 	if (RainEffect != nullptr)
 	{
-		RainEffect->SetAsset(RainSystem);
+		if (RainSystem != nullptr)
+		{
+			RainEffect->SetAsset(RainSystem);
+		}
+		else if (RainEffect->GetAsset() != nullptr)
+		{
+			RainSystem = RainEffect->GetAsset();
+		}
 	}
 
 	if (GroundSplashEffect != nullptr)
 	{
-		GroundSplashEffect->SetAsset(GroundSplashSystem);
+		if (GroundSplashSystem != nullptr)
+		{
+			GroundSplashEffect->SetAsset(GroundSplashSystem);
+		}
+		else if (GroundSplashEffect->GetAsset() != nullptr)
+		{
+			GroundSplashSystem = GroundSplashEffect->GetAsset();
+		}
 	}
 
 	ApplyVisualEffectTransforms();
@@ -178,8 +192,14 @@ void AUOUUmbrellaRainArea::ApplyNiagaraParameters()
 
 void AUOUUmbrellaRainArea::RefreshNiagaraActivation()
 {
+	UNiagaraSystem* ResolvedRainSystem = RainSystem;
+	if (ResolvedRainSystem == nullptr && RainEffect != nullptr)
+	{
+		ResolvedRainSystem = RainEffect->GetAsset();
+	}
+
 	const bool bShouldShowRain = bEnableRainVisuals
-		&& RainSystem != nullptr
+		&& ResolvedRainSystem != nullptr
 		&& RainVisualIntensity > UE_KINDA_SMALL_NUMBER;
 
 	if (RainEffect != nullptr)
@@ -196,9 +216,15 @@ void AUOUUmbrellaRainArea::RefreshNiagaraActivation()
 		}
 	}
 
+	UNiagaraSystem* ResolvedGroundSplashSystem = GroundSplashSystem;
+	if (ResolvedGroundSplashSystem == nullptr && GroundSplashEffect != nullptr)
+	{
+		ResolvedGroundSplashSystem = GroundSplashEffect->GetAsset();
+	}
+
 	const float GroundSplashIntensity = FMath::Clamp(RainVisualIntensity * GroundSplashIntensityMultiplier, 0.0f, 1.0f);
 	const bool bShouldShowGroundSplash = bEnableRainVisuals
-		&& GroundSplashSystem != nullptr
+		&& ResolvedGroundSplashSystem != nullptr
 		&& GroundSplashIntensity > UE_KINDA_SMALL_NUMBER;
 
 	if (GroundSplashEffect != nullptr)
