@@ -12,6 +12,7 @@ class UPrimitiveComponent;
 class ULocalLightComponent;
 class USceneComponent;
 class USpotLightComponent;
+class UUOULightInteractionSurfaceComponent;
 
 UCLASS(ClassGroup=(Light), meta=(BlueprintSpawnableComponent, DisplayName="UOU Light Exposure Source"))
 class UUOULightExposureSourceComponent : public UActorComponent
@@ -63,6 +64,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Collision")
 	bool bIgnoreOwner = true;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection")
+	bool bEnableReflectedLight = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection", meta = (ClampMin = "0"))
+	int32 MaxReflectionSurfacesPerTick = 4;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Debug")
 	bool bDrawDebug = false;
 
@@ -79,10 +86,16 @@ public:
 	int32 LastBlockedCount = 0;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Runtime")
+	int32 LastReflectedCount = 0;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Runtime")
 	FString LastLitTargetName = TEXT("None");
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Runtime")
 	FString LastBlockedName = TEXT("None");
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Runtime")
+	FString LastReflectorName = TEXT("None");
 
 	UFUNCTION(BlueprintCallable, Category = "Light")
 	void EmitLight(float DeltaTime);
@@ -104,12 +117,42 @@ protected:
 	float GetEffectiveInnerConeAngle(float OuterConeAngle) const;
 	FCollisionObjectQueryParams BuildReceiverObjectQueryParams() const;
 	void AppendReceivableObjects(AActor* TargetActor, UPrimitiveComponent* TargetComponent, TArray<UObject*>& OutReceivers) const;
+	void AppendLightInteractionSurfaces(AActor* TargetActor, UPrimitiveComponent* TargetComponent, TArray<UUOULightInteractionSurfaceComponent*>& OutSurfaces) const;
 	bool TryBuildExposureData(UObject* ReceiverObject, float DeltaTime, FUOULightExposureData& OutExposureData, FHitResult& OutBlockingHit) const;
 	bool HasLineOfSight(UObject* ReceiverObject, const FVector& SourcePosition, const FVector& ReceiverPosition, FHitResult& OutBlockingHit) const;
+	bool HasLineOfSightFrom(
+		UObject* ReceiverObject,
+		const FVector& TraceStart,
+		const FVector& ReceiverPosition,
+		FHitResult& OutBlockingHit,
+		const AActor* IgnoredActor,
+		const UPrimitiveComponent* IgnoredComponent) const;
+	bool TryBuildLightInteractionSurfaceHit(UUOULightInteractionSurfaceComponent* SurfaceComponent, FHitResult& OutSurfaceHit) const;
+	void EmitReflectedLightFromSurface(
+		UUOULightInteractionSurfaceComponent* SurfaceComponent,
+		const FHitResult& SurfaceHit,
+		float DeltaTime,
+		TSet<UObject*>& LitReceivers);
+	bool TryBuildReflectedExposureData(
+		UObject* ReceiverObject,
+		const UUOULightInteractionSurfaceComponent* SurfaceComponent,
+		const FVector& ReflectionOrigin,
+		const FVector& ReflectedDirection,
+		float SurfaceIntensity,
+		float DeltaTime,
+		FUOULightExposureData& OutExposureData,
+		FHitResult& OutBlockingHit) const;
 	float CalculateIntensity(float Distance, float Angle, float& OutDistanceFactor, float& OutAngleFactor) const;
+	float CalculateConeFactor(float Angle, float ConeAngle) const;
 	void DrawDebugSource() const;
 	void DrawDebugResult(const FUOULightExposureData& ExposureData, bool bLit) const;
 	void DrawDebugBlockedHit(const FVector& SourcePosition, const FHitResult& BlockingHit) const;
+	void DrawDebugReflectionRay(const FVector& Start, const FVector& End) const;
+	static void AddActorPrimitiveComponentsToIgnore(
+		const AActor* Actor,
+		FCollisionQueryParams& QueryParams,
+		const UPrimitiveComponent* ComponentToKeep = nullptr);
+	static void AddReceiverSelfComponentsToIgnore(UObject* ReceiverObject, FCollisionQueryParams& QueryParams);
 	static AActor* ResolveReceiverActor(UObject* ReceiverObject);
 	static FString GetReceivableDebugName(UObject* ReceiverObject);
 };
