@@ -55,6 +55,7 @@ void AUOUUmbrellaRainArea::BeginPlay()
 	Super::BeginPlay();
 	RainFillRate = FMath::Max(0.0f, RainFillRate);
 	ApplyPreviewSettings();
+	ApplyVisualEffectSettings();
 }
 
 void AUOUUmbrellaRainArea::OnConstruction(const FTransform& Transform)
@@ -63,6 +64,7 @@ void AUOUUmbrellaRainArea::OnConstruction(const FTransform& Transform)
 
 	RainFillRate = FMath::Max(0.0f, RainFillRate);
 	ApplyPreviewSettings();
+	ApplyVisualEffectSettings();
 }
 
 void AUOUUmbrellaRainArea::Tick(float DeltaSeconds)
@@ -88,6 +90,19 @@ void AUOUUmbrellaRainArea::Tick(float DeltaSeconds)
 		{
 			UmbrellaComponent->ApplyRainExposure(RainFillRate * DeltaSeconds);
 		}
+	}
+}
+
+void AUOUUmbrellaRainArea::ApplyVisualEffectSettings()
+{
+	if (RainEffect != nullptr)
+	{
+		RainEffect->SetAsset(RainSystem);
+	}
+
+	if (GroundSplashEffect != nullptr)
+	{
+		GroundSplashEffect->SetAsset(GroundSplashSystem);
 	}
 }
 
