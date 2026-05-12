@@ -12,6 +12,7 @@ class UNiagaraComponent;
 class UNiagaraSystem;
 class USceneComponent;
 class UStaticMeshComponent;
+class AUOUEnvironmentVisualActor;
 
 // 이 클래스는 우산 플레이어가 들어가면 시간당 비 노출과 물 받기를 적용하는 테스트용 비 영역을 담당한다.
 UCLASS(meta=(DisplayName="UOU Umbrella Rain Area"))
@@ -41,6 +42,9 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Rain|Visual")
 	TObjectPtr<UNiagaraComponent> GroundSplashEffect = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Visual")
+	TObjectPtr<AUOUEnvironmentVisualActor> EnvironmentVisual = nullptr;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Preview")
 	bool bShowEditorPreview = true;
