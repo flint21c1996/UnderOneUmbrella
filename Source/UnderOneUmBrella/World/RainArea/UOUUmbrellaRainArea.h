@@ -98,6 +98,7 @@ protected:
 
 	void ApplyPreviewSettings();
 	void ApplyVisualEffectSettings();
+	void ApplyVisualEffectTransforms();
 	void ApplyNiagaraParameters();
 	void RefreshNiagaraActivation();
 };

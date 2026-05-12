@@ -104,6 +104,34 @@ void AUOUUmbrellaRainArea::ApplyVisualEffectSettings()
 	{
 		GroundSplashEffect->SetAsset(GroundSplashSystem);
 	}
+
+	ApplyVisualEffectTransforms();
+}
+
+void AUOUUmbrellaRainArea::ApplyVisualEffectTransforms()
+{
+	if (RainVolume == nullptr)
+	{
+		return;
+	}
+
+	const FVector VolumeCenter = RainVolume->GetRelativeLocation();
+	const FRotator VolumeRotation = RainVolume->GetRelativeRotation();
+	const FVector BoxExtent = RainVolume->GetUnscaledBoxExtent();
+
+	if (RainEffect != nullptr)
+	{
+		const FVector RainLocalPosition = VolumeCenter + FVector(0.0f, 0.0f, BoxExtent.Z + RainEmitterTopPadding);
+		RainEffect->SetRelativeLocation(RainLocalPosition);
+		RainEffect->SetRelativeRotation(VolumeRotation);
+	}
+
+	if (GroundSplashEffect != nullptr)
+	{
+		const FVector GroundSplashLocalPosition = VolumeCenter - FVector(0.0f, 0.0f, BoxExtent.Z - GroundSplashHeightOffset);
+		GroundSplashEffect->SetRelativeLocation(GroundSplashLocalPosition);
+		GroundSplashEffect->SetRelativeRotation(VolumeRotation);
+	}
 }
 
 void AUOUUmbrellaRainArea::ApplyPreviewSettings()
