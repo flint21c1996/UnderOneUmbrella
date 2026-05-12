@@ -7,7 +7,8 @@
 
 AUOUEnvironmentVisualActor::AUOUEnvironmentVisualActor()
 {
-	PrimaryActorTick.bCanEverTick = false;
+	PrimaryActorTick.bCanEverTick = true;
+	PrimaryActorTick.bStartWithTickEnabled = true;
 
 	RootScene = CreateDefaultSubobject<USceneComponent>(TEXT("RootScene"));
 	SetRootComponent(RootScene);
@@ -43,6 +44,16 @@ void AUOUEnvironmentVisualActor::SetVisualIntensities(float PrimaryIntensity, fl
 
 	ApplyNiagaraParameters();
 	RefreshNiagaraActivation();
+}
+
+void AUOUEnvironmentVisualActor::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+
+	if (bKeepActiveEffectsAlive)
+	{
+		RefreshNiagaraActivation();
+	}
 }
 
 void AUOUEnvironmentVisualActor::SetVisualsEnabled(bool bNewEnabled)
@@ -109,11 +120,11 @@ void AUOUEnvironmentVisualActor::RefreshNiagaraActivation()
 	{
 		PrimaryEffect->SetVisibility(bShouldShowPrimary, true);
 
-		if (bShouldShowPrimary)
+		if (bShouldShowPrimary && !PrimaryEffect->IsActive())
 		{
 			PrimaryEffect->Activate(true);
 		}
-		else
+		else if (!bShouldShowPrimary && PrimaryEffect->IsActive())
 		{
 			PrimaryEffect->Deactivate();
 		}
@@ -128,11 +139,11 @@ void AUOUEnvironmentVisualActor::RefreshNiagaraActivation()
 	{
 		SecondaryEffect->SetVisibility(bShouldShowSecondary, true);
 
-		if (bShouldShowSecondary)
+		if (bShouldShowSecondary && !SecondaryEffect->IsActive())
 		{
 			SecondaryEffect->Activate(true);
 		}
-		else
+		else if (!bShouldShowSecondary && SecondaryEffect->IsActive())
 		{
 			SecondaryEffect->Deactivate();
 		}
