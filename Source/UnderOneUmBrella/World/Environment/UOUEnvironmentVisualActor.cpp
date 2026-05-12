@@ -33,6 +33,7 @@ void AUOUEnvironmentVisualActor::ConfigureRainVisual(
 	CachedAreaSize = AreaSize;
 
 	ApplyVisualEffectTransforms();
+	ApplyNiagaraParameters();
 }
 
 void AUOUEnvironmentVisualActor::BeginPlay()
@@ -41,6 +42,7 @@ void AUOUEnvironmentVisualActor::BeginPlay()
 
 	ApplyVisualEffectSettings();
 	ApplyVisualEffectTransforms();
+	ApplyNiagaraParameters();
 }
 
 void AUOUEnvironmentVisualActor::OnConstruction(const FTransform& Transform)
@@ -49,6 +51,7 @@ void AUOUEnvironmentVisualActor::OnConstruction(const FTransform& Transform)
 
 	ApplyVisualEffectSettings();
 	ApplyVisualEffectTransforms();
+	ApplyNiagaraParameters();
 }
 
 void AUOUEnvironmentVisualActor::ApplyVisualEffectSettings()
@@ -75,6 +78,19 @@ void AUOUEnvironmentVisualActor::ApplyVisualEffectSettings()
 		{
 			SecondarySystem = SecondaryEffect->GetAsset();
 		}
+	}
+}
+
+void AUOUEnvironmentVisualActor::ApplyNiagaraParameters()
+{
+	if (PrimaryEffect != nullptr && !PrimaryAreaSizeParameterName.IsNone())
+	{
+		PrimaryEffect->SetVariableVec2(PrimaryAreaSizeParameterName, CachedAreaSize);
+	}
+
+	if (SecondaryEffect != nullptr && !SecondaryAreaSizeParameterName.IsNone())
+	{
+		SecondaryEffect->SetVariableVec2(SecondaryAreaSizeParameterName, CachedAreaSize);
 	}
 }
 

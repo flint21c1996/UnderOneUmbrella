@@ -60,6 +60,13 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Environment Visual|Runtime")
 	FVector2D CachedAreaSize = FVector2D::ZeroVector;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual|Parameters")
+	FName PrimaryAreaSizeParameterName = TEXT("User.RainAreaSize");
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual|Parameters")
+	FName SecondaryAreaSizeParameterName = TEXT("User.GroundSplashAreaSize");
+
 	void ApplyVisualEffectSettings();
 	void ApplyVisualEffectTransforms();
+	void ApplyNiagaraParameters();
 };
