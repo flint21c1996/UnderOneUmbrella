@@ -36,6 +36,10 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void OnConstruction(const FTransform& Transform) override;
 
+#if WITH_EDITOR
+	virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
+#endif
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Environment Visual")
 	TObjectPtr<USceneComponent> RootScene = nullptr;
 
@@ -53,6 +57,12 @@ protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual")
 	TObjectPtr<UNiagaraSystem> SecondarySystem = nullptr;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UNiagaraSystem> LastAppliedPrimarySystem = nullptr;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UNiagaraSystem> LastAppliedSecondarySystem = nullptr;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Environment Visual|Runtime")
 	FVector CachedPrimaryLocalPosition = FVector::ZeroVector;
@@ -84,7 +94,7 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual|Parameters")
 	FName SecondaryIntensityParameterName = TEXT("User.GroundSplashIntensity");
 
-	void ApplyVisualEffectSettings();
+	void ApplyVisualEffectSettings(bool bForcePrimarySystem = false, bool bForceSecondarySystem = false);
 	void ApplyVisualEffectTransforms();
 	void ApplyNiagaraParameters();
 	void RefreshNiagaraActivation();
