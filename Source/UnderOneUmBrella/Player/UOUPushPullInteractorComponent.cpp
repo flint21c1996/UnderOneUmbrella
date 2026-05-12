@@ -1,0 +1,525 @@
+// Copyright Epic Games, Inc. All Rights Reserved.
+
+#include "Player/UOUPushPullInteractorComponent.h"
+
+#include "Components/PrimitiveComponent.h"
+#include "DrawDebugHelpers.h"
+#include "Engine/Engine.h"
+#include "Engine/OverlapResult.h"
+#include "Engine/World.h"
+#include "GameFramework/PlayerController.h"
+#include "GameFramework/CharacterMovementComponent.h"
+#include "Player/UOUCharacter.h"
+#include "Player/UOUCameraControllerComponent.h"
+#include "Player/UOUInteractionComponent.h"
+#include "Player/UOUUmbrellaComponent.h"
+#include "Puzzle/PushPull/UOUPushPullObjectComponent.h"
+
+namespace UOUPushPullInteractorPrivate
+{
+	constexpr float MoveInputThreshold = 0.0001f;
+	constexpr float MinCardinalGrabDot = 0.82f;
+	const int32 DebugMessageKey = 0x5A11;
+}
+
+UUOUPushPullInteractorComponent::UUOUPushPullInteractorComponent()
+{
+	PrimaryComponentTick.bCanEverTick = true;
+}
+
+void UUOUPushPullInteractorComponent::BeginPlay()
+{
+	Super::BeginPlay();
+
+	CandidateSearchRadius = FMath::Max(0.0f, CandidateSearchRadius);
+	ReleaseDistanceBuffer = FMath::Max(0.0f, ReleaseDistanceBuffer);
+	ResolveOwnerReferences();
+}
+
+void UUOUPushPullInteractorComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
+{
+	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+
+	UpdateMovementInputFallback();
+	RefreshCandidate();
+
+	if (GrabbedObject != nullptr)
+	{
+		if (!bGrabInputHeld || !CanUseHands() || IsGrabbedObjectTooFar())
+		{
+			EndGrab();
+		}
+		else if (OwnerCharacter != nullptr)
+		{
+			const float MaxWalkSpeed = OwnerCharacter->GetCharacterMovement() != nullptr
+				? OwnerCharacter->GetCharacterMovement()->MaxWalkSpeed
+				: 0.0f;
+			GrabbedObject->SetHorizontalVelocity(GrabbedMoveAxis * CurrentAxisInput * MaxWalkSpeed);
+			ApplyGrabbedRotation();
+		}
+	}
+
+	UpdateScreenDebug();
+	DrawWorldDebug();
+}
+
+void UUOUPushPullInteractorComponent::HandleGrabPressed()
+{
+	bGrabInputHeld = true;
+	LastFailureReason = TEXT("Grab Pressed");
+	if (GrabbedObject == nullptr)
+	{
+		TryBeginGrab();
+	}
+}
+
+void UUOUPushPullInteractorComponent::HandleGrabReleased()
+{
+	bGrabInputHeld = false;
+	EndGrab();
+}
+
+bool UUOUPushPullInteractorComponent::HandleMoveInput(const FVector2D& MovementVector, float MovementYaw)
+{
+	if (GrabbedObject == nullptr || OwnerCharacter == nullptr)
+	{
+		return false;
+	}
+
+	const FRotator YawRotation(0.0f, MovementYaw, 0.0f);
+	const FVector ForwardDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
+	const FVector RightDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y);
+	const FVector CameraRelativeMove = ForwardDirection * MovementVector.Y + RightDirection * MovementVector.X;
+
+	CurrentAxisInput = FVector::DotProduct(CameraRelativeMove, GrabbedMoveAxis);
+	if (FMath::Abs(CurrentAxisInput) > UOUPushPullInteractorPrivate::MoveInputThreshold)
+	{
+		OwnerCharacter->AddMovementInput(GrabbedMoveAxis, CurrentAxisInput);
+	}
+	else
+	{
+		CurrentAxisInput = 0.0f;
+	}
+
+	return true;
+}
+
+void UUOUPushPullInteractorComponent::RefreshCandidate()
+{
+	CurrentCandidateObject = nullptr;
+
+	if (GrabbedObject != nullptr)
+	{
+		CurrentCandidateObject = GrabbedObject;
+		return;
+	}
+
+	CurrentCandidateObject = FindBestCandidate();
+}
+
+bool UUOUPushPullInteractorComponent::CanUseHands() const
+{
+	if (OwnerCharacter == nullptr)
+	{
+		return false;
+	}
+
+	if (bRequireGrounded && OwnerCharacter->GetCharacterMovement() != nullptr && !OwnerCharacter->GetCharacterMovement()->IsMovingOnGround())
+	{
+		return false;
+	}
+
+	if (!bRequireClosedUmbrella || UmbrellaComponent == nullptr || !UmbrellaComponent->HasUmbrella())
+	{
+		return true;
+	}
+
+	return UmbrellaComponent->IsClosed();
+}
+
+bool UUOUPushPullInteractorComponent::IsGrabbedObjectTooFar() const
+{
+	if (GrabbedObject == nullptr || InteractionComponent == nullptr || OwnerCharacter == nullptr)
+	{
+		return false;
+	}
+
+	const float AllowedDistance = InteractionComponent->InteractionRange + ReleaseDistanceBuffer;
+	return FVector::Dist2D(OwnerCharacter->GetActorLocation(), GrabbedObject->GetGrabReferenceLocation()) > AllowedDistance;
+}
+
+void UUOUPushPullInteractorComponent::TryBeginGrab()
+{
+	if (OwnerCharacter == nullptr)
+	{
+		LastFailureReason = TEXT("No OwnerCharacter");
+		return;
+	}
+
+	if (CurrentCandidateObject == nullptr)
+	{
+		LastFailureReason = TEXT("No Candidate");
+		return;
+	}
+
+	if (!CanUseHands())
+	{
+		LastFailureReason = TEXT("Hands Blocked");
+		return;
+	}
+
+	FVector MoveAxis = FVector::ZeroVector;
+	if (!TryResolveGrabAxis(CurrentCandidateObject, MoveAxis))
+	{
+		LastFailureReason = TEXT("Invalid Grab Axis");
+		return;
+	}
+
+	if (!CurrentCandidateObject->TryBeginGrab(OwnerCharacter))
+	{
+		LastFailureReason = TEXT("Object Rejected Grab");
+		return;
+	}
+
+	GrabbedObject = CurrentCandidateObject;
+	GrabbedMoveAxis = MoveAxis;
+	CurrentAxisInput = 0.0f;
+	LastFailureReason = TEXT("Grabbed");
+
+	if (UCharacterMovementComponent* CharacterMovement = OwnerCharacter->GetCharacterMovement())
+	{
+		bCachedOrientRotationToMovement = CharacterMovement->bOrientRotationToMovement;
+		CharacterMovement->bOrientRotationToMovement = false;
+		CharacterMovement->StopMovementImmediately();
+	}
+
+	ApplyGrabbedRotation();
+}
+
+void UUOUPushPullInteractorComponent::EndGrab()
+{
+	if (OwnerCharacter != nullptr && OwnerCharacter->GetCharacterMovement() != nullptr)
+	{
+		OwnerCharacter->GetCharacterMovement()->bOrientRotationToMovement = bCachedOrientRotationToMovement;
+	}
+
+	if (GrabbedObject != nullptr)
+	{
+		GrabbedObject->EndGrab(OwnerCharacter);
+	}
+
+	GrabbedObject = nullptr;
+	GrabbedMoveAxis = FVector::ZeroVector;
+	CurrentAxisInput = 0.0f;
+	if (bGrabInputHeld)
+	{
+		LastFailureReason = TEXT("Grab Ended");
+	}
+}
+
+void UUOUPushPullInteractorComponent::ApplyGrabbedRotation() const
+{
+	if (OwnerCharacter == nullptr || GrabbedMoveAxis.IsNearlyZero())
+	{
+		return;
+	}
+
+	const FRotator DesiredRotation = FRotationMatrix::MakeFromX(-GrabbedMoveAxis).Rotator();
+	OwnerCharacter->SetActorRotation(FRotator(0.0f, DesiredRotation.Yaw, 0.0f));
+}
+
+void UUOUPushPullInteractorComponent::ResolveOwnerReferences()
+{
+	OwnerCharacter = Cast<AUOUCharacter>(GetOwner());
+	InteractionComponent = GetOwner() != nullptr ? GetOwner()->FindComponentByClass<UUOUInteractionComponent>() : nullptr;
+	UmbrellaComponent = GetOwner() != nullptr ? GetOwner()->FindComponentByClass<UUOUUmbrellaComponent>() : nullptr;
+}
+
+void UUOUPushPullInteractorComponent::UpdateMovementInputFallback()
+{
+	if (GrabbedObject == nullptr || OwnerCharacter == nullptr || !OwnerCharacter->IsLocallyControlled())
+	{
+		return;
+	}
+
+	APlayerController* PlayerController = Cast<APlayerController>(OwnerCharacter->GetController());
+	if (PlayerController == nullptr)
+	{
+		return;
+	}
+
+	FVector2D MovementVector = FVector2D::ZeroVector;
+	if (PlayerController->IsInputKeyDown(EKeys::W) || PlayerController->IsInputKeyDown(EKeys::Up))
+	{
+		MovementVector.Y += 1.0f;
+	}
+	if (PlayerController->IsInputKeyDown(EKeys::S) || PlayerController->IsInputKeyDown(EKeys::Down))
+	{
+		MovementVector.Y -= 1.0f;
+	}
+	if (PlayerController->IsInputKeyDown(EKeys::D) || PlayerController->IsInputKeyDown(EKeys::Right))
+	{
+		MovementVector.X += 1.0f;
+	}
+	if (PlayerController->IsInputKeyDown(EKeys::A) || PlayerController->IsInputKeyDown(EKeys::Left))
+	{
+		MovementVector.X -= 1.0f;
+	}
+
+	if (!MovementVector.IsNearlyZero())
+	{
+		MovementVector = MovementVector.GetSafeNormal();
+	}
+
+	float MovementYaw = 0.0f;
+	if (const UUOUCameraControllerComponent* CameraController = OwnerCharacter->GetCameraControllerComponent())
+	{
+		MovementYaw = CameraController->GetMovementYaw();
+	}
+
+	const FRotator YawRotation(0.0f, MovementYaw, 0.0f);
+	const FVector ForwardDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
+	const FVector RightDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y);
+	const FVector CameraRelativeMove = ForwardDirection * MovementVector.Y + RightDirection * MovementVector.X;
+
+	CurrentAxisInput = FVector::DotProduct(CameraRelativeMove, GrabbedMoveAxis);
+	if (FMath::Abs(CurrentAxisInput) <= UOUPushPullInteractorPrivate::MoveInputThreshold)
+	{
+		CurrentAxisInput = 0.0f;
+	}
+}
+
+void UUOUPushPullInteractorComponent::UpdateScreenDebug() const
+{
+	if (!bShowScreenDebug || GEngine == nullptr)
+	{
+		return;
+	}
+
+	const FString CandidateName = CurrentCandidateObject != nullptr ? CurrentCandidateObject->GetOwner()->GetName() : TEXT("None");
+	const FString GrabbedName = GrabbedObject != nullptr ? GrabbedObject->GetOwner()->GetName() : TEXT("None");
+	const FString UmbrellaStateText = UmbrellaComponent == nullptr
+		? TEXT("No UmbrellaComponent")
+		: (UmbrellaComponent->HasUmbrella()
+			? (UmbrellaComponent->IsClosed() ? TEXT("Closed") : TEXT("Not Closed"))
+			: TEXT("No Umbrella"));
+	const FString DebugText = FString::Printf(
+		TEXT("PushPull Candidate: %s\nGrabbed: %s\nHeld: %s\nCanUseHands: %s\nUmbrella: %s\nAxisInput: %.2f\nLast Result: %s"),
+		*CandidateName,
+		*GrabbedName,
+		bGrabInputHeld ? TEXT("Yes") : TEXT("No"),
+		CanUseHands() ? TEXT("Yes") : TEXT("No"),
+		*UmbrellaStateText,
+		CurrentAxisInput,
+		*LastFailureReason);
+
+	GEngine->AddOnScreenDebugMessage(UOUPushPullInteractorPrivate::DebugMessageKey, 0.0f, FColor::Orange, DebugText);
+}
+
+void UUOUPushPullInteractorComponent::DrawWorldDebug() const
+{
+	if (!bShowWorldDebug)
+	{
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	if (World == nullptr)
+	{
+		return;
+	}
+
+	const FVector DetectionOrigin = GetDetectionOriginLocation();
+	const FColor SearchColor = CurrentCandidateObject != nullptr ? FColor::Green : FColor::Cyan;
+	DrawDebugSphere(World, DetectionOrigin, CandidateSearchRadius, 24, SearchColor, false, 0.0f, 0, 1.5f);
+
+	if (CurrentCandidateObject != nullptr)
+	{
+		const FVector CandidateLocation = CurrentCandidateObject->GetGrabReferenceLocation();
+		DrawDebugLine(World, DetectionOrigin, CandidateLocation, FColor::Yellow, false, 0.0f, 0, 2.0f);
+		DrawDebugSphere(World, CandidateLocation, 14.0f, 12, FColor::Yellow, false, 0.0f, 0, 1.5f);
+	}
+
+	if (GrabbedObject != nullptr)
+	{
+		const FVector GrabbedLocation = GrabbedObject->GetGrabReferenceLocation();
+		DrawDebugDirectionalArrow(
+			World,
+			GrabbedLocation,
+			GrabbedLocation + GrabbedMoveAxis * 100.0f,
+			25.0f,
+			FColor::Orange,
+			false,
+			0.0f,
+			0,
+			3.0f);
+	}
+}
+
+bool UUOUPushPullInteractorComponent::TryResolveGrabAxis(UUOUPushPullObjectComponent* TargetObject, FVector& OutMoveAxis) const
+{
+	OutMoveAxis = FVector::ZeroVector;
+
+	if (OwnerCharacter == nullptr || TargetObject == nullptr)
+	{
+		return false;
+	}
+
+	const UPrimitiveComponent* TargetPrimitive = TargetObject->GetTargetPrimitive();
+	if (TargetPrimitive == nullptr)
+	{
+		return false;
+	}
+
+	FVector ToPlayer = OwnerCharacter->GetActorLocation() - TargetPrimitive->GetComponentLocation();
+	ToPlayer.Z = 0.0f;
+	if (ToPlayer.SizeSquared() <= UOUPushPullInteractorPrivate::MoveInputThreshold)
+	{
+		return false;
+	}
+
+	ToPlayer.Normalize();
+
+	const FVector Right = GetHorizontalAxis(TargetPrimitive->GetRightVector(), FVector::RightVector);
+	const FVector Forward = GetHorizontalAxis(TargetPrimitive->GetForwardVector(), FVector::ForwardVector);
+
+	FVector BestAxis = Right;
+	float BestDot = FVector::DotProduct(ToPlayer, Right);
+	CheckBetterAxis(-Right, ToPlayer, BestAxis, BestDot);
+	CheckBetterAxis(Forward, ToPlayer, BestAxis, BestDot);
+	CheckBetterAxis(-Forward, ToPlayer, BestAxis, BestDot);
+
+	if (BestDot < UOUPushPullInteractorPrivate::MinCardinalGrabDot)
+	{
+		return false;
+	}
+
+	OutMoveAxis = BestAxis;
+	return true;
+}
+
+UUOUPushPullObjectComponent* UUOUPushPullInteractorComponent::FindBestCandidate() const
+{
+	if (OwnerCharacter == nullptr)
+	{
+		return nullptr;
+	}
+
+	UWorld* World = GetWorld();
+	if (World == nullptr)
+	{
+		return nullptr;
+	}
+
+	TArray<FOverlapResult> OverlapResults;
+	FCollisionObjectQueryParams ObjectQueryParams;
+	if (bDetectWorldDynamic)
+	{
+		ObjectQueryParams.AddObjectTypesToQuery(ECC_WorldDynamic);
+	}
+
+	if (bDetectPhysicsBody)
+	{
+		ObjectQueryParams.AddObjectTypesToQuery(ECC_PhysicsBody);
+	}
+
+	if (bDetectPuzzleWeight)
+	{
+		ObjectQueryParams.AddObjectTypesToQuery(ECC_GameTraceChannel1);
+	}
+
+	if (ObjectQueryParams.IsValid() == false)
+	{
+		ObjectQueryParams.AddObjectTypesToQuery(ECC_WorldDynamic);
+		ObjectQueryParams.AddObjectTypesToQuery(ECC_PhysicsBody);
+	}
+
+	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(PushPullCandidateOverlap), false, OwnerCharacter);
+	QueryParams.AddIgnoredActor(OwnerCharacter);
+
+	const FVector DetectionOrigin = GetDetectionOriginLocation();
+	const FCollisionShape SearchShape = FCollisionShape::MakeSphere(CandidateSearchRadius);
+	if (!World->OverlapMultiByObjectType(OverlapResults, DetectionOrigin, FQuat::Identity, ObjectQueryParams, SearchShape, QueryParams))
+	{
+		return nullptr;
+	}
+
+	UUOUPushPullObjectComponent* BestCandidate = nullptr;
+	float BestDistanceSquared = TNumericLimits<float>::Max();
+
+	for (const FOverlapResult& OverlapResult : OverlapResults)
+	{
+		AActor* CandidateOwner = OverlapResult.GetActor();
+		if (CandidateOwner == nullptr)
+		{
+			continue;
+		}
+
+		UUOUPushPullObjectComponent* CandidateObject = CandidateOwner->FindComponentByClass<UUOUPushPullObjectComponent>();
+		if (CandidateObject == nullptr || !CandidateObject->CanGrab(OwnerCharacter))
+		{
+			continue;
+		}
+
+		FVector ResolvedAxis = FVector::ZeroVector;
+		if (!TryResolveGrabAxis(CandidateObject, ResolvedAxis))
+		{
+			continue;
+		}
+
+		const float DistanceSquared = FVector::DistSquared2D(DetectionOrigin, CandidateObject->GetGrabReferenceLocation());
+		if (DistanceSquared >= BestDistanceSquared)
+		{
+			continue;
+		}
+
+		BestDistanceSquared = DistanceSquared;
+		BestCandidate = CandidateObject;
+	}
+
+	return BestCandidate;
+}
+
+FVector UUOUPushPullInteractorComponent::GetDetectionOriginLocation() const
+{
+	if (InteractionComponent != nullptr)
+	{
+		if (InteractionComponent->DetectionOrigin != nullptr)
+		{
+			return InteractionComponent->DetectionOrigin->GetComponentLocation();
+		}
+
+		if (OwnerCharacter != nullptr)
+		{
+			return OwnerCharacter->GetActorLocation() + InteractionComponent->DetectionOffset;
+		}
+	}
+
+	if (OwnerCharacter != nullptr)
+	{
+		return OwnerCharacter->GetActorLocation() + FVector(50.0f, 0.0f, 40.0f);
+	}
+
+	return FVector::ZeroVector;
+}
+
+void UUOUPushPullInteractorComponent::CheckBetterAxis(const FVector& Axis, const FVector& ToPlayer, FVector& BestAxis, float& BestDot)
+{
+	const float Dot = FVector::DotProduct(ToPlayer, Axis);
+	if (Dot > BestDot)
+	{
+		BestAxis = Axis;
+		BestDot = Dot;
+	}
+}
+
+FVector UUOUPushPullInteractorComponent::GetHorizontalAxis(FVector Axis, const FVector& Fallback)
+{
+	Axis.Z = 0.0f;
+	if (Axis.SizeSquared() <= UOUPushPullInteractorPrivate::MoveInputThreshold)
+	{
+		return Fallback;
+	}
+
+	return Axis.GetSafeNormal();
+}
