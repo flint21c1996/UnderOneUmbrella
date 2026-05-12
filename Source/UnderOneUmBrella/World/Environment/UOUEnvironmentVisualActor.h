@@ -20,6 +20,9 @@ public:
 	AUOUEnvironmentVisualActor();
 
 protected:
+	virtual void BeginPlay() override;
+	virtual void OnConstruction(const FTransform& Transform) override;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Environment Visual")
 	TObjectPtr<USceneComponent> RootScene = nullptr;
 
@@ -37,4 +40,6 @@ protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual")
 	TObjectPtr<UNiagaraSystem> SecondarySystem = nullptr;
+
+	void ApplyVisualEffectSettings();
 };
