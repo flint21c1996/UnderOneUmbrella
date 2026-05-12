@@ -59,6 +59,7 @@ void AUOUUmbrellaRainArea::BeginPlay()
 	ApplyPreviewSettings();
 	ApplyVisualEffectSettings();
 	ApplyNiagaraParameters();
+	RefreshNiagaraActivation();
 }
 
 void AUOUUmbrellaRainArea::OnConstruction(const FTransform& Transform)
@@ -71,6 +72,7 @@ void AUOUUmbrellaRainArea::OnConstruction(const FTransform& Transform)
 	ApplyPreviewSettings();
 	ApplyVisualEffectSettings();
 	ApplyNiagaraParameters();
+	RefreshNiagaraActivation();
 }
 
 void AUOUUmbrellaRainArea::Tick(float DeltaSeconds)
@@ -171,6 +173,46 @@ void AUOUUmbrellaRainArea::ApplyNiagaraParameters()
 	{
 		const float GroundSplashIntensity = FMath::Clamp(RainVisualIntensity * GroundSplashIntensityMultiplier, 0.0f, 1.0f);
 		GroundSplashEffect->SetVariableFloat(GroundSplashIntensityParameterName, GroundSplashIntensity);
+	}
+}
+
+void AUOUUmbrellaRainArea::RefreshNiagaraActivation()
+{
+	const bool bShouldShowRain = bEnableRainVisuals
+		&& RainSystem != nullptr
+		&& RainVisualIntensity > UE_KINDA_SMALL_NUMBER;
+
+	if (RainEffect != nullptr)
+	{
+		RainEffect->SetVisibility(bShouldShowRain, true);
+
+		if (bShouldShowRain)
+		{
+			RainEffect->Activate(true);
+		}
+		else
+		{
+			RainEffect->Deactivate();
+		}
+	}
+
+	const float GroundSplashIntensity = FMath::Clamp(RainVisualIntensity * GroundSplashIntensityMultiplier, 0.0f, 1.0f);
+	const bool bShouldShowGroundSplash = bEnableRainVisuals
+		&& GroundSplashSystem != nullptr
+		&& GroundSplashIntensity > UE_KINDA_SMALL_NUMBER;
+
+	if (GroundSplashEffect != nullptr)
+	{
+		GroundSplashEffect->SetVisibility(bShouldShowGroundSplash, true);
+
+		if (bShouldShowGroundSplash)
+		{
+			GroundSplashEffect->Activate(true);
+		}
+		else
+		{
+			GroundSplashEffect->Deactivate();
+		}
 	}
 }
 
