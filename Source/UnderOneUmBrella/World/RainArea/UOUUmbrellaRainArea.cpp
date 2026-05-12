@@ -7,6 +7,7 @@
 #include "Components/StaticMeshComponent.h"
 #include "GameFramework/Actor.h"
 #include "Materials/MaterialInterface.h"
+#include "NiagaraComponent.h"
 #include "Player/UOUUmbrellaComponent.h"
 #include "UObject/ConstructorHelpers.h"
 
@@ -32,6 +33,14 @@ AUOUUmbrellaRainArea::AUOUUmbrellaRainArea()
 	PreviewVolumeMesh->SetCastShadow(false);
 	PreviewVolumeMesh->SetHiddenInGame(false);
 	PreviewVolumeMesh->SetVisibility(true);
+
+	RainEffect = CreateDefaultSubobject<UNiagaraComponent>(TEXT("RainEffect"));
+	RainEffect->SetupAttachment(RootScene);
+	RainEffect->SetAutoActivate(false);
+
+	GroundSplashEffect = CreateDefaultSubobject<UNiagaraComponent>(TEXT("GroundSplashEffect"));
+	GroundSplashEffect->SetupAttachment(RootScene);
+	GroundSplashEffect->SetAutoActivate(false);
 
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeMeshFinder(TEXT("/Engine/BasicShapes/Cube.Cube"));
 	if (CubeMeshFinder.Succeeded())
