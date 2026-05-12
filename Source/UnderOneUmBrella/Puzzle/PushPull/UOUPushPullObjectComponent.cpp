@@ -16,6 +16,8 @@ void UUOUPushPullObjectComponent::BeginPlay()
 
 	MaxHorizontalSpeed = FMath::Max(0.0f, MaxHorizontalSpeed);
 	ResolveTargetPrimitive();
+	CacheBasePhysicsLocks();
+	ApplyGrabStateConstraints(false);
 }
 
 bool UUOUPushPullObjectComponent::CanGrab(AActor* Interactor) const
@@ -37,6 +39,7 @@ bool UUOUPushPullObjectComponent::TryBeginGrab(AActor* Interactor)
 
 	CurrentGrabber = Interactor;
 	bIsGrabbed = true;
+	ApplyGrabStateConstraints(true);
 	return true;
 }
 
@@ -50,6 +53,7 @@ void UUOUPushPullObjectComponent::EndGrab(AActor* Interactor)
 	CurrentGrabber = nullptr;
 	bIsGrabbed = false;
 	StopHorizontalMotion();
+	ApplyGrabStateConstraints(false);
 }
 
 FVector UUOUPushPullObjectComponent::SetHorizontalVelocity(FVector HorizontalVelocity)
@@ -68,6 +72,21 @@ FVector UUOUPushPullObjectComponent::SetHorizontalVelocity(FVector HorizontalVel
 	const FVector CurrentVelocity = TargetPrimitive->GetPhysicsLinearVelocity();
 	TargetPrimitive->SetPhysicsLinearVelocity(FVector(HorizontalVelocity.X, HorizontalVelocity.Y, CurrentVelocity.Z));
 	return HorizontalVelocity;
+}
+
+FVector UUOUPushPullObjectComponent::GetGrabReferenceLocation() const
+{
+	if (TargetPrimitive != nullptr)
+	{
+		return TargetPrimitive->GetComponentLocation();
+	}
+
+	if (const AActor* Owner = GetOwner())
+	{
+		return Owner->GetActorLocation();
+	}
+
+	return FVector::ZeroVector;
 }
 
 void UUOUPushPullObjectComponent::ResolveTargetPrimitive()
@@ -95,6 +114,30 @@ void UUOUPushPullObjectComponent::ResolveTargetPrimitive()
 			}
 		}
 	}
+}
+
+void UUOUPushPullObjectComponent::CacheBasePhysicsLocks()
+{
+	if (TargetPrimitive == nullptr)
+	{
+		return;
+	}
+
+	bBaseLockXTranslation = TargetPrimitive->BodyInstance.bLockXTranslation;
+	bBaseLockYTranslation = TargetPrimitive->BodyInstance.bLockYTranslation;
+}
+
+void UUOUPushPullObjectComponent::ApplyGrabStateConstraints(bool bCanMoveHorizontally)
+{
+	if (TargetPrimitive == nullptr)
+	{
+		return;
+	}
+
+	TargetPrimitive->SetConstraintMode(EDOFMode::SixDOF);
+	TargetPrimitive->BodyInstance.bLockXTranslation = bCanMoveHorizontally ? bBaseLockXTranslation : true;
+	TargetPrimitive->BodyInstance.bLockYTranslation = bCanMoveHorizontally ? bBaseLockYTranslation : true;
+	TargetPrimitive->RecreatePhysicsState();
 }
 
 void UUOUPushPullObjectComponent::StopHorizontalMotion()
