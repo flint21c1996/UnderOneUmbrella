@@ -56,6 +56,7 @@ void AUOUUmbrellaRainArea::BeginPlay()
 	RainFillRate = FMath::Max(0.0f, RainFillRate);
 	ApplyPreviewSettings();
 	ApplyVisualEffectSettings();
+	ApplyNiagaraParameters();
 }
 
 void AUOUUmbrellaRainArea::OnConstruction(const FTransform& Transform)
@@ -65,6 +66,7 @@ void AUOUUmbrellaRainArea::OnConstruction(const FTransform& Transform)
 	RainFillRate = FMath::Max(0.0f, RainFillRate);
 	ApplyPreviewSettings();
 	ApplyVisualEffectSettings();
+	ApplyNiagaraParameters();
 }
 
 void AUOUUmbrellaRainArea::Tick(float DeltaSeconds)
@@ -131,6 +133,27 @@ void AUOUUmbrellaRainArea::ApplyVisualEffectTransforms()
 		const FVector GroundSplashLocalPosition = VolumeCenter - FVector(0.0f, 0.0f, BoxExtent.Z - GroundSplashHeightOffset);
 		GroundSplashEffect->SetRelativeLocation(GroundSplashLocalPosition);
 		GroundSplashEffect->SetRelativeRotation(VolumeRotation);
+	}
+}
+
+void AUOUUmbrellaRainArea::ApplyNiagaraParameters()
+{
+	if (RainVolume == nullptr)
+	{
+		return;
+	}
+
+	const FVector BoxExtent = RainVolume->GetUnscaledBoxExtent();
+	const FVector2D AreaSize(BoxExtent.X * 2.0f, BoxExtent.Y * 2.0f);
+
+	if (RainEffect != nullptr && !RainAreaSizeParameterName.IsNone())
+	{
+		RainEffect->SetVariableVec2(RainAreaSizeParameterName, AreaSize);
+	}
+
+	if (GroundSplashEffect != nullptr && !GroundSplashAreaSizeParameterName.IsNone())
+	{
+		GroundSplashEffect->SetVariableVec2(GroundSplashAreaSizeParameterName, AreaSize);
 	}
 }
 
