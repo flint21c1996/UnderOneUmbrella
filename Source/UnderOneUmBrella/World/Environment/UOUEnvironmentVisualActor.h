@@ -29,6 +29,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Environment Visual")
 	void SetVisualIntensities(float PrimaryIntensity, float SecondaryIntensity);
 
+	UFUNCTION(BlueprintCallable, Category = "Environment Visual")
+	void SetVisualsEnabled(bool bNewEnabled);
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void OnConstruction(const FTransform& Transform) override;
@@ -84,4 +87,5 @@ protected:
 	void ApplyVisualEffectSettings();
 	void ApplyVisualEffectTransforms();
 	void ApplyNiagaraParameters();
+	void RefreshNiagaraActivation();
 };

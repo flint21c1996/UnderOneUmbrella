@@ -42,6 +42,13 @@ void AUOUEnvironmentVisualActor::SetVisualIntensities(float PrimaryIntensity, fl
 	CachedSecondaryIntensity = FMath::Clamp(SecondaryIntensity, 0.0f, 1.0f);
 
 	ApplyNiagaraParameters();
+	RefreshNiagaraActivation();
+}
+
+void AUOUEnvironmentVisualActor::SetVisualsEnabled(bool bNewEnabled)
+{
+	bEnableVisuals = bNewEnabled;
+	RefreshNiagaraActivation();
 }
 
 void AUOUEnvironmentVisualActor::BeginPlay()
@@ -51,6 +58,7 @@ void AUOUEnvironmentVisualActor::BeginPlay()
 	ApplyVisualEffectSettings();
 	ApplyVisualEffectTransforms();
 	ApplyNiagaraParameters();
+	RefreshNiagaraActivation();
 }
 
 void AUOUEnvironmentVisualActor::OnConstruction(const FTransform& Transform)
@@ -60,6 +68,7 @@ void AUOUEnvironmentVisualActor::OnConstruction(const FTransform& Transform)
 	ApplyVisualEffectSettings();
 	ApplyVisualEffectTransforms();
 	ApplyNiagaraParameters();
+	RefreshNiagaraActivation();
 }
 
 void AUOUEnvironmentVisualActor::ApplyVisualEffectSettings()
@@ -85,6 +94,47 @@ void AUOUEnvironmentVisualActor::ApplyVisualEffectSettings()
 		else if (SecondaryEffect->GetAsset() != nullptr)
 		{
 			SecondarySystem = SecondaryEffect->GetAsset();
+		}
+	}
+}
+
+void AUOUEnvironmentVisualActor::RefreshNiagaraActivation()
+{
+	const bool bShouldShowPrimary = bEnableVisuals
+		&& PrimaryEffect != nullptr
+		&& PrimaryEffect->GetAsset() != nullptr
+		&& CachedPrimaryIntensity > UE_KINDA_SMALL_NUMBER;
+
+	if (PrimaryEffect != nullptr)
+	{
+		PrimaryEffect->SetVisibility(bShouldShowPrimary, true);
+
+		if (bShouldShowPrimary)
+		{
+			PrimaryEffect->Activate(true);
+		}
+		else
+		{
+			PrimaryEffect->Deactivate();
+		}
+	}
+
+	const bool bShouldShowSecondary = bEnableVisuals
+		&& SecondaryEffect != nullptr
+		&& SecondaryEffect->GetAsset() != nullptr
+		&& CachedSecondaryIntensity > UE_KINDA_SMALL_NUMBER;
+
+	if (SecondaryEffect != nullptr)
+	{
+		SecondaryEffect->SetVisibility(bShouldShowSecondary, true);
+
+		if (bShouldShowSecondary)
+		{
+			SecondaryEffect->Activate(true);
+		}
+		else
+		{
+			SecondaryEffect->Deactivate();
 		}
 	}
 }
