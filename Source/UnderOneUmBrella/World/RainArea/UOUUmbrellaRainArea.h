@@ -8,8 +8,6 @@
 
 class UBoxComponent;
 class UMaterialInterface;
-class UNiagaraComponent;
-class UNiagaraSystem;
 class USceneComponent;
 class UStaticMeshComponent;
 class AUOUEnvironmentVisualActor;
@@ -36,12 +34,6 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Rain|Preview")
 	TObjectPtr<UStaticMeshComponent> PreviewVolumeMesh = nullptr;
-
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Rain|Visual")
-	TObjectPtr<UNiagaraComponent> RainEffect = nullptr;
-
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Rain|Visual")
-	TObjectPtr<UNiagaraComponent> GroundSplashEffect = nullptr;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Visual")
 	TObjectPtr<AUOUEnvironmentVisualActor> EnvironmentVisual = nullptr;
@@ -70,12 +62,6 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Visual")
 	bool bEnableRainVisuals = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Visual")
-	TObjectPtr<UNiagaraSystem> RainSystem = nullptr;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Visual")
-	TObjectPtr<UNiagaraSystem> GroundSplashSystem = nullptr;
-
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Visual", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float RainVisualIntensity = 1.0f;
 
@@ -88,23 +74,7 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Visual", meta = (ClampMin = "0.0"))
 	float GroundSplashHeightOffset = 5.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Visual|Parameters")
-	FName RainIntensityParameterName = TEXT("User.RainIntensity");
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Visual|Parameters")
-	FName RainAreaSizeParameterName = TEXT("User.RainAreaSize");
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Visual|Parameters")
-	FName GroundSplashIntensityParameterName = TEXT("User.GroundSplashIntensity");
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Visual|Parameters")
-	FName GroundSplashAreaSizeParameterName = TEXT("User.GroundSplashAreaSize");
-
 	void ApplyPreviewSettings();
-	void ApplyVisualEffectSettings();
-	void ApplyVisualEffectTransforms();
-	void ApplyNiagaraParameters();
-	void RefreshNiagaraActivation();
 	void ApplyEnvironmentVisualGeometry();
 	void ApplyEnvironmentVisualState();
 };

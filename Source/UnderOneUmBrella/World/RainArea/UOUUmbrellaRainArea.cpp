@@ -7,7 +7,6 @@
 #include "Components/StaticMeshComponent.h"
 #include "GameFramework/Actor.h"
 #include "Materials/MaterialInterface.h"
-#include "NiagaraComponent.h"
 #include "Player/UOUUmbrellaComponent.h"
 #include "UObject/ConstructorHelpers.h"
 #include "World/Environment/UOUEnvironmentVisualActor.h"
@@ -35,14 +34,6 @@ AUOUUmbrellaRainArea::AUOUUmbrellaRainArea()
 	PreviewVolumeMesh->SetHiddenInGame(false);
 	PreviewVolumeMesh->SetVisibility(true);
 
-	RainEffect = CreateDefaultSubobject<UNiagaraComponent>(TEXT("RainEffect"));
-	RainEffect->SetupAttachment(RootScene);
-	RainEffect->SetAutoActivate(false);
-
-	GroundSplashEffect = CreateDefaultSubobject<UNiagaraComponent>(TEXT("GroundSplashEffect"));
-	GroundSplashEffect->SetupAttachment(RootScene);
-	GroundSplashEffect->SetAutoActivate(false);
-
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeMeshFinder(TEXT("/Engine/BasicShapes/Cube.Cube"));
 	if (CubeMeshFinder.Succeeded())
 	{
@@ -58,9 +49,6 @@ void AUOUUmbrellaRainArea::BeginPlay()
 	RainVisualIntensity = FMath::Clamp(RainVisualIntensity, 0.0f, 1.0f);
 	GroundSplashIntensityMultiplier = FMath::Max(0.0f, GroundSplashIntensityMultiplier);
 	ApplyPreviewSettings();
-	ApplyVisualEffectSettings();
-	ApplyNiagaraParameters();
-	RefreshNiagaraActivation();
 	ApplyEnvironmentVisualGeometry();
 	ApplyEnvironmentVisualState();
 }
@@ -73,9 +61,6 @@ void AUOUUmbrellaRainArea::OnConstruction(const FTransform& Transform)
 	RainVisualIntensity = FMath::Clamp(RainVisualIntensity, 0.0f, 1.0f);
 	GroundSplashIntensityMultiplier = FMath::Max(0.0f, GroundSplashIntensityMultiplier);
 	ApplyPreviewSettings();
-	ApplyVisualEffectSettings();
-	ApplyNiagaraParameters();
-	RefreshNiagaraActivation();
 	ApplyEnvironmentVisualGeometry();
 	ApplyEnvironmentVisualState();
 }
@@ -102,147 +87,6 @@ void AUOUUmbrellaRainArea::Tick(float DeltaSeconds)
 		if (UUOUUmbrellaComponent* UmbrellaComponent = OverlappingActor->FindComponentByClass<UUOUUmbrellaComponent>())
 		{
 			UmbrellaComponent->ApplyRainExposure(RainFillRate * DeltaSeconds);
-		}
-	}
-}
-
-void AUOUUmbrellaRainArea::ApplyVisualEffectSettings()
-{
-	if (RainEffect != nullptr)
-	{
-		if (RainSystem != nullptr)
-		{
-			RainEffect->SetAsset(RainSystem);
-		}
-		else if (RainEffect->GetAsset() != nullptr)
-		{
-			RainSystem = RainEffect->GetAsset();
-		}
-	}
-
-	if (GroundSplashEffect != nullptr)
-	{
-		if (GroundSplashSystem != nullptr)
-		{
-			GroundSplashEffect->SetAsset(GroundSplashSystem);
-		}
-		else if (GroundSplashEffect->GetAsset() != nullptr)
-		{
-			GroundSplashSystem = GroundSplashEffect->GetAsset();
-		}
-	}
-
-	ApplyVisualEffectTransforms();
-}
-
-void AUOUUmbrellaRainArea::ApplyVisualEffectTransforms()
-{
-	if (RainVolume == nullptr)
-	{
-		return;
-	}
-
-	const FVector VolumeCenter = RainVolume->GetRelativeLocation();
-	const FRotator VolumeRotation = RainVolume->GetRelativeRotation();
-	const FVector BoxExtent = RainVolume->GetUnscaledBoxExtent();
-
-	if (RainEffect != nullptr)
-	{
-		const FVector RainLocalPosition = VolumeCenter + FVector(0.0f, 0.0f, BoxExtent.Z + RainEmitterTopPadding);
-		RainEffect->SetRelativeLocation(RainLocalPosition);
-		RainEffect->SetRelativeRotation(VolumeRotation);
-	}
-
-	if (GroundSplashEffect != nullptr)
-	{
-		const FVector GroundSplashLocalPosition = VolumeCenter - FVector(0.0f, 0.0f, BoxExtent.Z - GroundSplashHeightOffset);
-		GroundSplashEffect->SetRelativeLocation(GroundSplashLocalPosition);
-		GroundSplashEffect->SetRelativeRotation(VolumeRotation);
-	}
-}
-
-void AUOUUmbrellaRainArea::ApplyNiagaraParameters()
-{
-	if (RainVolume == nullptr)
-	{
-		return;
-	}
-
-	const FVector BoxExtent = RainVolume->GetUnscaledBoxExtent();
-	const FVector2D AreaSize(BoxExtent.X * 2.0f, BoxExtent.Y * 2.0f);
-
-	if (RainEffect != nullptr && !RainAreaSizeParameterName.IsNone())
-	{
-		RainEffect->SetVariableVec2(RainAreaSizeParameterName, AreaSize);
-	}
-
-	if (RainEffect != nullptr && !RainIntensityParameterName.IsNone())
-	{
-		RainEffect->SetVariableFloat(
-			RainIntensityParameterName,
-			FMath::Clamp(RainVisualIntensity, 0.0f, 1.0f));
-	}
-
-	if (GroundSplashEffect != nullptr && !GroundSplashAreaSizeParameterName.IsNone())
-	{
-		GroundSplashEffect->SetVariableVec2(GroundSplashAreaSizeParameterName, AreaSize);
-	}
-
-	if (GroundSplashEffect != nullptr && !GroundSplashIntensityParameterName.IsNone())
-	{
-		const float GroundSplashIntensity = FMath::Clamp(RainVisualIntensity * GroundSplashIntensityMultiplier, 0.0f, 1.0f);
-		GroundSplashEffect->SetVariableFloat(GroundSplashIntensityParameterName, GroundSplashIntensity);
-	}
-}
-
-void AUOUUmbrellaRainArea::RefreshNiagaraActivation()
-{
-	UNiagaraSystem* ResolvedRainSystem = RainSystem;
-	if (ResolvedRainSystem == nullptr && RainEffect != nullptr)
-	{
-		ResolvedRainSystem = RainEffect->GetAsset();
-	}
-
-	const bool bShouldShowRain = bEnableRainVisuals
-		&& ResolvedRainSystem != nullptr
-		&& RainVisualIntensity > UE_KINDA_SMALL_NUMBER;
-
-	if (RainEffect != nullptr)
-	{
-		RainEffect->SetVisibility(bShouldShowRain, true);
-
-		if (bShouldShowRain)
-		{
-			RainEffect->Activate(true);
-		}
-		else
-		{
-			RainEffect->Deactivate();
-		}
-	}
-
-	UNiagaraSystem* ResolvedGroundSplashSystem = GroundSplashSystem;
-	if (ResolvedGroundSplashSystem == nullptr && GroundSplashEffect != nullptr)
-	{
-		ResolvedGroundSplashSystem = GroundSplashEffect->GetAsset();
-	}
-
-	const float GroundSplashIntensity = FMath::Clamp(RainVisualIntensity * GroundSplashIntensityMultiplier, 0.0f, 1.0f);
-	const bool bShouldShowGroundSplash = bEnableRainVisuals
-		&& ResolvedGroundSplashSystem != nullptr
-		&& GroundSplashIntensity > UE_KINDA_SMALL_NUMBER;
-
-	if (GroundSplashEffect != nullptr)
-	{
-		GroundSplashEffect->SetVisibility(bShouldShowGroundSplash, true);
-
-		if (bShouldShowGroundSplash)
-		{
-			GroundSplashEffect->Activate(true);
-		}
-		else
-		{
-			GroundSplashEffect->Deactivate();
 		}
 	}
 }
