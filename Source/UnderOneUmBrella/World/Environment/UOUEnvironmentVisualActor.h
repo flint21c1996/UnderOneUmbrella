@@ -19,6 +19,13 @@ class AUOUEnvironmentVisualActor : public AActor
 public:
 	AUOUEnvironmentVisualActor();
 
+	UFUNCTION(BlueprintCallable, Category = "Environment Visual|Rain")
+	void ConfigureRainVisual(
+		const FVector& RainLocalPosition,
+		const FVector& GroundSplashLocalPosition,
+		const FRotator& EffectLocalRotation,
+		const FVector2D& AreaSize);
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void OnConstruction(const FTransform& Transform) override;
@@ -41,5 +48,18 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual")
 	TObjectPtr<UNiagaraSystem> SecondarySystem = nullptr;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Environment Visual|Runtime")
+	FVector CachedPrimaryLocalPosition = FVector::ZeroVector;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Environment Visual|Runtime")
+	FVector CachedSecondaryLocalPosition = FVector::ZeroVector;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Environment Visual|Runtime")
+	FRotator CachedEffectLocalRotation = FRotator::ZeroRotator;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Environment Visual|Runtime")
+	FVector2D CachedAreaSize = FVector2D::ZeroVector;
+
 	void ApplyVisualEffectSettings();
+	void ApplyVisualEffectTransforms();
 };
