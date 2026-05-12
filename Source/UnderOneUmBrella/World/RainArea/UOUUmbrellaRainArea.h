@@ -106,4 +106,5 @@ protected:
 	void ApplyNiagaraParameters();
 	void RefreshNiagaraActivation();
 	void ApplyEnvironmentVisualGeometry();
+	void ApplyEnvironmentVisualState();
 };

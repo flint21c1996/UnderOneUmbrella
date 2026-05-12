@@ -62,6 +62,7 @@ void AUOUUmbrellaRainArea::BeginPlay()
 	ApplyNiagaraParameters();
 	RefreshNiagaraActivation();
 	ApplyEnvironmentVisualGeometry();
+	ApplyEnvironmentVisualState();
 }
 
 void AUOUUmbrellaRainArea::OnConstruction(const FTransform& Transform)
@@ -76,6 +77,7 @@ void AUOUUmbrellaRainArea::OnConstruction(const FTransform& Transform)
 	ApplyNiagaraParameters();
 	RefreshNiagaraActivation();
 	ApplyEnvironmentVisualGeometry();
+	ApplyEnvironmentVisualState();
 }
 
 void AUOUUmbrellaRainArea::Tick(float DeltaSeconds)
@@ -269,6 +271,20 @@ void AUOUUmbrellaRainArea::ApplyEnvironmentVisualGeometry()
 		GroundSplashLocalPosition,
 		EffectLocalRotation,
 		AreaSize);
+}
+
+void AUOUUmbrellaRainArea::ApplyEnvironmentVisualState()
+{
+	if (EnvironmentVisual == nullptr)
+	{
+		return;
+	}
+
+	const float PrimaryIntensity = FMath::Clamp(RainVisualIntensity, 0.0f, 1.0f);
+	const float SecondaryIntensity = FMath::Clamp(RainVisualIntensity * GroundSplashIntensityMultiplier, 0.0f, 1.0f);
+
+	EnvironmentVisual->SetVisualIntensities(PrimaryIntensity, SecondaryIntensity);
+	EnvironmentVisual->SetVisualsEnabled(bEnableRainVisuals);
 }
 
 void AUOUUmbrellaRainArea::ApplyPreviewSettings()
