@@ -26,6 +26,9 @@ public:
 		const FRotator& EffectLocalRotation,
 		const FVector2D& AreaSize);
 
+	UFUNCTION(BlueprintCallable, Category = "Environment Visual")
+	void SetVisualIntensities(float PrimaryIntensity, float SecondaryIntensity);
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void OnConstruction(const FTransform& Transform) override;
@@ -60,11 +63,23 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Environment Visual|Runtime")
 	FVector2D CachedAreaSize = FVector2D::ZeroVector;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Environment Visual|Runtime")
+	float CachedPrimaryIntensity = 1.0f;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Environment Visual|Runtime")
+	float CachedSecondaryIntensity = 1.0f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual|Parameters")
 	FName PrimaryAreaSizeParameterName = TEXT("User.RainAreaSize");
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual|Parameters")
 	FName SecondaryAreaSizeParameterName = TEXT("User.GroundSplashAreaSize");
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual|Parameters")
+	FName PrimaryIntensityParameterName = TEXT("User.RainIntensity");
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual|Parameters")
+	FName SecondaryIntensityParameterName = TEXT("User.GroundSplashIntensity");
 
 	void ApplyVisualEffectSettings();
 	void ApplyVisualEffectTransforms();

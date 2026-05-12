@@ -36,6 +36,14 @@ void AUOUEnvironmentVisualActor::ConfigureRainVisual(
 	ApplyNiagaraParameters();
 }
 
+void AUOUEnvironmentVisualActor::SetVisualIntensities(float PrimaryIntensity, float SecondaryIntensity)
+{
+	CachedPrimaryIntensity = FMath::Clamp(PrimaryIntensity, 0.0f, 1.0f);
+	CachedSecondaryIntensity = FMath::Clamp(SecondaryIntensity, 0.0f, 1.0f);
+
+	ApplyNiagaraParameters();
+}
+
 void AUOUEnvironmentVisualActor::BeginPlay()
 {
 	Super::BeginPlay();
@@ -88,9 +96,19 @@ void AUOUEnvironmentVisualActor::ApplyNiagaraParameters()
 		PrimaryEffect->SetVariableVec2(PrimaryAreaSizeParameterName, CachedAreaSize);
 	}
 
+	if (PrimaryEffect != nullptr && !PrimaryIntensityParameterName.IsNone())
+	{
+		PrimaryEffect->SetVariableFloat(PrimaryIntensityParameterName, CachedPrimaryIntensity);
+	}
+
 	if (SecondaryEffect != nullptr && !SecondaryAreaSizeParameterName.IsNone())
 	{
 		SecondaryEffect->SetVariableVec2(SecondaryAreaSizeParameterName, CachedAreaSize);
+	}
+
+	if (SecondaryEffect != nullptr && !SecondaryIntensityParameterName.IsNone())
+	{
+		SecondaryEffect->SetVariableFloat(SecondaryIntensityParameterName, CachedSecondaryIntensity);
 	}
 }
 
