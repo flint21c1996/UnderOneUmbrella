@@ -10,6 +10,7 @@
 #include "NiagaraComponent.h"
 #include "Player/UOUUmbrellaComponent.h"
 #include "UObject/ConstructorHelpers.h"
+#include "World/Environment/UOUEnvironmentVisualActor.h"
 
 AUOUUmbrellaRainArea::AUOUUmbrellaRainArea()
 {
@@ -60,6 +61,7 @@ void AUOUUmbrellaRainArea::BeginPlay()
 	ApplyVisualEffectSettings();
 	ApplyNiagaraParameters();
 	RefreshNiagaraActivation();
+	ApplyEnvironmentVisualGeometry();
 }
 
 void AUOUUmbrellaRainArea::OnConstruction(const FTransform& Transform)
@@ -73,6 +75,7 @@ void AUOUUmbrellaRainArea::OnConstruction(const FTransform& Transform)
 	ApplyVisualEffectSettings();
 	ApplyNiagaraParameters();
 	RefreshNiagaraActivation();
+	ApplyEnvironmentVisualGeometry();
 }
 
 void AUOUUmbrellaRainArea::Tick(float DeltaSeconds)
@@ -240,6 +243,32 @@ void AUOUUmbrellaRainArea::RefreshNiagaraActivation()
 			GroundSplashEffect->Deactivate();
 		}
 	}
+}
+
+void AUOUUmbrellaRainArea::ApplyEnvironmentVisualGeometry()
+{
+	if (EnvironmentVisual == nullptr || RainVolume == nullptr)
+	{
+		return;
+	}
+
+	const FVector BoxExtent = RainVolume->GetScaledBoxExtent();
+	const FVector VolumeCenter = RainVolume->GetComponentLocation();
+	const FVector VolumeUp = RainVolume->GetUpVector();
+	const FVector RainWorldPosition = VolumeCenter + VolumeUp * (BoxExtent.Z + RainEmitterTopPadding);
+	const FVector GroundSplashWorldPosition = VolumeCenter - VolumeUp * (BoxExtent.Z - GroundSplashHeightOffset);
+
+	const FTransform VisualTransform = EnvironmentVisual->GetActorTransform();
+	const FVector RainLocalPosition = VisualTransform.InverseTransformPosition(RainWorldPosition);
+	const FVector GroundSplashLocalPosition = VisualTransform.InverseTransformPosition(GroundSplashWorldPosition);
+	const FRotator EffectLocalRotation = (VisualTransform.GetRotation().Inverse() * RainVolume->GetComponentQuat()).Rotator();
+	const FVector2D AreaSize(BoxExtent.X * 2.0f, BoxExtent.Y * 2.0f);
+
+	EnvironmentVisual->ConfigureRainVisual(
+		RainLocalPosition,
+		GroundSplashLocalPosition,
+		EffectLocalRotation,
+		AreaSize);
 }
 
 void AUOUUmbrellaRainArea::ApplyPreviewSettings()

@@ -105,4 +105,5 @@ protected:
 	void ApplyVisualEffectTransforms();
 	void ApplyNiagaraParameters();
 	void RefreshNiagaraActivation();
+	void ApplyEnvironmentVisualGeometry();
 };
