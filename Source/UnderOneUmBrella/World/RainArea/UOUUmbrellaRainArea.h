@@ -76,6 +76,7 @@ protected:
 
 	void ApplyPreviewSettings();
 	void ResolveEnvironmentVisual();
+	void ApplyEnvironmentVisualSettings();
 	void ApplyEnvironmentVisualGeometry();
 	void ApplyEnvironmentVisualState();
 };

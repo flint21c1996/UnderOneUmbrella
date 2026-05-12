@@ -50,8 +50,7 @@ void AUOUUmbrellaRainArea::BeginPlay()
 	GroundSplashIntensityMultiplier = FMath::Max(0.0f, GroundSplashIntensityMultiplier);
 	ResolveEnvironmentVisual();
 	ApplyPreviewSettings();
-	ApplyEnvironmentVisualGeometry();
-	ApplyEnvironmentVisualState();
+	ApplyEnvironmentVisualSettings();
 }
 
 void AUOUUmbrellaRainArea::OnConstruction(const FTransform& Transform)
@@ -63,8 +62,7 @@ void AUOUUmbrellaRainArea::OnConstruction(const FTransform& Transform)
 	GroundSplashIntensityMultiplier = FMath::Max(0.0f, GroundSplashIntensityMultiplier);
 	ResolveEnvironmentVisual();
 	ApplyPreviewSettings();
-	ApplyEnvironmentVisualGeometry();
-	ApplyEnvironmentVisualState();
+	ApplyEnvironmentVisualSettings();
 }
 
 void AUOUUmbrellaRainArea::Tick(float DeltaSeconds)
@@ -111,6 +109,12 @@ void AUOUUmbrellaRainArea::ResolveEnvironmentVisual()
 			return;
 		}
 	}
+}
+
+void AUOUUmbrellaRainArea::ApplyEnvironmentVisualSettings()
+{
+	ApplyEnvironmentVisualGeometry();
+	ApplyEnvironmentVisualState();
 }
 
 void AUOUUmbrellaRainArea::ApplyEnvironmentVisualGeometry()
