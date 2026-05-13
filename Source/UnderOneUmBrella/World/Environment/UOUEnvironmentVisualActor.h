@@ -125,6 +125,9 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual|Parameters", meta = (ToolTip = "우산이 비를 막는 표현 강도를 Niagara에 전달할 User Parameter 이름입니다."))
 	FName RainBlockerIntensityParameterName = TEXT("RainBlockerIntensity");
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual|Rain Block", meta = (ClampMin = "0.0", ToolTip = "빠른 비 파티클이 작은 우산 차단 영역을 지나치지 않도록 Niagara kill 반지름에 더해지는 여유 값입니다."))
+	float RainBlockerKillRadiusPadding = 75.0f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual|Debug", meta = (ToolTip = "Niagara에 전달된 우산 비 차단 영역을 월드에 표시합니다."))
 	bool bDrawRainBlockerNiagaraDebug = true;
 
@@ -135,5 +138,5 @@ protected:
 	void ApplyVisualEffectTransforms();
 	void ApplyNiagaraParameters();
 	void RefreshNiagaraActivation();
-	void DrawRainBlockerNiagaraDebug(const UNiagaraComponent* Effect, const FVector& EffectLocalBlockerPosition) const;
+	void DrawRainBlockerNiagaraDebug(const UNiagaraComponent* Effect, const FVector& EffectLocalBlockerPosition, float EffectiveBlockerRadius) const;
 };

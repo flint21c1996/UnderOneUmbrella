@@ -167,6 +167,7 @@ void AUOUEnvironmentVisualActor::RefreshNiagaraActivation()
 		if (bShouldShowPrimary && !PrimaryEffect->IsActive())
 		{
 			PrimaryEffect->Activate(true);
+			ApplyNiagaraParameters();
 		}
 		else if (!bShouldShowPrimary && PrimaryEffect->IsActive())
 		{
@@ -186,6 +187,7 @@ void AUOUEnvironmentVisualActor::RefreshNiagaraActivation()
 		if (bShouldShowSecondary && !SecondaryEffect->IsActive())
 		{
 			SecondaryEffect->Activate(true);
+			ApplyNiagaraParameters();
 		}
 		else if (!bShouldShowSecondary && SecondaryEffect->IsActive())
 		{
@@ -227,6 +229,9 @@ void AUOUEnvironmentVisualActor::ApplyNiagaraParameters()
 		const FVector EffectLocalBlockerPosition = bCachedRainBlockerActive
 			? Effect->GetComponentTransform().InverseTransformPosition(BlockerWorldPosition)
 			: FVector::ZeroVector;
+		const float EffectiveBlockerRadius = bCachedRainBlockerActive
+			? CachedRainBlockerRadius + FMath::Max(0.0f, RainBlockerKillRadiusPadding)
+			: 0.0f;
 
 		if (!RainBlockerActiveParameterName.IsNone())
 		{
@@ -240,7 +245,7 @@ void AUOUEnvironmentVisualActor::ApplyNiagaraParameters()
 
 		if (!RainBlockerRadiusParameterName.IsNone())
 		{
-			Effect->SetVariableFloat(RainBlockerRadiusParameterName, CachedRainBlockerRadius);
+			Effect->SetVariableFloat(RainBlockerRadiusParameterName, EffectiveBlockerRadius);
 		}
 
 		if (!RainBlockerIntensityParameterName.IsNone())
@@ -248,7 +253,7 @@ void AUOUEnvironmentVisualActor::ApplyNiagaraParameters()
 			Effect->SetVariableFloat(RainBlockerIntensityParameterName, CachedRainBlockerIntensity);
 		}
 
-		DrawRainBlockerNiagaraDebug(Effect, EffectLocalBlockerPosition);
+		DrawRainBlockerNiagaraDebug(Effect, EffectLocalBlockerPosition, EffectiveBlockerRadius);
 	};
 
 	ApplyRainBlockerParameters(PrimaryEffect);
@@ -270,13 +275,13 @@ void AUOUEnvironmentVisualActor::ApplyVisualEffectTransforms()
 	}
 }
 
-void AUOUEnvironmentVisualActor::DrawRainBlockerNiagaraDebug(const UNiagaraComponent* Effect, const FVector& EffectLocalBlockerPosition) const
+void AUOUEnvironmentVisualActor::DrawRainBlockerNiagaraDebug(const UNiagaraComponent* Effect, const FVector& EffectLocalBlockerPosition, float EffectiveBlockerRadius) const
 {
 	if (!bDrawRainBlockerNiagaraDebug
 		|| !bCachedRainBlockerActive
 		|| Effect == nullptr
 		|| GetWorld() == nullptr
-		|| CachedRainBlockerRadius <= 0.0f)
+		|| EffectiveBlockerRadius <= 0.0f)
 	{
 		return;
 	}
@@ -287,7 +292,7 @@ void AUOUEnvironmentVisualActor::DrawRainBlockerNiagaraDebug(const UNiagaraCompo
 	DrawDebugSphere(
 		GetWorld(),
 		DebugWorldLocation,
-		CachedRainBlockerRadius,
+		EffectiveBlockerRadius,
 		24,
 		FColor::Magenta,
 		false,
