@@ -26,6 +26,13 @@ public:
 		const FRotator& EffectLocalRotation,
 		const FVector2D& AreaSize);
 
+	UFUNCTION(BlueprintCallable, Category = "Environment Visual|Rain")
+	void SetRainBlockerData(
+		bool bIsBlocking,
+		const FVector& BlockerLocalPosition,
+		float BlockerRadius,
+		float BlockerIntensity);
+
 	UFUNCTION(BlueprintCallable, Category = "Environment Visual")
 	void SetVisualIntensities(float PrimaryIntensity, float SecondaryIntensity);
 
@@ -75,6 +82,18 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Environment Visual|Runtime")
 	FVector2D CachedAreaSize = FVector2D::ZeroVector;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Environment Visual|Runtime")
+	bool bCachedRainBlockerActive = false;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Environment Visual|Runtime")
+	FVector CachedRainBlockerLocalPosition = FVector::ZeroVector;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Environment Visual|Runtime")
+	float CachedRainBlockerRadius = 0.0f;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Environment Visual|Runtime")
+	float CachedRainBlockerIntensity = 0.0f;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Environment Visual|Runtime")
 	float CachedPrimaryIntensity = 1.0f;

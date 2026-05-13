@@ -76,6 +76,20 @@ void AUOUEnvironmentVisualActor::ConfigureRainVisual(
 	ApplyNiagaraParameters();
 }
 
+void AUOUEnvironmentVisualActor::SetRainBlockerData(
+	bool bIsBlocking,
+	const FVector& BlockerLocalPosition,
+	float BlockerRadius,
+	float BlockerIntensity)
+{
+	bCachedRainBlockerActive = bIsBlocking && BlockerRadius > 0.0f && BlockerIntensity > 0.0f;
+	CachedRainBlockerLocalPosition = bCachedRainBlockerActive ? BlockerLocalPosition : FVector::ZeroVector;
+	CachedRainBlockerRadius = bCachedRainBlockerActive ? FMath::Max(0.0f, BlockerRadius) : 0.0f;
+	CachedRainBlockerIntensity = bCachedRainBlockerActive ? FMath::Clamp(BlockerIntensity, 0.0f, 1.0f) : 0.0f;
+
+	ApplyNiagaraParameters();
+}
+
 void AUOUEnvironmentVisualActor::SetVisualIntensities(float PrimaryIntensity, float SecondaryIntensity)
 {
 	CachedPrimaryIntensity = FMath::Clamp(PrimaryIntensity, 0.0f, 1.0f);
