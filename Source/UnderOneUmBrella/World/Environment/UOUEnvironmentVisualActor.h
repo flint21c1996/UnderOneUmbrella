@@ -102,28 +102,28 @@ protected:
 	float CachedSecondaryIntensity = 1.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual|Parameters")
-	FName PrimaryAreaSizeParameterName = TEXT("User.RainAreaSize");
+	FName PrimaryAreaSizeParameterName = TEXT("RainAreaSize");
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual|Parameters")
-	FName SecondaryAreaSizeParameterName = TEXT("User.GroundSplashAreaSize");
+	FName SecondaryAreaSizeParameterName = TEXT("GroundSplashAreaSize");
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual|Parameters")
-	FName PrimaryIntensityParameterName = TEXT("User.RainIntensity");
+	FName PrimaryIntensityParameterName = TEXT("RainIntensity");
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual|Parameters")
-	FName SecondaryIntensityParameterName = TEXT("User.GroundSplashIntensity");
+	FName SecondaryIntensityParameterName = TEXT("GroundSplashIntensity");
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual|Parameters", meta = (ToolTip = "우산이 현재 비를 막고 있는지 Niagara에 전달할 User Parameter 이름입니다."))
-	FName RainBlockerActiveParameterName = TEXT("User.RainBlockerActive");
+	FName RainBlockerActiveParameterName = TEXT("RainBlockerActive");
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual|Parameters", meta = (ToolTip = "우산이 비를 막는 중심 위치를 Niagara에 전달할 User Parameter 이름입니다. Visual Actor 기준 로컬 좌표입니다."))
-	FName RainBlockerLocalPositionParameterName = TEXT("User.RainBlockerLocalPosition");
+	FName RainBlockerLocalPositionParameterName = TEXT("RainBlockerLocalPosition");
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual|Parameters", meta = (ToolTip = "우산이 비를 막는 반지름을 Niagara에 전달할 User Parameter 이름입니다."))
-	FName RainBlockerRadiusParameterName = TEXT("User.RainBlockerRadius");
+	FName RainBlockerRadiusParameterName = TEXT("RainBlockerRadius");
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual|Parameters", meta = (ToolTip = "우산이 비를 막는 표현 강도를 Niagara에 전달할 User Parameter 이름입니다."))
-	FName RainBlockerIntensityParameterName = TEXT("User.RainBlockerIntensity");
+	FName RainBlockerIntensityParameterName = TEXT("RainBlockerIntensity");
 
 	void ApplyVisualEffectSettings(bool bForcePrimarySystem = false, bool bForceSecondarySystem = false);
 	void ApplyVisualEffectTransforms();
