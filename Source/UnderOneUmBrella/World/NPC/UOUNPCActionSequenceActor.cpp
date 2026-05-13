@@ -154,6 +154,7 @@ void AUOUNPCActionSequenceActor::HandleNPCActionCompleted(AUOUNPCCharacter* NPC,
 	}
 
 	++CurrentActionIndex;
+	// BT 정리와 블랙보드 갱신이 먼저 끝나도록 다음 틱에서 다음 액션을 실행합니다.
 	FTimerDelegate RunNextActionDelegate;
 	RunNextActionDelegate.BindUObject(this, &AUOUNPCActionSequenceActor::RunCurrentAction);
 	GetWorldTimerManager().SetTimerForNextTick(RunNextActionDelegate);

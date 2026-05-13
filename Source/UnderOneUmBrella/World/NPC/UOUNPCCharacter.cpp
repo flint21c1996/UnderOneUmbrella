@@ -139,6 +139,7 @@ bool AUOUNPCCharacter::JumpMoveToTargetLocation(const FVector& TargetLocation)
 	LaunchCharacter(CalculateJumpLaunchVelocity(TargetLocation, ActionRequest.JumpTravelTime), true, true);
 	if (UCharacterMovementComponent* MovementComponent = GetCharacterMovement())
 	{
+		// 낙하 상태 갱신이 다음 프레임으로 밀려도 점프 태스크 완료 판정이 안정적으로 동작하게 합니다.
 		MovementComponent->SetMovementMode(MOVE_Falling);
 	}
 	return true;

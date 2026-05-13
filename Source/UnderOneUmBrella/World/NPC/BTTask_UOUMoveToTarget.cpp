@@ -173,6 +173,7 @@ bool UBTTask_UOUMoveToTarget::RequestMove(
 		return false;
 	}
 
+	// 타겟 액터가 바닥보다 위나 아래에 놓일 수 있으므로 NavMesh에 투영된 위치로 이동합니다.
 	FVector ProjectedStartLocation;
 	const bool bProjectedStart = ProjectLocationToNavigation(
 		AIController,
@@ -202,6 +203,7 @@ bool UBTTask_UOUMoveToTarget::RequestMove(
 	EPathFollowingRequestResult::Type DirectMoveResult = EPathFollowingRequestResult::Failed;
 	if (MoveResult == EPathFollowingRequestResult::Failed && bAllowDirectMoveFallback)
 	{
+		// 간단한 테스트 맵에서 가까운 발판 사이 경로 생성이 실패해도 직접 이동으로 확인할 수 있게 합니다.
 		DirectMoveResult = AIController->MoveToLocation(
 			ProjectedTargetLocation,
 			AcceptanceRadius,

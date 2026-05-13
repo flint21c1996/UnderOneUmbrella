@@ -32,6 +32,7 @@ EBTNodeResult::Type UBTTask_UOUJumpMoveToTarget::ExecuteTask(UBehaviorTreeCompon
 	Memory->bObservedAirborne = false;
 
 	FVector TargetLocation = FVector::ZeroVector;
+	// 점프 처리가 블랙보드 갱신 타이밍에 의존하지 않도록 현재 액션 요청을 우선 사용합니다.
 	if (!NPCCharacter->GetCurrentActionTargetLocation(TargetLocation) &&
 		!ResolveBlackboardTargetLocation(OwnerComp, TargetLocation))
 	{
