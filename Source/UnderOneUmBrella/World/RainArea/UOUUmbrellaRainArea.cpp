@@ -69,13 +69,23 @@ void AUOUUmbrellaRainArea::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 
-	if (RainFillRate <= 0.0f || RainVolume == nullptr)
+	if (RainVolume == nullptr)
 	{
+		return;
+	}
+
+	if (RainFillRate <= 0.0f)
+	{
+		ApplyEnvironmentVisualRainBlocker(false, FVector::ZeroVector, 0.0f, 0.0f);
 		return;
 	}
 
 	TArray<AActor*> OverlappingActors;
 	RainVolume->GetOverlappingActors(OverlappingActors);
+
+	bool bHasRainBlocker = false;
+	FVector RainBlockerWorldLocation = FVector::ZeroVector;
+	float RainBlockerRadius = 0.0f;
 
 	for (AActor* OverlappingActor : OverlappingActors)
 	{
@@ -87,8 +97,24 @@ void AUOUUmbrellaRainArea::Tick(float DeltaSeconds)
 		if (UUOUUmbrellaComponent* UmbrellaComponent = OverlappingActor->FindComponentByClass<UUOUUmbrellaComponent>())
 		{
 			UmbrellaComponent->ApplyRainExposure(RainFillRate * DeltaSeconds);
+
+			FVector CandidateBlockerWorldLocation = FVector::ZeroVector;
+			float CandidateBlockerRadius = 0.0f;
+			if (UmbrellaComponent->TryGetRainBlockerData(CandidateBlockerWorldLocation, CandidateBlockerRadius)
+				&& CandidateBlockerRadius > RainBlockerRadius)
+			{
+				bHasRainBlocker = true;
+				RainBlockerWorldLocation = CandidateBlockerWorldLocation;
+				RainBlockerRadius = CandidateBlockerRadius;
+			}
 		}
 	}
+
+	ApplyEnvironmentVisualRainBlocker(
+		bHasRainBlocker,
+		RainBlockerWorldLocation,
+		RainBlockerRadius,
+		bHasRainBlocker ? RainVisualIntensity : 0.0f);
 }
 
 void AUOUUmbrellaRainArea::ResolveEnvironmentVisual()
@@ -155,6 +181,29 @@ void AUOUUmbrellaRainArea::ApplyEnvironmentVisualState()
 
 	EnvironmentVisual->SetVisualIntensities(PrimaryIntensity, SecondaryIntensity);
 	EnvironmentVisual->SetVisualsEnabled(bEnableRainVisuals);
+}
+
+void AUOUUmbrellaRainArea::ApplyEnvironmentVisualRainBlocker(bool bIsBlocking, const FVector& BlockerWorldLocation, float BlockerRadius, float BlockerIntensity)
+{
+	if (EnvironmentVisual == nullptr)
+	{
+		ResolveEnvironmentVisual();
+	}
+
+	if (EnvironmentVisual == nullptr)
+	{
+		return;
+	}
+
+	const FVector BlockerLocalPosition = bIsBlocking
+		? EnvironmentVisual->GetActorTransform().InverseTransformPosition(BlockerWorldLocation)
+		: FVector::ZeroVector;
+
+	EnvironmentVisual->SetRainBlockerData(
+		bIsBlocking,
+		BlockerLocalPosition,
+		BlockerRadius,
+		BlockerIntensity);
 }
 
 void AUOUUmbrellaRainArea::ApplyPreviewSettings()

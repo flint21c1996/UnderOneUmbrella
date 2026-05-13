@@ -79,4 +79,5 @@ protected:
 	void ApplyEnvironmentVisualSettings();
 	void ApplyEnvironmentVisualGeometry();
 	void ApplyEnvironmentVisualState();
+	void ApplyEnvironmentVisualRainBlocker(bool bIsBlocking, const FVector& BlockerWorldLocation, float BlockerRadius, float BlockerIntensity);
 };
