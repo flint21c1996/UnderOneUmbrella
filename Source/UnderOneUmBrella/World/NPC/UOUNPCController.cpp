@@ -95,6 +95,23 @@ bool AUOUNPCController::SetActivationBlackboard(
 	return true;
 }
 
+bool AUOUNPCController::SetActionBlackboard(bool bHasAction, const FUOUNPCActionRequest& ActionRequest)
+{
+	FVector TargetLocation = ActionRequest.TargetLocation;
+	AActor* TargetActor = nullptr;
+	if (ActionRequest.bUseTargetActor && ActionRequest.TargetActor != nullptr)
+	{
+		TargetActor = ActionRequest.TargetActor.Get();
+		TargetLocation = TargetActor->GetActorLocation();
+	}
+
+	return SetActivationBlackboard(
+		bHasAction,
+		TargetActor,
+		TargetLocation,
+		static_cast<uint8>(ActionRequest.ActionType));
+}
+
 bool AUOUNPCController::MoveToGoalActor(AActor* GoalActor, float AcceptanceRadius)
 {
 	if (GoalActor == nullptr)

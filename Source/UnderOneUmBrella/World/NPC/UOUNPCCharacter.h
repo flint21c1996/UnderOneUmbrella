@@ -4,11 +4,18 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
+#include "World/NPC/UOUNPCActionTypes.h"
 #include "UOUNPCCharacter.generated.h"
 
 class AUOUNPCController;
+class AUOUNPCCharacter;
 class UBehaviorTree;
 class UAnimMontage;
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(
+	FOnUOUNPCActionCompletedSignature,
+	AUOUNPCCharacter*, NPC,
+	UObject*, ActionSource);
 
 UENUM(BlueprintType)
 enum class EOUUNPCActivationAction : uint8
@@ -71,6 +78,18 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "NPC|Runtime")
 	bool bPendingMoveAfterJumpLanding = false;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "NPC|Runtime")
+	bool bHasActiveActionRequest = false;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "NPC|Runtime")
+	FUOUNPCActionRequest ActiveActionRequest;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "NPC|Runtime")
+	TObjectPtr<UObject> ActiveActionSource = nullptr;
+
+	UPROPERTY(BlueprintAssignable, Category = "NPC|Action")
+	FOnUOUNPCActionCompletedSignature OnNPCActionCompleted;
+
 	UFUNCTION(BlueprintCallable, Category = "Puzzle|Actions")
 	void Activate();
 
@@ -86,11 +105,32 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "NPC|Movement")
 	bool JumpMoveToConfiguredTarget();
 
+	UFUNCTION(BlueprintCallable, Category = "NPC|Movement")
+	bool JumpMoveToTargetLocation(const FVector& TargetLocation);
+
 	UFUNCTION(BlueprintCallable, Category = "NPC|Animation")
 	float PlayActivationAnimation();
 
 	UFUNCTION(BlueprintCallable, Category = "NPC|Movement")
 	void StopNPCMovement();
+
+	UFUNCTION(BlueprintCallable, Category = "NPC|Action")
+	bool RequestNPCAction(UObject* ActionSource, const FUOUNPCActionRequest& ActionRequest);
+
+	UFUNCTION(BlueprintCallable, Category = "NPC|Action")
+	bool ClearNPCAction(UObject* ActionSource);
+
+	UFUNCTION(BlueprintCallable, Category = "NPC|Action")
+	void CompleteActiveNPCAction();
+
+	UFUNCTION(BlueprintPure, Category = "NPC|Action")
+	bool ShouldClearActiveActionOnFinish() const;
+
+	UFUNCTION(BlueprintPure, Category = "NPC|Action")
+	bool GetCurrentActionTargetLocation(FVector& OutTargetLocation) const;
+
+	UFUNCTION(BlueprintPure, Category = "NPC|Action")
+	float GetCurrentActionAcceptanceRadius() const;
 
 	UFUNCTION(BlueprintImplementableEvent, Category = "NPC|Events")
 	void ReceiveNPCActivated();
@@ -98,12 +138,19 @@ public:
 	UFUNCTION(BlueprintImplementableEvent, Category = "NPC|Events")
 	void ReceiveNPCDeactivated();
 
+	UFUNCTION(BlueprintImplementableEvent, Category = "NPC|Events")
+	void ReceiveNPCActionCompleted(UObject* ActionSource);
+
 	UFUNCTION(BlueprintPure, Category = "NPC|Behavior")
 	UBehaviorTree* GetBehaviorTree() const;
 
 protected:
 	AUOUNPCController* GetNPCController();
 	bool SyncActivationBlackboard();
+	void ExecuteCurrentActionDirectly();
+	FUOUNPCActionRequest BuildLegacyActionRequest() const;
+	FUOUNPCActionRequest GetCurrentActionRequest() const;
+	bool GetTargetLocationFromActionRequest(const FUOUNPCActionRequest& ActionRequest, FVector& OutTargetLocation) const;
 	bool GetConfiguredTargetLocation(FVector& OutTargetLocation) const;
-	FVector CalculateJumpLaunchVelocity(const FVector& TargetLocation) const;
+	FVector CalculateJumpLaunchVelocity(const FVector& TargetLocation, float TravelTime) const;
 };

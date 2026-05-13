@@ -53,24 +53,18 @@ void AUOUNPCCharacter::Landed(const FHitResult& Hit)
 void AUOUNPCCharacter::Activate()
 {
 	bActivated = true;
+	if (!bHasActiveActionRequest)
+	{
+		ActiveActionRequest = BuildLegacyActionRequest();
+		ActiveActionSource = this;
+		bHasActiveActionRequest = true;
+	}
+
 	const bool bBehaviorTreeHandled = SyncActivationBlackboard();
 
 	if (!bBehaviorTreeHandled)
 	{
-		switch (ActivationAction)
-		{
-		case EOUUNPCActivationAction::MoveToTarget:
-			MoveToConfiguredTarget();
-			break;
-		case EOUUNPCActivationAction::PlayAnimation:
-			PlayActivationAnimation();
-			break;
-		case EOUUNPCActivationAction::JumpMoveToTarget:
-			JumpMoveToConfiguredTarget();
-			break;
-		default:
-			break;
-		}
+		ExecuteCurrentActionDirectly();
 	}
 
 	ReceiveNPCActivated();
@@ -78,11 +72,18 @@ void AUOUNPCCharacter::Activate()
 
 void AUOUNPCCharacter::Deactivate()
 {
+	UAnimMontage* MontageToStop = ActiveActionRequest.AnimationMontage != nullptr
+		? ActiveActionRequest.AnimationMontage.Get()
+		: ActivationMontage.Get();
+
 	bActivated = false;
 	bPendingMoveAfterJumpLanding = false;
+	bHasActiveActionRequest = false;
+	ActiveActionRequest = FUOUNPCActionRequest();
+	ActiveActionSource = nullptr;
 	SyncActivationBlackboard();
 	StopNPCMovement();
-	StopAnimMontage(ActivationMontage);
+	StopAnimMontage(MontageToStop);
 	ReceiveNPCDeactivated();
 }
 
@@ -99,18 +100,19 @@ void AUOUNPCCharacter::Toggle()
 
 bool AUOUNPCCharacter::MoveToConfiguredTarget()
 {
+	const FUOUNPCActionRequest ActionRequest = GetCurrentActionRequest();
 	AUOUNPCController* NPCController = GetNPCController();
 	if (NPCController == nullptr)
 	{
 		return false;
 	}
 
-	if (bUseMoveTargetActor)
+	if (ActionRequest.bUseTargetActor)
 	{
-		return NPCController->MoveToGoalActor(MoveTargetActor, AcceptanceRadius);
+		return NPCController->MoveToGoalActor(ActionRequest.TargetActor.Get(), ActionRequest.AcceptanceRadius);
 	}
 
-	return NPCController->MoveToGoalLocation(MoveTargetLocation, AcceptanceRadius);
+	return NPCController->MoveToGoalLocation(ActionRequest.TargetLocation, ActionRequest.AcceptanceRadius);
 }
 
 bool AUOUNPCCharacter::JumpMoveToConfiguredTarget()
@@ -121,25 +123,43 @@ bool AUOUNPCCharacter::JumpMoveToConfiguredTarget()
 		return false;
 	}
 
-	if (FVector::Dist2D(GetActorLocation(), TargetLocation) <= FMath::Max(0.0f, AcceptanceRadius))
+	return JumpMoveToTargetLocation(TargetLocation);
+}
+
+bool AUOUNPCCharacter::JumpMoveToTargetLocation(const FVector& TargetLocation)
+{
+	const FUOUNPCActionRequest ActionRequest = GetCurrentActionRequest();
+	if (FVector::Dist2D(GetActorLocation(), TargetLocation) <= FMath::Max(0.0f, ActionRequest.AcceptanceRadius))
 	{
 		return true;
 	}
 
 	StopNPCMovement();
-	bPendingMoveAfterJumpLanding = bMoveToTargetAfterJumpLanding;
-	LaunchCharacter(CalculateJumpLaunchVelocity(TargetLocation), true, true);
+	bPendingMoveAfterJumpLanding = ActionRequest.bMoveToTargetAfterJumpLanding;
+	LaunchCharacter(CalculateJumpLaunchVelocity(TargetLocation, ActionRequest.JumpTravelTime), true, true);
+	if (UCharacterMovementComponent* MovementComponent = GetCharacterMovement())
+	{
+		MovementComponent->SetMovementMode(MOVE_Falling);
+	}
 	return true;
 }
 
 float AUOUNPCCharacter::PlayActivationAnimation()
 {
-	if (ActivationMontage == nullptr)
+	const FUOUNPCActionRequest ActionRequest = GetCurrentActionRequest();
+	UAnimMontage* MontageToPlay = ActionRequest.AnimationMontage != nullptr
+		? ActionRequest.AnimationMontage.Get()
+		: ActivationMontage.Get();
+	if (MontageToPlay == nullptr)
 	{
 		return 0.0f;
 	}
 
-	return PlayAnimMontage(ActivationMontage, ActivationMontagePlayRate, ActivationMontageStartSection);
+	const float PlayRate = FMath::Max(0.0f, ActionRequest.AnimationPlayRate);
+	const FName StartSection = ActionRequest.AnimationMontage != nullptr
+		? ActionRequest.AnimationStartSection
+		: ActivationMontageStartSection;
+	return PlayAnimMontage(MontageToPlay, PlayRate, StartSection);
 }
 
 void AUOUNPCCharacter::StopNPCMovement()
@@ -148,6 +168,83 @@ void AUOUNPCCharacter::StopNPCMovement()
 	{
 		NPCController->StopMovement();
 	}
+}
+
+bool AUOUNPCCharacter::RequestNPCAction(UObject* ActionSource, const FUOUNPCActionRequest& ActionRequest)
+{
+	if (ActionRequest.ActionType == EUOUNPCActionType::None)
+	{
+		return false;
+	}
+
+	if (bHasActiveActionRequest)
+	{
+		StopNPCMovement();
+	}
+
+	ActiveActionRequest = ActionRequest;
+	ActiveActionSource = ActionSource;
+	bHasActiveActionRequest = true;
+	bActivated = true;
+
+	const bool bBehaviorTreeHandled = SyncActivationBlackboard();
+	if (!bBehaviorTreeHandled)
+	{
+		ExecuteCurrentActionDirectly();
+	}
+
+	ReceiveNPCActivated();
+	return true;
+}
+
+bool AUOUNPCCharacter::ClearNPCAction(UObject* ActionSource)
+{
+	if (!bHasActiveActionRequest)
+	{
+		return false;
+	}
+
+	if (ActionSource != nullptr && ActiveActionSource != nullptr && ActiveActionSource.Get() != ActionSource)
+	{
+		return false;
+	}
+
+	Deactivate();
+	return true;
+}
+
+void AUOUNPCCharacter::CompleteActiveNPCAction()
+{
+	if (!bHasActiveActionRequest)
+	{
+		return;
+	}
+
+	UObject* CompletedActionSource = ActiveActionSource.Get();
+	bActivated = false;
+	bPendingMoveAfterJumpLanding = false;
+	bHasActiveActionRequest = false;
+	ActiveActionRequest = FUOUNPCActionRequest();
+	ActiveActionSource = nullptr;
+	SyncActivationBlackboard();
+	OnNPCActionCompleted.Broadcast(this, CompletedActionSource);
+	ReceiveNPCActionCompleted(CompletedActionSource);
+	ReceiveNPCDeactivated();
+}
+
+bool AUOUNPCCharacter::ShouldClearActiveActionOnFinish() const
+{
+	return bHasActiveActionRequest && ActiveActionRequest.bClearActionOnFinish;
+}
+
+bool AUOUNPCCharacter::GetCurrentActionTargetLocation(FVector& OutTargetLocation) const
+{
+	return GetTargetLocationFromActionRequest(GetCurrentActionRequest(), OutTargetLocation);
+}
+
+float AUOUNPCCharacter::GetCurrentActionAcceptanceRadius() const
+{
+	return FMath::Max(0.0f, GetCurrentActionRequest().AcceptanceRadius);
 }
 
 UBehaviorTree* AUOUNPCCharacter::GetBehaviorTree() const
@@ -173,39 +270,91 @@ bool AUOUNPCCharacter::SyncActivationBlackboard()
 		return false;
 	}
 
-	FVector TargetLocation = MoveTargetLocation;
-	if (bUseMoveTargetActor && MoveTargetActor != nullptr)
-	{
-		TargetLocation = MoveTargetActor->GetActorLocation();
-	}
-
-	return NPCController->SetActivationBlackboard(
-		bActivated,
-		bUseMoveTargetActor ? MoveTargetActor.Get() : nullptr,
-		TargetLocation,
-		static_cast<uint8>(ActivationAction));
+	return NPCController->SetActionBlackboard(bActivated && bHasActiveActionRequest, GetCurrentActionRequest());
 }
 
-bool AUOUNPCCharacter::GetConfiguredTargetLocation(FVector& OutTargetLocation) const
+void AUOUNPCCharacter::ExecuteCurrentActionDirectly()
 {
-	if (bUseMoveTargetActor)
+	switch (GetCurrentActionRequest().ActionType)
 	{
-		if (MoveTargetActor == nullptr)
+	case EUOUNPCActionType::MoveToTarget:
+		MoveToConfiguredTarget();
+		break;
+	case EUOUNPCActionType::PlayAnimation:
+		PlayActivationAnimation();
+		break;
+	case EUOUNPCActionType::JumpMoveToTarget:
+		JumpMoveToConfiguredTarget();
+		break;
+	case EUOUNPCActionType::None:
+	default:
+		break;
+	}
+}
+
+FUOUNPCActionRequest AUOUNPCCharacter::BuildLegacyActionRequest() const
+{
+	FUOUNPCActionRequest ActionRequest;
+	switch (ActivationAction)
+	{
+	case EOUUNPCActivationAction::MoveToTarget:
+		ActionRequest.ActionType = EUOUNPCActionType::MoveToTarget;
+		break;
+	case EOUUNPCActivationAction::PlayAnimation:
+		ActionRequest.ActionType = EUOUNPCActionType::PlayAnimation;
+		break;
+	case EOUUNPCActivationAction::JumpMoveToTarget:
+		ActionRequest.ActionType = EUOUNPCActionType::JumpMoveToTarget;
+		break;
+	default:
+		ActionRequest.ActionType = EUOUNPCActionType::None;
+		break;
+	}
+
+	ActionRequest.bUseTargetActor = bUseMoveTargetActor;
+	ActionRequest.TargetActor = MoveTargetActor;
+	ActionRequest.TargetLocation = MoveTargetLocation;
+	ActionRequest.AcceptanceRadius = AcceptanceRadius;
+	ActionRequest.JumpTravelTime = JumpTravelTime;
+	ActionRequest.bMoveToTargetAfterJumpLanding = bMoveToTargetAfterJumpLanding;
+	ActionRequest.AnimationMontage = ActivationMontage;
+	ActionRequest.AnimationPlayRate = ActivationMontagePlayRate;
+	ActionRequest.AnimationStartSection = ActivationMontageStartSection;
+	return ActionRequest;
+}
+
+FUOUNPCActionRequest AUOUNPCCharacter::GetCurrentActionRequest() const
+{
+	return bHasActiveActionRequest ? ActiveActionRequest : BuildLegacyActionRequest();
+}
+
+bool AUOUNPCCharacter::GetTargetLocationFromActionRequest(
+	const FUOUNPCActionRequest& ActionRequest,
+	FVector& OutTargetLocation) const
+{
+	if (ActionRequest.bUseTargetActor)
+	{
+		if (ActionRequest.TargetActor == nullptr)
 		{
 			return false;
 		}
 
-		OutTargetLocation = MoveTargetActor->GetActorLocation();
+		OutTargetLocation = ActionRequest.TargetActor->GetActorLocation();
 		return true;
 	}
 
-	OutTargetLocation = MoveTargetLocation;
+	OutTargetLocation = ActionRequest.TargetLocation;
 	return true;
 }
 
-FVector AUOUNPCCharacter::CalculateJumpLaunchVelocity(const FVector& TargetLocation) const
+bool AUOUNPCCharacter::GetConfiguredTargetLocation(FVector& OutTargetLocation) const
 {
-	const float SafeTravelTime = FMath::Max(0.1f, JumpTravelTime);
+	return GetTargetLocationFromActionRequest(GetCurrentActionRequest(), OutTargetLocation);
+}
+
+FVector AUOUNPCCharacter::CalculateJumpLaunchVelocity(const FVector& TargetLocation, float TravelTime) const
+{
+	const float SafeTravelTime = FMath::Max(0.1f, TravelTime);
 	const FVector Delta = TargetLocation - GetActorLocation();
 	const FVector HorizontalVelocity(Delta.X / SafeTravelTime, Delta.Y / SafeTravelTime, 0.0f);
 

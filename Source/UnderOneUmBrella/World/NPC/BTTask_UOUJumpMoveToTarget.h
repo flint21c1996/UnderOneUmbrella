@@ -11,6 +11,8 @@ class AUOUNPCCharacter;
 struct FUOUJumpMoveToTargetTaskMemory
 {
 	TWeakObjectPtr<AUOUNPCCharacter> NPCCharacter;
+	FVector TargetLocation = FVector::ZeroVector;
+	float AcceptanceRadius = 50.0f;
 	float ElapsedTime = 0.0f;
 	bool bObservedAirborne = false;
 };
@@ -30,4 +32,6 @@ public:
 protected:
 	UPROPERTY(EditAnywhere, Category = "NPC|Jump", meta = (ClampMin = "0.1"))
 	float MaxJumpDuration = 2.0f;
+
+	bool ResolveBlackboardTargetLocation(UBehaviorTreeComponent& OwnerComp, FVector& OutTargetLocation) const;
 };

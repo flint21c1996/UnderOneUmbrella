@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "AIController.h"
+#include "World/NPC/UOUNPCActionTypes.h"
 #include "UOUNPCController.generated.h"
 
 class UBehaviorTree;
@@ -29,6 +30,9 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "NPC|Behavior")
 	bool SetActivationBlackboard(bool bNewActivated, AActor* TargetActor, const FVector& TargetLocation, uint8 ActionTypeValue);
+
+	UFUNCTION(BlueprintCallable, Category = "NPC|Behavior")
+	bool SetActionBlackboard(bool bHasAction, const FUOUNPCActionRequest& ActionRequest);
 
 	UFUNCTION(BlueprintCallable, Category = "NPC|Movement")
 	bool MoveToGoalActor(AActor* GoalActor, float AcceptanceRadius);
