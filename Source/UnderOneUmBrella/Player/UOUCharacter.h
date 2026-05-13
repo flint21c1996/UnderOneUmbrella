@@ -11,6 +11,7 @@ class UArrowComponent;
 class UCameraComponent;
 class UInputAction;
 class UInputMappingContext;
+class UUOUPushPullInteractorComponent;
 class USceneComponent;
 class USpringArmComponent;
 class UUOUCameraControllerComponent;
@@ -43,6 +44,18 @@ class AUOUCharacter : public ACharacter
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input, meta = (AllowPrivateAccess = "true"))
 	UInputAction* LookAction;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input, meta = (AllowPrivateAccess = "true"))
+	UInputAction* ContextInteractAction;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input, meta = (AllowPrivateAccess = "true"))
+	UInputAction* UmbrellaToggleAction;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input, meta = (AllowPrivateAccess = "true"))
+	UInputAction* UmbrellaInvertAction;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input, meta = (AllowPrivateAccess = "true"))
+	UInputAction* UmbrellaDebugFillAction;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Camera, meta = (AllowPrivateAccess = "true"))
 	UUOUCameraControllerComponent* CameraControllerComponent;
 
@@ -58,11 +71,15 @@ class AUOUCharacter : public ACharacter
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Gameplay, meta = (AllowPrivateAccess = "true"))
 	UArrowComponent* InteractionOrigin;
 
+	UPROPERTY(Transient, VisibleInstanceOnly, BlueprintReadOnly, Category = Gameplay, meta = (AllowPrivateAccess = "true"))
+	UUOUPushPullInteractorComponent* PushPullInteractorComponent;
+
 public:
 	AUOUCharacter();
 
 protected:
 	virtual void BeginPlay() override;
+	virtual void Tick(float DeltaSeconds) override;
 	void Move(const FInputActionValue& Value);
 	void Look(const FInputActionValue& Value);
 	void RotateCameraLeft();
@@ -75,6 +92,10 @@ protected:
 	void HandleUmbrellaPourPressed();
 	void HandleUmbrellaPourReleased();
 	void HandleUmbrellaDebugFillPressed();
+	void HandleContextInteractPressed();
+	void HandleContextInteractReleased();
+	void HandlePushPullPressed();
+	void HandlePushPullReleased();
 
 	virtual void NotifyControllerChanged() override;
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
@@ -85,4 +106,21 @@ public:
 	FORCEINLINE class USpringArmComponent* GetCameraBoom() const { return CameraBoom; }
 	FORCEINLINE class UCameraComponent* GetFollowCamera() const { return FollowCamera; }
 	FORCEINLINE class UUOUCameraControllerComponent* GetCameraControllerComponent() const { return CameraControllerComponent; }
+	FORCEINLINE class UUOUPushPullInteractorComponent* GetPushPullInteractorComponent() const { return PushPullInteractorComponent; }
+
+private:
+	UPROPERTY(Transient)
+	int32 ContextInteractPressedCount = 0;
+
+	UPROPERTY(Transient)
+	int32 ContextInteractReleasedCount = 0;
+
+	UPROPERTY(Transient)
+	int32 PushPullPressedCount = 0;
+
+	UPROPERTY(Transient)
+	int32 PushPullReleasedCount = 0;
+
+	UPROPERTY(Transient)
+	bool bLoggedMissingPushPullComponent = false;
 };

@@ -282,6 +282,16 @@ bool UUOUUmbrellaComponent::CanCollectWater() const
 	return bHasUmbrella && CurrentState == EUOUUmbrellaState::UpsideDown;
 }
 
+bool UUOUUmbrellaComponent::HasUmbrella() const
+{
+	return bHasUmbrella;
+}
+
+bool UUOUUmbrellaComponent::IsClosed() const
+{
+	return bHasUmbrella && CurrentState == EUOUUmbrellaState::Closed;
+}
+
 bool UUOUUmbrellaComponent::IsOpen() const
 {
 	return bHasUmbrella && CurrentState == EUOUUmbrellaState::Open;

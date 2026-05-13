@@ -197,6 +197,12 @@ public:
 	bool CanCollectWater() const;
 
 	UFUNCTION(BlueprintPure, Category = "Umbrella")
+	bool HasUmbrella() const;
+
+	UFUNCTION(BlueprintPure, Category = "Umbrella")
+	bool IsClosed() const;
+
+	UFUNCTION(BlueprintPure, Category = "Umbrella")
 	bool IsOpen() const;
 
 	UFUNCTION(BlueprintPure, Category = "Umbrella")
