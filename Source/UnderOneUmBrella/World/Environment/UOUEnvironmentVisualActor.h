@@ -113,6 +113,18 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual|Parameters")
 	FName SecondaryIntensityParameterName = TEXT("User.GroundSplashIntensity");
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual|Parameters", meta = (ToolTip = "우산이 현재 비를 막고 있는지 Niagara에 전달할 User Parameter 이름입니다."))
+	FName RainBlockerActiveParameterName = TEXT("User.RainBlockerActive");
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual|Parameters", meta = (ToolTip = "우산이 비를 막는 중심 위치를 Niagara에 전달할 User Parameter 이름입니다. Visual Actor 기준 로컬 좌표입니다."))
+	FName RainBlockerLocalPositionParameterName = TEXT("User.RainBlockerLocalPosition");
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual|Parameters", meta = (ToolTip = "우산이 비를 막는 반지름을 Niagara에 전달할 User Parameter 이름입니다."))
+	FName RainBlockerRadiusParameterName = TEXT("User.RainBlockerRadius");
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual|Parameters", meta = (ToolTip = "우산이 비를 막는 표현 강도를 Niagara에 전달할 User Parameter 이름입니다."))
+	FName RainBlockerIntensityParameterName = TEXT("User.RainBlockerIntensity");
+
 	void ApplyVisualEffectSettings(bool bForcePrimarySystem = false, bool bForceSecondarySystem = false);
 	void ApplyVisualEffectTransforms();
 	void ApplyNiagaraParameters();

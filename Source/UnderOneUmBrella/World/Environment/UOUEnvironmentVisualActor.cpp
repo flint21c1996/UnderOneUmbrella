@@ -214,6 +214,37 @@ void AUOUEnvironmentVisualActor::ApplyNiagaraParameters()
 	{
 		SecondaryEffect->SetVariableFloat(SecondaryIntensityParameterName, CachedSecondaryIntensity);
 	}
+
+	auto ApplyRainBlockerParameters = [this](UNiagaraComponent* Effect)
+	{
+		if (Effect == nullptr)
+		{
+			return;
+		}
+
+		if (!RainBlockerActiveParameterName.IsNone())
+		{
+			Effect->SetVariableBool(RainBlockerActiveParameterName, bCachedRainBlockerActive);
+		}
+
+		if (!RainBlockerLocalPositionParameterName.IsNone())
+		{
+			Effect->SetVariableVec3(RainBlockerLocalPositionParameterName, CachedRainBlockerLocalPosition);
+		}
+
+		if (!RainBlockerRadiusParameterName.IsNone())
+		{
+			Effect->SetVariableFloat(RainBlockerRadiusParameterName, CachedRainBlockerRadius);
+		}
+
+		if (!RainBlockerIntensityParameterName.IsNone())
+		{
+			Effect->SetVariableFloat(RainBlockerIntensityParameterName, CachedRainBlockerIntensity);
+		}
+	};
+
+	ApplyRainBlockerParameters(PrimaryEffect);
+	ApplyRainBlockerParameters(SecondaryEffect);
 }
 
 void AUOUEnvironmentVisualActor::ApplyVisualEffectTransforms()
