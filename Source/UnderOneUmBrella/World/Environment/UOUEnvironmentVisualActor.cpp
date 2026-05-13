@@ -222,6 +222,11 @@ void AUOUEnvironmentVisualActor::ApplyNiagaraParameters()
 			return;
 		}
 
+		const FVector BlockerWorldPosition = GetActorTransform().TransformPosition(CachedRainBlockerLocalPosition);
+		const FVector EffectLocalBlockerPosition = bCachedRainBlockerActive
+			? Effect->GetComponentTransform().InverseTransformPosition(BlockerWorldPosition)
+			: FVector::ZeroVector;
+
 		if (!RainBlockerActiveParameterName.IsNone())
 		{
 			Effect->SetVariableBool(RainBlockerActiveParameterName, bCachedRainBlockerActive);
@@ -229,7 +234,7 @@ void AUOUEnvironmentVisualActor::ApplyNiagaraParameters()
 
 		if (!RainBlockerLocalPositionParameterName.IsNone())
 		{
-			Effect->SetVariableVec3(RainBlockerLocalPositionParameterName, CachedRainBlockerLocalPosition);
+			Effect->SetVariableVec3(RainBlockerLocalPositionParameterName, EffectLocalBlockerPosition);
 		}
 
 		if (!RainBlockerRadiusParameterName.IsNone())
