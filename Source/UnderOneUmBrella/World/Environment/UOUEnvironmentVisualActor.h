@@ -125,8 +125,15 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual|Parameters", meta = (ToolTip = "우산이 비를 막는 표현 강도를 Niagara에 전달할 User Parameter 이름입니다."))
 	FName RainBlockerIntensityParameterName = TEXT("RainBlockerIntensity");
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual|Debug", meta = (ToolTip = "Niagara에 전달된 우산 비 차단 영역을 월드에 표시합니다."))
+	bool bDrawRainBlockerNiagaraDebug = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual|Debug", meta = (ClampMin = "0.0", ToolTip = "Niagara 비 차단 디버그 구체의 선 두께입니다."))
+	float RainBlockerNiagaraDebugThickness = 2.0f;
+
 	void ApplyVisualEffectSettings(bool bForcePrimarySystem = false, bool bForceSecondarySystem = false);
 	void ApplyVisualEffectTransforms();
 	void ApplyNiagaraParameters();
 	void RefreshNiagaraActivation();
+	void DrawRainBlockerNiagaraDebug(const UNiagaraComponent* Effect, const FVector& EffectLocalBlockerPosition) const;
 };

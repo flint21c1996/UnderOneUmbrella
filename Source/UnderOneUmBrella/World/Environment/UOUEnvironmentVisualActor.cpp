@@ -3,6 +3,7 @@
 #include "World/Environment/UOUEnvironmentVisualActor.h"
 
 #include "Components/SceneComponent.h"
+#include "DrawDebugHelpers.h"
 #include "NiagaraComponent.h"
 #include "UObject/UnrealType.h"
 
@@ -246,6 +247,8 @@ void AUOUEnvironmentVisualActor::ApplyNiagaraParameters()
 		{
 			Effect->SetVariableFloat(RainBlockerIntensityParameterName, CachedRainBlockerIntensity);
 		}
+
+		DrawRainBlockerNiagaraDebug(Effect, EffectLocalBlockerPosition);
 	};
 
 	ApplyRainBlockerParameters(PrimaryEffect);
@@ -265,4 +268,41 @@ void AUOUEnvironmentVisualActor::ApplyVisualEffectTransforms()
 		SecondaryEffect->SetRelativeLocation(CachedSecondaryLocalPosition);
 		SecondaryEffect->SetRelativeRotation(CachedEffectLocalRotation);
 	}
+}
+
+void AUOUEnvironmentVisualActor::DrawRainBlockerNiagaraDebug(const UNiagaraComponent* Effect, const FVector& EffectLocalBlockerPosition) const
+{
+	if (!bDrawRainBlockerNiagaraDebug
+		|| !bCachedRainBlockerActive
+		|| Effect == nullptr
+		|| GetWorld() == nullptr
+		|| CachedRainBlockerRadius <= 0.0f)
+	{
+		return;
+	}
+
+	const FVector DebugWorldLocation = Effect->GetComponentTransform().TransformPosition(EffectLocalBlockerPosition);
+	const float CenterRadius = FMath::Max(6.0f, RainBlockerNiagaraDebugThickness * 2.0f);
+
+	DrawDebugSphere(
+		GetWorld(),
+		DebugWorldLocation,
+		CachedRainBlockerRadius,
+		24,
+		FColor::Magenta,
+		false,
+		0.0f,
+		0,
+		RainBlockerNiagaraDebugThickness);
+
+	DrawDebugSphere(
+		GetWorld(),
+		DebugWorldLocation,
+		CenterRadius,
+		8,
+		FColor::White,
+		false,
+		0.0f,
+		0,
+		RainBlockerNiagaraDebugThickness);
 }
