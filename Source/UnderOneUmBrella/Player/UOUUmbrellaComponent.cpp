@@ -299,6 +299,48 @@ bool UUOUUmbrellaComponent::BlocksJumping() const
 	return bHasUmbrella && (CurrentState == EUOUUmbrellaState::UpsideDown || CurrentState == EUOUUmbrellaState::Pouring);
 }
 
+bool UUOUUmbrellaComponent::IsBlockingRain() const
+{
+	return IsOpen();
+}
+
+bool UUOUUmbrellaComponent::TryGetRainBlockerData(FVector& OutWorldLocation, float& OutRadius) const
+{
+	OutWorldLocation = FVector::ZeroVector;
+	OutRadius = 0.0f;
+
+	if (!IsBlockingRain() || RainBlockerRadius <= 0.0f)
+	{
+		return false;
+	}
+
+	const USceneComponent* BlockerComponent = OpenVisual;
+	if (BlockerComponent == nullptr)
+	{
+		BlockerComponent = RuntimeHeldVisual;
+	}
+	if (BlockerComponent == nullptr)
+	{
+		BlockerComponent = PickupAttachPoint;
+	}
+
+	if (BlockerComponent != nullptr)
+	{
+		OutWorldLocation = BlockerComponent->GetComponentTransform().TransformPosition(RainBlockerLocalOffset);
+		OutRadius = RainBlockerRadius;
+		return true;
+	}
+
+	if (const AActor* Owner = GetOwner())
+	{
+		OutWorldLocation = Owner->GetActorLocation() + RainBlockerLocalOffset;
+		OutRadius = RainBlockerRadius;
+		return true;
+	}
+
+	return false;
+}
+
 float UUOUUmbrellaComponent::GetCurrentStoredWater() const
 {
 	return StoredWaterContainer != nullptr ? StoredWaterContainer->CurrentAmount : 0.0f;
