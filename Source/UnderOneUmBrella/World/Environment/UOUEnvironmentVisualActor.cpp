@@ -162,9 +162,10 @@ void AUOUEnvironmentVisualActor::RefreshNiagaraActivation()
 
 	if (PrimaryEffect != nullptr)
 	{
+		const bool bWasPrimaryVisible = PrimaryEffect->IsVisible();
 		PrimaryEffect->SetVisibility(bShouldShowPrimary, true);
 
-		if (bShouldShowPrimary && !PrimaryEffect->IsActive())
+		if (bShouldShowPrimary && (!PrimaryEffect->IsActive() || !bWasPrimaryVisible))
 		{
 			PrimaryEffect->Activate(true);
 			ApplyNiagaraParameters();
@@ -182,9 +183,10 @@ void AUOUEnvironmentVisualActor::RefreshNiagaraActivation()
 
 	if (SecondaryEffect != nullptr)
 	{
+		const bool bWasSecondaryVisible = SecondaryEffect->IsVisible();
 		SecondaryEffect->SetVisibility(bShouldShowSecondary, true);
 
-		if (bShouldShowSecondary && !SecondaryEffect->IsActive())
+		if (bShouldShowSecondary && (!SecondaryEffect->IsActive() || !bWasSecondaryVisible))
 		{
 			SecondaryEffect->Activate(true);
 			ApplyNiagaraParameters();
