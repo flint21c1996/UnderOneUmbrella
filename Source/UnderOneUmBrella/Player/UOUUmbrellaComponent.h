@@ -101,6 +101,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Debug")
 	bool bShowScreenDebug = true;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Debug", meta = (ToolTip = "열린 우산이 비를 막는 중심 위치와 반지름을 월드에 표시합니다."))
+	bool bDrawRainBlockerDebug = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Debug", meta = (ClampMin = "0.0", ToolTip = "Rain Blocker 디버그 원과 중심점의 선 두께입니다."))
+	float RainBlockerDebugThickness = 2.0f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Water", meta = (ClampMin = "0.0"))
 	float PourRate = 1.5f;
 
@@ -238,6 +244,7 @@ protected:
 	void ApplyHeldVisualFromAssets(UStaticMesh* Mesh, const TArray<TObjectPtr<UMaterialInterface>>& Materials, const FVector& SourceRelativeScale);
 	FTransform GetHeldVisualRelativeTransform(const FVector& SourceRelativeScale) const;
 	void DrawScreenDebug() const;
+	void DrawRainBlockerDebug() const;
 	void UpdatePourAimFacing();
 	void ClearPourAimFacing();
 	void UpdatePouring(float DeltaTime);

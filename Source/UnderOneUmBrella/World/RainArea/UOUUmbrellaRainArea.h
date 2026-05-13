@@ -74,10 +74,17 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Visual", meta = (ClampMin = "0.0"))
 	float GroundSplashHeightOffset = 5.0f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Debug", meta = (ToolTip = "RainArea가 비주얼에 전달하는 영역 계산값을 월드에 표시합니다."))
+	bool bDrawRainVisualDebug = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Debug", meta = (ClampMin = "0.0", ToolTip = "RainArea 비주얼 디버그 박스와 선의 두께입니다."))
+	float RainVisualDebugThickness = 2.0f;
+
 	void ApplyPreviewSettings();
 	void ResolveEnvironmentVisual();
 	void ApplyEnvironmentVisualSettings();
 	void ApplyEnvironmentVisualGeometry();
 	void ApplyEnvironmentVisualState();
 	void ApplyEnvironmentVisualRainBlocker(bool bIsBlocking, const FVector& BlockerWorldLocation, float BlockerRadius, float BlockerIntensity);
+	void DrawRainVisualDebug() const;
 };

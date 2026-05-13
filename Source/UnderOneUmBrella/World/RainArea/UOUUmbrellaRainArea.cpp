@@ -5,6 +5,7 @@
 #include "Components/BoxComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "DrawDebugHelpers.h"
 #include "GameFramework/Actor.h"
 #include "Materials/MaterialInterface.h"
 #include "Player/UOUUmbrellaComponent.h"
@@ -73,6 +74,8 @@ void AUOUUmbrellaRainArea::Tick(float DeltaSeconds)
 	{
 		return;
 	}
+
+	DrawRainVisualDebug();
 
 	if (RainFillRate <= 0.0f)
 	{
@@ -204,6 +207,86 @@ void AUOUUmbrellaRainArea::ApplyEnvironmentVisualRainBlocker(bool bIsBlocking, c
 		BlockerLocalPosition,
 		BlockerRadius,
 		BlockerIntensity);
+}
+
+void AUOUUmbrellaRainArea::DrawRainVisualDebug() const
+{
+	if (!bDrawRainVisualDebug || RainVolume == nullptr)
+	{
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	if (World == nullptr)
+	{
+		return;
+	}
+
+	const FVector BoxExtent = RainVolume->GetScaledBoxExtent();
+	const FVector VolumeCenter = RainVolume->GetComponentLocation();
+	const FQuat VolumeRotation = RainVolume->GetComponentQuat();
+	const FVector VolumeUp = RainVolume->GetUpVector();
+	const FVector RainWorldPosition = VolumeCenter + VolumeUp * (BoxExtent.Z + RainEmitterTopPadding);
+	const FVector GroundSplashWorldPosition = VolumeCenter - VolumeUp * (BoxExtent.Z - GroundSplashHeightOffset);
+	const FVector VisualAreaHalfExtent(BoxExtent.X, BoxExtent.Y, 2.0f);
+	const float Thickness = FMath::Max(0.0f, RainVisualDebugThickness);
+	const float LifeTime = 0.0f;
+
+	DrawDebugBox(
+		World,
+		VolumeCenter,
+		BoxExtent,
+		VolumeRotation,
+		FColor::Green,
+		false,
+		LifeTime,
+		0,
+		Thickness);
+
+	DrawDebugBox(
+		World,
+		RainWorldPosition,
+		VisualAreaHalfExtent,
+		VolumeRotation,
+		FColor::Cyan,
+		false,
+		LifeTime,
+		0,
+		Thickness);
+
+	DrawDebugBox(
+		World,
+		GroundSplashWorldPosition,
+		VisualAreaHalfExtent,
+		VolumeRotation,
+		FColor::Blue,
+		false,
+		LifeTime,
+		0,
+		Thickness);
+
+	DrawDebugLine(
+		World,
+		GroundSplashWorldPosition,
+		RainWorldPosition,
+		FColor::Yellow,
+		false,
+		LifeTime,
+		0,
+		Thickness);
+
+	DrawDebugString(
+		World,
+		RainWorldPosition + VolumeUp * 20.0f,
+		FString::Printf(
+			TEXT("RainAreaSize %.1f x %.1f"),
+			BoxExtent.X * 2.0f,
+			BoxExtent.Y * 2.0f),
+		nullptr,
+		FColor::Cyan,
+		LifeTime,
+		false,
+		1.0f);
 }
 
 void AUOUUmbrellaRainArea::ApplyPreviewSettings()
