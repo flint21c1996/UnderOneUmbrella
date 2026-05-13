@@ -333,7 +333,7 @@ bool UUOUUmbrellaComponent::TryGetRainBlockerData(FVector& OutWorldLocation, flo
 
 	if (const AActor* Owner = GetOwner())
 	{
-		OutWorldLocation = Owner->GetActorLocation() + RainBlockerLocalOffset;
+		OutWorldLocation = Owner->GetActorTransform().TransformPosition(RainBlockerLocalOffset);
 		OutRadius = RainBlockerRadius;
 		return true;
 	}
