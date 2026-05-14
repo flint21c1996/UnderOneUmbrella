@@ -101,6 +101,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Debug")
 	bool bShowScreenDebug = true;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Debug", meta = (ToolTip = "열린 우산이 비를 막는 중심 위치와 반지름을 월드에 표시합니다."))
+	bool bDrawRainBlockerDebug = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Debug", meta = (ClampMin = "0.0", ToolTip = "Rain Blocker 디버그 원과 중심점의 선 두께입니다."))
+	float RainBlockerDebugThickness = 2.0f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Water", meta = (ClampMin = "0.0"))
 	float PourRate = 1.5f;
 
@@ -121,6 +127,12 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Rain", meta = (ClampMin = "0.0"))
 	float StoredWaterWeightMultiplier = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Rain Block", meta = (ClampMin = "0.0", ToolTip = "우산이 비를 막는 시각적 반지름입니다. RainArea와 Niagara가 이 값을 사용해 빗줄기 차단과 우산 물 튐 범위를 표현합니다."))
+	float RainBlockerRadius = 90.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Rain Block", meta = (ToolTip = "비 차단 중심을 우산 표시 컴포넌트 기준으로 보정하는 로컬 오프셋입니다. 우산 물 튐 위치가 맞지 않을 때 조정합니다."))
+	FVector RainBlockerLocalOffset = FVector::ZeroVector;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Dependencies")
 	TObjectPtr<UUOUWaterContainerComponent> StoredWaterContainer = nullptr;
@@ -203,6 +215,12 @@ public:
 	bool BlocksJumping() const;
 
 	UFUNCTION(BlueprintPure, Category = "Umbrella")
+	bool IsBlockingRain() const;
+
+	UFUNCTION(BlueprintPure, Category = "Umbrella")
+	bool TryGetRainBlockerData(FVector& OutWorldLocation, float& OutRadius) const;
+
+	UFUNCTION(BlueprintPure, Category = "Umbrella")
 	float GetCurrentStoredWater() const;
 
 	UFUNCTION(BlueprintPure, Category = "Umbrella")
@@ -232,6 +250,7 @@ protected:
 	void ApplyHeldVisualFromAssets(UStaticMesh* Mesh, const TArray<TObjectPtr<UMaterialInterface>>& Materials, const FVector& SourceRelativeScale);
 	FTransform GetHeldVisualRelativeTransform(const FVector& SourceRelativeScale) const;
 	void DrawScreenDebug() const;
+	void DrawRainBlockerDebug() const;
 	void UpdatePourAimFacing();
 	void ClearPourAimFacing();
 	void UpdatePouring(float DeltaTime);
