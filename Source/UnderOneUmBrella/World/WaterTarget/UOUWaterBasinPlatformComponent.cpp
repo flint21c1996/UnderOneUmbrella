@@ -11,16 +11,26 @@ UUOUWaterBasinPlatformComponent::UUOUWaterBasinPlatformComponent()
 	PrimaryComponentTick.bCanEverTick = true;
 }
 
+void UUOUWaterBasinPlatformComponent::OnRegister()
+{
+	Super::OnRegister();
+
+	AutoResolveTargetActor();
+}
+
 void UUOUWaterBasinPlatformComponent::BeginPlay()
 {
 	Super::BeginPlay();
 
+	AutoResolveTargetActor();
 	RefreshPlatformPosition();
 }
 
 void UUOUWaterBasinPlatformComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+
+	SyncAutoResolvedTargetActor();
 
 	USceneComponent* ResolvedPlatformComponent = GetPlatformComponent();
 	if (!ResolvedPlatformComponent)
@@ -56,12 +66,30 @@ void UUOUWaterBasinPlatformComponent::TickComponent(float DeltaTime, ELevelTick 
 void UUOUWaterBasinPlatformComponent::SetTargetActor(AActor* NewTargetActor)
 {
 	TargetActor = NewTargetActor;
+	bTargetActorAutoResolved = false;
 
 	RefreshPlatformPosition();
 }
 
+void UUOUWaterBasinPlatformComponent::AutoResolveTargetActor()
+{
+	if (!bAutoFindTargetActorFromAttachParent)
+	{
+		return;
+	}
+
+	AActor* CurrentAttachParentTargetActor = FindAttachParentTargetActor();
+	if (bKeepAutoTargetSyncedWithAttachParent || !IsValid(TargetActor))
+	{
+		TargetActor = CurrentAttachParentTargetActor;
+		bTargetActorAutoResolved = IsValid(TargetActor);
+	}
+}
+
 void UUOUWaterBasinPlatformComponent::RefreshPlatformPosition()
 {
+	SyncAutoResolvedTargetActor();
+
 	USceneComponent* ResolvedPlatformComponent = GetPlatformComponent();
 	if (!ResolvedPlatformComponent)
 	{
@@ -105,7 +133,58 @@ UUOUWaterBasinTargetComponent* UUOUWaterBasinPlatformComponent::GetTargetCompone
 		return TargetActor->FindComponentByClass<UUOUWaterBasinTargetComponent>();
 	}
 
+	if (bAutoFindTargetActorFromAttachParent)
+	{
+		if (const AActor* ResolvedTargetActor = FindAttachParentTargetActor())
+		{
+			return ResolvedTargetActor->FindComponentByClass<UUOUWaterBasinTargetComponent>();
+		}
+	}
+
 	return GetOwner() ? GetOwner()->FindComponentByClass<UUOUWaterBasinTargetComponent>() : nullptr;
+}
+
+void UUOUWaterBasinPlatformComponent::SyncAutoResolvedTargetActor()
+{
+	if (!bAutoFindTargetActorFromAttachParent)
+	{
+		return;
+	}
+
+	if (!bKeepAutoTargetSyncedWithAttachParent)
+	{
+		AutoResolveTargetActor();
+		return;
+	}
+
+	AActor* CurrentAttachParentTargetActor = FindAttachParentTargetActor();
+	if (TargetActor != CurrentAttachParentTargetActor)
+	{
+		TargetActor = CurrentAttachParentTargetActor;
+		bTargetActorAutoResolved = IsValid(TargetActor);
+	}
+}
+
+AActor* UUOUWaterBasinPlatformComponent::FindAttachParentTargetActor() const
+{
+	const AActor* Owner = GetOwner();
+	if (!Owner)
+	{
+		return nullptr;
+	}
+
+	AActor* ParentActor = Owner->GetAttachParentActor();
+	while (IsValid(ParentActor))
+	{
+		if (ParentActor->FindComponentByClass<UUOUWaterBasinTargetComponent>())
+		{
+			return ParentActor;
+		}
+
+		ParentActor = ParentActor->GetAttachParentActor();
+	}
+
+	return nullptr;
 }
 
 USceneComponent* UUOUWaterBasinPlatformComponent::GetPlatformComponent() const

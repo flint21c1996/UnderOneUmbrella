@@ -21,6 +21,9 @@ class UNDERONEUMBRELLA_API UUOUWaterBasinPlatformComponent : public UActorCompon
 public:
 	UUOUWaterBasinPlatformComponent();
 
+	// 에디터/런타임 등록 시 Attach Parent 체인에서 WaterBasinTarget Actor를 자동으로 찾습니다.
+	virtual void OnRegister() override;
+
 	// 시작 시 Target/Platform 참조를 해석하고 현재 수면 위치에 맞춰 플랫폼 위치를 갱신합니다.
 	virtual void BeginPlay() override;
 
@@ -31,6 +34,15 @@ public:
 	// Platform Actor와 WaterTile Actor가 같은 경우에만 비워둘 수 있습니다.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Platform", meta = (ToolTip = "플랫폼이 따라갈 WaterBasinTargetComponent를 가진 WaterTile Actor입니다. 플랫폼 Actor와 WaterTile Actor가 같을 때만 비워둘 수 있습니다."))
 	TObjectPtr<AActor> TargetActor = nullptr;
+
+	// TargetActor가 비어 있으면 이 플랫폼 Actor의 Attach Parent 체인을 따라 올라가며 WaterBasinTargetComponent를 가진 Actor를 자동으로 찾습니다.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Platform", meta = (ToolTip = "TargetActor가 비어 있으면 Attach Parent 체인에서 WaterBasinTargetComponent를 가진 WaterTile Actor를 자동으로 찾습니다."))
+	bool bAutoFindTargetActorFromAttachParent = true;
+
+	// Attach Parent가 바뀔 때마다 TargetActor를 현재 부모 체인 기준으로 갱신합니다.
+	// 수동으로 지정한 TargetActor를 고정하고 싶다면 이 옵션을 끄면 됩니다.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Platform", meta = (ToolTip = "Attach Parent 변경에 맞춰 TargetActor를 계속 갱신합니다. 수동 지정 값을 고정하려면 이 옵션을 끄세요."))
+	bool bKeepAutoTargetSyncedWithAttachParent = true;
 
 	// 실제로 높이를 이동시킬 SceneComponent입니다.
 	// 비워두면 이름/태그로 찾고, 그래도 없으면 기본적으로 Platform Actor의 RootComponent를 움직입니다.
@@ -71,6 +83,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Water Platform")
 	void SetTargetActor(AActor* NewTargetActor);
 
+	// Attach Parent 체인에서 WaterBasinTargetComponent를 가진 Actor를 찾아 TargetActor에 설정합니다.
+	UFUNCTION(BlueprintCallable, CallInEditor, Category = "Water Platform")
+	void AutoResolveTargetActor();
+
 	// 현재 WaterTile 자신의 수면 월드 Z를 기준으로 플랫폼 위치를 즉시 다시 계산합니다.
 	UFUNCTION(BlueprintCallable, Category = "Water Platform")
 	void RefreshPlatformPosition();
@@ -80,8 +96,17 @@ public:
 	float GetTargetSurfaceWorldZ() const;
 
 private:
+	// TargetActor가 마지막으로 Attach Parent 자동 탐색으로 설정되었는지 추적합니다.
+	bool bTargetActorAutoResolved = false;
+
 	// TargetActor 또는 Owner에서 WaterBasinTargetComponent를 찾습니다.
 	UUOUWaterBasinTargetComponent* GetTargetComponent() const;
+
+	// 자동 TargetActor가 부모 Attach 상태와 일치하도록 갱신합니다.
+	void SyncAutoResolvedTargetActor();
+
+	// Owner의 Attach Parent 체인을 따라가며 WaterBasinTargetComponent를 가진 Actor를 찾습니다.
+	AActor* FindAttachParentTargetActor() const;
 
 	// PlatformComponent가 비어 있으면 이름/태그 또는 RootComponent로 해석합니다.
 	USceneComponent* GetPlatformComponent() const;
