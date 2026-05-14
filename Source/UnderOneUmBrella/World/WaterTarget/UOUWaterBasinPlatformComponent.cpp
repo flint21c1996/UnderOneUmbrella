@@ -15,11 +15,11 @@ void UUOUWaterBasinPlatformComponent::BeginPlay()
 {
 	Super::BeginPlay();
 
-	if (bCaptureInitialOffsetOnBeginPlay)
+	if (bCaptureBaseZOnBeginPlay)
 	{
 		if (const USceneComponent* ResolvedPlatformComponent = GetPlatformComponent())
 		{
-			SurfaceOffsetZ = ResolvedPlatformComponent->GetComponentLocation().Z - GetTargetSurfaceWorldZ();
+			BasePlatformWorldZ = ResolvedPlatformComponent->GetComponentLocation().Z;
 		}
 	}
 
@@ -36,7 +36,7 @@ void UUOUWaterBasinPlatformComponent::TickComponent(float DeltaTime, ELevelTick 
 		return;
 	}
 
-	CurrentTargetWorldZ = GetTargetSurfaceWorldZ() + SurfaceOffsetZ;
+	CurrentTargetWorldZ = BasePlatformWorldZ + GetTargetWaterDepthWorld() + WaterDepthOffsetZ;
 
 	FVector NextLocation = ResolvedPlatformComponent->GetComponentLocation();
 	if (!bMoveOnlyZ)
@@ -65,11 +65,11 @@ void UUOUWaterBasinPlatformComponent::SetTargetActor(AActor* NewTargetActor)
 {
 	TargetActor = NewTargetActor;
 
-	if (bCaptureInitialOffsetOnBeginPlay)
+	if (bCaptureBaseZOnBeginPlay)
 	{
 		if (const USceneComponent* ResolvedPlatformComponent = GetPlatformComponent())
 		{
-			SurfaceOffsetZ = ResolvedPlatformComponent->GetComponentLocation().Z - GetTargetSurfaceWorldZ();
+			BasePlatformWorldZ = ResolvedPlatformComponent->GetComponentLocation().Z;
 		}
 	}
 
@@ -84,7 +84,7 @@ void UUOUWaterBasinPlatformComponent::RefreshPlatformPosition()
 		return;
 	}
 
-	CurrentTargetWorldZ = GetTargetSurfaceWorldZ() + SurfaceOffsetZ;
+	CurrentTargetWorldZ = BasePlatformWorldZ + GetTargetWaterDepthWorld() + WaterDepthOffsetZ;
 
 	FVector NewLocation = ResolvedPlatformComponent->GetComponentLocation();
 	if (!bMoveOnlyZ)
@@ -101,21 +101,15 @@ void UUOUWaterBasinPlatformComponent::RefreshPlatformPosition()
 	ResolvedPlatformComponent->SetWorldLocation(NewLocation);
 }
 
-float UUOUWaterBasinPlatformComponent::GetTargetSurfaceWorldZ() const
+float UUOUWaterBasinPlatformComponent::GetTargetWaterDepthWorld() const
 {
 	const UUOUWaterBasinTargetComponent* TargetComponent = GetTargetComponent();
 	if (!TargetComponent)
 	{
-		return GetOwner() ? GetOwner()->GetActorLocation().Z : 0.0f;
+		return 0.0f;
 	}
 
-	if (bUseConnectedGroupSurface)
-	{
-		const FUOUWaterBasinGroupDebugData GroupData = TargetComponent->GetConnectedGroupDebugData();
-		return GroupData.SurfaceWorldZ;
-	}
-
-	return TargetComponent->GetBottomWorldZ() + TargetComponent->GetWaterDepthWorld();
+	return TargetComponent->GetWaterDepthWorld();
 }
 
 UUOUWaterBasinTargetComponent* UUOUWaterBasinPlatformComponent::GetTargetComponent() const
