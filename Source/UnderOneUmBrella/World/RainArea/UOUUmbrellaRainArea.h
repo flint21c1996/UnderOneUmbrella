@@ -10,6 +10,7 @@ class UBoxComponent;
 class UMaterialInterface;
 class USceneComponent;
 class UStaticMeshComponent;
+class AUOUEnvironmentVisualActor;
 
 // 이 클래스는 우산 플레이어가 들어가면 시간당 비 노출과 물 받기를 적용하는 테스트용 비 영역을 담당한다.
 UCLASS(meta=(DisplayName="UOU Umbrella Rain Area"))
@@ -34,6 +35,9 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Rain|Preview")
 	TObjectPtr<UStaticMeshComponent> PreviewVolumeMesh = nullptr;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Visual")
+	TObjectPtr<AUOUEnvironmentVisualActor> EnvironmentVisual = nullptr;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Preview")
 	bool bShowEditorPreview = true;
 
@@ -55,5 +59,32 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain", meta = (ClampMin = "0.0"))
 	float RainFillRate = 1.0f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Visual")
+	bool bEnableRainVisuals = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Visual", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float RainVisualIntensity = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Visual", meta = (ClampMin = "0.0", ClampMax = "2.0"))
+	float GroundSplashIntensityMultiplier = 0.45f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Visual", meta = (ClampMin = "0.0"))
+	float RainEmitterTopPadding = 25.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Visual", meta = (ClampMin = "0.0"))
+	float GroundSplashHeightOffset = 5.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Debug", meta = (ToolTip = "RainArea가 비주얼에 전달하는 영역 계산값을 월드에 표시합니다."))
+	bool bDrawRainVisualDebug = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Debug", meta = (ClampMin = "0.0", ToolTip = "RainArea 비주얼 디버그 박스와 선의 두께입니다."))
+	float RainVisualDebugThickness = 2.0f;
+
 	void ApplyPreviewSettings();
+	void ResolveEnvironmentVisual();
+	void ApplyEnvironmentVisualSettings();
+	void ApplyEnvironmentVisualGeometry();
+	void ApplyEnvironmentVisualState();
+	void ApplyEnvironmentVisualRainBlocker(bool bIsBlocking, const FVector& BlockerWorldLocation, float BlockerRadius, float BlockerIntensity);
+	void DrawRainVisualDebug() const;
 };

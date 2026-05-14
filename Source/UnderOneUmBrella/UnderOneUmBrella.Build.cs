@@ -19,7 +19,8 @@ public class UnderOneUmBrella : ModuleRules
 			"EnhancedInput",
 			"AIModule",
 			"NavigationSystem",
-			"GameplayTasks"
-		});
+			"GameplayTasks",
+            "Niagara"
+        });
 	}
 }

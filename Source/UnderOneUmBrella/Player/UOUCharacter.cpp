@@ -3,11 +3,13 @@
 #include "Player/UOUCharacter.h"
 
 #include "Camera/CameraComponent.h"
+#include "Components/ActorComponent.h"
 #include "Components/ArrowComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SceneComponent.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
+#include "Engine/Engine.h"
 #include "Engine/LocalPlayer.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/Controller.h"
@@ -15,12 +17,59 @@
 #include "InputActionValue.h"
 #include "InputCoreTypes.h"
 #include "Player/UOUCameraControllerComponent.h"
+#include "Player/UOUPushPullInteractorComponent.h"
 #include "Player/UOUUmbrellaComponent.h"
 
 DEFINE_LOG_CATEGORY(LogTemplateCharacter);
 
+namespace
+{
+	void LogPushPullComponentState(const AUOUCharacter* Character, const TCHAR* ContextLabel)
+	{
+		if (Character == nullptr)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[PushPullDebug][%s] Character is null."), ContextLabel);
+			return;
+		}
+
+		const UClass* CharacterClass = Character->GetClass();
+		const UClass* SuperClass = CharacterClass != nullptr ? CharacterClass->GetSuperClass() : nullptr;
+		const UUOUPushPullInteractorComponent* FoundComponent = Character->FindComponentByClass<UUOUPushPullInteractorComponent>();
+
+		UE_LOG(
+			LogTemp,
+			Warning,
+			TEXT("[PushPullDebug][%s] Character=%s Class=%s Super=%s StoredPtr=%s FoundByClass=%s"),
+			ContextLabel,
+			*Character->GetName(),
+			CharacterClass != nullptr ? *CharacterClass->GetName() : TEXT("None"),
+			SuperClass != nullptr ? *SuperClass->GetName() : TEXT("None"),
+			Character->GetPushPullInteractorComponent() != nullptr ? *Character->GetPushPullInteractorComponent()->GetName() : TEXT("None"),
+			FoundComponent != nullptr ? *FoundComponent->GetName() : TEXT("None"));
+
+		TInlineComponentArray<UActorComponent*> Components(Character);
+		for (const UActorComponent* Component : Components)
+		{
+			if (Component == nullptr)
+			{
+				continue;
+			}
+
+			UE_LOG(
+				LogTemp,
+				Warning,
+				TEXT("[PushPullDebug][%s] Component=%s Class=%s"),
+				ContextLabel,
+				*Component->GetName(),
+				*Component->GetClass()->GetName());
+		}
+	}
+}
+
 AUOUCharacter::AUOUCharacter()
 {
+	PrimaryActorTick.bCanEverTick = true;
+
 	GetCapsuleComponent()->InitCapsuleSize(42.f, 96.0f);
 
 	bUseControllerRotationPitch = false;
@@ -28,6 +77,7 @@ AUOUCharacter::AUOUCharacter()
 	bUseControllerRotationRoll = false;
 
 	GetCharacterMovement()->bOrientRotationToMovement = true;
+	GetCharacterMovement()->bEnablePhysicsInteraction = false;
 	GetCharacterMovement()->RotationRate = FRotator(0.0f, 500.0f, 0.0f);
 	GetCharacterMovement()->JumpZVelocity = 700.f;
 	GetCharacterMovement()->AirControl = 0.35f;
@@ -68,11 +118,14 @@ AUOUCharacter::AUOUCharacter()
 	InteractionOrigin = CreateDefaultSubobject<UArrowComponent>(TEXT("InteractionOrigin"));
 	InteractionOrigin->SetupAttachment(RootComponent);
 	InteractionOrigin->SetRelativeLocation(FVector(50.0f, 0.0f, 40.0f));
+
 }
 
 void AUOUCharacter::BeginPlay()
 {
 	Super::BeginPlay();
+
+	PushPullInteractorComponent = FindComponentByClass<UUOUPushPullInteractorComponent>();
 
 	TInlineComponentArray<UArrowComponent*> ArrowComponents(this);
 	for (UArrowComponent* DebugArrowComponent : ArrowComponents)
@@ -82,6 +135,39 @@ void AUOUCharacter::BeginPlay()
 			DebugArrowComponent->SetHiddenInGame(true);
 		}
 	}
+
+	LogPushPullComponentState(this, TEXT("BeginPlay"));
+}
+
+void AUOUCharacter::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+
+	if (PushPullInteractorComponent == nullptr && !bLoggedMissingPushPullComponent)
+	{
+		LogPushPullComponentState(this, TEXT("TickMissingPtr"));
+		bLoggedMissingPushPullComponent = true;
+	}
+
+	if (!IsLocallyControlled() || GEngine == nullptr)
+	{
+		return;
+	}
+
+	const APlayerController* PlayerController = Cast<APlayerController>(GetController());
+	const bool bPhysicalContextKeyDown = PlayerController != nullptr && PlayerController->IsInputKeyDown(EKeys::RightMouseButton);
+	const FString ContextDebugText = FString::Printf(
+		TEXT("Context Action: %s\nPhysical RMB: %s\nContext Pressed Count: %d\nContext Released Count: %d\nPushPull Pressed Count: %d\nPushPull Released Count: %d\nPushPull Ptr: %s\nPushPull IsGrabbing: %s"),
+		ContextInteractAction != nullptr ? *ContextInteractAction->GetName() : TEXT("None"),
+		bPhysicalContextKeyDown ? TEXT("Yes") : TEXT("No"),
+		ContextInteractPressedCount,
+		ContextInteractReleasedCount,
+		PushPullPressedCount,
+		PushPullReleasedCount,
+		PushPullInteractorComponent != nullptr ? TEXT("Valid") : TEXT("Null"),
+		(PushPullInteractorComponent != nullptr && PushPullInteractorComponent->IsGrabbing()) ? TEXT("Yes") : TEXT("No"));
+
+	GEngine->AddOnScreenDebugMessage(0xC07E, 0.0f, FColor::Magenta, ContextDebugText);
 }
 
 void AUOUCharacter::NotifyControllerChanged()
@@ -104,6 +190,28 @@ void AUOUCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompon
 		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &AUOUCharacter::HandleJumpStarted);
 		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &ACharacter::StopJumping);
 		EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &AUOUCharacter::Move);
+		EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Completed, this, &AUOUCharacter::Move);
+
+		if (ContextInteractAction != nullptr)
+		{
+			EnhancedInputComponent->BindAction(ContextInteractAction, ETriggerEvent::Started, this, &AUOUCharacter::HandleContextInteractPressed);
+			EnhancedInputComponent->BindAction(ContextInteractAction, ETriggerEvent::Completed, this, &AUOUCharacter::HandleContextInteractReleased);
+		}
+
+		if (UmbrellaToggleAction != nullptr)
+		{
+			EnhancedInputComponent->BindAction(UmbrellaToggleAction, ETriggerEvent::Started, this, &AUOUCharacter::HandleUmbrellaTogglePressed);
+		}
+
+		if (UmbrellaInvertAction != nullptr)
+		{
+			EnhancedInputComponent->BindAction(UmbrellaInvertAction, ETriggerEvent::Started, this, &AUOUCharacter::HandleUmbrellaInvertPressed);
+		}
+
+		if (UmbrellaDebugFillAction != nullptr)
+		{
+			EnhancedInputComponent->BindAction(UmbrellaDebugFillAction, ETriggerEvent::Started, this, &AUOUCharacter::HandleUmbrellaDebugFillPressed);
+		}
 	}
 	else
 	{
@@ -117,21 +225,42 @@ void AUOUCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompon
 
 	if (UUOUUmbrellaComponent* UmbrellaComponent = FindUmbrellaComponent())
 	{
-		PlayerInputComponent->BindKey(UmbrellaComponent->GetToggleUmbrellaKey(), IE_Pressed, this, &AUOUCharacter::HandleUmbrellaTogglePressed);
-		PlayerInputComponent->BindKey(UmbrellaComponent->GetInvertUmbrellaKey(), IE_Pressed, this, &AUOUCharacter::HandleUmbrellaInvertPressed);
-		PlayerInputComponent->BindKey(UmbrellaComponent->GetPourKey(), IE_Pressed, this, &AUOUCharacter::HandleUmbrellaPourPressed);
-		PlayerInputComponent->BindKey(UmbrellaComponent->GetPourKey(), IE_Released, this, &AUOUCharacter::HandleUmbrellaPourReleased);
+		if (UmbrellaToggleAction == nullptr)
+		{
+			PlayerInputComponent->BindKey(UmbrellaComponent->GetToggleUmbrellaKey(), IE_Pressed, this, &AUOUCharacter::HandleUmbrellaTogglePressed);
+		}
 
-		if (UmbrellaComponent->IsDebugFillEnabled())
+		if (UmbrellaInvertAction == nullptr)
+		{
+			PlayerInputComponent->BindKey(UmbrellaComponent->GetInvertUmbrellaKey(), IE_Pressed, this, &AUOUCharacter::HandleUmbrellaInvertPressed);
+		}
+
+		if (ContextInteractAction == nullptr)
+		{
+			PlayerInputComponent->BindKey(UmbrellaComponent->GetPourKey(), IE_Pressed, this, &AUOUCharacter::HandleUmbrellaPourPressed);
+			PlayerInputComponent->BindKey(UmbrellaComponent->GetPourKey(), IE_Released, this, &AUOUCharacter::HandleUmbrellaPourReleased);
+		}
+
+		if (UmbrellaComponent->IsDebugFillEnabled() && UmbrellaDebugFillAction == nullptr)
 		{
 			PlayerInputComponent->BindKey(UmbrellaComponent->GetDebugFillKey(), IE_Pressed, this, &AUOUCharacter::HandleUmbrellaDebugFillPressed);
 		}
 	}
+
 }
 
 void AUOUCharacter::Move(const FInputActionValue& Value)
 {
 	const FVector2D MovementVector = Value.Get<FVector2D>();
+
+	if (PushPullInteractorComponent != nullptr)
+	{
+		const float MovementYaw = CameraControllerComponent != nullptr ? CameraControllerComponent->GetMovementYaw() : 0.0f;
+		if (PushPullInteractorComponent->HandleMoveInput(MovementVector, MovementYaw))
+		{
+			return;
+		}
+	}
 
 	if (UUOUUmbrellaComponent* UmbrellaComponent = FindUmbrellaComponent())
 	{
@@ -192,6 +321,11 @@ void AUOUCharacter::ZoomCameraOut()
 
 void AUOUCharacter::HandleJumpStarted()
 {
+	if (PushPullInteractorComponent != nullptr && PushPullInteractorComponent->BlocksJumping())
+	{
+		return;
+	}
+
 	if (UUOUUmbrellaComponent* UmbrellaComponent = FindUmbrellaComponent())
 	{
 		if (UmbrellaComponent->BlocksJumping())
@@ -247,6 +381,71 @@ void AUOUCharacter::HandleUmbrellaDebugFillPressed()
 	if (UUOUUmbrellaComponent* UmbrellaComponent = FindUmbrellaComponent())
 	{
 		UmbrellaComponent->HandleInputPressed(UmbrellaComponent->GetDebugFillKey());
+	}
+}
+
+void AUOUCharacter::HandleContextInteractPressed()
+{
+	++ContextInteractPressedCount;
+
+	if (UUOUUmbrellaComponent* UmbrellaComponent = FindUmbrellaComponent())
+	{
+		if (UmbrellaComponent->HasUmbrella() && UmbrellaComponent->IsUpsideDown() && UmbrellaComponent->GetCurrentStoredWater() > 0.0f)
+		{
+			HandleUmbrellaPourPressed();
+			return;
+		}
+	}
+
+	HandlePushPullPressed();
+}
+
+void AUOUCharacter::HandleContextInteractReleased()
+{
+	++ContextInteractReleasedCount;
+
+	if (UUOUUmbrellaComponent* UmbrellaComponent = FindUmbrellaComponent())
+	{
+		if (UmbrellaComponent->IsPouring())
+		{
+			HandleUmbrellaPourReleased();
+		}
+	}
+
+	if (PushPullInteractorComponent != nullptr && PushPullInteractorComponent->IsGrabbing())
+	{
+		HandlePushPullReleased();
+	}
+}
+
+void AUOUCharacter::HandlePushPullPressed()
+{
+	++PushPullPressedCount;
+
+	if (PushPullInteractorComponent == nullptr)
+	{
+		PushPullInteractorComponent = FindComponentByClass<UUOUPushPullInteractorComponent>();
+		LogPushPullComponentState(this, TEXT("HandlePushPullPressed"));
+	}
+
+	if (PushPullInteractorComponent != nullptr)
+	{
+		PushPullInteractorComponent->HandleGrabPressed();
+	}
+}
+
+void AUOUCharacter::HandlePushPullReleased()
+{
+	++PushPullReleasedCount;
+
+	if (PushPullInteractorComponent == nullptr)
+	{
+		PushPullInteractorComponent = FindComponentByClass<UUOUPushPullInteractorComponent>();
+	}
+
+	if (PushPullInteractorComponent != nullptr)
+	{
+		PushPullInteractorComponent->HandleGrabReleased();
 	}
 }
 

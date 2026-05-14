@@ -44,10 +44,24 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Puzzle|PushPull")
 	FVector SetHorizontalVelocity(FVector HorizontalVelocity);
 
+	UFUNCTION(BlueprintPure, Category = "Puzzle|PushPull")
+	UPrimitiveComponent* GetTargetPrimitive() const { return TargetPrimitive; }
+
+	UFUNCTION(BlueprintPure, Category = "Puzzle|PushPull")
+	FVector GetGrabReferenceLocation() const;
+
 protected:
 	UPROPERTY(Transient)
 	TObjectPtr<AActor> CurrentGrabber = nullptr;
 
+	UPROPERTY(Transient)
+	bool bBaseLockXTranslation = false;
+
+	UPROPERTY(Transient)
+	bool bBaseLockYTranslation = false;
+
 	void ResolveTargetPrimitive();
+	void CacheBasePhysicsLocks();
+	void ApplyGrabStateConstraints(bool bCanMoveHorizontally);
 	void StopHorizontalMotion();
 };
