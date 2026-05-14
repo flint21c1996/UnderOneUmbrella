@@ -15,14 +15,6 @@ void UUOUWaterBasinPlatformComponent::BeginPlay()
 {
 	Super::BeginPlay();
 
-	if (bCaptureBaseZOnBeginPlay)
-	{
-		if (const USceneComponent* ResolvedPlatformComponent = GetPlatformComponent())
-		{
-			BasePlatformWorldZ = ResolvedPlatformComponent->GetComponentLocation().Z;
-		}
-	}
-
 	RefreshPlatformPosition();
 }
 
@@ -36,7 +28,7 @@ void UUOUWaterBasinPlatformComponent::TickComponent(float DeltaTime, ELevelTick 
 		return;
 	}
 
-	CurrentTargetWorldZ = BasePlatformWorldZ + GetTargetWaterDepthWorld() + WaterDepthOffsetZ;
+	CurrentTargetWorldZ = GetTargetSurfaceWorldZ() + SurfaceOffsetZ;
 
 	FVector NextLocation = ResolvedPlatformComponent->GetComponentLocation();
 	if (!bMoveOnlyZ)
@@ -65,14 +57,6 @@ void UUOUWaterBasinPlatformComponent::SetTargetActor(AActor* NewTargetActor)
 {
 	TargetActor = NewTargetActor;
 
-	if (bCaptureBaseZOnBeginPlay)
-	{
-		if (const USceneComponent* ResolvedPlatformComponent = GetPlatformComponent())
-		{
-			BasePlatformWorldZ = ResolvedPlatformComponent->GetComponentLocation().Z;
-		}
-	}
-
 	RefreshPlatformPosition();
 }
 
@@ -84,7 +68,7 @@ void UUOUWaterBasinPlatformComponent::RefreshPlatformPosition()
 		return;
 	}
 
-	CurrentTargetWorldZ = BasePlatformWorldZ + GetTargetWaterDepthWorld() + WaterDepthOffsetZ;
+	CurrentTargetWorldZ = GetTargetSurfaceWorldZ() + SurfaceOffsetZ;
 
 	FVector NewLocation = ResolvedPlatformComponent->GetComponentLocation();
 	if (!bMoveOnlyZ)
@@ -101,15 +85,15 @@ void UUOUWaterBasinPlatformComponent::RefreshPlatformPosition()
 	ResolvedPlatformComponent->SetWorldLocation(NewLocation);
 }
 
-float UUOUWaterBasinPlatformComponent::GetTargetWaterDepthWorld() const
+float UUOUWaterBasinPlatformComponent::GetTargetSurfaceWorldZ() const
 {
 	const UUOUWaterBasinTargetComponent* TargetComponent = GetTargetComponent();
 	if (!TargetComponent)
 	{
-		return 0.0f;
+		return GetOwner() ? GetOwner()->GetActorLocation().Z : 0.0f;
 	}
 
-	return TargetComponent->GetWaterDepthWorld();
+	return TargetComponent->GetBottomWorldZ() + TargetComponent->GetWaterDepthWorld();
 }
 
 UUOUWaterBasinTargetComponent* UUOUWaterBasinPlatformComponent::GetTargetComponent() const
