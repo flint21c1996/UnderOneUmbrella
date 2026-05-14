@@ -1,0 +1,64 @@
+// Copyright Epic Games, Inc. All Rights Reserved.
+
+#pragma once
+
+#include "CoreMinimal.h"
+#include "UOULightExposureTypes.generated.h"
+
+// 수신체에 도달한 게임플레이 빛 샘플 하나의 데이터입니다.
+USTRUCT(BlueprintType, meta = (ToolTip = "게임플레이 빛이 수신체에 도달했을 때 전달되는 데이터입니다."))
+struct FUOULightExposureData
+{
+	GENERATED_BODY()
+
+	FUOULightExposureData() = default;
+
+	FUOULightExposureData(
+		UObject* InSource,
+		const FVector& InSourcePosition,
+		const FVector& InReceiverPosition,
+		const FVector& InDirectionFromSource,
+		float InDistance,
+		float InIntensity,
+		float InDistanceFactor,
+		float InAngleFactor,
+		float InDeltaTime)
+		: Source(InSource)
+		, SourcePosition(InSourcePosition)
+		, ReceiverPosition(InReceiverPosition)
+		, DirectionFromSource(InDirectionFromSource)
+		, Distance(InDistance)
+		, Intensity(InIntensity)
+		, DistanceFactor(InDistanceFactor)
+		, AngleFactor(InAngleFactor)
+		, DeltaTime(InDeltaTime)
+	{
+	}
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Exposure", meta = (ToolTip = "이 노출 샘플을 발생시킨 오브젝트입니다."))
+	TObjectPtr<UObject> Source = nullptr;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Exposure", meta = (ToolTip = "노출 레이가 시작된 월드 위치입니다."))
+	FVector SourcePosition = FVector::ZeroVector;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Exposure", meta = (ToolTip = "이 샘플에서 수신체가 사용한 월드 위치입니다."))
+	FVector ReceiverPosition = FVector::ZeroVector;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Exposure", meta = (ToolTip = "광원에서 수신체로 향하는 정규화된 방향입니다."))
+	FVector DirectionFromSource = FVector::ForwardVector;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Exposure", meta = (ToolTip = "이 샘플에서 광원과 수신체 사이의 거리입니다."))
+	float Distance = 0.0f;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Exposure", meta = (ToolTip = "감쇠 계산 뒤 최종적으로 적용된 게임플레이 빛 세기입니다."))
+	float Intensity = 0.0f;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Exposure", meta = (ToolTip = "최종 빛 세기를 계산할 때 사용한 거리 감쇠 계수입니다."))
+	float DistanceFactor = 0.0f;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Exposure", meta = (ToolTip = "최종 빛 세기를 계산할 때 사용한 원뿔 각도 감쇠 계수입니다."))
+	float AngleFactor = 0.0f;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Exposure", meta = (ToolTip = "이 노출 샘플이 나타내는 DeltaTime입니다."))
+	float DeltaTime = 0.0f;
+};
