@@ -7,27 +7,45 @@
 #include "InputCoreTypes.h"
 #include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetSystemLibrary.h"
-#include "UObject/ConstructorHelpers.h"
+#include "UObject/SoftObjectPath.h"
+
+namespace
+{
+constexpr TCHAR DefaultTestLevelPath[] = TEXT("/Game/UOU/Maps/TempMap.TempMap");
+constexpr TCHAR DefaultTitleMenuWidgetClassPath[] = TEXT("/Game/UOU/UI/WBP_TitleMenu.WBP_TitleMenu_C");
+}
 
 AUOUTitlePlayerController::AUOUTitlePlayerController()
-	: TestLevel(FSoftObjectPath(TEXT("/Game/UOU/Maps/TempMap.TempMap")))
 {
 	bShowMouseCursor = false;
-
-	static ConstructorHelpers::FClassFinder<UUserWidget> TitleMenuBPClass(TEXT("/Game/UOU/UI/WBP_TitleMenu"));
-	if (TitleMenuBPClass.Succeeded())
-	{
-		TitleMenuWidgetClass = TitleMenuBPClass.Class;
-	}
 }
 
 void AUOUTitlePlayerController::BeginPlay()
 {
 	Super::BeginPlay();
 
-	if (TitleMenuWidgetClass != nullptr)
+	if (TestLevel.IsNull())
 	{
-		TitleMenuWidget = CreateWidget<UUserWidget>(this, TitleMenuWidgetClass);
+		TestLevel = TSoftObjectPtr<UWorld>(FSoftObjectPath(DefaultTestLevelPath));
+		UE_LOG(LogTemp, Warning, TEXT("Title test level was not configured. Falling back to %s."), DefaultTestLevelPath);
+	}
+
+	if (TitleMenuWidgetClass.IsNull())
+	{
+		TitleMenuWidgetClass = TSoftClassPtr<UUserWidget>(FSoftClassPath(DefaultTitleMenuWidgetClassPath));
+		UE_LOG(LogTemp, Warning, TEXT("Title menu widget was not configured. Falling back to %s."), DefaultTitleMenuWidgetClassPath);
+	}
+
+	TSubclassOf<UUserWidget> LoadedTitleMenuWidgetClass = TitleMenuWidgetClass.LoadSynchronous();
+	if (LoadedTitleMenuWidgetClass == nullptr)
+	{
+		TitleMenuWidgetClass = TSoftClassPtr<UUserWidget>(FSoftClassPath(DefaultTitleMenuWidgetClassPath));
+		LoadedTitleMenuWidgetClass = TitleMenuWidgetClass.LoadSynchronous();
+	}
+
+	if (LoadedTitleMenuWidgetClass != nullptr)
+	{
+		TitleMenuWidget = CreateWidget<UUserWidget>(this, LoadedTitleMenuWidgetClass);
 		if (TitleMenuWidget != nullptr)
 		{
 			TitleMenuWidget->AddToViewport();
@@ -41,6 +59,7 @@ void AUOUTitlePlayerController::BeginPlay()
 	}
 	else
 	{
+		UE_LOG(LogTemp, Error, TEXT("Failed to load title menu widget class."));
 		SetInputMode(FInputModeGameOnly());
 	}
 

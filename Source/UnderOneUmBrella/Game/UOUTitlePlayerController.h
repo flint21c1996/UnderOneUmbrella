@@ -9,7 +9,7 @@
 class UWorld;
 class UUserWidget;
 
-UCLASS()
+UCLASS(Config=Game)
 class UNDERONEUMBRELLA_API AUOUTitlePlayerController : public APlayerController
 {
 	GENERATED_BODY()
@@ -28,11 +28,11 @@ protected:
 	virtual void SetupInputComponent() override;
 
 private:
-	UPROPERTY(EditDefaultsOnly, Category = "Title")
+	UPROPERTY(EditDefaultsOnly, Config, Category = "Title")
 	TSoftObjectPtr<UWorld> TestLevel;
 
-	UPROPERTY(EditDefaultsOnly, Category = "Title")
-	TSubclassOf<UUserWidget> TitleMenuWidgetClass;
+	UPROPERTY(EditDefaultsOnly, Config, Category = "Title")
+	TSoftClassPtr<UUserWidget> TitleMenuWidgetClass;
 
 	UPROPERTY()
 	TObjectPtr<UUserWidget> TitleMenuWidget;

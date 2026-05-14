@@ -13,11 +13,4 @@ class AUOUGameMode : public AGameModeBase
 
 public:
 	AUOUGameMode();
-
-	virtual void InitGame(const FString& MapName, const FString& Options, FString& ErrorMessage) override;
-	virtual UClass* GetDefaultPawnClassForController_Implementation(AController* InController) override;
-
-private:
-	bool IsTitleMap(const FString& MapName) const;
-	bool IsTitleWorld() const;
 };
