@@ -6,7 +6,6 @@
 #include "GameFramework/GameModeBase.h"
 #include "UOUGameMode.generated.h"
 
-// ???대옒?ㅻ뒗 ?꾨줈?앺듃 湲곕낯 罹먮┃?곗? ?쒖옉 洹쒖튃??臾띕뒗 寃뚯엫 紐⑤뱶??
 UCLASS(minimalapi)
 class AUOUGameMode : public AGameModeBase
 {
@@ -14,7 +13,11 @@ class AUOUGameMode : public AGameModeBase
 
 public:
 	AUOUGameMode();
+
+	virtual void InitGame(const FString& MapName, const FString& Options, FString& ErrorMessage) override;
+	virtual UClass* GetDefaultPawnClassForController_Implementation(AController* InController) override;
+
+private:
+	bool IsTitleMap(const FString& MapName) const;
+	bool IsTitleWorld() const;
 };
-
-
-
