@@ -49,12 +49,7 @@ void AUOUTitlePlayerController::BeginPlay()
 		if (TitleMenuWidget != nullptr)
 		{
 			TitleMenuWidget->AddToViewport();
-
-			FInputModeGameAndUI InputMode;
-			InputMode.SetWidgetToFocus(TitleMenuWidget->TakeWidget());
-			InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
-			SetInputMode(InputMode);
-			bShowMouseCursor = true;
+			ApplyTitleMenuInputMode();
 		}
 	}
 	else
@@ -62,9 +57,6 @@ void AUOUTitlePlayerController::BeginPlay()
 		UE_LOG(LogTemp, Error, TEXT("Failed to load title menu widget class."));
 		SetInputMode(FInputModeGameOnly());
 	}
-
-	SetIgnoreMoveInput(true);
-	SetIgnoreLookInput(true);
 }
 
 void AUOUTitlePlayerController::SetupInputComponent()
@@ -78,7 +70,7 @@ void AUOUTitlePlayerController::SetupInputComponent()
 
 	InputComponent->BindKey(EKeys::Enter, IE_Pressed, this, &AUOUTitlePlayerController::StartGame);
 	InputComponent->BindKey(EKeys::SpaceBar, IE_Pressed, this, &AUOUTitlePlayerController::StartGame);
-	InputComponent->BindKey(EKeys::Escape, IE_Pressed, this, &AUOUTitlePlayerController::QuitGame);
+	InputComponent->BindKey(EKeys::Escape, IE_Pressed, this, &AUOUTitlePlayerController::ToggleSettingsMenu);
 	InputComponent->BindKey(EKeys::Q, IE_Pressed, this, &AUOUTitlePlayerController::QuitGame);
 }
 
@@ -96,4 +88,31 @@ void AUOUTitlePlayerController::StartGame()
 void AUOUTitlePlayerController::QuitGame()
 {
 	UKismetSystemLibrary::QuitGame(this, this, EQuitPreference::Quit, false);
+}
+
+void AUOUTitlePlayerController::RestoreInputModeAfterSettingsMenu()
+{
+	ApplyTitleMenuInputMode();
+}
+
+void AUOUTitlePlayerController::ApplyTitleMenuInputMode()
+{
+	if (TitleMenuWidget != nullptr)
+	{
+		FInputModeGameAndUI InputMode;
+		InputMode.SetWidgetToFocus(TitleMenuWidget->TakeWidget());
+		InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+		SetInputMode(InputMode);
+		bShowMouseCursor = true;
+	}
+	else
+	{
+		SetInputMode(FInputModeGameOnly());
+		bShowMouseCursor = false;
+	}
+
+	ResetIgnoreMoveInput();
+	ResetIgnoreLookInput();
+	SetIgnoreMoveInput(true);
+	SetIgnoreLookInput(true);
 }

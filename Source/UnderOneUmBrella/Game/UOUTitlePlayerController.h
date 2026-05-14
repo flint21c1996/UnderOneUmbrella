@@ -3,14 +3,14 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "GameFramework/PlayerController.h"
+#include "UOUMenuPlayerController.h"
 #include "UOUTitlePlayerController.generated.h"
 
 class UWorld;
 class UUserWidget;
 
 UCLASS(Config=Game)
-class UNDERONEUMBRELLA_API AUOUTitlePlayerController : public APlayerController
+class UNDERONEUMBRELLA_API AUOUTitlePlayerController : public AUOUMenuPlayerController
 {
 	GENERATED_BODY()
 
@@ -26,8 +26,11 @@ public:
 protected:
 	virtual void BeginPlay() override;
 	virtual void SetupInputComponent() override;
+	virtual void RestoreInputModeAfterSettingsMenu() override;
 
 private:
+	void ApplyTitleMenuInputMode();
+
 	UPROPERTY(EditDefaultsOnly, Config, Category = "Title")
 	TSoftObjectPtr<UWorld> TestLevel;
 
