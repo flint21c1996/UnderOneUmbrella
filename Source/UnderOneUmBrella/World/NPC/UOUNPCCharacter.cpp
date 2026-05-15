@@ -98,6 +98,38 @@ void AUOUNPCCharacter::Toggle()
 	Activate();
 }
 
+void AUOUNPCCharacter::ApplyPuzzleResult_Implementation(EOUUPuzzleResultAction Action)
+{
+	switch (Action)
+	{
+	case EOUUPuzzleResultAction::Activate:
+		Activate();
+		break;
+	case EOUUPuzzleResultAction::Deactivate:
+		Deactivate();
+		break;
+	case EOUUPuzzleResultAction::Pause:
+		StopNPCMovement();
+		break;
+	case EOUUPuzzleResultAction::Resume:
+		if (bActivated)
+		{
+			const bool bBehaviorTreeHandled = SyncActivationBlackboard();
+			if (!bBehaviorTreeHandled)
+			{
+				ExecuteCurrentActionDirectly();
+			}
+		}
+		break;
+	case EOUUPuzzleResultAction::Toggle:
+		Toggle();
+		break;
+	case EOUUPuzzleResultAction::None:
+	default:
+		break;
+	}
+}
+
 bool AUOUNPCCharacter::MoveToConfiguredTarget()
 {
 	const FUOUNPCActionRequest ActionRequest = GetCurrentActionRequest();

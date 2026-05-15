@@ -53,3 +53,24 @@ void AUOUNPCActionRequestActor::Toggle()
 
 	Activate();
 }
+
+void AUOUNPCActionRequestActor::ApplyPuzzleResult_Implementation(EOUUPuzzleResultAction Action)
+{
+	switch (Action)
+	{
+	case EOUUPuzzleResultAction::Activate:
+		Activate();
+		break;
+	case EOUUPuzzleResultAction::Deactivate:
+		Deactivate();
+		break;
+	case EOUUPuzzleResultAction::Toggle:
+		Toggle();
+		break;
+	case EOUUPuzzleResultAction::None:
+	case EOUUPuzzleResultAction::Pause:
+	case EOUUPuzzleResultAction::Resume:
+	default:
+		break;
+	}
+}
