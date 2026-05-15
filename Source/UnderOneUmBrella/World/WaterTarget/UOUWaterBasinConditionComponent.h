@@ -48,21 +48,26 @@ class UNDERONEUMBRELLA_API UUOUWaterBasinConditionComponent : public UActorCompo
 public:
 	UUOUWaterBasinConditionComponent();
 
+	virtual void OnRegister() override;
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
+
+#if WITH_EDITOR
+	virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
+#endif
 
 	// 여러 조건 컴포넌트를 구분하기 위한 이름입니다. Context에도 그대로 전달됩니다.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Condition", meta = (ToolTip = "여러 조건 컴포넌트를 구분하기 위한 이름입니다. ReactionComponent는 이 값을 보고 어떤 조건에서 호출됐는지 구분할 수 있습니다."))
 	FName ConditionId = TEXT("WaterCondition");
 
-	// 조건을 읽을 WaterTile Actor입니다. 비워두면 PlatformComponent의 TargetActor를 우선 사용합니다.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Condition|Target", meta = (ToolTip = "조건을 읽을 WaterTile Actor입니다. 해당 Actor에는 UOUWaterBasinTargetComponent가 있어야 합니다."))
+	// 조건을 읽을 WaterTile Actor입니다. 직접 지정하면 수동 override로 사용하고, 비워두면 자동 탐색으로 채웁니다.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Condition|Target", meta = (ToolTip = "조건을 읽을 WaterTile Actor입니다. 직접 지정하면 수동 override로 사용하고, 비워두면 자동 탐색으로 채웁니다."))
 	TObjectPtr<AActor> TargetWaterTileActor = nullptr;
 
-	// TargetWaterTileActor가 비어 있을 때 같은 Actor의 WaterBasinPlatformComponent에서 WaterTile을 자동으로 찾습니다.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Condition|Target", meta = (ToolTip = "TargetWaterTileActor가 비어 있으면 같은 Actor의 WaterBasinPlatformComponent가 참조하는 WaterTile을 자동으로 사용합니다."))
-	bool bAutoResolveWaterTileFromPlatform = true;
+	// TargetWaterTileActor가 비어 있을 때 Attach Parent 체인 또는 PlatformComponent에서 WaterTile을 자동으로 찾아 설정합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Condition|Target", meta = (ToolTip = "TargetWaterTileActor가 비어 있으면 Attach Parent 체인 또는 같은 Actor의 WaterBasinPlatformComponent에서 WaterTile을 자동으로 찾아 설정합니다."))
+	bool bAutoResolveTargetWaterTileActor = true;
 
 	// 조건 값으로 어떤 물/플랫폼 값을 사용할지 정합니다.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Condition|Rule", meta = (ToolTip = "조건 판정에 사용할 값을 정합니다. 예를 들어 수면 월드 Z, 채움 비율, 플랫폼 높이 등을 선택할 수 있습니다."))
@@ -148,6 +153,9 @@ private:
 	FUOUPuzzleConditionContext LastContext;
 
 	UPROPERTY(Transient)
+	bool bTargetWaterTileActorAutoResolved = false;
+
+	UPROPERTY(Transient)
 	bool bIsSatisfied = false;
 
 	UPROPERTY(Transient)
@@ -161,7 +169,7 @@ private:
 
 	void BindToWaterBasinTarget();
 	void UnbindFromWaterBasinTarget();
-	UUOUWaterBasinTargetComponent* ResolveWaterBasinTarget() const;
+	UUOUWaterBasinTargetComponent* ResolveWaterBasinTarget();
 	UUOUWaterBasinPlatformComponent* ResolvePlatformComponent() const;
 	FUOUPuzzleConditionContext BuildConditionContext(UUOUWaterBasinTargetComponent* WaterBasinTarget) const;
 	float ResolveCurrentValue(const FUOUPuzzleConditionContext& Context) const;

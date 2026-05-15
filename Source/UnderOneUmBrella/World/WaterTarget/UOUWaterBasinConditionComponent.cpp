@@ -12,6 +12,13 @@ UUOUWaterBasinConditionComponent::UUOUWaterBasinConditionComponent()
 	PrimaryComponentTick.bCanEverTick = true;
 }
 
+void UUOUWaterBasinConditionComponent::OnRegister()
+{
+	Super::OnRegister();
+
+	ResolveWaterBasinTarget();
+}
+
 void UUOUWaterBasinConditionComponent::BeginPlay()
 {
 	Super::BeginPlay();
@@ -40,6 +47,23 @@ void UUOUWaterBasinConditionComponent::TickComponent(float DeltaTime, ELevelTick
 		EvaluateCondition();
 	}
 }
+
+#if WITH_EDITOR
+void UUOUWaterBasinConditionComponent::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent)
+{
+	const FName ChangedPropertyName = PropertyChangedEvent.Property
+		? PropertyChangedEvent.Property->GetFName()
+		: NAME_None;
+
+	if (ChangedPropertyName == GET_MEMBER_NAME_CHECKED(UUOUWaterBasinConditionComponent, TargetWaterTileActor))
+	{
+		bTargetWaterTileActorAutoResolved = false;
+		UnbindFromWaterBasinTarget();
+	}
+
+	Super::PostEditChangeProperty(PropertyChangedEvent);
+}
+#endif
 
 void UUOUWaterBasinConditionComponent::EvaluateCondition(bool bForceNotify)
 {
@@ -116,50 +140,55 @@ void UUOUWaterBasinConditionComponent::UnbindFromWaterBasinTarget()
 	}
 }
 
-UUOUWaterBasinTargetComponent* UUOUWaterBasinConditionComponent::ResolveWaterBasinTarget() const
+UUOUWaterBasinTargetComponent* UUOUWaterBasinConditionComponent::ResolveWaterBasinTarget()
 {
-	if (IsValid(TargetWaterTileActor))
+	if (IsValid(TargetWaterTileActor) && !bTargetWaterTileActorAutoResolved)
 	{
 		return TargetWaterTileActor->FindComponentByClass<UUOUWaterBasinTargetComponent>();
 	}
 
-	const AActor* Owner = GetOwner();
+	AActor* Owner = GetOwner();
 	if (!Owner)
 	{
 		return nullptr;
 	}
 
-	if (bAutoResolveWaterTileFromPlatform)
+	if (bAutoResolveTargetWaterTileActor)
 	{
+		for (AActor* ParentActor = Owner->GetAttachParentActor(); IsValid(ParentActor); ParentActor = ParentActor->GetAttachParentActor())
+		{
+			if (UUOUWaterBasinTargetComponent* ParentTargetComponent = ParentActor->FindComponentByClass<UUOUWaterBasinTargetComponent>())
+			{
+				TargetWaterTileActor = ParentActor;
+				bTargetWaterTileActorAutoResolved = true;
+				return ParentTargetComponent;
+			}
+		}
+
 		if (const UUOUWaterBasinPlatformComponent* PlatformComponent = ResolvePlatformComponent())
 		{
 			if (IsValid(PlatformComponent->TargetActor))
 			{
 				if (UUOUWaterBasinTargetComponent* TargetComponent = PlatformComponent->TargetActor->FindComponentByClass<UUOUWaterBasinTargetComponent>())
 				{
+					TargetWaterTileActor = PlatformComponent->TargetActor;
+					bTargetWaterTileActorAutoResolved = true;
 					return TargetComponent;
 				}
 			}
 		}
-	}
 
-	if (UUOUWaterBasinTargetComponent* OwnerTargetComponent = Owner->FindComponentByClass<UUOUWaterBasinTargetComponent>())
-	{
-		return OwnerTargetComponent;
-	}
-
-	AActor* ParentActor = Owner->GetAttachParentActor();
-	while (IsValid(ParentActor))
-	{
-		if (UUOUWaterBasinTargetComponent* ParentTargetComponent = ParentActor->FindComponentByClass<UUOUWaterBasinTargetComponent>())
+		if (UUOUWaterBasinTargetComponent* OwnerTargetComponent = Owner->FindComponentByClass<UUOUWaterBasinTargetComponent>())
 		{
-			return ParentTargetComponent;
+			TargetWaterTileActor = Owner;
+			bTargetWaterTileActorAutoResolved = true;
+			return OwnerTargetComponent;
 		}
-
-		ParentActor = ParentActor->GetAttachParentActor();
 	}
 
-	return nullptr;
+	return IsValid(TargetWaterTileActor)
+		? TargetWaterTileActor->FindComponentByClass<UUOUWaterBasinTargetComponent>()
+		: nullptr;
 }
 
 UUOUWaterBasinPlatformComponent* UUOUWaterBasinConditionComponent::ResolvePlatformComponent() const
