@@ -218,6 +218,12 @@ protected:
 	UUOUWaterBasinTargetComponent* ResolveWaterBasinTarget();
 	UUOUWaterBasinPlatformComponent* ResolvePlatformComponent() const;
 	FUOUWaterBasinReactionContext BuildReactionContext(UUOUWaterBasinTargetComponent* WaterBasinTarget);
+
+	// 현재 Context가 이 Reaction의 조건을 만족하는지 판정합니다.
+	// 기본 구현은 ValueSource, CompareMode, ThresholdValue를 사용합니다.
+	// 특수 퍼즐 조건이 필요하면 파생 컴포넌트에서 이 함수만 오버라이드하면 됩니다.
+	virtual bool EvaluateReactionCondition(FUOUWaterBasinReactionContext& Context);
+
 	float ResolveCurrentValue(const FUOUWaterBasinReactionContext& Context) const;
 	bool DoesValueSatisfyCondition(float CurrentValue) const;
 	void DrawReactionDebugText();

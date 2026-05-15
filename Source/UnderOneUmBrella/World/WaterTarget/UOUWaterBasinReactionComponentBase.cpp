@@ -78,9 +78,7 @@ void UUOUWaterBasinReactionComponentBase::EvaluateReaction(bool bForceNotify)
 	}
 
 	FUOUWaterBasinReactionContext NewContext = BuildReactionContext(WaterBasinTarget);
-	NewContext.CurrentValue = ResolveCurrentValue(NewContext);
-	NewContext.ThresholdValue = ThresholdValue;
-	NewContext.bIsSatisfied = DoesValueSatisfyCondition(NewContext.CurrentValue);
+	NewContext.bIsSatisfied = EvaluateReactionCondition(NewContext);
 
 	const bool bWasSatisfied = bIsConditionSatisfied;
 	bIsConditionSatisfied = NewContext.bIsSatisfied;
@@ -205,6 +203,13 @@ FUOUWaterBasinReactionContext UUOUWaterBasinReactionComponentBase::BuildReaction
 	}
 
 	return Context;
+}
+
+bool UUOUWaterBasinReactionComponentBase::EvaluateReactionCondition(FUOUWaterBasinReactionContext& Context)
+{
+	Context.CurrentValue = ResolveCurrentValue(Context);
+	Context.ThresholdValue = ThresholdValue;
+	return DoesValueSatisfyCondition(Context.CurrentValue);
 }
 
 float UUOUWaterBasinReactionComponentBase::ResolveCurrentValue(const FUOUWaterBasinReactionContext& Context) const
