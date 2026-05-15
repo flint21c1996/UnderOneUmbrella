@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "Puzzle/Core/UOUPuzzleResultReceiver.h"
 #include "World/NPC/UOUNPCActionTypes.h"
 #include "UOUNPCActionSequenceActor.generated.h"
 
@@ -12,7 +13,7 @@ class USceneComponent;
 
 // 활성화 또는 비활성화될 때 NPC 액션 요청 목록을 순서대로 실행하는 액터입니다.
 UCLASS(Blueprintable, meta = (DisplayName = "UOU NPC Action Sequence", ToolTip = "설정된 NPC 액션 목록을 순서대로 실행합니다."))
-class AUOUNPCActionSequenceActor : public AActor
+class AUOUNPCActionSequenceActor : public AActor, public IUOUPuzzleResultReceiver
 {
 	GENERATED_BODY()
 
@@ -62,6 +63,8 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "NPC|Sequence")
 	void StopSequence();
+
+	virtual void ApplyPuzzleResult_Implementation(EOUUPuzzleResultAction Action) override;
 
 protected:
 	UPROPERTY()

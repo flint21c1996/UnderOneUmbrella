@@ -69,6 +69,29 @@ void AUOUNPCActionSequenceActor::StopSequence()
 	CurrentSequenceActions.Reset();
 }
 
+void AUOUNPCActionSequenceActor::ApplyPuzzleResult_Implementation(EOUUPuzzleResultAction Action)
+{
+	switch (Action)
+	{
+	case EOUUPuzzleResultAction::Activate:
+		Activate();
+		break;
+	case EOUUPuzzleResultAction::Deactivate:
+		Deactivate();
+		break;
+	case EOUUPuzzleResultAction::Pause:
+		StopSequence();
+		break;
+	case EOUUPuzzleResultAction::Toggle:
+		Toggle();
+		break;
+	case EOUUPuzzleResultAction::None:
+	case EOUUPuzzleResultAction::Resume:
+	default:
+		break;
+	}
+}
+
 void AUOUNPCActionSequenceActor::StartSequence(
 	const TArray<FUOUNPCActionRequest>& Actions,
 	bool bDeactivateSequence)
