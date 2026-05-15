@@ -284,6 +284,15 @@ float UUOUWaterBasinTargetComponent::GetBottomWorldZ() const
 		return BasinBounds.Min.Z;
 	}
 
+	if (BottomHeightMode == EUOUWaterBasinBottomHeightMode::ActorBoundsMinZ)
+	{
+		// WaterVisual이 유일한 Primitive인 Actor는 Basin bounds 계산에서 Visual이 제외되어 실패할 수 있습니다.
+		// 이때 실패한 Bounds.Min을 쓰거나 ActorLocation을 그대로 바닥으로 쓰면 중앙 피벗 기준으로 수면이 커집니다.
+		const float MaxDepthWorld = GetMaxWaterHeight() * FMath::Max(WorldUnitsPerTile, 1.0f);
+		return Owner->GetActorLocation().Z - (MaxDepthWorld * 0.5f);
+	}
+
+
 	return Owner->GetActorLocation().Z;
 }
 
@@ -560,8 +569,30 @@ void UUOUWaterBasinTargetComponent::UpdateWaterVisual()
 	CaptureWaterVisualTransformIfNeeded();
 
 	FVector NewScale = InitialWaterVisualScale;
-	const float HeightRatio = FMath::Clamp(VisibleDepthWorld / MaxDepthWorld, 0.0f, 1.0f);
-	NewScale.Z = InitialWaterVisualScale.Z * HeightRatio;
+
+	FVector LocalMin = FVector::ZeroVector;
+	FVector LocalMax = FVector::ZeroVector;
+	if (UStaticMeshComponent* WaterVisualMeshComponent = Cast<UStaticMeshComponent>(WaterVisualComponent.Get()))
+	{
+		WaterVisualMeshComponent->GetLocalBounds(LocalMin, LocalMax);
+
+		const FVector LocalSize = LocalMax - LocalMin;
+		if (LocalSize.Z > KINDA_SMALL_NUMBER)
+		{
+			NewScale.Z = VisibleDepthWorld / LocalSize.Z;
+		}
+		else
+		{
+			const float HeightRatio = FMath::Clamp(VisibleDepthWorld / MaxDepthWorld, 0.0f, 1.0f);
+			NewScale.Z = InitialWaterVisualScale.Z * HeightRatio;
+		}
+	}
+	else
+	{
+		const float HeightRatio = FMath::Clamp(VisibleDepthWorld / MaxDepthWorld, 0.0f, 1.0f);
+		NewScale.Z = InitialWaterVisualScale.Z * HeightRatio;
+	}
+
 	WaterVisualComponent->SetWorldScale3D(NewScale);
 
 	if (bAutoPlaceWaterVisual)
@@ -576,8 +607,10 @@ void UUOUWaterBasinTargetComponent::UpdateWaterVisual()
 			NewLocation.Y = BasinCenter.Y;
 		}
 
-		//NewLocation.Z = GetBottomWorldZ() + (VisibleDepthWorld * 0.5f);
-		//WaterVisualComponent->SetWorldLocation(NewLocation);
+		const FVector LocalCenter = (LocalMin + LocalMax) * 0.5f;
+		const FVector PivotOffset = LocalCenter * NewScale;
+		NewLocation.Z = GetBottomWorldZ() + (VisibleDepthWorld * 0.5f);
+		WaterVisualComponent->SetWorldLocation(NewLocation - PivotOffset);
 	}
 }
 
