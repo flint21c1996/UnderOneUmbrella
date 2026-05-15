@@ -2,6 +2,7 @@
 
 #include "World/WaterTarget/UOUWaterBasinReactionComponentBase.h"
 
+#include "DrawDebugHelpers.h"
 #include "GameFramework/Actor.h"
 #include "World/WaterTarget/UOUWaterBasinPlatformComponent.h"
 #include "World/WaterTarget/UOUWaterBasinTargetComponent.h"
@@ -45,6 +46,8 @@ void UUOUWaterBasinReactionComponentBase::TickComponent(float DeltaTime, ELevelT
 	{
 		EvaluateReaction();
 	}
+
+	DrawReactionDebugText();
 }
 
 #if WITH_EDITOR
@@ -303,11 +306,41 @@ void UUOUWaterBasinReactionComponentBase::NotifyReactionResult(const FUOUWaterBa
 	{
 		OnReactionSatisfied.Broadcast(Context);
 		OnWaterBasinReactionSatisfied(Context);
+		++SatisfiedEventCount;
 		bHasTriggeredOnce = true;
 	}
 	else if ((bForceNotify || bBecameUnsatisfied) && !Context.bIsSatisfied)
 	{
 		OnReactionUnsatisfied.Broadcast(Context);
 		OnWaterBasinReactionUnsatisfied(Context);
+		++UnsatisfiedEventCount;
 	}
+}
+
+void UUOUWaterBasinReactionComponentBase::DrawReactionDebugText()
+{
+	if (!bDrawDebugText || !GetWorld() || !GetOwner())
+	{
+		return;
+	}
+
+	const FVector DrawLocation = GetOwner()->GetActorLocation() + DrawDebugOffset;
+	const FColor TextColor = bHasEvaluated
+		? (bIsConditionSatisfied ? DebugSatisfiedColor : DebugUnsatisfiedColor)
+		: DebugWaitingColor;
+
+	const FString DebugText = FString::Printf(
+		TEXT("%s\nSatisfied: %s\nValue: %.3f / %.3f\nWater Z: %.1f\nDepth: %.3f\nFill: %.3f\nVolume: %.3f\nEvents: +%d / -%d"),
+		*GetName(),
+		bIsConditionSatisfied ? TEXT("TRUE") : TEXT("FALSE"),
+		LastContext.CurrentValue,
+		LastContext.ThresholdValue,
+		LastContext.WaterSurfaceWorldZ,
+		LastContext.WaterDepth,
+		LastContext.WaterFillRatio,
+		LastContext.WaterVolume,
+		SatisfiedEventCount,
+		UnsatisfiedEventCount);
+
+	DrawDebugString(GetWorld(), DrawLocation, DebugText, nullptr, TextColor, 0.0f, true);
 }

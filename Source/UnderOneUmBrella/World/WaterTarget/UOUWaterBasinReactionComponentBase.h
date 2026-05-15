@@ -6,6 +6,7 @@
 #include "Components/ActorComponent.h"
 #include "UOUWaterBasinReactionComponentBase.generated.h"
 
+class AActor;
 class UUOUWaterBasinPlatformComponent;
 class UUOUWaterBasinTargetComponent;
 
@@ -154,6 +155,32 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Water Basin Reaction|Runtime")
 	FUOUWaterBasinReactionContext LastContext;
 
+	// Debug Draw 텍스트 표시 여부입니다. 플랫폼이 많을 때 화면이 복잡해지지 않도록 기본값은 꺼져 있습니다.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Reaction|Debug", meta = (ToolTip = "Reaction 조건 상태를 Debug Draw 텍스트로 표시합니다. 기본값은 꺼져 있으며, 테스트할 컴포넌트에서만 켜서 사용합니다."))
+	bool bDrawDebugText = false;
+
+	// Owner Actor 위치에서 어느 정도 떨어진 곳에 텍스트를 표시할지 정합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Reaction|Debug", meta = (ToolTip = "Owner Actor 위치 기준 Debug Draw 텍스트 표시 오프셋입니다."))
+	FVector DrawDebugOffset = FVector(0.0f, 0.0f, 160.0f);
+
+	// 아직 조건 평가가 한 번도 없을 때 사용할 텍스트 색상입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Reaction|Debug", meta = (ToolTip = "아직 조건 평가가 한 번도 없을 때 사용할 텍스트 색상입니다."))
+	FColor DebugWaitingColor = FColor::Yellow;
+
+	// 조건이 만족된 상태일 때 사용할 텍스트 색상입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Reaction|Debug", meta = (ToolTip = "조건이 만족된 상태일 때 사용할 텍스트 색상입니다."))
+	FColor DebugSatisfiedColor = FColor::Green;
+
+	// 조건이 만족되지 않은 상태일 때 사용할 텍스트 색상입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Reaction|Debug", meta = (ToolTip = "조건이 만족되지 않은 상태일 때 사용할 텍스트 색상입니다."))
+	FColor DebugUnsatisfiedColor = FColor::Red;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Water Basin Reaction|Runtime")
+	int32 SatisfiedEventCount = 0;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Water Basin Reaction|Runtime")
+	int32 UnsatisfiedEventCount = 0;
+
 	UPROPERTY(BlueprintAssignable, Category = "Water Basin Reaction|Event")
 	FUOUWaterBasinReactionEvent OnReactionConditionChanged;
 
@@ -193,6 +220,7 @@ protected:
 	FUOUWaterBasinReactionContext BuildReactionContext(UUOUWaterBasinTargetComponent* WaterBasinTarget);
 	float ResolveCurrentValue(const FUOUWaterBasinReactionContext& Context) const;
 	bool DoesValueSatisfyCondition(float CurrentValue) const;
+	void DrawReactionDebugText();
 
 private:
 	UPROPERTY(Transient)
