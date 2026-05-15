@@ -1,18 +1,18 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
-#include "World/WaterTarget/UOUPuzzleConditionComponent.h"
+#include "World/WaterTarget/UOUWaterBasinConditionComponent.h"
 
 #include "Components/SceneComponent.h"
 #include "GameFramework/Actor.h"
 #include "World/WaterTarget/UOUWaterBasinPlatformComponent.h"
 #include "World/WaterTarget/UOUWaterBasinTargetComponent.h"
 
-UUOUPuzzleConditionComponent::UUOUPuzzleConditionComponent()
+UUOUWaterBasinConditionComponent::UUOUWaterBasinConditionComponent()
 {
 	PrimaryComponentTick.bCanEverTick = true;
 }
 
-void UUOUPuzzleConditionComponent::BeginPlay()
+void UUOUWaterBasinConditionComponent::BeginPlay()
 {
 	Super::BeginPlay();
 
@@ -24,29 +24,29 @@ void UUOUPuzzleConditionComponent::BeginPlay()
 	}
 }
 
-void UUOUPuzzleConditionComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
+void UUOUWaterBasinConditionComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	UnbindFromWaterBasinTarget();
 
 	Super::EndPlay(EndPlayReason);
 }
 
-void UUOUPuzzleConditionComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
+void UUOUWaterBasinConditionComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
-	if (bEvaluateEveryTick || ValueSource == EUOUPuzzleConditionValueSource::PlatformWorldZ)
+	if (bEvaluateEveryTick || ValueSource == EUOUWaterBasinConditionValueSource::PlatformWorldZ)
 	{
 		EvaluateCondition();
 	}
 }
 
-void UUOUPuzzleConditionComponent::EvaluateCondition(bool bForceNotify)
+void UUOUWaterBasinConditionComponent::EvaluateCondition(bool bForceNotify)
 {
 	BindToWaterBasinTarget();
 
 	UUOUWaterBasinTargetComponent* WaterBasinTarget = ResolveWaterBasinTarget();
-	if (!WaterBasinTarget && ValueSource != EUOUPuzzleConditionValueSource::PlatformWorldZ)
+	if (!WaterBasinTarget && ValueSource != EUOUWaterBasinConditionValueSource::PlatformWorldZ)
 	{
 		return;
 	}
@@ -70,22 +70,27 @@ void UUOUPuzzleConditionComponent::EvaluateCondition(bool bForceNotify)
 	}
 }
 
-bool UUOUPuzzleConditionComponent::IsConditionSatisfied() const
+bool UUOUWaterBasinConditionComponent::IsConditionSatisfied() const
 {
 	return bIsSatisfied;
 }
 
-FUOUPuzzleConditionContext UUOUPuzzleConditionComponent::GetLastContext() const
+FUOUPuzzleConditionContext UUOUWaterBasinConditionComponent::GetLastContext() const
 {
 	return LastContext;
 }
 
-void UUOUPuzzleConditionComponent::HandleWaterStateChanged(UUOUWaterBasinTargetComponent* ChangedTarget)
+void UUOUWaterBasinConditionComponent::HandleWaterStateChanged(UUOUWaterBasinTargetComponent* ChangedTarget)
 {
+	if (ChangedTarget != BoundWaterBasinTarget)
+	{
+		BindToWaterBasinTarget();
+	}
+
 	EvaluateCondition();
 }
 
-void UUOUPuzzleConditionComponent::BindToWaterBasinTarget()
+void UUOUWaterBasinConditionComponent::BindToWaterBasinTarget()
 {
 	UUOUWaterBasinTargetComponent* ResolvedTarget = ResolveWaterBasinTarget();
 	if (BoundWaterBasinTarget == ResolvedTarget)
@@ -98,20 +103,20 @@ void UUOUPuzzleConditionComponent::BindToWaterBasinTarget()
 	BoundWaterBasinTarget = ResolvedTarget;
 	if (BoundWaterBasinTarget)
 	{
-		BoundWaterBasinTarget->OnWaterStateChanged.AddUniqueDynamic(this, &UUOUPuzzleConditionComponent::HandleWaterStateChanged);
+		BoundWaterBasinTarget->OnWaterStateChanged.AddUniqueDynamic(this, &UUOUWaterBasinConditionComponent::HandleWaterStateChanged);
 	}
 }
 
-void UUOUPuzzleConditionComponent::UnbindFromWaterBasinTarget()
+void UUOUWaterBasinConditionComponent::UnbindFromWaterBasinTarget()
 {
 	if (BoundWaterBasinTarget)
 	{
-		BoundWaterBasinTarget->OnWaterStateChanged.RemoveDynamic(this, &UUOUPuzzleConditionComponent::HandleWaterStateChanged);
+		BoundWaterBasinTarget->OnWaterStateChanged.RemoveDynamic(this, &UUOUWaterBasinConditionComponent::HandleWaterStateChanged);
 		BoundWaterBasinTarget = nullptr;
 	}
 }
 
-UUOUWaterBasinTargetComponent* UUOUPuzzleConditionComponent::ResolveWaterBasinTarget() const
+UUOUWaterBasinTargetComponent* UUOUWaterBasinConditionComponent::ResolveWaterBasinTarget() const
 {
 	if (IsValid(TargetWaterTileActor))
 	{
@@ -157,16 +162,16 @@ UUOUWaterBasinTargetComponent* UUOUPuzzleConditionComponent::ResolveWaterBasinTa
 	return nullptr;
 }
 
-UUOUWaterBasinPlatformComponent* UUOUPuzzleConditionComponent::ResolvePlatformComponent() const
+UUOUWaterBasinPlatformComponent* UUOUWaterBasinConditionComponent::ResolvePlatformComponent() const
 {
 	return GetOwner() ? GetOwner()->FindComponentByClass<UUOUWaterBasinPlatformComponent>() : nullptr;
 }
 
-FUOUPuzzleConditionContext UUOUPuzzleConditionComponent::BuildConditionContext(UUOUWaterBasinTargetComponent* WaterBasinTarget) const
+FUOUPuzzleConditionContext UUOUWaterBasinConditionComponent::BuildConditionContext(UUOUWaterBasinTargetComponent* WaterBasinTarget) const
 {
 	FUOUPuzzleConditionContext Context;
 	Context.ConditionOwner = GetOwner();
-	Context.ConditionComponent = const_cast<UUOUPuzzleConditionComponent*>(this);
+	Context.ConditionComponent = const_cast<UUOUWaterBasinConditionComponent*>(this);
 	Context.ConditionId = ConditionId;
 	Context.ThresholdValue = ThresholdValue;
 	Context.PlatformComponent = ResolvePlatformComponent();
@@ -201,44 +206,44 @@ FUOUPuzzleConditionContext UUOUPuzzleConditionComponent::BuildConditionContext(U
 	return Context;
 }
 
-float UUOUPuzzleConditionComponent::ResolveCurrentValue(const FUOUPuzzleConditionContext& Context) const
+float UUOUWaterBasinConditionComponent::ResolveCurrentValue(const FUOUPuzzleConditionContext& Context) const
 {
 	switch (ValueSource)
 	{
-	case EUOUPuzzleConditionValueSource::WaterSurfaceWorldZ:
+	case EUOUWaterBasinConditionValueSource::WaterSurfaceWorldZ:
 		return Context.WaterSurfaceWorldZ;
-	case EUOUPuzzleConditionValueSource::WaterDepth:
+	case EUOUWaterBasinConditionValueSource::WaterDepth:
 		return Context.WaterDepth;
-	case EUOUPuzzleConditionValueSource::WaterDepthWorld:
+	case EUOUWaterBasinConditionValueSource::WaterDepthWorld:
 		return Context.WaterDepthWorld;
-	case EUOUPuzzleConditionValueSource::WaterFillRatio:
+	case EUOUWaterBasinConditionValueSource::WaterFillRatio:
 		return Context.WaterFillRatio;
-	case EUOUPuzzleConditionValueSource::WaterVolume:
+	case EUOUWaterBasinConditionValueSource::WaterVolume:
 		return Context.WaterVolume;
-	case EUOUPuzzleConditionValueSource::PlatformWorldZ:
+	case EUOUWaterBasinConditionValueSource::PlatformWorldZ:
 		return Context.PlatformWorldZ;
 	default:
 		return 0.0f;
 	}
 }
 
-bool UUOUPuzzleConditionComponent::DoesValueSatisfyCondition(float CurrentValue) const
+bool UUOUWaterBasinConditionComponent::DoesValueSatisfyCondition(float CurrentValue) const
 {
 	switch (CompareMode)
 	{
-	case EUOUPuzzleConditionCompareMode::GreaterOrEqual:
+	case EUOUWaterBasinConditionCompareMode::GreaterOrEqual:
 		return CurrentValue >= ThresholdValue - Tolerance;
-	case EUOUPuzzleConditionCompareMode::Greater:
+	case EUOUWaterBasinConditionCompareMode::Greater:
 		return CurrentValue > ThresholdValue;
-	case EUOUPuzzleConditionCompareMode::LessOrEqual:
+	case EUOUWaterBasinConditionCompareMode::LessOrEqual:
 		return CurrentValue <= ThresholdValue + Tolerance;
-	case EUOUPuzzleConditionCompareMode::Less:
+	case EUOUWaterBasinConditionCompareMode::Less:
 		return CurrentValue < ThresholdValue;
-	case EUOUPuzzleConditionCompareMode::Equal:
+	case EUOUWaterBasinConditionCompareMode::Equal:
 		return FMath::Abs(CurrentValue - ThresholdValue) <= Tolerance;
-	case EUOUPuzzleConditionCompareMode::NotEqual:
+	case EUOUWaterBasinConditionCompareMode::NotEqual:
 		return FMath::Abs(CurrentValue - ThresholdValue) > Tolerance;
-	case EUOUPuzzleConditionCompareMode::BetweenInclusive:
+	case EUOUWaterBasinConditionCompareMode::BetweenInclusive:
 	{
 		const float MinValue = FMath::Min(ThresholdValue, UpperThresholdValue);
 		const float MaxValue = FMath::Max(ThresholdValue, UpperThresholdValue);
@@ -249,7 +254,7 @@ bool UUOUPuzzleConditionComponent::DoesValueSatisfyCondition(float CurrentValue)
 	}
 }
 
-void UUOUPuzzleConditionComponent::BroadcastConditionResult(const FUOUPuzzleConditionContext& Context, bool bWasSatisfied)
+void UUOUWaterBasinConditionComponent::BroadcastConditionResult(const FUOUPuzzleConditionContext& Context, bool bWasSatisfied)
 {
 	const bool bCanTriggerSatisfied = !bTriggerOnce || !bHasTriggeredOnce;
 	const bool bBecameSatisfied = !bWasSatisfied && Context.bIsSatisfied;
@@ -269,7 +274,7 @@ void UUOUPuzzleConditionComponent::BroadcastConditionResult(const FUOUPuzzleCond
 	}
 }
 
-void UUOUPuzzleConditionComponent::NotifyReactionTargets(const FUOUPuzzleConditionContext& Context, bool bWasSatisfied)
+void UUOUWaterBasinConditionComponent::NotifyReactionTargets(const FUOUPuzzleConditionContext& Context, bool bWasSatisfied)
 {
 	TSet<UObject*> NotifiedObjects;
 
@@ -315,7 +320,7 @@ void UUOUPuzzleConditionComponent::NotifyReactionTargets(const FUOUPuzzleConditi
 	}
 }
 
-void UUOUPuzzleConditionComponent::NotifyActivatableObject(UObject* Object, const FUOUPuzzleConditionContext& Context, bool bWasSatisfied, TSet<UObject*>& NotifiedObjects)
+void UUOUWaterBasinConditionComponent::NotifyActivatableObject(UObject* Object, const FUOUPuzzleConditionContext& Context, bool bWasSatisfied, TSet<UObject*>& NotifiedObjects)
 {
 	if (!IsValid(Object) || Object == this || NotifiedObjects.Contains(Object))
 	{
