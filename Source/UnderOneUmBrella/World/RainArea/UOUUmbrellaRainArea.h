@@ -36,9 +36,11 @@ protected:
 	TObjectPtr<UStaticMeshComponent> PreviewVolumeMesh = nullptr;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Visual")
+	// 비 영역과 연동되는 환경 비주얼 액터를 연결하는 참조값입니다.
 	TObjectPtr<AUOUEnvironmentVisualActor> EnvironmentVisual = nullptr;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Preview")
+	// 에디터 안에서 프리뷰 메쉬를 보여줄지 정한 값입니다.
 	bool bShowEditorPreview = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Preview")
@@ -57,9 +59,11 @@ protected:
 	TObjectPtr<UMaterialInterface> PreviewMaterial = nullptr;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain", meta = (ClampMin = "0.0"))
+	// 비 영역 안에서 물이 차는 속도를 정한 값입니다.
 	float RainFillRate = 1.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Visual")
+	// 환경 비주얼 액터에도 비주얼 세팅을 함께 밀어넣을지 정한 값입니다.
 	bool bEnableRainVisuals = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Visual", meta = (ClampMin = "0.0", ClampMax = "1.0"))
@@ -80,11 +84,18 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Debug", meta = (ClampMin = "0.0", ToolTip = "RainArea 비주얼 디버그 박스와 선의 두께입니다."))
 	float RainVisualDebugThickness = 2.0f;
 
+	// 현재 프리뷰 메쉬의 표시 상태와 스케일을 설정값에 맞게 다시 맞춥니다.
 	void ApplyPreviewSettings();
+	// 연결된 환경 비주얼 액터를 자동으로 찾거나 다시 연결합니다.
 	void ResolveEnvironmentVisual();
+	// 환경 비주얼 액터에 강도와 표시 옵션 같은 공통 설정을 넘깁니다.
 	void ApplyEnvironmentVisualSettings();
+	// 비 영역 크기에 맞춰 환경 비주얼의 배치 범위를 갱신합니다.
 	void ApplyEnvironmentVisualGeometry();
+	// 현재 비 영역이 켜져 있는지에 따라 환경 비주얼의 활성 상태를 맞춥니다.
 	void ApplyEnvironmentVisualState();
+	// 우산이 비를 막을 때 환경 비주얼에도 차단 위치와 강도를 전달합니다.
 	void ApplyEnvironmentVisualRainBlocker(bool bIsBlocking, const FVector& BlockerWorldLocation, float BlockerRadius, float BlockerIntensity);
+	// 비주얼 디버그 박스를 그려서 환경 연동 범위를 확인합니다.
 	void DrawRainVisualDebug() const;
 };

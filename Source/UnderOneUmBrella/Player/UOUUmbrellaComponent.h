@@ -102,6 +102,7 @@ public:
 	bool bShowScreenDebug = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Debug", meta = (ToolTip = "열린 우산이 비를 막는 중심 위치와 반지름을 월드에 표시합니다."))
+	// 우산이 비를 막는 지점을 디버그 구와 선으로 그릴지 정한 값입니다.
 	bool bDrawRainBlockerDebug = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Debug", meta = (ClampMin = "0.0", ToolTip = "Rain Blocker 디버그 원과 중심점의 선 두께입니다."))
@@ -129,12 +130,15 @@ public:
 	float StoredWaterWeightMultiplier = 1.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Rain Block", meta = (ClampMin = "0.0", ToolTip = "우산이 비를 막는 시각적 반지름입니다. RainArea와 Niagara가 이 값을 사용해 빗줄기 차단과 우산 물 튐 범위를 표현합니다."))
+	// 비 차단 지점을 계산할 때 쓰는 반지름 값입니다.
 	float RainBlockerRadius = 90.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Rain Block", meta = (ToolTip = "비 차단 중심을 우산 표시 컴포넌트 기준으로 보정하는 로컬 오프셋입니다. 우산 물 튐 위치가 맞지 않을 때 조정합니다."))
+	// 우산 기준 위치에서 비 차단 지점을 얼마나 옮길지 정한 보정값입니다.
 	FVector RainBlockerLocalOffset = FVector::ZeroVector;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Dependencies")
+	// 우산 안에 모인 물을 저장하고 퍼즐이나 무게 계산에도 넘겨주는 컨테이너입니다.
 	TObjectPtr<UUOUWaterContainerComponent> StoredWaterContainer = nullptr;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Dependencies")
@@ -250,7 +254,9 @@ protected:
 	void ApplyHeldVisualFromAssets(UStaticMesh* Mesh, const TArray<TObjectPtr<UMaterialInterface>>& Materials, const FVector& SourceRelativeScale);
 	FTransform GetHeldVisualRelativeTransform(const FVector& SourceRelativeScale) const;
 	void DrawScreenDebug() const;
+	// 우산이 실제로 비를 막는 위치와 범위를 디버그 선과 구로 그립니다.
 	void DrawRainBlockerDebug() const;
+	// 붓는 동안 플레이어가 마우스 방향을 따라보도록 회전을 보정합니다.
 	void UpdatePourAimFacing();
 	void ClearPourAimFacing();
 	void UpdatePouring(float DeltaTime);
