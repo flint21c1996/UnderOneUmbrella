@@ -6,8 +6,10 @@
 
 AUOUPuzzleMoverActor::AUOUPuzzleMoverActor()
 {
+	// 무버 액터는 상태에 따라 매 틱 위치를 보간해야 하므로 Tick을 사용합니다.
 	PrimaryActorTick.bCanEverTick = true;
 
+	// 이동 대상과 활성 비활성 기준점은 모두 같은 루트 아래에 배치합니다.
 	RootScene = CreateDefaultSubobject<USceneComponent>(TEXT("RootScene"));
 	SetRootComponent(RootScene);
 
@@ -26,11 +28,13 @@ void AUOUPuzzleMoverActor::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 
+	// 일시정지 중에는 현재 위치를 유지하고 이동 갱신만 멈춥니다.
 	if (bPaused)
 	{
 		return;
 	}
 
+	// 활성 상태를 보고 목표 지점 쪽으로 이동 대상을 조금씩 옮깁니다.
 	MoveTarget(DeltaSeconds);
 }
 
@@ -65,6 +69,33 @@ void AUOUPuzzleMoverActor::SetActivated(bool bNewActivated)
 	bPaused = false;
 }
 
+void AUOUPuzzleMoverActor::ApplyPuzzleResult_Implementation(EOUUPuzzleResultAction Action)
+{
+	// 외부에서는 결과 액션 enum 하나만 전달하고
+	// 실제 내부 동작은 기존 Activate 계열 함수로 다시 분기합니다.
+	switch (Action)
+	{
+	case EOUUPuzzleResultAction::Activate:
+		Activate();
+		break;
+	case EOUUPuzzleResultAction::Deactivate:
+		Deactivate();
+		break;
+	case EOUUPuzzleResultAction::Pause:
+		Pause();
+		break;
+	case EOUUPuzzleResultAction::Resume:
+		Resume();
+		break;
+	case EOUUPuzzleResultAction::Toggle:
+		Toggle();
+		break;
+	case EOUUPuzzleResultAction::None:
+	default:
+		break;
+	}
+}
+
 void AUOUPuzzleMoverActor::MoveTarget(float DeltaSeconds)
 {
 	if (MovingTarget == nullptr)
@@ -72,12 +103,14 @@ void AUOUPuzzleMoverActor::MoveTarget(float DeltaSeconds)
 		return;
 	}
 
+	// 현재 활성 상태에 따라 도착해야 할 기준점을 고릅니다.
 	const USceneComponent* TargetPoint = bActivated ? ActivePoint.Get() : InactivePoint.Get();
 	if (TargetPoint == nullptr)
 	{
 		return;
 	}
 
+	// 현재 위치에서 목표 위치까지 일정 속도로 보간 이동합니다.
 	const FVector CurrentLocation = MovingTarget->GetComponentLocation();
 	const FVector NextLocation = FMath::VInterpConstantTo(
 		CurrentLocation,
