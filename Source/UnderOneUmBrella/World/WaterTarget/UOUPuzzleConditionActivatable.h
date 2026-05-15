@@ -81,7 +81,7 @@ struct UNDERONEUMBRELLA_API FUOUPuzzleConditionContext
 
 // 조건을 만족했을 때 반응할 컴포넌트/액터가 구현하는 인터페이스입니다.
 // 팀원은 UActorComponent에 이 인터페이스를 구현한 뒤 Platform Actor에 붙이면
-// PuzzleConditionComponent가 조건 변화 시 이 함수들을 호출할 수 있습니다.
+// WaterBasinConditionComponent가 조건 변화 시 이 함수들을 호출할 수 있습니다.
 UINTERFACE(Blueprintable)
 class UNDERONEUMBRELLA_API UUOUPuzzleConditionActivatable : public UInterface
 {
