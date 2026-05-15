@@ -9,6 +9,7 @@
 
 namespace
 {
+// config가 비어 있어도 프로토타입을 바로 실행할 수 있도록 기본 경로를 둡니다.
 constexpr TCHAR DefaultSettingsMenuWidgetClassPath[] = TEXT("/Game/UOU/UI/WBP_SettingsMenu.WBP_SettingsMenu_C");
 constexpr TCHAR DefaultTitleLevelPath[] = TEXT("/Game/UOU/Maps/TitleMap.TitleMap");
 }
@@ -19,6 +20,7 @@ AUOUMenuPlayerController::AUOUMenuPlayerController()
 
 void AUOUMenuPlayerController::OpenSettingsMenu()
 {
+	// 이미 열린 상태에서 중복 생성하면 입력 모드가 꼬일 수 있으므로 한 번만 생성합니다.
 	if (bSettingsMenuOpen)
 	{
 		return;
@@ -50,6 +52,7 @@ void AUOUMenuPlayerController::OpenSettingsMenu()
 		return;
 	}
 
+	// 설정창은 현재 화면 위에 떠야 하므로 높은 ZOrder로 올립니다.
 	SettingsMenuWidget->AddToViewport(100);
 	bSettingsMenuOpen = true;
 	ApplySettingsMenuInputMode(SettingsMenuWidget);
@@ -86,6 +89,7 @@ void AUOUMenuPlayerController::ToggleSettingsMenu()
 
 void AUOUMenuPlayerController::ReturnToTitle()
 {
+	// 타이틀 화면 자체에서는 '타이틀로 돌아가기' 버튼이 동작하지 않도록 권한 플래그를 확인합니다.
 	if (!bCanReturnToTitle)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("ReturnToTitle was requested, but this controller does not allow it."));
@@ -109,6 +113,7 @@ void AUOUMenuPlayerController::ToggleTestSetting()
 
 void AUOUMenuPlayerController::ApplySettingsMenuInputMode(UUserWidget* InSettingsMenuWidget)
 {
+	// 설정창이 열린 동안에는 게임 조작을 잠그고 UI 입력을 우선합니다.
 	if (InSettingsMenuWidget != nullptr)
 	{
 		FInputModeGameAndUI InputMode;
@@ -118,6 +123,8 @@ void AUOUMenuPlayerController::ApplySettingsMenuInputMode(UUserWidget* InSetting
 	}
 
 	bShowMouseCursor = true;
+
+	// Ignore 입력은 누적 카운터라 Reset 후 다시 잠가야 닫을 때 예상대로 풀립니다.
 	ResetIgnoreMoveInput();
 	ResetIgnoreLookInput();
 	SetIgnoreMoveInput(true);

@@ -11,6 +11,7 @@
 
 namespace
 {
+// config가 비어 있어도 타이틀 메뉴를 바로 테스트할 수 있도록 기본 경로를 둡니다.
 constexpr TCHAR DefaultTestLevelPath[] = TEXT("/Game/UOU/Maps/TempMap.TempMap");
 constexpr TCHAR DefaultTitleMenuWidgetClassPath[] = TEXT("/Game/UOU/UI/WBP_TitleMenu.WBP_TitleMenu_C");
 }
@@ -24,6 +25,7 @@ void AUOUTitlePlayerController::BeginPlay()
 {
 	Super::BeginPlay();
 
+	// 타이틀 메뉴는 PlayerController가 직접 생성해서 맵 자체는 비어 있는 상태로 유지합니다.
 	if (TestLevel.IsNull())
 	{
 		TestLevel = TSoftObjectPtr<UWorld>(FSoftObjectPath(DefaultTestLevelPath));
@@ -68,6 +70,7 @@ void AUOUTitlePlayerController::SetupInputComponent()
 		return;
 	}
 
+	// 버튼 클릭 외에도 키보드로 기본 메뉴 동작을 빠르게 테스트할 수 있게 둡니다.
 	InputComponent->BindKey(EKeys::Enter, IE_Pressed, this, &AUOUTitlePlayerController::StartGame);
 	InputComponent->BindKey(EKeys::SpaceBar, IE_Pressed, this, &AUOUTitlePlayerController::StartGame);
 	InputComponent->BindKey(EKeys::Escape, IE_Pressed, this, &AUOUTitlePlayerController::ToggleSettingsMenu);
@@ -76,6 +79,7 @@ void AUOUTitlePlayerController::SetupInputComponent()
 
 void AUOUTitlePlayerController::StartGame()
 {
+	// 맵 전환 중에 버튼이 다시 눌려도 OpenLevel을 한 번만 요청합니다.
 	if (bIsOpeningLevel || TestLevel.IsNull())
 	{
 		return;
@@ -92,11 +96,13 @@ void AUOUTitlePlayerController::QuitGame()
 
 void AUOUTitlePlayerController::RestoreInputModeAfterSettingsMenu()
 {
+	// 설정창을 닫으면 다시 타이틀 메뉴가 포커스를 가져야 합니다.
 	ApplyTitleMenuInputMode();
 }
 
 void AUOUTitlePlayerController::ApplyTitleMenuInputMode()
 {
+	// 타이틀은 항상 UI 조작 화면이라 마우스 커서를 켜고 이동/시점 입력을 막습니다.
 	if (TitleMenuWidget != nullptr)
 	{
 		FInputModeGameAndUI InputMode;

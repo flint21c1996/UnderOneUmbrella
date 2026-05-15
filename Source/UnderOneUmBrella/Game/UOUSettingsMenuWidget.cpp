@@ -42,5 +42,6 @@ bool UUOUSettingsMenuWidget::CanReturnToTitle() const
 
 AUOUMenuPlayerController* UUOUSettingsMenuWidget::GetMenuPlayerController() const
 {
+	// WBP를 어떤 화면에서 열었는지는 Owning Player를 통해 구분합니다.
 	return Cast<AUOUMenuPlayerController>(GetOwningPlayer());
 }

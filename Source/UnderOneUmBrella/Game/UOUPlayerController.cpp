@@ -8,11 +8,13 @@
 
 namespace
 {
+// config가 비어 있어도 인게임 HUD를 바로 띄울 수 있도록 기본 경로를 둡니다.
 constexpr TCHAR DefaultInGameHUDWidgetClassPath[] = TEXT("/Game/UOU/UI/WBP_InGameHUD.WBP_InGameHUD_C");
 }
 
 AUOUPlayerController::AUOUPlayerController()
 {
+	// 인게임 설정창에서는 타이틀 복귀 버튼을 보여줘야 합니다.
 	SetCanReturnToTitle(true);
 }
 
@@ -20,6 +22,7 @@ void AUOUPlayerController::BeginPlay()
 {
 	Super::BeginPlay();
 
+	// 인게임 HUD는 실제 플레이 화면 위에 얹는 최소 UI입니다.
 	if (InGameHUDWidgetClass.IsNull())
 	{
 		InGameHUDWidgetClass = TSoftClassPtr<UUserWidget>(FSoftClassPath(DefaultInGameHUDWidgetClassPath));
@@ -58,5 +61,6 @@ void AUOUPlayerController::SetupInputComponent()
 		return;
 	}
 
+	// ESC는 타이틀과 인게임 공통으로 설정창 토글에 사용합니다.
 	InputComponent->BindKey(EKeys::Escape, IE_Pressed, this, &AUOUPlayerController::ToggleSettingsMenu);
 }
