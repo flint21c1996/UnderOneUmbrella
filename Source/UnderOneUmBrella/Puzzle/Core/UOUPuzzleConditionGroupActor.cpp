@@ -4,11 +4,14 @@
 
 #include "Components/SceneComponent.h"
 #include "Puzzle/Core/UOUPuzzleConditionSourceComponent.h"
+#include "Puzzle/Core/UOUPuzzleResultReceiver.h"
 
 AUOUPuzzleConditionGroupActor::AUOUPuzzleConditionGroupActor()
 {
+	// 조건 그룹 액터는 직접 Tick하지 않고 내부 조건 변화 이벤트만 구독합니다.
 	PrimaryActorTick.bCanEverTick = false;
 
+	// 씬 배치용 루트와 실제 계산을 담당할 그룹 컴포넌트를 함께 준비합니다.
 	RootScene = CreateDefaultSubobject<USceneComponent>(TEXT("RootScene"));
 	SetRootComponent(RootScene);
 
@@ -52,6 +55,7 @@ void AUOUPuzzleConditionGroupActor::BeginPlay()
 
 void AUOUPuzzleConditionGroupActor::RefreshGroupSetup()
 {
+	// 액터 목록에서 조건 소스를 다시 모아 내부 그룹 컴포넌트에 주입합니다.
 	ResolveConditionSourcesFromActors();
 
 	if (PuzzleConditionGroupComponent == nullptr)
@@ -100,6 +104,8 @@ void AUOUPuzzleConditionGroupActor::HandleGroupStateChanged(bool bNewSatisfied)
 
 void AUOUPuzzleConditionGroupActor::ResolveConditionSourcesFromActors()
 {
+	// ConditionActors는 퍼즐 원인을 담는 액터 목록입니다.
+	// 각 액터 안의 조건 소스 컴포넌트를 꺼내 하나의 그룹으로 묶습니다.
 	ResolvedConditionSources.Reset();
 
 	if (!bCollectConditionSourcesFromConditionActors)
@@ -127,6 +133,7 @@ void AUOUPuzzleConditionGroupActor::ResolveConditionSourcesFromActors()
 
 void AUOUPuzzleConditionGroupActor::DispatchResultBindings(bool bSatisfied) const
 {
+	// 현재 만족 상태에 맞는 액션을 골라 결과 액터들에게 순서대로 전달합니다.
 	for (const FOUUPuzzleResultBinding& Binding : ResultBindings)
 	{
 		ExecuteResultAction(
@@ -142,50 +149,12 @@ void AUOUPuzzleConditionGroupActor::ExecuteResultAction(AActor* TargetActor, EOU
 		return;
 	}
 
-	const FName FunctionName = GetActionFunctionName(Action);
-	if (FunctionName.IsNone())
+	if (!TargetActor->GetClass()->ImplementsInterface(UUOUPuzzleResultReceiver::StaticClass()))
 	{
 		return;
 	}
 
-	if (UFunction* Function = TargetActor->FindFunction(FunctionName))
-	{
-		TargetActor->ProcessEvent(Function, nullptr);
-		return;
-	}
-
-	TInlineComponentArray<UActorComponent*> ActorComponents(TargetActor);
-	for (UActorComponent* Component : ActorComponents)
-	{
-		if (Component == nullptr)
-		{
-			continue;
-		}
-
-		if (UFunction* Function = Component->FindFunction(FunctionName))
-		{
-			Component->ProcessEvent(Function, nullptr);
-			return;
-		}
-	}
-}
-
-FName AUOUPuzzleConditionGroupActor::GetActionFunctionName(EOUUPuzzleResultAction Action)
-{
-	switch (Action)
-	{
-	case EOUUPuzzleResultAction::Activate:
-		return TEXT("Activate");
-	case EOUUPuzzleResultAction::Deactivate:
-		return TEXT("Deactivate");
-	case EOUUPuzzleResultAction::Pause:
-		return TEXT("Pause");
-	case EOUUPuzzleResultAction::Resume:
-		return TEXT("Resume");
-	case EOUUPuzzleResultAction::Toggle:
-		return TEXT("Toggle");
-	case EOUUPuzzleResultAction::None:
-	default:
-		return NAME_None;
-	}
+	// 결과 액터가 구현한 공통 인터페이스 진입점을 호출합니다.
+	// 내부에서 어떤 동작을 할지는 각 액터가 ApplyPuzzleResult로 재정의합니다.
+	IUOUPuzzleResultReceiver::Execute_ApplyPuzzleResult(TargetActor, Action);
 }
