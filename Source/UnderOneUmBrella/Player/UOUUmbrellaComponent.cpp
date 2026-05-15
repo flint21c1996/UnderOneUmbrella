@@ -6,6 +6,7 @@
 #include "Components/PrimitiveComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "DrawDebugHelpers.h"
 #include "Engine/Engine.h"
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
@@ -52,12 +53,14 @@ void UUOUUmbrellaComponent::TickComponent(float DeltaTime, ELevelTick TickType, 
 	{
 		ClearPourAimFacing();
 		DrawScreenDebug();
+		DrawRainBlockerDebug();
 		return;
 	}
 
 	UpdatePourAimFacing();
 	UpdatePouring(DeltaTime);
 	DrawScreenDebug();
+	DrawRainBlockerDebug();
 }
 
 void UUOUUmbrellaComponent::AcquireUmbrella()
@@ -307,6 +310,48 @@ bool UUOUUmbrellaComponent::IsPouring() const
 bool UUOUUmbrellaComponent::BlocksJumping() const
 {
 	return bHasUmbrella && (CurrentState == EUOUUmbrellaState::UpsideDown || CurrentState == EUOUUmbrellaState::Pouring);
+}
+
+bool UUOUUmbrellaComponent::IsBlockingRain() const
+{
+	return IsOpen();
+}
+
+bool UUOUUmbrellaComponent::TryGetRainBlockerData(FVector& OutWorldLocation, float& OutRadius) const
+{
+	OutWorldLocation = FVector::ZeroVector;
+	OutRadius = 0.0f;
+
+	if (!IsBlockingRain() || RainBlockerRadius <= 0.0f)
+	{
+		return false;
+	}
+
+	const USceneComponent* BlockerComponent = OpenVisual;
+	if (BlockerComponent == nullptr)
+	{
+		BlockerComponent = RuntimeHeldVisual;
+	}
+	if (BlockerComponent == nullptr)
+	{
+		BlockerComponent = PickupAttachPoint;
+	}
+
+	if (BlockerComponent != nullptr)
+	{
+		OutWorldLocation = BlockerComponent->GetComponentTransform().TransformPosition(RainBlockerLocalOffset);
+		OutRadius = RainBlockerRadius;
+		return true;
+	}
+
+	if (const AActor* Owner = GetOwner())
+	{
+		OutWorldLocation = Owner->GetActorTransform().TransformPosition(RainBlockerLocalOffset);
+		OutRadius = RainBlockerRadius;
+		return true;
+	}
+
+	return false;
 }
 
 float UUOUUmbrellaComponent::GetCurrentStoredWater() const
@@ -586,6 +631,75 @@ void UUOUUmbrellaComponent::DrawScreenDebug() const
 		DebugText,
 		false,
 		FVector2D(1.0f, 1.0f));
+}
+
+void UUOUUmbrellaComponent::DrawRainBlockerDebug() const
+{
+	if (!bDrawRainBlockerDebug)
+	{
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	if (World == nullptr)
+	{
+		return;
+	}
+
+	FVector BlockerWorldLocation = FVector::ZeroVector;
+	float BlockerRadius = 0.0f;
+	if (!TryGetRainBlockerData(BlockerWorldLocation, BlockerRadius))
+	{
+		return;
+	}
+
+	const float Thickness = FMath::Max(0.0f, RainBlockerDebugThickness);
+	const float LifeTime = 0.0f;
+
+	DrawDebugSphere(
+		World,
+		BlockerWorldLocation,
+		8.0f,
+		12,
+		FColor::Yellow,
+		false,
+		LifeTime,
+		0,
+		Thickness);
+
+	DrawDebugCircle(
+		World,
+		BlockerWorldLocation,
+		BlockerRadius,
+		64,
+		FColor::Cyan,
+		false,
+		LifeTime,
+		0,
+		Thickness,
+		FVector::ForwardVector,
+		FVector::RightVector,
+		false);
+
+	DrawDebugLine(
+		World,
+		BlockerWorldLocation + FVector(0.0f, 0.0f, 20.0f),
+		BlockerWorldLocation - FVector(0.0f, 0.0f, 20.0f),
+		FColor::Yellow,
+		false,
+		LifeTime,
+		0,
+		Thickness);
+
+	DrawDebugString(
+		World,
+		BlockerWorldLocation + FVector(0.0f, 0.0f, 18.0f),
+		FString::Printf(TEXT("RainBlocker R=%.1f"), BlockerRadius),
+		nullptr,
+		FColor::Yellow,
+		LifeTime,
+		false,
+		1.0f);
 }
 
 void UUOUUmbrellaComponent::UpdatePourAimFacing()
