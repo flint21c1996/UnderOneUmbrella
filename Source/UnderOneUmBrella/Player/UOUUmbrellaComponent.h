@@ -16,7 +16,7 @@ class UStaticMeshComponent;
 class UUOURainReceiverComponent;
 class UUOUWaterContainerComponent;
 
-// ???닿굅?뺤? ?곗궛???꾩옱 ?대뼡 ?곹깭濡??숈옉 以묒씤吏 ?섑??몃떎.
+// 우산의 현재 상태입니다.
 UENUM(BlueprintType)
 enum class EUOUUmbrellaState : uint8
 {
@@ -26,6 +26,7 @@ enum class EUOUUmbrellaState : uint8
 	Pouring
 };
 
+// 우산에서 부은 물이 실제로 전달된 대상의 종류입니다.
 UENUM(BlueprintType)
 enum class EUOUUmbrellaPourReceiverType : uint8
 {
@@ -38,7 +39,8 @@ enum class EUOUUmbrellaPourReceiverType : uint8
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnUmbrellaStateChangedSignature, EUOUUmbrellaState, NewState, bool, bHasUmbrella);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnUmbrellaRainBlockedSignature, float, BlockedAmount);
 
-// ???대옒?ㅻ뒗 ?곗궛 ?뚯쑀 ?щ?? ?곹깭 ?꾪솚, 鍮??몄텧 諛섏쓳, 臾?諛쏄린? 遺볤린 ?먮쫫???대떦?쒕떎.
+// 플레이어의 우산 보유 상태와 우산 상태 전환을 관리하는 컴포넌트입니다.
+// 우산 열기/닫기/뒤집기/물 담기/물 붓기/비 차단 등을 담당합니다.
 UCLASS(ClassGroup=(Gameplay), meta=(BlueprintSpawnableComponent, DisplayName="UOU Umbrella"))
 class UUOUUmbrellaComponent : public UActorComponent
 {
