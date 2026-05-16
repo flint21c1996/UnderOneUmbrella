@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
+#include "Puzzle/Core/UOUPuzzleResultReceiver.h"
 #include "World/NPC/UOUNPCActionTypes.h"
 #include "UOUNPCCharacter.generated.h"
 
@@ -27,7 +28,7 @@ enum class EOUUNPCActivationAction : uint8
 
 // 퍼즐에서 전달한 이동, 점프, 애니메이션 요청을 처리하는 NPC 베이스 캐릭터입니다.
 UCLASS(Blueprintable, meta = (DisplayName = "UOU NPC Character", ToolTip = "퍼즐 액션과 Behavior Tree 태스크로 제어되는 NPC 캐릭터입니다."))
-class AUOUNPCCharacter : public ACharacter
+class AUOUNPCCharacter : public ACharacter, public IUOUPuzzleResultReceiver
 {
 	GENERATED_BODY()
 
@@ -99,6 +100,8 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Puzzle|Actions")
 	void Toggle();
+
+	virtual void ApplyPuzzleResult_Implementation(EOUUPuzzleResultAction Action) override;
 
 	UFUNCTION(BlueprintCallable, Category = "NPC|Movement")
 	bool MoveToConfiguredTarget();

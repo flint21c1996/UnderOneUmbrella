@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "Puzzle/Core/UOUPuzzleResultReceiver.h"
 #include "World/NPC/UOUNPCActionTypes.h"
 #include "UOUNPCActionRequestActor.generated.h"
 
@@ -12,7 +13,7 @@ class USceneComponent;
 
 // 활성화될 때 NPC에 단일 액션 요청을 전달하는 액터입니다.
 UCLASS(Blueprintable, meta = (DisplayName = "UOU NPC Action Request", ToolTip = "활성화될 때 설정된 NPC 액션 하나를 요청합니다."))
-class AUOUNPCActionRequestActor : public AActor
+class AUOUNPCActionRequestActor : public AActor, public IUOUPuzzleResultReceiver
 {
 	GENERATED_BODY()
 
@@ -49,4 +50,6 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Puzzle|Actions")
 	void Toggle();
+
+	virtual void ApplyPuzzleResult_Implementation(EOUUPuzzleResultAction Action) override;
 };

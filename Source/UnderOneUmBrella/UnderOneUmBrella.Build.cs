@@ -20,7 +20,8 @@ public class UnderOneUmBrella : ModuleRules
 			"AIModule",
 			"NavigationSystem",
 			"GameplayTasks",
-            "Niagara"
+			"Niagara",
+			"UMG"
         });
 	}
 }

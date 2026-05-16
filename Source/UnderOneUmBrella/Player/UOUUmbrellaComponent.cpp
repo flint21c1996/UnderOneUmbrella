@@ -15,6 +15,7 @@
 #include "Materials/MaterialInterface.h"
 #include "Player/UOURainReceiverComponent.h"
 #include "Player/UOUWaterContainerComponent.h"
+#include "World/WaterTarget/UOUWaterBasinTargetComponent.h"
 #include "World/WaterTarget/UOUUmbrellaWaterTarget.h"
 
 // 우산 컴포넌트는 물 붓기, 조준 회전, 디버그 표시를 계속 갱신해야 해서 틱을 켭니다.
@@ -963,6 +964,23 @@ bool UUOUUmbrellaComponent::TryReceiveWaterAtHit(const FHitResult& HitResult, fl
 		LastPourTargetName = ParentWaterTargetActor->GetName();
 		ParentWaterTargetActor->ReceiveWater(WaterAmount);
 		return true;
+	}
+
+	if (UUOUWaterBasinTargetComponent* WaterBasinTarget = HitActor->FindComponentByClass<UUOUWaterBasinTargetComponent>())
+	{
+		LastPourTargetName = HitActor->GetName();
+		WaterBasinTarget->AddWater(WaterAmount, true);
+		return true;
+	}
+
+	if (AActor* ParentActor = HitActor->GetAttachParentActor())
+	{
+		if (UUOUWaterBasinTargetComponent* ParentWaterBasinTarget = ParentActor->FindComponentByClass<UUOUWaterBasinTargetComponent>())
+		{
+			LastPourTargetName = ParentActor->GetName();
+			ParentWaterBasinTarget->AddWater(WaterAmount, true);
+			return true;
+		}
 	}
 
 	if (UUOUWaterContainerComponent* WaterTargetContainer = HitActor->FindComponentByClass<UUOUWaterContainerComponent>())

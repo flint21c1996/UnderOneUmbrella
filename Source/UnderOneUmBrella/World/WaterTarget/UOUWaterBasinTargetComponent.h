@@ -67,6 +67,7 @@ struct FUOUWaterBasinGroupDebugData
 	float HighestTopWorldZ = 0.0f;
 };
 
+//수면의 정보가 바뀔때 발생할 이벤트
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FUOUWaterBasinTargetChangedSignature, UUOUWaterBasinTargetComponent*, Target);
 
 UCLASS(ClassGroup=(Puzzle), meta=(BlueprintSpawnableComponent))
