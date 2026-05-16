@@ -26,6 +26,15 @@ enum class EUOUUmbrellaState : uint8
 	Pouring
 };
 
+UENUM(BlueprintType)
+enum class EUOUUmbrellaPourReceiverType : uint8
+{
+	None,
+	UmbrellaWaterTarget,
+	WaterBasinTarget,
+	WaterContainer
+};
+
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnUmbrellaStateChangedSignature, EUOUUmbrellaState, NewState, bool, bHasUmbrella);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnUmbrellaRainBlockedSignature, float, BlockedAmount);
 
@@ -108,6 +117,18 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Debug", meta = (ClampMin = "0.0", ToolTip = "Rain Blocker 디버그 원과 중심점의 선 두께입니다."))
 	float RainBlockerDebugThickness = 2.0f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Debug", meta = (ToolTip = "Draws the umbrella water pour trace in the world while pouring."))
+	bool bDrawPourTraceDebug = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Debug", meta = (ToolTip = "Draws a world-space label beside the last pour trace hit or endpoint."))
+	bool bDrawPourTraceDebugLabel = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Debug", meta = (ClampMin = "0.0"))
+	float PourTraceDebugThickness = 3.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Debug", meta = (ClampMin = "0.0"))
+	float PourTraceDebugLifeTime = 0.0f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Water", meta = (ClampMin = "0.0"))
 	float PourRate = 1.5f;
 
@@ -155,6 +176,36 @@ public:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Umbrella|Runtime")
 	FString LastPourTargetName = TEXT("None");
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Umbrella|Runtime")
+	EUOUUmbrellaPourReceiverType LastPourReceiverType = EUOUUmbrellaPourReceiverType::None;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Umbrella|Runtime")
+	bool bHasLastPourTrace = false;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Umbrella|Runtime")
+	bool bLastPourTraceHit = false;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Umbrella|Runtime")
+	bool bLastPourDeliveredWater = false;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Umbrella|Runtime")
+	FVector LastPourTraceStart = FVector::ZeroVector;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Umbrella|Runtime")
+	FVector LastPourTraceEnd = FVector::ZeroVector;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Umbrella|Runtime")
+	FVector LastPourTraceImpactPoint = FVector::ZeroVector;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Umbrella|Runtime")
+	float LastPourAmount = 0.0f;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Umbrella|Runtime")
+	float LastPourStoredWaterBefore = 0.0f;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Umbrella|Runtime")
+	float LastPourStoredWaterAfter = 0.0f;
 
 	UFUNCTION(BlueprintCallable, Category = "Umbrella")
 	void AcquireUmbrella();
@@ -256,13 +307,15 @@ protected:
 	void DrawScreenDebug() const;
 	// 우산이 실제로 비를 막는 위치와 범위를 디버그 선과 구로 그립니다.
 	void DrawRainBlockerDebug() const;
+	void DrawPourTraceDebug() const;
+	void ClearPourTraceDebug();
 	// 붓는 동안 플레이어가 마우스 방향을 따라보도록 회전을 보정합니다.
 	void UpdatePourAimFacing();
 	void ClearPourAimFacing();
 	void UpdatePouring(float DeltaTime);
 	bool TryGetMouseAimDirection(FVector& AimDirection, FVector& AimPoint) const;
 	bool TryGetPourDirection(FVector& PourOriginLocation, FVector& PourDirection) const;
-	bool TryReceiveWaterAtHit(const FHitResult& HitResult, float WaterAmount);
+	bool TryReceiveWaterAtHit(const FHitResult& HitResult, float WaterAmount, EUOUUmbrellaPourReceiverType& OutReceiverType);
 	bool ShouldSpillStoredWater(EUOUUmbrellaState PreviousState, EUOUUmbrellaState NextState) const;
 	void SpillStoredWater();
 };
