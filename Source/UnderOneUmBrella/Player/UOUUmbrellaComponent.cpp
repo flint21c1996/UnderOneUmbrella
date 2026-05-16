@@ -18,6 +18,25 @@
 #include "World/WaterTarget/UOUWaterBasinTargetComponent.h"
 #include "World/WaterTarget/UOUUmbrellaWaterTarget.h"
 
+namespace
+{
+const TCHAR* GetPourReceiverTypeText(EUOUUmbrellaPourReceiverType ReceiverType)
+{
+	switch (ReceiverType)
+	{
+	case EUOUUmbrellaPourReceiverType::UmbrellaWaterTarget:
+		return TEXT("UmbrellaWaterTarget");
+	case EUOUUmbrellaPourReceiverType::WaterBasinTarget:
+		return TEXT("WaterBasinTarget");
+	case EUOUUmbrellaPourReceiverType::WaterContainer:
+		return TEXT("WaterContainer");
+	case EUOUUmbrellaPourReceiverType::None:
+	default:
+		return TEXT("None");
+	}
+}
+}
+
 UUOUUmbrellaComponent::UUOUUmbrellaComponent()
 {
 	PrimaryComponentTick.bCanEverTick = true;
@@ -53,6 +72,7 @@ void UUOUUmbrellaComponent::TickComponent(float DeltaTime, ELevelTick TickType, 
 	if (!bHasUmbrella)
 	{
 		ClearPourAimFacing();
+		ClearPourTraceDebug();
 		DrawScreenDebug();
 		DrawRainBlockerDebug();
 		return;
@@ -62,6 +82,7 @@ void UUOUUmbrellaComponent::TickComponent(float DeltaTime, ELevelTick TickType, 
 	UpdatePouring(DeltaTime);
 	DrawScreenDebug();
 	DrawRainBlockerDebug();
+	DrawPourTraceDebug();
 }
 
 void UUOUUmbrellaComponent::AcquireUmbrella()
@@ -386,6 +407,8 @@ void UUOUUmbrellaComponent::SetState(EUOUUmbrellaState NewState)
 	{
 		LastPourHitName = TEXT("None");
 		LastPourTargetName = TEXT("None");
+		LastPourReceiverType = EUOUUmbrellaPourReceiverType::None;
+		ClearPourTraceDebug();
 	}
 
 	RefreshVisuals();
@@ -617,13 +640,18 @@ void UUOUUmbrellaComponent::DrawScreenDebug() const
 		: TEXT("Unknown");
 
 	const FString DebugText = FString::Printf(
-		TEXT("Umbrella Owned: %s\nState: %s\nStored Water: %.2f\nRain Exposure: %.2f\nBlocks Jump: %s\nLast Pour Target: %s"),
+		TEXT("Umbrella Owned: %s\nState: %s\nStored Water: %.2f\nRain Exposure: %.2f\nBlocks Jump: %s\nPour Hit: %s\nPour Target: %s\nPour Receiver: %s\nPour Amount: %.2f\nStored Before/After: %.2f -> %.2f"),
 		bHasUmbrella ? TEXT("Yes") : TEXT("No"),
 		*StateText,
 		GetCurrentStoredWater(),
 		GetCurrentPlayerRainAmount(),
 		BlocksJumping() ? TEXT("Yes") : TEXT("No"),
-		*LastPourTargetName);
+		*LastPourHitName,
+		*LastPourTargetName,
+		GetPourReceiverTypeText(LastPourReceiverType),
+		LastPourAmount,
+		LastPourStoredWaterBefore,
+		LastPourStoredWaterAfter);
 
 	GEngine->AddOnScreenDebugMessage(
 		0x554F5531,
@@ -703,6 +731,99 @@ void UUOUUmbrellaComponent::DrawRainBlockerDebug() const
 		1.0f);
 }
 
+void UUOUUmbrellaComponent::DrawPourTraceDebug() const
+{
+	if (!bDrawPourTraceDebug || !bHasLastPourTrace)
+	{
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	if (World == nullptr)
+	{
+		return;
+	}
+
+	const float LifeTime = FMath::Max(0.0f, PourTraceDebugLifeTime);
+	const float Thickness = FMath::Max(0.0f, PourTraceDebugThickness);
+	const FVector DrawEnd = bLastPourTraceHit ? LastPourTraceImpactPoint : LastPourTraceEnd;
+	const FColor TraceColor = bLastPourDeliveredWater
+		? FColor::Green
+		: (bLastPourTraceHit ? FColor::Red : FColor::Cyan);
+
+	DrawDebugLine(
+		World,
+		LastPourTraceStart,
+		DrawEnd,
+		TraceColor,
+		false,
+		LifeTime,
+		0,
+		Thickness);
+
+	DrawDebugSphere(
+		World,
+		LastPourTraceStart,
+		6.0f,
+		12,
+		FColor::Cyan,
+		false,
+		LifeTime,
+		0,
+		Thickness);
+
+	if (bLastPourTraceHit)
+	{
+		DrawDebugSphere(
+			World,
+			LastPourTraceImpactPoint,
+			8.0f,
+			12,
+			TraceColor,
+			false,
+			LifeTime,
+			0,
+			Thickness);
+	}
+
+	if (bDrawPourTraceDebugLabel)
+	{
+		const FVector LabelLocation = DrawEnd + FVector(0.0f, 0.0f, 24.0f);
+		const FString LabelText = FString::Printf(
+			TEXT("Pour Trace\nHit: %s\nTarget: %s\nReceiver: %s\nAmount: %.2f\nStored: %.2f -> %.2f"),
+			*LastPourHitName,
+			*LastPourTargetName,
+			GetPourReceiverTypeText(LastPourReceiverType),
+			LastPourAmount,
+			LastPourStoredWaterBefore,
+			LastPourStoredWaterAfter);
+
+		DrawDebugString(
+			World,
+			LabelLocation,
+			LabelText,
+			nullptr,
+			TraceColor,
+			LifeTime,
+			true,
+			1.0f);
+	}
+}
+
+void UUOUUmbrellaComponent::ClearPourTraceDebug()
+{
+	bHasLastPourTrace = false;
+	bLastPourTraceHit = false;
+	bLastPourDeliveredWater = false;
+	LastPourTraceStart = FVector::ZeroVector;
+	LastPourTraceEnd = FVector::ZeroVector;
+	LastPourTraceImpactPoint = FVector::ZeroVector;
+	LastPourAmount = 0.0f;
+	LastPourStoredWaterBefore = GetCurrentStoredWater();
+	LastPourStoredWaterAfter = GetCurrentStoredWater();
+	LastPourReceiverType = EUOUUmbrellaPourReceiverType::None;
+}
+
 void UUOUUmbrellaComponent::UpdatePourAimFacing()
 {
 	if (!bRotateOwnerTowardsPourDirection || CurrentState != EUOUUmbrellaState::Pouring)
@@ -739,16 +860,33 @@ void UUOUUmbrellaComponent::UpdatePouring(float DeltaTime)
 {
 	if (CurrentState != EUOUUmbrellaState::Pouring || StoredWaterContainer == nullptr)
 	{
+		ClearPourTraceDebug();
 		return;
 	}
 
-	const float PourAmount = PourRate * DeltaTime;
+	const float StoredWaterBefore = GetCurrentStoredWater();
+	const float RequestedPourAmount = FMath::Max(0.0f, PourRate) * FMath::Max(0.0f, DeltaTime);
+	const float PourAmount = FMath::Min(StoredWaterBefore, RequestedPourAmount);
+	if (PourAmount <= KINDA_SMALL_NUMBER)
+	{
+		EndPour();
+		return;
+	}
+
 	StoredWaterContainer->RemoveAmount(PourAmount);
+	const float StoredWaterAfter = GetCurrentStoredWater();
 
 	FVector TraceStart = FVector::ZeroVector;
 	FVector TraceDirection = FVector::ForwardVector;
 	LastPourHitName = TEXT("No Hit");
 	LastPourTargetName = TEXT("None");
+	LastPourReceiverType = EUOUUmbrellaPourReceiverType::None;
+	bHasLastPourTrace = false;
+	bLastPourTraceHit = false;
+	bLastPourDeliveredWater = false;
+	LastPourAmount = PourAmount;
+	LastPourStoredWaterBefore = StoredWaterBefore;
+	LastPourStoredWaterAfter = StoredWaterAfter;
 
 	if (TryGetPourDirection(TraceStart, TraceDirection))
 	{
@@ -756,21 +894,48 @@ void UUOUUmbrellaComponent::UpdatePouring(float DeltaTime)
 		AActor* Owner = GetOwner();
 		if (World != nullptr && Owner != nullptr)
 		{
-			FHitResult HitResult;
 			FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(UmbrellaPourTrace), false, Owner);
 			QueryParams.AddIgnoredActor(Owner);
 
 			const FVector TraceEnd = TraceStart + TraceDirection * PourDistance;
-			if (World->LineTraceSingleByChannel(HitResult, TraceStart, TraceEnd, PourTraceChannel, QueryParams))
+			LastPourTraceStart = TraceStart;
+			LastPourTraceEnd = TraceEnd;
+			LastPourTraceImpactPoint = TraceEnd;
+			bHasLastPourTrace = true;
+
+			TArray<FHitResult> HitResults;
+			if (World->LineTraceMultiByChannel(HitResults, TraceStart, TraceEnd, PourTraceChannel, QueryParams))
 			{
-				LastPourHitName = GetNameSafe(HitResult.GetComponent());
-				TryReceiveWaterAtHit(HitResult, PourAmount);
+				HitResults.Sort([](const FHitResult& Left, const FHitResult& Right)
+				{
+					return Left.Distance < Right.Distance;
+				});
+
+				for (const FHitResult& HitResult : HitResults)
+				{
+					AActor* HitActor = HitResult.GetActor();
+					if (HitActor == nullptr || HitActor == Owner)
+					{
+						continue;
+					}
+
+					LastPourHitName = GetNameSafe(HitResult.GetComponent());
+					LastPourTraceImpactPoint = HitResult.ImpactPoint;
+					bLastPourTraceHit = true;
+
+					EUOUUmbrellaPourReceiverType ReceiverType = EUOUUmbrellaPourReceiverType::None;
+					bLastPourDeliveredWater = TryReceiveWaterAtHit(HitResult, PourAmount, ReceiverType);
+					LastPourReceiverType = ReceiverType;
+					break;
+				}
 			}
 		}
 	}
 	else
 	{
+		ClearPourTraceDebug();
 		LastPourHitName = TEXT("Invalid Ray");
+		LastPourTargetName = TEXT("None");
 	}
 
 	if (GetCurrentStoredWater() <= 0.0f)
@@ -864,8 +1029,10 @@ bool UUOUUmbrellaComponent::TryGetPourDirection(FVector& PourOriginLocation, FVe
 	return !PourDirection.IsNearlyZero();
 }
 
-bool UUOUUmbrellaComponent::TryReceiveWaterAtHit(const FHitResult& HitResult, float WaterAmount)
+bool UUOUUmbrellaComponent::TryReceiveWaterAtHit(const FHitResult& HitResult, float WaterAmount, EUOUUmbrellaPourReceiverType& OutReceiverType)
 {
+	OutReceiverType = EUOUUmbrellaPourReceiverType::None;
+
 	AActor* HitActor = HitResult.GetActor();
 	if (HitActor == nullptr)
 	{
@@ -875,6 +1042,7 @@ bool UUOUUmbrellaComponent::TryReceiveWaterAtHit(const FHitResult& HitResult, fl
 	if (AUOUUmbrellaWaterTarget* WaterTargetActor = Cast<AUOUUmbrellaWaterTarget>(HitActor))
 	{
 		LastPourTargetName = HitActor->GetName();
+		OutReceiverType = EUOUUmbrellaPourReceiverType::UmbrellaWaterTarget;
 		WaterTargetActor->ReceiveWater(WaterAmount);
 		return true;
 	}
@@ -882,6 +1050,7 @@ bool UUOUUmbrellaComponent::TryReceiveWaterAtHit(const FHitResult& HitResult, fl
 	if (AUOUUmbrellaWaterTarget* ParentWaterTargetActor = HitActor->GetAttachParentActor() != nullptr ? Cast<AUOUUmbrellaWaterTarget>(HitActor->GetAttachParentActor()) : nullptr)
 	{
 		LastPourTargetName = ParentWaterTargetActor->GetName();
+		OutReceiverType = EUOUUmbrellaPourReceiverType::UmbrellaWaterTarget;
 		ParentWaterTargetActor->ReceiveWater(WaterAmount);
 		return true;
 	}
@@ -889,6 +1058,7 @@ bool UUOUUmbrellaComponent::TryReceiveWaterAtHit(const FHitResult& HitResult, fl
 	if (UUOUWaterBasinTargetComponent* WaterBasinTarget = HitActor->FindComponentByClass<UUOUWaterBasinTargetComponent>())
 	{
 		LastPourTargetName = HitActor->GetName();
+		OutReceiverType = EUOUUmbrellaPourReceiverType::WaterBasinTarget;
 		WaterBasinTarget->AddWater(WaterAmount, true);
 		return true;
 	}
@@ -898,6 +1068,7 @@ bool UUOUUmbrellaComponent::TryReceiveWaterAtHit(const FHitResult& HitResult, fl
 		if (UUOUWaterBasinTargetComponent* ParentWaterBasinTarget = ParentActor->FindComponentByClass<UUOUWaterBasinTargetComponent>())
 		{
 			LastPourTargetName = ParentActor->GetName();
+			OutReceiverType = EUOUUmbrellaPourReceiverType::WaterBasinTarget;
 			ParentWaterBasinTarget->AddWater(WaterAmount, true);
 			return true;
 		}
@@ -906,6 +1077,7 @@ bool UUOUUmbrellaComponent::TryReceiveWaterAtHit(const FHitResult& HitResult, fl
 	if (UUOUWaterContainerComponent* WaterTargetContainer = HitActor->FindComponentByClass<UUOUWaterContainerComponent>())
 	{
 		LastPourTargetName = HitActor->GetName();
+		OutReceiverType = EUOUUmbrellaPourReceiverType::WaterContainer;
 		WaterTargetContainer->AddAmount(WaterAmount);
 		return true;
 	}
