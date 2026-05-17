@@ -27,6 +27,17 @@ enum class EUOUUmbrellaState : uint8
 	Pouring
 };
 
+// 우산에서 부은 물이 실제로 전달된 대상의 종류입니다.
+// 디버그 텍스트와 라인트레이스 결과 확인에 사용합니다.
+UENUM(BlueprintType)
+enum class EUOUUmbrellaPourReceiverType : uint8
+{
+	None,
+	UmbrellaWaterTarget,
+	WaterBasinTarget,
+	WaterContainer
+};
+
 // 우산 보유 여부나 상태가 바뀌었을 때 블루프린트와 다른 시스템에 알려주는 이벤트입니다.
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnUmbrellaStateChangedSignature, EUOUUmbrellaState, NewState, bool, bHasUmbrella);
 
@@ -138,6 +149,22 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Debug", meta = (ClampMin = "0.0", ToolTip = "비 차단 디버그 선과 중심점의 두께입니다."))
 	float RainBlockerDebugThickness = 2.0f;
 
+	// 물 붓기 라인트레이스를 월드에 보여줄지 정합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Debug", meta = (ToolTip = "물을 붓는 동안 우산 물줄기 라인트레이스를 월드에 표시합니다."))
+	bool bDrawPourTraceDebug = true;
+
+	// 마지막 물 붓기 결과 라벨을 월드에 보여줄지 정합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Debug", meta = (ToolTip = "마지막 물 붓기 히트 지점이나 끝점 옆에 디버그 라벨을 표시합니다."))
+	bool bDrawPourTraceDebugLabel = true;
+
+	// 물 붓기 라인트레이스 디버그 선의 두께입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Debug", meta = (ClampMin = "0.0"))
+	float PourTraceDebugThickness = 3.0f;
+
+	// 물 붓기 디버그 선과 라벨이 유지되는 시간입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Debug", meta = (ClampMin = "0.0"))
+	float PourTraceDebugLifeTime = 0.0f;
+
 	// 초당 붓는 물의 양입니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Water", meta = (ClampMin = "0.0"))
 	float PourRate = 1.5f;
@@ -197,6 +224,46 @@ public:
 	// 마지막으로 물을 실제로 받은 대상 이름입니다.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Umbrella|Runtime")
 	FString LastPourTargetName = TEXT("None");
+
+	// 마지막으로 물을 받은 대상의 종류입니다.
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Umbrella|Runtime")
+	EUOUUmbrellaPourReceiverType LastPourReceiverType = EUOUUmbrellaPourReceiverType::None;
+
+	// 마지막 물 붓기 라인트레이스를 그릴 수 있는 데이터가 있는지 나타냅니다.
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Umbrella|Runtime")
+	bool bHasLastPourTrace = false;
+
+	// 마지막 물 붓기 라인트레이스가 무언가를 맞췄는지 나타냅니다.
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Umbrella|Runtime")
+	bool bLastPourTraceHit = false;
+
+	// 마지막 물 붓기 라인트레이스가 실제로 물을 전달했는지 나타냅니다.
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Umbrella|Runtime")
+	bool bLastPourDeliveredWater = false;
+
+	// 마지막 물 붓기 라인트레이스의 시작 위치입니다.
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Umbrella|Runtime")
+	FVector LastPourTraceStart = FVector::ZeroVector;
+
+	// 마지막 물 붓기 라인트레이스의 끝 위치입니다.
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Umbrella|Runtime")
+	FVector LastPourTraceEnd = FVector::ZeroVector;
+
+	// 마지막 물 붓기 라인트레이스가 맞은 위치입니다.
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Umbrella|Runtime")
+	FVector LastPourTraceImpactPoint = FVector::ZeroVector;
+
+	// 마지막 프레임에 붓기로 사용한 물의 양입니다.
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Umbrella|Runtime")
+	float LastPourAmount = 0.0f;
+
+	// 마지막 물 붓기 직전 저장된 물의 양입니다.
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Umbrella|Runtime")
+	float LastPourStoredWaterBefore = 0.0f;
+
+	// 마지막 물 붓기 직후 저장된 물의 양입니다.
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Umbrella|Runtime")
+	float LastPourStoredWaterAfter = 0.0f;
 
 	// 우산을 획득 상태로 바꾸고 기본 닫힘 상태로 초기화합니다.
 	UFUNCTION(BlueprintCallable, Category = "Umbrella")
@@ -345,6 +412,12 @@ protected:
 	// 우산이 실제로 비를 막는 위치와 범위를 월드 디버그 선과 구로 그립니다.
 	void DrawRainBlockerDebug() const;
 
+	// 물 붓기 라인트레이스와 마지막 전달 결과를 월드 디버그로 그립니다.
+	void DrawPourTraceDebug() const;
+
+	// 물 붓기 디버그에 사용하는 마지막 트레이스 기록을 비웁니다.
+	void ClearPourTraceDebug();
+
 	// 물을 붓는 동안 플레이어가 마우스 방향을 바라보도록 회전을 보정합니다.
 	void UpdatePourAimFacing();
 
@@ -360,8 +433,8 @@ protected:
 	// 물 붓기 시작 위치와 최종 방향을 계산합니다.
 	bool TryGetPourDirection(FVector& PourOriginLocation, FVector& PourDirection) const;
 
-	// 라인트레이스에 맞은 액터가 물을 받을 수 있으면 물을 전달합니다.
-	bool TryReceiveWaterAtHit(const FHitResult& HitResult, float WaterAmount);
+	// 라인트레이스에 맞은 액터가 물을 받을 수 있으면 물을 전달하고 대상 종류를 기록합니다.
+	bool TryReceiveWaterAtHit(const FHitResult& HitResult, float WaterAmount, EUOUUmbrellaPourReceiverType& OutReceiverType);
 
 	// 상태 전환 과정에서 저장된 물을 버려야 하는지 판단합니다.
 	bool ShouldSpillStoredWater(EUOUUmbrellaState PreviousState, EUOUUmbrellaState NextState) const;

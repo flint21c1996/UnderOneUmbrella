@@ -18,6 +18,26 @@
 #include "World/WaterTarget/UOUWaterBasinTargetComponent.h"
 #include "World/WaterTarget/UOUUmbrellaWaterTarget.h"
 
+namespace
+{
+// 물 붓기 디버그 라벨에 표시할 수 있도록 수신 대상 enum을 짧은 문자열로 바꿉니다.
+const TCHAR* GetPourReceiverTypeText(EUOUUmbrellaPourReceiverType ReceiverType)
+{
+	switch (ReceiverType)
+	{
+	case EUOUUmbrellaPourReceiverType::UmbrellaWaterTarget:
+		return TEXT("UmbrellaWaterTarget");
+	case EUOUUmbrellaPourReceiverType::WaterBasinTarget:
+		return TEXT("WaterBasinTarget");
+	case EUOUUmbrellaPourReceiverType::WaterContainer:
+		return TEXT("WaterContainer");
+	case EUOUUmbrellaPourReceiverType::None:
+	default:
+		return TEXT("None");
+	}
+}
+}
+
 // 우산 컴포넌트는 물 붓기, 조준 회전, 디버그 표시를 계속 갱신해야 해서 틱을 켭니다.
 UUOUUmbrellaComponent::UUOUUmbrellaComponent()
 {
@@ -58,8 +78,9 @@ void UUOUUmbrellaComponent::TickComponent(float DeltaTime, ELevelTick TickType, 
 
 	if (!bHasUmbrella)
 	{
-		// 우산이 없어도 디버그는 상태 확인용으로 남기고, 조준 회전은 정리합니다.
+		// 우산이 없어도 디버그는 상태 확인용으로 남기고, 조준과 물줄기 기록은 정리합니다.
 		ClearPourAimFacing();
+		ClearPourTraceDebug();
 		DrawScreenDebug();
 		DrawRainBlockerDebug();
 		return;
@@ -69,6 +90,7 @@ void UUOUUmbrellaComponent::TickComponent(float DeltaTime, ELevelTick TickType, 
 	UpdatePouring(DeltaTime);
 	DrawScreenDebug();
 	DrawRainBlockerDebug();
+	DrawPourTraceDebug();
 }
 
 // 우산을 새로 획득했을 때 보유 상태와 저장 물을 초기화합니다.
@@ -430,6 +452,8 @@ void UUOUUmbrellaComponent::SetState(EUOUUmbrellaState NewState)
 		// 붓기 상태가 아니면 마지막 라인트레이스 결과를 초기화해 디버그 오해를 줄입니다.
 		LastPourHitName = TEXT("None");
 		LastPourTargetName = TEXT("None");
+		LastPourReceiverType = EUOUUmbrellaPourReceiverType::None;
+		ClearPourTraceDebug();
 	}
 
 	RefreshVisuals();
@@ -680,13 +704,18 @@ void UUOUUmbrellaComponent::DrawScreenDebug() const
 		: TEXT("Unknown");
 
 	const FString DebugText = FString::Printf(
-		TEXT("Umbrella Owned: %s\nState: %s\nStored Water: %.2f\nRain Exposure: %.2f\nBlocks Jump: %s\nLast Pour Target: %s"),
+		TEXT("Umbrella Owned: %s\nState: %s\nStored Water: %.2f\nRain Exposure: %.2f\nBlocks Jump: %s\nPour Hit: %s\nPour Target: %s\nPour Receiver: %s\nPour Amount: %.2f\nStored Before/After: %.2f -> %.2f"),
 		bHasUmbrella ? TEXT("Yes") : TEXT("No"),
 		*StateText,
 		GetCurrentStoredWater(),
 		GetCurrentPlayerRainAmount(),
 		BlocksJumping() ? TEXT("Yes") : TEXT("No"),
-		*LastPourTargetName);
+		*LastPourHitName,
+		*LastPourTargetName,
+		GetPourReceiverTypeText(LastPourReceiverType),
+		LastPourAmount,
+		LastPourStoredWaterBefore,
+		LastPourStoredWaterAfter);
 
 	GEngine->AddOnScreenDebugMessage(
 		0x554F5531,
@@ -768,6 +797,101 @@ void UUOUUmbrellaComponent::DrawRainBlockerDebug() const
 		1.0f);
 }
 
+// 물 붓기 라인트레이스의 마지막 결과를 월드에 그려 어느 대상에 닿았는지 확인합니다.
+void UUOUUmbrellaComponent::DrawPourTraceDebug() const
+{
+	if (!bDrawPourTraceDebug || !bHasLastPourTrace)
+	{
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	if (World == nullptr)
+	{
+		return;
+	}
+
+	const float LifeTime = FMath::Max(0.0f, PourTraceDebugLifeTime);
+	const float Thickness = FMath::Max(0.0f, PourTraceDebugThickness);
+	const FVector DrawEnd = bLastPourTraceHit ? LastPourTraceImpactPoint : LastPourTraceEnd;
+	const FColor TraceColor = bLastPourDeliveredWater
+		? FColor::Green
+		: (bLastPourTraceHit ? FColor::Red : FColor::Cyan);
+
+	DrawDebugLine(
+		World,
+		LastPourTraceStart,
+		DrawEnd,
+		TraceColor,
+		false,
+		LifeTime,
+		0,
+		Thickness);
+
+	DrawDebugSphere(
+		World,
+		LastPourTraceStart,
+		6.0f,
+		12,
+		FColor::Cyan,
+		false,
+		LifeTime,
+		0,
+		Thickness);
+
+	if (bLastPourTraceHit)
+	{
+		DrawDebugSphere(
+			World,
+			LastPourTraceImpactPoint,
+			8.0f,
+			12,
+			TraceColor,
+			false,
+			LifeTime,
+			0,
+			Thickness);
+	}
+
+	if (bDrawPourTraceDebugLabel)
+	{
+		const FVector LabelLocation = DrawEnd + FVector(0.0f, 0.0f, 24.0f);
+		const FString LabelText = FString::Printf(
+			TEXT("Pour Trace\nHit: %s\nTarget: %s\nReceiver: %s\nAmount: %.2f\nStored: %.2f -> %.2f"),
+			*LastPourHitName,
+			*LastPourTargetName,
+			GetPourReceiverTypeText(LastPourReceiverType),
+			LastPourAmount,
+			LastPourStoredWaterBefore,
+			LastPourStoredWaterAfter);
+
+		DrawDebugString(
+			World,
+			LabelLocation,
+			LabelText,
+			nullptr,
+			TraceColor,
+			LifeTime,
+			true,
+			1.0f);
+	}
+}
+
+// 물 붓기 디버그 기록을 초기 상태로 돌립니다.
+void UUOUUmbrellaComponent::ClearPourTraceDebug()
+{
+	bHasLastPourTrace = false;
+	bLastPourTraceHit = false;
+	bLastPourDeliveredWater = false;
+	LastPourTraceStart = FVector::ZeroVector;
+	LastPourTraceEnd = FVector::ZeroVector;
+	LastPourTraceImpactPoint = FVector::ZeroVector;
+	LastPourAmount = 0.0f;
+	LastPourStoredWaterBefore = GetCurrentStoredWater();
+	LastPourStoredWaterAfter = GetCurrentStoredWater();
+	LastPourReceiverType = EUOUUmbrellaPourReceiverType::None;
+}
+
 // 물을 붓는 동안 캐릭터 몸 방향을 마우스 조준 방향에 맞춥니다.
 void UUOUUmbrellaComponent::UpdatePourAimFacing()
 {
@@ -808,17 +932,34 @@ void UUOUUmbrellaComponent::UpdatePouring(float DeltaTime)
 {
 	if (CurrentState != EUOUUmbrellaState::Pouring || StoredWaterContainer == nullptr)
 	{
+		ClearPourTraceDebug();
 		return;
 	}
 
-	const float PourAmount = PourRate * DeltaTime;
-	// 먼저 저장량을 줄이고, 실제 대상이 있으면 같은 양을 전달합니다.
+	const float StoredWaterBefore = GetCurrentStoredWater();
+	const float RequestedPourAmount = FMath::Max(0.0f, PourRate) * FMath::Max(0.0f, DeltaTime);
+	const float PourAmount = FMath::Min(StoredWaterBefore, RequestedPourAmount);
+	if (PourAmount <= KINDA_SMALL_NUMBER)
+	{
+		EndPour();
+		return;
+	}
+
+	// 저장된 양보다 많이 붓지 않도록 제한한 뒤 실제 저장량을 줄입니다.
 	StoredWaterContainer->RemoveAmount(PourAmount);
+	const float StoredWaterAfter = GetCurrentStoredWater();
 
 	FVector TraceStart = FVector::ZeroVector;
 	FVector TraceDirection = FVector::ForwardVector;
 	LastPourHitName = TEXT("No Hit");
 	LastPourTargetName = TEXT("None");
+	LastPourReceiverType = EUOUUmbrellaPourReceiverType::None;
+	bHasLastPourTrace = false;
+	bLastPourTraceHit = false;
+	bLastPourDeliveredWater = false;
+	LastPourAmount = PourAmount;
+	LastPourStoredWaterBefore = StoredWaterBefore;
+	LastPourStoredWaterAfter = StoredWaterAfter;
 
 	if (TryGetPourDirection(TraceStart, TraceDirection))
 	{
@@ -826,22 +967,49 @@ void UUOUUmbrellaComponent::UpdatePouring(float DeltaTime)
 		AActor* Owner = GetOwner();
 		if (World != nullptr && Owner != nullptr)
 		{
-			FHitResult HitResult;
 			FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(UmbrellaPourTrace), false, Owner);
 			QueryParams.AddIgnoredActor(Owner);
 
 			const FVector TraceEnd = TraceStart + TraceDirection * PourDistance;
-			// 우산에서 목표 방향으로 한 번 쏴서 물을 받을 수 있는 대상을 찾습니다.
-			if (World->LineTraceSingleByChannel(HitResult, TraceStart, TraceEnd, PourTraceChannel, QueryParams))
+			LastPourTraceStart = TraceStart;
+			LastPourTraceEnd = TraceEnd;
+			LastPourTraceImpactPoint = TraceEnd;
+			bHasLastPourTrace = true;
+
+			TArray<FHitResult> HitResults;
+			if (World->LineTraceMultiByChannel(HitResults, TraceStart, TraceEnd, PourTraceChannel, QueryParams))
 			{
-				LastPourHitName = GetNameSafe(HitResult.GetComponent());
-				TryReceiveWaterAtHit(HitResult, PourAmount);
+				// 여러 대상이 겹쳐 맞을 수 있으므로 가까운 히트부터 검사합니다.
+				HitResults.Sort([](const FHitResult& Left, const FHitResult& Right)
+				{
+					return Left.Distance < Right.Distance;
+				});
+
+				for (const FHitResult& HitResult : HitResults)
+				{
+					AActor* HitActor = HitResult.GetActor();
+					if (HitActor == nullptr || HitActor == Owner)
+					{
+						continue;
+					}
+
+					LastPourHitName = GetNameSafe(HitResult.GetComponent());
+					LastPourTraceImpactPoint = HitResult.ImpactPoint;
+					bLastPourTraceHit = true;
+
+					EUOUUmbrellaPourReceiverType ReceiverType = EUOUUmbrellaPourReceiverType::None;
+					bLastPourDeliveredWater = TryReceiveWaterAtHit(HitResult, PourAmount, ReceiverType);
+					LastPourReceiverType = ReceiverType;
+					break;
+				}
 			}
 		}
 	}
 	else
 	{
+		ClearPourTraceDebug();
 		LastPourHitName = TEXT("Invalid Ray");
+		LastPourTargetName = TEXT("None");
 	}
 
 	if (GetCurrentStoredWater() <= 0.0f)
@@ -941,9 +1109,11 @@ bool UUOUUmbrellaComponent::TryGetPourDirection(FVector& PourOriginLocation, FVe
 	return !PourDirection.IsNearlyZero();
 }
 
-// 라인트레이스에 맞은 액터가 물을 받을 수 있는 타입이면 정해진 양을 전달합니다.
-bool UUOUUmbrellaComponent::TryReceiveWaterAtHit(const FHitResult& HitResult, float WaterAmount)
+// 라인트레이스에 맞은 액터가 물을 받을 수 있는 타입이면 물을 전달하고 받은 대상 종류를 기록합니다.
+bool UUOUUmbrellaComponent::TryReceiveWaterAtHit(const FHitResult& HitResult, float WaterAmount, EUOUUmbrellaPourReceiverType& OutReceiverType)
 {
+	OutReceiverType = EUOUUmbrellaPourReceiverType::None;
+
 	AActor* HitActor = HitResult.GetActor();
 	if (HitActor == nullptr)
 	{
@@ -954,21 +1124,25 @@ bool UUOUUmbrellaComponent::TryReceiveWaterAtHit(const FHitResult& HitResult, fl
 	{
 		// 전용 물 받기 액터는 ReceiveWater 함수로 물을 넘깁니다.
 		LastPourTargetName = HitActor->GetName();
+		OutReceiverType = EUOUUmbrellaPourReceiverType::UmbrellaWaterTarget;
 		WaterTargetActor->ReceiveWater(WaterAmount);
 		return true;
 	}
 
 	if (AUOUUmbrellaWaterTarget* ParentWaterTargetActor = HitActor->GetAttachParentActor() != nullptr ? Cast<AUOUUmbrellaWaterTarget>(HitActor->GetAttachParentActor()) : nullptr)
 	{
-		// 맞은 컴포넌트의 소유 액터가 자식일 수 있어 부모 물 받기 액터도 한 번 더 확인합니다.
+		// 맞은 액터가 자식 액터일 수 있어 부모 물 받기 액터도 한 번 더 확인합니다.
 		LastPourTargetName = ParentWaterTargetActor->GetName();
+		OutReceiverType = EUOUUmbrellaPourReceiverType::UmbrellaWaterTarget;
 		ParentWaterTargetActor->ReceiveWater(WaterAmount);
 		return true;
 	}
 
 	if (UUOUWaterBasinTargetComponent* WaterBasinTarget = HitActor->FindComponentByClass<UUOUWaterBasinTargetComponent>())
 	{
+		// 물 조절 장치 쪽 타겟 컴포넌트도 우산 물 붓기를 받을 수 있게 처리합니다.
 		LastPourTargetName = HitActor->GetName();
+		OutReceiverType = EUOUUmbrellaPourReceiverType::WaterBasinTarget;
 		WaterBasinTarget->AddWater(WaterAmount, true);
 		return true;
 	}
@@ -977,7 +1151,9 @@ bool UUOUUmbrellaComponent::TryReceiveWaterAtHit(const FHitResult& HitResult, fl
 	{
 		if (UUOUWaterBasinTargetComponent* ParentWaterBasinTarget = ParentActor->FindComponentByClass<UUOUWaterBasinTargetComponent>())
 		{
+			// 히트된 자식 액터 대신 부모가 물 조절 컴포넌트를 들고 있는 경우를 처리합니다.
 			LastPourTargetName = ParentActor->GetName();
+			OutReceiverType = EUOUUmbrellaPourReceiverType::WaterBasinTarget;
 			ParentWaterBasinTarget->AddWater(WaterAmount, true);
 			return true;
 		}
@@ -987,6 +1163,7 @@ bool UUOUUmbrellaComponent::TryReceiveWaterAtHit(const FHitResult& HitResult, fl
 	{
 		// 상자처럼 물 저장 컴포넌트만 가진 액터도 직접 물을 받을 수 있게 처리합니다.
 		LastPourTargetName = HitActor->GetName();
+		OutReceiverType = EUOUUmbrellaPourReceiverType::WaterContainer;
 		WaterTargetContainer->AddAmount(WaterAmount);
 		return true;
 	}
