@@ -21,8 +21,8 @@ FName UUOUDebugControllerComponentBase::GetDebugCategoryName() const
 {
 	switch (DebugCategory)
 	{
-	case EUOUDebugCategory::Character:
-		return TEXT("Character");
+	case EUOUDebugCategory::Player:
+		return TEXT("Player");
 	case EUOUDebugCategory::NPC:
 		return TEXT("NPC");
 	case EUOUDebugCategory::Puzzle:
@@ -35,16 +35,14 @@ FName UUOUDebugControllerComponentBase::GetDebugCategoryName() const
 		return TEXT("Performance");
 	case EUOUDebugCategory::System:
 		return TEXT("System");
-	case EUOUDebugCategory::Custom:
-		return TEXT("Custom");
 	default:
 		return NAME_None;
 	}
 }
 
-UUOUCharacterDebugControllerComponent::UUOUCharacterDebugControllerComponent()
+UUOUPlayerDebugControllerComponent::UUOUPlayerDebugControllerComponent()
 {
-	DebugCategory = EUOUDebugCategory::Character;
+	DebugCategory = EUOUDebugCategory::Player;
 	DebugColor = FColor::Green;
 	Priority = 100;
 }
@@ -83,4 +81,3 @@ UUOUPerformanceDebugControllerComponent::UUOUPerformanceDebugControllerComponent
 	DebugColor = FColor::Silver;
 	Priority = 90;
 }
-

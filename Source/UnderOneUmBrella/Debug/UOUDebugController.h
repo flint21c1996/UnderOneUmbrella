@@ -9,9 +9,9 @@
 
 class USceneComponent;
 class UUOUDebugControllerComponentBase;
-class UUOUCharacterDebugControllerComponent;
 class UUOUInteractionDebugControllerComponent;
 class UUOUNPCDebugControllerComponent;
+class UUOUPlayerDebugControllerComponent;
 class UUOUPerformanceDebugControllerComponent;
 class UUOUPuzzleDebugControllerComponent;
 class UUOUVFXDebugControllerComponent;
@@ -49,7 +49,7 @@ public:
 	bool bOnlyShowFocusedActor = false;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "디버그|컨트롤러")
-	TObjectPtr<UUOUCharacterDebugControllerComponent> CharacterDebugController;
+	TObjectPtr<UUOUPlayerDebugControllerComponent> PlayerDebugController;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "디버그|컨트롤러")
 	TObjectPtr<UUOUNPCDebugControllerComponent> NPCDebugController;
@@ -80,4 +80,3 @@ public:
 
 	const TArray<TObjectPtr<UUOUDebugControllerComponentBase>>& GetDebugControllerComponents() const;
 };
-

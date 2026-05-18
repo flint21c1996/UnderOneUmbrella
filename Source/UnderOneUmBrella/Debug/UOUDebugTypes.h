@@ -10,13 +10,11 @@
 UENUM(BlueprintType)
 enum class EUOUDebugCategory : uint8
 {
-	Character UMETA(DisplayName = "캐릭터"),
+	Player UMETA(DisplayName = "플레이어"),
 	NPC UMETA(DisplayName = "NPC"),
 	Puzzle UMETA(DisplayName = "퍼즐"),
 	Interaction UMETA(DisplayName = "상호작용"),
 	VFX UMETA(DisplayName = "VFX"),
 	Performance UMETA(DisplayName = "성능"),
-	System UMETA(DisplayName = "시스템"),
-	Custom UMETA(DisplayName = "커스텀")
+	System UMETA(DisplayName = "시스템")
 };
-

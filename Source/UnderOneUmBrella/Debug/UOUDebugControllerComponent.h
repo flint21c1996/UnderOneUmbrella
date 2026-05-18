@@ -38,21 +38,21 @@ public:
 	FName GetDebugCategoryName() const;
 };
 
-UCLASS(ClassGroup=(Debug), meta=(BlueprintSpawnableComponent, DisplayName = "UOU Character Debug Controller"))
-class UNDERONEUMBRELLA_API UUOUCharacterDebugControllerComponent : public UUOUDebugControllerComponentBase
+UCLASS(ClassGroup=(Debug), meta=(BlueprintSpawnableComponent, DisplayName = "UOU Player Debug Controller"))
+class UNDERONEUMBRELLA_API UUOUPlayerDebugControllerComponent : public UUOUDebugControllerComponentBase
 {
 	GENERATED_BODY()
 
 public:
-	UUOUCharacterDebugControllerComponent();
+	UUOUPlayerDebugControllerComponent();
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "디버그|캐릭터", meta = (ToolTip = "캐릭터 핵심 상태를 메인 뷰포트에 표시합니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "디버그|플레이어", meta = (ToolTip = "플레이어 핵심 상태를 메인 뷰포트에 표시합니다."))
 	bool bShowViewportHUD = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "디버그|캐릭터", meta = (ToolTip = "현재 상호작용 대상 정보를 캐릭터 디버그에 포함합니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "디버그|플레이어", meta = (ToolTip = "현재 상호작용 대상 정보를 플레이어 디버그에 포함합니다."))
 	bool bShowInteractionTarget = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "디버그|캐릭터", meta = (ToolTip = "캐릭터 이동, 입력, 상태 값을 디버그에 포함합니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "디버그|플레이어", meta = (ToolTip = "플레이어 이동, 입력, 상태 값을 디버그에 포함합니다."))
 	bool bShowMovementState = true;
 };
 
@@ -151,4 +151,3 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "디버그|성능", meta = (ToolTip = "액터, 컴포넌트 등 월드 단위 개수를 표시합니다."))
 	bool bShowWorldCounts = false;
 };
-

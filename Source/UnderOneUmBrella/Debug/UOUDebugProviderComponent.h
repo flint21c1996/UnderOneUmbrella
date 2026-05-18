@@ -8,6 +8,7 @@
 #include "UOUDebugProviderComponent.generated.h"
 
 // 단순한 액터 디버그 정보는 이 컴포넌트를 붙여 통합 디버그 시스템에 등록할 수 있습니다.
+// 프로젝트의 기본 Provider 확장 방식은 이 컴포넌트를 상속한 도메인별 컴포넌트를 액터에 붙이는 것입니다.
 UCLASS(ClassGroup=(Debug), meta=(BlueprintSpawnableComponent, DisplayName = "UOU Debug Provider"))
 class UNDERONEUMBRELLA_API UUOUDebugProviderComponent : public UActorComponent, public IUOUDebugProvider
 {
@@ -19,7 +20,7 @@ public:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "디버그", meta = (ToolTip = "이 Provider가 디버그 정보를 제공할지 결정합니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "디버그", meta = (ToolTip = "이 액터의 디버그 정보를 개별적으로 제공할지 결정합니다."))
 	bool bEnabled = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "디버그", meta = (ToolTip = "이 Provider가 속한 디버그 카테고리입니다."))

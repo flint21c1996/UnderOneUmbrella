@@ -13,7 +13,7 @@ AUOUDebugController::AUOUDebugController()
 	RootSceneComponent = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
 	SetRootComponent(RootSceneComponent);
 
-	CharacterDebugController = CreateDefaultSubobject<UUOUCharacterDebugControllerComponent>(TEXT("CharacterDebugController"));
+	PlayerDebugController = CreateDefaultSubobject<UUOUPlayerDebugControllerComponent>(TEXT("PlayerDebugController"));
 	NPCDebugController = CreateDefaultSubobject<UUOUNPCDebugControllerComponent>(TEXT("NPCDebugController"));
 	PuzzleDebugController = CreateDefaultSubobject<UUOUPuzzleDebugControllerComponent>(TEXT("PuzzleDebugController"));
 	InteractionDebugController = CreateDefaultSubobject<UUOUInteractionDebugControllerComponent>(TEXT("InteractionDebugController"));
