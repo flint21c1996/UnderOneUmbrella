@@ -44,43 +44,43 @@ struct UNDERONEUMBRELLA_API FUOUWaterBasinVolumeDeviceActionSetting
 	EUOUWaterBasinVolumeDevicePuzzleCommand Command = EUOUWaterBasinVolumeDevicePuzzleCommand::RunOperation;
 
 	// 물을 Target 하나에만 적용할지, 연결 그룹 전체에 나눠 적용할지 정합니다.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Device", meta = (ToolTip = "물을 Target 하나에만 적용할지, 연결 그룹 전체에 나눠 적용할지 정합니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Device", meta = (EditCondition = "Command == EUOUWaterBasinVolumeDevicePuzzleCommand::RunOperation || Command == EUOUWaterBasinVolumeDevicePuzzleCommand::ToggleDevice", EditConditionHides, ToolTip = "물을 Target 하나에만 적용할지, 연결 그룹 전체에 나눠 적용할지 정합니다."))
 	EUOUWaterBasinDeviceControlScope ControlScope = EUOUWaterBasinDeviceControlScope::ConnectedGroup;
 
 	// 실제로 실행할 물 조작입니다.
 	// FillAll, DrainAll, AddAmount, RemoveAmount, SetWaterDepth, SetSurfaceWorldZ 중에서 선택합니다.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Device", meta = (ToolTip = "실제로 실행할 물 조작입니다. Fill/Drain/Add/Remove/Set 계열을 액션별로 다르게 지정할 수 있습니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Device", meta = (EditCondition = "Command == EUOUWaterBasinVolumeDevicePuzzleCommand::RunOperation || Command == EUOUWaterBasinVolumeDevicePuzzleCommand::ToggleDevice", EditConditionHides, ToolTip = "실제로 실행할 물 조작입니다. Fill/Drain/Add/Remove/Set 계열을 액션별로 다르게 지정할 수 있습니다."))
 	EUOUWaterBasinVolumeDeviceOperation Operation = EUOUWaterBasinVolumeDeviceOperation::AddAmount;
 
 	// AddAmount/RemoveAmount에서 사용할 1회 물 부피입니다.
 	// 기본 1은 1x1x1 타일 한 칸 부피를 기준으로 테스트하기 쉬운 값입니다.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Device", meta = (ClampMin = "0.0", ToolTip = "AddAmount 또는 RemoveAmount에서 한 번에 추가/제거할 물 부피입니다. 기본 1은 1x1x1 타일 한 칸 부피 기준입니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Device", meta = (ClampMin = "0.0", EditCondition = "(Command == EUOUWaterBasinVolumeDevicePuzzleCommand::RunOperation || Command == EUOUWaterBasinVolumeDevicePuzzleCommand::ToggleDevice) && (Operation == EUOUWaterBasinVolumeDeviceOperation::AddAmount || Operation == EUOUWaterBasinVolumeDeviceOperation::RemoveAmount)", EditConditionHides, ToolTip = "AddAmount 또는 RemoveAmount에서 한 번에 추가/제거할 물 부피입니다. 기본 1은 1x1x1 타일 한 칸 부피 기준입니다."))
 	float Amount = 1.0f;
 
 	// SetWaterDepth에서 사용할 목표 깊이입니다.
 	// 단위는 타일 높이 기준이며, 실제 월드 높이는 WaterTile의 WorldUnitsPerTile을 곱해 계산됩니다.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Device", meta = (ClampMin = "0.0", ToolTip = "SetWaterDepth에서 사용할 목표 물 깊이입니다. 타일 높이 단위이며 월드 높이는 WorldUnitsPerTile을 곱해 계산됩니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Device", meta = (ClampMin = "0.0", EditCondition = "(Command == EUOUWaterBasinVolumeDevicePuzzleCommand::RunOperation || Command == EUOUWaterBasinVolumeDevicePuzzleCommand::ToggleDevice) && Operation == EUOUWaterBasinVolumeDeviceOperation::SetWaterDepth", EditConditionHides, ToolTip = "SetWaterDepth에서 사용할 목표 물 깊이입니다. 타일 높이 단위이며 월드 높이는 WorldUnitsPerTile을 곱해 계산됩니다."))
 	float TargetWaterDepth = 1.0f;
 
 	// SetSurfaceWorldZ에서 사용할 목표 수면 월드 Z입니다.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Device", meta = (ToolTip = "SetSurfaceWorldZ에서 사용할 목표 수면 월드 Z입니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Device", meta = (EditCondition = "(Command == EUOUWaterBasinVolumeDevicePuzzleCommand::RunOperation || Command == EUOUWaterBasinVolumeDevicePuzzleCommand::ToggleDevice) && Operation == EUOUWaterBasinVolumeDeviceOperation::SetSurfaceWorldZ", EditConditionHides, ToolTip = "SetSurfaceWorldZ에서 사용할 목표 수면 월드 Z입니다."))
 	float TargetSurfaceWorldZ = 0.0f;
 
 	// 켜져 있으면 RunOperation이 1회 실행이 아니라 연속 동작 시작으로 처리됩니다.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Device|Continuous", meta = (ToolTip = "켜져 있으면 RunOperation이 1회 실행이 아니라 연속 동작 시작으로 처리됩니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Device|Continuous", meta = (EditCondition = "Command == EUOUWaterBasinVolumeDevicePuzzleCommand::RunOperation || Command == EUOUWaterBasinVolumeDevicePuzzleCommand::ToggleDevice", EditConditionHides, ToolTip = "켜져 있으면 RunOperation이 1회 실행이 아니라 연속 동작 시작으로 처리됩니다."))
 	bool bUseContinuousChange = false;
 
 	// 연속 Add/Remove/Fill/Drain에서 초당 변화시킬 물 부피입니다.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Device|Continuous", meta = (ClampMin = "0.0", ToolTip = "연속 Add/Remove/Fill/Drain에서 초당 변화시킬 물 부피입니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Device|Continuous", meta = (ClampMin = "0.0", EditCondition = "(Command == EUOUWaterBasinVolumeDevicePuzzleCommand::RunOperation || Command == EUOUWaterBasinVolumeDevicePuzzleCommand::ToggleDevice) && bUseContinuousChange && (Operation == EUOUWaterBasinVolumeDeviceOperation::AddAmount || Operation == EUOUWaterBasinVolumeDeviceOperation::RemoveAmount || Operation == EUOUWaterBasinVolumeDeviceOperation::FillAll || Operation == EUOUWaterBasinVolumeDeviceOperation::DrainAll)", EditConditionHides, ToolTip = "연속 Add/Remove/Fill/Drain에서 초당 변화시킬 물 부피입니다."))
 	float ContinuousVolumePerSecond = 1.0f;
 
 	// 연속 SetWaterDepth/SetSurfaceWorldZ에서 초당 이동할 높이입니다.
 	// SetWaterDepth에서는 타일 높이 단위, SetSurfaceWorldZ에서는 내부에서 월드 높이로 변환되어 사용됩니다.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Device|Continuous", meta = (ClampMin = "0.0", ToolTip = "연속 SetWaterDepth 또는 SetSurfaceWorldZ에서 초당 이동할 높이입니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Device|Continuous", meta = (ClampMin = "0.0", EditCondition = "(Command == EUOUWaterBasinVolumeDevicePuzzleCommand::RunOperation || Command == EUOUWaterBasinVolumeDevicePuzzleCommand::ToggleDevice) && bUseContinuousChange && (Operation == EUOUWaterBasinVolumeDeviceOperation::SetWaterDepth || Operation == EUOUWaterBasinVolumeDeviceOperation::SetSurfaceWorldZ)", EditConditionHides, ToolTip = "연속 SetWaterDepth 또는 SetSurfaceWorldZ에서 초당 이동할 높이입니다."))
 	float ContinuousHeightPerSecond = 1.0f;
 
 	// 목표 수위, 가득 참, 비어 있음에 도달하면 연속 동작을 자동으로 멈춥니다.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Device|Continuous", meta = (ToolTip = "목표 수위, 가득 참, 비어 있음에 도달하면 연속 동작을 자동으로 멈춥니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Device|Continuous", meta = (EditCondition = "(Command == EUOUWaterBasinVolumeDevicePuzzleCommand::RunOperation || Command == EUOUWaterBasinVolumeDevicePuzzleCommand::ToggleDevice) && bUseContinuousChange", EditConditionHides, ToolTip = "목표 수위, 가득 참, 비어 있음에 도달하면 연속 동작을 자동으로 멈춥니다."))
 	bool bDeactivateWhenReachedGoal = true;
 };
 
@@ -115,15 +115,15 @@ public:
 	FUOUWaterBasinVolumeDeviceActionSetting DeactivateAction;
 
 	// ApplyPuzzleResult(Pause)를 받았을 때 실행할 물 동작입니다.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Device|Puzzle Result|Pause")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, AdvancedDisplay, Category = "Water Device|Puzzle Result|Pause")
 	FUOUWaterBasinVolumeDeviceActionSetting PauseAction;
 
 	// ApplyPuzzleResult(Resume)를 받았을 때 실행할 물 동작입니다.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Device|Puzzle Result|Resume")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, AdvancedDisplay, Category = "Water Device|Puzzle Result|Resume")
 	FUOUWaterBasinVolumeDeviceActionSetting ResumeAction;
 
 	// ApplyPuzzleResult(Toggle)를 받았을 때 실행할 물 동작입니다.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Device|Puzzle Result|Toggle")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, AdvancedDisplay, Category = "Water Device|Puzzle Result|Toggle")
 	FUOUWaterBasinVolumeDeviceActionSetting ToggleAction;
 
 	// 기존 VolumeDeviceComponent 설정을 그대로 실행합니다.
