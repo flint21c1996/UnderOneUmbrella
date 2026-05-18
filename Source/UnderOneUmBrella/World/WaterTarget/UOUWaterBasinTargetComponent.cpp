@@ -14,6 +14,24 @@ bool UUOUWaterBasinTargetComponent::bRuntimeDebugConnectionLinesEnabled = true;
 EUOUWaterBasinDebugOverlayScope UUOUWaterBasinTargetComponent::RuntimeDebugOverlayScope = EUOUWaterBasinDebugOverlayScope::SpecificTarget;
 TWeakObjectPtr<UUOUWaterBasinTargetComponent> UUOUWaterBasinTargetComponent::RuntimeDebugTarget;
 
+namespace
+{
+	constexpr float MinWorldUnitsPerTile = 1.0f;
+	constexpr float DebugPercentScale = 100.0f;
+	constexpr float DebugTextLifeTime = 0.0f;
+	constexpr float DebugTextScale = 1.0f;
+	constexpr float DebugConnectionLineLifeTime = 0.0f;
+	constexpr float DebugConnectionLineThickness = 4.0f;
+	constexpr float DebugGroupLabelOffsetZ = 120.0f;
+	constexpr float DebugTargetLabelOffsetZ = 80.0f;
+
+	// 연결 그룹의 공통 수면 높이는 이분 탐색으로 찾습니다.
+	// 40회 반복하면 탐색 높이 범위가 2^40번 쪼개지므로,
+	// 1,000,000 Unreal Unit 높이의 큰 맵에서도 마지막 오차 폭이 약 0.000001uu 이하가 됩니다.
+	// 수면 시각 표현이나 퍼즐 판정에서 체감할 수 없는 수준이라 고정 반복으로 충분합니다.
+	constexpr int32 SurfaceSolveBinarySearchIterationCount = 40;
+}
+
 UUOUWaterBasinTargetComponent::UUOUWaterBasinTargetComponent()
 {
 	PrimaryComponentTick.bCanEverTick = true;
@@ -147,7 +165,7 @@ void UUOUWaterBasinTargetComponent::SetWaterDepth(float Depth, bool bApplyToConn
 {
 	// Depth는 퍼즐 타일 단위입니다. 실제 월드 높이는 WorldUnitsPerTile을 곱해 SurfaceWorldZ로 변환합니다.
 	const float ClampedDepth = FMath::Clamp(Depth, 0.0f, GetMaxWaterHeight());
-	const float SurfaceWorldZ = GetBottomWorldZ() + (ClampedDepth * FMath::Max(WorldUnitsPerTile, 1.0f));
+	const float SurfaceWorldZ = GetBottomWorldZ() + (ClampedDepth * FMath::Max(WorldUnitsPerTile, MinWorldUnitsPerTile));
 	SetWaterSurfaceWorldZ(SurfaceWorldZ, bApplyToConnectedGroup);
 }
 
@@ -288,7 +306,7 @@ float UUOUWaterBasinTargetComponent::GetBottomWorldZ() const
 	{
 		// WaterVisual이 유일한 Primitive인 Actor는 Basin bounds 계산에서 Visual이 제외되어 실패할 수 있습니다.
 		// 이때 실패한 Bounds.Min을 쓰거나 ActorLocation을 그대로 바닥으로 쓰면 중앙 피벗 기준으로 수면이 커집니다.
-		const float MaxDepthWorld = GetMaxWaterHeight() * FMath::Max(WorldUnitsPerTile, 1.0f);
+		const float MaxDepthWorld = GetMaxWaterHeight() * FMath::Max(WorldUnitsPerTile, MinWorldUnitsPerTile);
 		return Owner->GetActorLocation().Z - (MaxDepthWorld * 0.5f);
 	}
 
@@ -298,7 +316,7 @@ float UUOUWaterBasinTargetComponent::GetBottomWorldZ() const
 
 float UUOUWaterBasinTargetComponent::GetTopWorldZ() const
 {
-	return GetBottomWorldZ() + (GetMaxWaterHeight() * FMath::Max(WorldUnitsPerTile, 1.0f));
+	return GetBottomWorldZ() + (GetMaxWaterHeight() * FMath::Max(WorldUnitsPerTile, MinWorldUnitsPerTile));
 }
 
 float UUOUWaterBasinTargetComponent::GetSurfaceArea() const
@@ -321,7 +339,7 @@ float UUOUWaterBasinTargetComponent::GetSurfaceArea() const
 	if (TryGetBasinBounds(BasinBounds))
 	{
 		// ActorBounds는 이미 월드 Scale이 반영된 bounds입니다. 월드 cm를 퍼즐 타일 단위로 변환합니다.
-		const float Unit = FMath::Max(WorldUnitsPerTile, 1.0f);
+		const float Unit = FMath::Max(WorldUnitsPerTile, MinWorldUnitsPerTile);
 		const FVector SizeInTiles = BasinBounds.GetSize() / Unit;
 		return FMath::Max(SizeInTiles.X * SizeInTiles.Y, KINDA_SMALL_NUMBER);
 	}
@@ -348,7 +366,7 @@ float UUOUWaterBasinTargetComponent::GetMaxWaterHeight() const
 	FBox BasinBounds;
 	if (TryGetBasinBounds(BasinBounds))
 	{
-		const float Unit = FMath::Max(WorldUnitsPerTile, 1.0f);
+		const float Unit = FMath::Max(WorldUnitsPerTile, MinWorldUnitsPerTile);
 		return FMath::Max(BasinBounds.GetSize().Z / Unit, KINDA_SMALL_NUMBER);
 	}
 
@@ -362,7 +380,7 @@ float UUOUWaterBasinTargetComponent::GetCapacity() const
 
 float UUOUWaterBasinTargetComponent::GetWaterDepthWorld() const
 {
-	return CurrentWaterDepth * FMath::Max(WorldUnitsPerTile, 1.0f);
+	return CurrentWaterDepth * FMath::Max(WorldUnitsPerTile, MinWorldUnitsPerTile);
 }
 
 FUOUWaterBasinGroupDebugData UUOUWaterBasinTargetComponent::GetConnectedGroupDebugData() const
@@ -548,7 +566,7 @@ void UUOUWaterBasinTargetComponent::UpdateWaterVisual()
 		return;
 	}
 
-	const float MaxDepthWorld = GetMaxWaterHeight() * FMath::Max(WorldUnitsPerTile, 1.0f);
+	const float MaxDepthWorld = GetMaxWaterHeight() * FMath::Max(WorldUnitsPerTile, MinWorldUnitsPerTile);
 	if (MaxDepthWorld <= KINDA_SMALL_NUMBER)
 	{
 		return;
@@ -767,10 +785,10 @@ void UUOUWaterBasinTargetComponent::DrawTargetDebugString() const
 			GroupData.TargetCount,
 			GroupData.TotalVolume,
 			GroupData.TotalCapacity,
-			GroupData.FillRatio * 100.0f,
+			GroupData.FillRatio * DebugPercentScale,
 			GroupData.SurfaceWorldZ);
 
-		DrawDebugString(World, GetDebugLabelWorld(), Text, nullptr, FColor::Yellow, 0.0f, true, 1.0f);
+		DrawDebugString(World, GetDebugLabelWorld(), Text, nullptr, FColor::Yellow, DebugTextLifeTime, true, DebugTextScale);
 		return;
 	}
 
@@ -779,10 +797,10 @@ void UUOUWaterBasinTargetComponent::DrawTargetDebugString() const
 		CurrentWaterVolume,
 		GetCapacity(),
 		CurrentWaterDepth,
-		CurrentFillRatio * 100.0f,
+		CurrentFillRatio * DebugPercentScale,
 		WaterSurfaceWorldZ);
 
-	DrawDebugString(World, GetDebugLabelWorld(), Text, nullptr, FColor::Cyan, 0.0f, true, 1.0f);
+	DrawDebugString(World, GetDebugLabelWorld(), Text, nullptr, FColor::Cyan, DebugTextLifeTime, true, DebugTextScale);
 }
 
 void UUOUWaterBasinTargetComponent::DrawSpecificTargetConnections() const
@@ -804,7 +822,7 @@ void UUOUWaterBasinTargetComponent::DrawSpecificTargetConnections() const
 
 		if (IsDirectlyConnectedTo(Candidate) || Candidate->IsDirectlyConnectedTo(this))
 		{
-			DrawDebugLine(World, Start, Candidate->GetDebugCenterWorld(), FColor::Cyan, false, 0.0f, 0, 4.0f);
+			DrawDebugLine(World, Start, Candidate->GetDebugCenterWorld(), FColor::Cyan, false, DebugConnectionLineLifeTime, 0, DebugConnectionLineThickness);
 		}
 	}
 }
@@ -838,7 +856,7 @@ void UUOUWaterBasinTargetComponent::DrawConnectedGroupConnections() const
 
 			if (From->IsDirectlyConnectedTo(To) || To->IsDirectlyConnectedTo(From))
 			{
-				DrawDebugLine(World, From->GetDebugCenterWorld(), To->GetDebugCenterWorld(), FColor::Yellow, false, 0.0f, 0, 4.0f);
+				DrawDebugLine(World, From->GetDebugCenterWorld(), To->GetDebugCenterWorld(), FColor::Yellow, false, DebugConnectionLineLifeTime, 0, DebugConnectionLineThickness);
 			}
 		}
 	}
@@ -885,13 +903,13 @@ FVector UUOUWaterBasinTargetComponent::GetDebugLabelWorld() const
 		if (GroupBounds.IsValid)
 		{
 			FVector LabelLocation = GroupBounds.GetCenter();
-			LabelLocation.Z = GroupBounds.Max.Z + 120.0f;
+			LabelLocation.Z = GroupBounds.Max.Z + DebugGroupLabelOffsetZ;
 			return LabelLocation;
 		}
 	}
 
 	FVector LabelLocation = GetDebugCenterWorld();
-	LabelLocation.Z = GetTopWorldZ() + 80.0f;
+	LabelLocation.Z = GetTopWorldZ() + DebugTargetLabelOffsetZ;
 	return LabelLocation;
 }
 
@@ -978,7 +996,7 @@ bool UUOUWaterBasinTargetComponent::TryGetBasinBounds(FBox& OutBounds) const
 float UUOUWaterBasinTargetComponent::GetVolumeAtSurfaceWorldZ(float SurfaceWorldZ) const
 {
 	// SurfaceWorldZ가 바닥보다 낮으면 깊이 0, Top보다 높으면 최대 깊이로 clamp합니다.
-	const float Unit = FMath::Max(WorldUnitsPerTile, 1.0f);
+	const float Unit = FMath::Max(WorldUnitsPerTile, MinWorldUnitsPerTile);
 	const float Depth = FMath::Clamp((SurfaceWorldZ - GetBottomWorldZ()) / Unit, 0.0f, GetMaxWaterHeight());
 	return Depth * GetSurfaceArea();
 }
@@ -1024,9 +1042,11 @@ float UUOUWaterBasinTargetComponent::SolveSurfaceWorldZForVolume(const TArray<UU
 
 	float Low = LowestBottom;
 	float High = HighestTop;
-	for (int32 Iteration = 0; Iteration < 40; ++Iteration)
+	for (int32 Iteration = 0; Iteration < SurfaceSolveBinarySearchIterationCount; ++Iteration)
 	{
-		// SurfaceWorldZ가 높아질수록 그룹 총 부피가 단조 증가하므로 이분 탐색으로 목표 부피의 수면을 찾을 수 있습니다.
+		// SurfaceWorldZ가 높아질수록 그룹 총 부피가 단조 증가하므로 이분 탐색으로 목표 부피의 수면을 찾습니다.
+		// Mid에서의 부피가 목표보다 작으면 더 높은 수면이 필요하므로 Low를 올리고,
+		// 목표보다 크거나 같으면 더 낮은 수면도 가능한지 확인하기 위해 High를 내립니다.
 		const float Mid = (Low + High) * 0.5f;
 		float VolumeAtMid = 0.0f;
 
