@@ -5,6 +5,14 @@
 #include "GameFramework/Actor.h"
 #include "World/WaterTarget/UOUWaterBasinTargetComponent.h"
 
+namespace
+{
+	// 연속 동작은 Tick마다 조금씩 목표에 접근하므로 값이 정확히 같은 순간을 기다리면 정지하지 못할 수 있습니다.
+	// 0.001은 물 부피/타일 높이 단위에서 눈에 보이지 않는 작은 오차만 도달로 허용하기 위한 값입니다.
+	constexpr float OperationGoalVolumeTolerance = 0.001f;
+	constexpr float OperationGoalHeightToleranceInTiles = 0.001f;
+}
+
 UUOUWaterBasinVolumeDeviceComponent::UUOUWaterBasinVolumeDeviceComponent()
 {
 	PrimaryComponentTick.bCanEverTick = true;
@@ -243,8 +251,7 @@ bool UUOUWaterBasinVolumeDeviceComponent::IsAtOperationGoal() const
 		return false;
 	}
 
-	constexpr float VolumeTolerance = 0.001f;
-	constexpr float HeightTolerance = 0.001f;
+	const float HeightToleranceWorld = OperationGoalHeightToleranceInTiles * TargetComponent->WorldUnitsPerTile;
 
 	if (ShouldApplyToConnectedGroup())
 	{
@@ -254,16 +261,19 @@ bool UUOUWaterBasinVolumeDeviceComponent::IsAtOperationGoal() const
 		switch (Operation)
 		{
 		case EUOUWaterBasinVolumeDeviceOperation::FillAll:
-			return GroupData.TotalVolume >= GroupData.TotalCapacity - VolumeTolerance;
+			return GroupData.TotalVolume >= GroupData.TotalCapacity - OperationGoalVolumeTolerance;
 
 		case EUOUWaterBasinVolumeDeviceOperation::DrainAll:
-			return GroupData.TotalVolume <= VolumeTolerance;
+			return GroupData.TotalVolume <= OperationGoalVolumeTolerance;
 
 		case EUOUWaterBasinVolumeDeviceOperation::SetWaterDepth:
-			return FMath::IsNearlyEqual(GroupData.SurfaceWorldZ, TargetComponent->GetBottomWorldZ() + (TargetWaterDepth * TargetComponent->WorldUnitsPerTile), HeightTolerance * TargetComponent->WorldUnitsPerTile);
+		{
+			const float TargetDepthSurfaceWorldZ = TargetComponent->GetBottomWorldZ() + (TargetWaterDepth * TargetComponent->WorldUnitsPerTile);
+			return FMath::IsNearlyEqual(GroupData.SurfaceWorldZ, TargetDepthSurfaceWorldZ, HeightToleranceWorld);
+		}
 
 		case EUOUWaterBasinVolumeDeviceOperation::SetSurfaceWorldZ:
-			return FMath::IsNearlyEqual(GroupData.SurfaceWorldZ, TargetSurfaceWorldZ, HeightTolerance * TargetComponent->WorldUnitsPerTile);
+			return FMath::IsNearlyEqual(GroupData.SurfaceWorldZ, TargetSurfaceWorldZ, HeightToleranceWorld);
 
 		default:
 			return false;
@@ -274,16 +284,16 @@ bool UUOUWaterBasinVolumeDeviceComponent::IsAtOperationGoal() const
 	{
 	// TargetOnly에서는 해당 TargetComponent 하나의 런타임 값을 직접 비교합니다.
 	case EUOUWaterBasinVolumeDeviceOperation::FillAll:
-		return TargetComponent->CurrentWaterVolume >= TargetComponent->GetCapacity() - VolumeTolerance;
+		return TargetComponent->CurrentWaterVolume >= TargetComponent->GetCapacity() - OperationGoalVolumeTolerance;
 
 	case EUOUWaterBasinVolumeDeviceOperation::DrainAll:
-		return TargetComponent->CurrentWaterVolume <= VolumeTolerance;
+		return TargetComponent->CurrentWaterVolume <= OperationGoalVolumeTolerance;
 
 	case EUOUWaterBasinVolumeDeviceOperation::SetWaterDepth:
-		return FMath::IsNearlyEqual(TargetComponent->CurrentWaterDepth, TargetWaterDepth, HeightTolerance);
+		return FMath::IsNearlyEqual(TargetComponent->CurrentWaterDepth, TargetWaterDepth, OperationGoalHeightToleranceInTiles);
 
 	case EUOUWaterBasinVolumeDeviceOperation::SetSurfaceWorldZ:
-		return FMath::IsNearlyEqual(TargetComponent->WaterSurfaceWorldZ, TargetSurfaceWorldZ, HeightTolerance * TargetComponent->WorldUnitsPerTile);
+		return FMath::IsNearlyEqual(TargetComponent->WaterSurfaceWorldZ, TargetSurfaceWorldZ, HeightToleranceWorld);
 
 	default:
 		return false;
