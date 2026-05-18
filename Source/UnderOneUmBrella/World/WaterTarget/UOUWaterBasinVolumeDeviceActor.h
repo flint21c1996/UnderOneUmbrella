@@ -16,19 +16,19 @@ UENUM(BlueprintType)
 enum class EUOUWaterBasinVolumeDevicePuzzleCommand : uint8
 {
 	// 기존 VolumeDeviceComponent에 직접 설정된 Operation/Amount/Continuous 값을 그대로 사용합니다.
-	UseComponentDefault UMETA(DisplayName = "Use Component Default", ToolTip = "기존 VolumeDeviceComponent 설정과 기본 액션 동작을 그대로 사용합니다."),
+	UseComponentDefault UMETA(DisplayName = "Use Component Default"),
 
 	// 이 액션 설정의 Operation 값을 VolumeDeviceComponent에 복사한 뒤 실행합니다.
-	RunOperation UMETA(DisplayName = "Run Operation", ToolTip = "이 액션 설정에 담긴 물 동작을 실행합니다. Continuous가 켜져 있으면 연속 동작을 시작하고, 꺼져 있으면 1회 실행합니다."),
+	RunOperation UMETA(DisplayName = "Run Operation"),
 
 	// 연속 동작만 멈춥니다. 1회 동작에는 추가 실행을 하지 않습니다.
-	StopDevice UMETA(DisplayName = "Stop Device", ToolTip = "현재 진행 중인 연속 물 동작을 멈춥니다."),
+	StopDevice UMETA(DisplayName = "Stop Device"),
 
 	// 이 액션 설정을 적용한 뒤 VolumeDeviceComponent의 현재 활성 상태를 토글합니다.
-	ToggleDevice UMETA(DisplayName = "Toggle Device", ToolTip = "이 액션 설정을 적용한 뒤 장치 실행 또는 정지를 전환합니다."),
+	ToggleDevice UMETA(DisplayName = "Toggle Device"),
 
 	// 이 퍼즐 결과 액션을 의도적으로 무시합니다.
-	Ignore UMETA(DisplayName = "Ignore", ToolTip = "해당 퍼즐 결과 액션을 무시합니다.")
+	Ignore UMETA(DisplayName = "Ignore")
 };
 
 // 퍼즐 결과 액션 하나가 실행할 물 장치 동작 설정입니다.
