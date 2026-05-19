@@ -7,8 +7,7 @@
 #include "Debug/UOUDebugProvider.h"
 #include "UOUDebugProviderComponent.generated.h"
 
-// 단순한 액터 디버그 정보는 이 컴포넌트를 붙여 통합 디버그 시스템에 등록할 수 있습니다.
-// 프로젝트의 기본 Provider 확장 방식은 이 컴포넌트를 상속한 도메인별 컴포넌트를 액터에 붙이는 것입니다.
+// Component-based debug provider for actors that should participate in the UOU debug system.
 UCLASS(ClassGroup=(Debug), meta=(BlueprintSpawnableComponent, DisplayName = "UOU Debug Provider"))
 class UNDERONEUMBRELLA_API UUOUDebugProviderComponent : public UActorComponent, public IUOUDebugProvider
 {
@@ -20,19 +19,19 @@ public:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "디버그", meta = (ToolTip = "이 액터의 디버그 정보를 개별적으로 제공할지 결정합니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug", meta = (ToolTip = "Controls whether this provider contributes debug information."))
 	bool bEnabled = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "디버그", meta = (ToolTip = "이 Provider가 속한 디버그 카테고리입니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug", meta = (ToolTip = "Debug category controlled by the level debug controller."))
 	EUOUDebugCategory DebugCategory = EUOUDebugCategory::System;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "디버그", meta = (ToolTip = "월드 라벨에 표시할 이름입니다. 비워두면 Owner 이름을 사용합니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug", meta = (ToolTip = "Optional display name shown on debug labels. Uses the owner name when empty."))
 	FText DisplayName;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "디버그", meta = (MultiLine = "true", ToolTip = "월드 라벨이나 상세 UI에 표시할 짧은 요약입니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug", meta = (MultiLine = "true", ToolTip = "Optional summary text shown on debug labels."))
 	FText SummaryText;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "디버그", meta = (ToolTip = "Owner 위치 기준 디버그 라벨이 표시될 오프셋입니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug", meta = (ToolTip = "World offset used for this provider's debug label."))
 	FVector WorldLocationOffset = FVector(0.0f, 0.0f, 120.0f);
 
 	virtual EUOUDebugCategory GetDebugCategory_Implementation() const override;
@@ -40,5 +39,5 @@ public:
 	virtual FText GetDebugDisplayName_Implementation() const override;
 	virtual FText GetDebugSummaryText_Implementation() const override;
 	virtual FVector GetDebugWorldLocation_Implementation() const override;
+	virtual void GetDebugConnections_Implementation(TArray<FUOUDebugConnection>& OutConnections) const override;
 };
-

@@ -36,6 +36,7 @@ public:
 	AUOUNPCCharacter();
 
 	virtual void BeginPlay() override;
+	virtual void Tick(float DeltaSeconds) override;
 	virtual void Landed(const FHitResult& Hit) override;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "NPC|Activation", meta = (ToolTip = "명시적인 액션 요청이 없을 때 직접 Activate 호출에서 사용할 기본 액션입니다."))
@@ -157,4 +158,8 @@ protected:
 	bool GetTargetLocationFromActionRequest(const FUOUNPCActionRequest& ActionRequest, FVector& OutTargetLocation) const;
 	bool GetConfiguredTargetLocation(FVector& OutTargetLocation) const;
 	FVector CalculateJumpLaunchVelocity(const FVector& TargetLocation, float TravelTime) const;
+	void DrawNPCDebug();
+	FString BuildNPCDebugText(const class UUOUNPCDebugControllerComponent& DebugController) const;
+	void DrawNPCMoveTargetDebug(const class UUOUNPCDebugControllerComponent& DebugController) const;
+	void DrawNPCPathDebug(const class UUOUNPCDebugControllerComponent& DebugController) const;
 };

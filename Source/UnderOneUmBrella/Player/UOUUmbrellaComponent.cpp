@@ -6,6 +6,7 @@
 #include "Components/PrimitiveComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Debug/UOUDebugSubsystem.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/Engine.h"
 #include "Engine/World.h"
@@ -686,7 +687,9 @@ FTransform UUOUUmbrellaComponent::GetHeldVisualRelativeTransform(const FVector& 
 // 플레이 중 우산 보유 상태, 저장된 물, 마지막 붓기 대상을 화면에 표시합니다.
 void UUOUUmbrellaComponent::DrawScreenDebug() const
 {
-	if (!bShowScreenDebug || GEngine == nullptr)
+	if (!bShowScreenDebug
+		|| !UUOUDebugSubsystem::IsDebugCategoryEnabled(this, EUOUDebugCategory::Player)
+		|| GEngine == nullptr)
 	{
 		return;
 	}
@@ -729,7 +732,7 @@ void UUOUUmbrellaComponent::DrawScreenDebug() const
 // 우산이 비를 막는 중심과 범위를 월드에 그려 RainArea 판정 위치를 눈으로 확인합니다.
 void UUOUUmbrellaComponent::DrawRainBlockerDebug() const
 {
-	if (!bDrawRainBlockerDebug)
+	if (!bDrawRainBlockerDebug || !UUOUDebugSubsystem::IsDebugCategoryEnabled(this, EUOUDebugCategory::Player))
 	{
 		return;
 	}
@@ -800,7 +803,9 @@ void UUOUUmbrellaComponent::DrawRainBlockerDebug() const
 // 물 붓기 라인트레이스의 마지막 결과를 월드에 그려 어느 대상에 닿았는지 확인합니다.
 void UUOUUmbrellaComponent::DrawPourTraceDebug() const
 {
-	if (!bDrawPourTraceDebug || !bHasLastPourTrace)
+	if (!bDrawPourTraceDebug
+		|| !bHasLastPourTrace
+		|| !UUOUDebugSubsystem::IsDebugCategoryEnabled(this, EUOUDebugCategory::Player))
 	{
 		return;
 	}

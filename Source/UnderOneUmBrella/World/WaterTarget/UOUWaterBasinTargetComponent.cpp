@@ -5,6 +5,7 @@
 #include "Components/PrimitiveComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Debug/UOUDebugSubsystem.h"
 #include "DrawDebugHelpers.h"
 #include "GameFramework/Actor.h"
 #include "UObject/UObjectIterator.h"
@@ -729,7 +730,9 @@ void UUOUWaterBasinTargetComponent::CaptureWaterVisualTransformIfNeeded()
 
 void UUOUWaterBasinTargetComponent::DrawRuntimeDebug()
 {
-	if (!bRuntimeDebugOverlayEnabled || !ShouldDrawTargetDebug())
+	if (!bRuntimeDebugOverlayEnabled
+		|| !UUOUDebugSubsystem::IsDebugCategoryEnabled(this, EUOUDebugCategory::Puzzle)
+		|| !ShouldDrawTargetDebug())
 	{
 		return;
 	}

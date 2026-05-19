@@ -2,6 +2,7 @@
 
 #include "World/WaterTarget/UOUWaterBasinReactionComponentBase.h"
 
+#include "Debug/UOUDebugSubsystem.h"
 #include "DrawDebugHelpers.h"
 #include "GameFramework/Actor.h"
 #include "World/WaterTarget/UOUWaterBasinPlatformComponent.h"
@@ -324,7 +325,10 @@ void UUOUWaterBasinReactionComponentBase::NotifyReactionResult(const FUOUWaterBa
 
 void UUOUWaterBasinReactionComponentBase::DrawReactionDebugText()
 {
-	if (!bDrawDebugText || !GetWorld() || !GetOwner())
+	if (!bDrawDebugText
+		|| !UUOUDebugSubsystem::IsDebugCategoryEnabled(this, EUOUDebugCategory::Puzzle)
+		|| !GetWorld()
+		|| !GetOwner())
 	{
 		return;
 	}

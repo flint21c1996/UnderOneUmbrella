@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "Debug/UOUPuzzleDebugInfoProvider.h"
 #include "UOUPuzzleConditionSourceComponent.generated.h"
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnPuzzleConditionChangedSignature, bool, bIsSatisfied);
@@ -11,7 +12,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnPuzzleConditionChangedSignature, 
 // 개별 퍼즐 조건의 만족 여부를 공통 방식으로 다루는 기반 컴포넌트입니다.
 // 버튼, 물, 저울 같은 조건 소스는 이 클래스를 상속받아 상태를 노출합니다.
 UCLASS(Abstract, BlueprintType, Blueprintable, ClassGroup=(Puzzle), meta=(BlueprintSpawnableComponent))
-class UUOUPuzzleConditionSourceComponent : public UActorComponent
+class UUOUPuzzleConditionSourceComponent : public UActorComponent, public IUOUPuzzleDebugInfoProvider
 {
 	GENERATED_BODY()
 
@@ -25,6 +26,8 @@ public:
 	// 현재 조건이 만족 상태인지 반환합니다.
 	UFUNCTION(BlueprintPure, Category = "Puzzle|Condition")
 	bool IsSatisfied() const;
+
+	virtual TArray<FString> GetPuzzleDebugInfo_Implementation() const override;
 
 protected:
 	// 현재 조건 만족 여부를 저장하는 공통 상태값입니다.

@@ -7,7 +7,7 @@
 #include "Debug/UOUDebugTypes.h"
 #include "UOUDebugControllerComponent.generated.h"
 
-// AUOUDebugController 아래에서 도메인별 디버그 옵션을 묶는 기본 컴포넌트입니다.
+// Base component for one debug category controlled by AUOUDebugController.
 UCLASS(Abstract, Blueprintable, ClassGroup=(Debug), meta=(BlueprintSpawnableComponent))
 class UNDERONEUMBRELLA_API UUOUDebugControllerComponentBase : public UActorComponent
 {
@@ -16,25 +16,25 @@ class UNDERONEUMBRELLA_API UUOUDebugControllerComponentBase : public UActorCompo
 public:
 	UUOUDebugControllerComponentBase();
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "디버그|공통", meta = (ToolTip = "이 도메인의 디버그 표시를 활성화합니다."))
+	UPROPERTY(BlueprintReadWrite, Transient, Category = "Debug|Common", meta = (ToolTip = "Enables this debug category at runtime."))
 	bool bEnabled = true;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "디버그|공통", meta = (ToolTip = "이 컴포넌트가 담당하는 디버그 카테고리입니다."))
+	UPROPERTY(BlueprintReadOnly, Category = "Debug|Common", meta = (ToolTip = "Debug category represented by this component."))
 	EUOUDebugCategory DebugCategory = EUOUDebugCategory::System;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "디버그|공통", meta = (ToolTip = "월드 디버그 라인, 라벨 등에 사용할 기본 색상입니다."))
+	UPROPERTY(BlueprintReadWrite, Category = "Debug|Common", meta = (ToolTip = "Default color for debug lines, labels, and helpers."))
 	FColor DebugColor = FColor::White;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "디버그|공통", meta = (ToolTip = "동시에 표시할 때 우선순위를 정합니다. 값이 높을수록 먼저 표시합니다."))
+	UPROPERTY(BlueprintReadWrite, Category = "Debug|Common", meta = (ToolTip = "Display priority. Higher values should be shown first when budget limits are added."))
 	int32 Priority = 0;
 
-	UFUNCTION(BlueprintCallable, Category = "디버그")
+	UFUNCTION(BlueprintCallable, Category = "Debug")
 	void SetDebugEnabled(bool bNewEnabled);
 
-	UFUNCTION(BlueprintPure, Category = "디버그")
+	UFUNCTION(BlueprintPure, Category = "Debug")
 	bool IsDebugEnabled() const;
 
-	UFUNCTION(BlueprintPure, Category = "디버그")
+	UFUNCTION(BlueprintPure, Category = "Debug")
 	FName GetDebugCategoryName() const;
 };
 
@@ -46,13 +46,13 @@ class UNDERONEUMBRELLA_API UUOUPlayerDebugControllerComponent : public UUOUDebug
 public:
 	UUOUPlayerDebugControllerComponent();
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "디버그|플레이어", meta = (ToolTip = "플레이어 핵심 상태를 메인 뷰포트에 표시합니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Player", meta = (ToolTip = "Shows player debug information on the main viewport."))
 	bool bShowViewportHUD = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "디버그|플레이어", meta = (ToolTip = "현재 상호작용 대상 정보를 플레이어 디버그에 포함합니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Player", meta = (ToolTip = "Includes the current player interaction target."))
 	bool bShowInteractionTarget = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "디버그|플레이어", meta = (ToolTip = "플레이어 이동, 입력, 상태 값을 디버그에 포함합니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Player", meta = (ToolTip = "Includes player movement, input, and state values."))
 	bool bShowMovementState = true;
 };
 
@@ -64,17 +64,20 @@ class UNDERONEUMBRELLA_API UUOUNPCDebugControllerComponent : public UUOUDebugCon
 public:
 	UUOUNPCDebugControllerComponent();
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "디버그|NPC", meta = (ToolTip = "NPC 근처에 월드 디버그 라벨을 표시합니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|NPC", meta = (ToolTip = "Shows world labels near NPC actors."))
 	bool bShowWorldLabels = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "디버그|NPC", meta = (ToolTip = "NPC가 이동하려는 목표 위치를 표시합니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|NPC", meta = (ToolTip = "Shows NPC movement targets."))
 	bool bShowMoveTarget = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "디버그|NPC", meta = (ToolTip = "NPC의 이동 경로나 방향 보조선을 표시합니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|NPC", meta = (ToolTip = "Shows NPC path and direction helper lines."))
 	bool bShowPath = false;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "디버그|NPC", meta = (ToolTip = "NPC의 현재 AI/액션 상태를 표시합니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|NPC", meta = (ToolTip = "Shows current NPC AI or action state."))
 	bool bShowState = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|NPC", meta = (ToolTip = "Shows current requested and active NPC animation information."))
+	bool bShowAnimation = true;
 };
 
 UCLASS(ClassGroup=(Debug), meta=(BlueprintSpawnableComponent, DisplayName = "UOU Puzzle Debug Controller"))
@@ -85,16 +88,16 @@ class UNDERONEUMBRELLA_API UUOUPuzzleDebugControllerComponent : public UUOUDebug
 public:
 	UUOUPuzzleDebugControllerComponent();
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "디버그|퍼즐", meta = (ToolTip = "퍼즐 액터 위에 요약 라벨을 표시합니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Puzzle", meta = (ToolTip = "Shows summary labels above puzzle actors."))
 	bool bShowWorldLabels = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "디버그|퍼즐", meta = (ToolTip = "퍼즐 액터끼리의 연결 관계를 라인으로 표시합니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Puzzle", meta = (ToolTip = "Shows connection lines between puzzle input, condition, and result actors."))
 	bool bShowConnections = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "디버그|퍼즐", meta = (ToolTip = "퍼즐 구조를 한 줄 설명으로 표시합니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Puzzle", meta = (ToolTip = "Shows compact puzzle summary text."))
 	bool bShowSummaryText = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "디버그|퍼즐", meta = (ToolTip = "퍼즐 노드의 현재 활성/비활성 상태를 표시합니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Puzzle", meta = (ToolTip = "Shows current active or inactive state for puzzle nodes."))
 	bool bShowNodeState = true;
 };
 
@@ -106,13 +109,13 @@ class UNDERONEUMBRELLA_API UUOUInteractionDebugControllerComponent : public UUOU
 public:
 	UUOUInteractionDebugControllerComponent();
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "디버그|상호작용", meta = (ToolTip = "상호작용 탐색 Trace와 범위를 표시합니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Interaction", meta = (ToolTip = "Shows interaction trace range and direction."))
 	bool bShowTrace = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "디버그|상호작용", meta = (ToolTip = "현재 선택된 상호작용 후보를 표시합니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Interaction", meta = (ToolTip = "Shows the current interaction candidate."))
 	bool bShowCandidate = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "디버그|상호작용", meta = (ToolTip = "상호작용 불가 사유를 표시합니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Interaction", meta = (ToolTip = "Shows why interaction is currently blocked."))
 	bool bShowFailReason = false;
 };
 
@@ -124,10 +127,10 @@ class UNDERONEUMBRELLA_API UUOUVFXDebugControllerComponent : public UUOUDebugCon
 public:
 	UUOUVFXDebugControllerComponent();
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "디버그|VFX", meta = (ToolTip = "활성 VFX나 파티클 수를 표시합니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|VFX", meta = (ToolTip = "Shows active VFX or particle counts."))
 	bool bShowParticleCount = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "디버그|VFX", meta = (ToolTip = "Niagara 컴포넌트의 소유자와 위치를 표시합니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|VFX", meta = (ToolTip = "Shows Niagara component owner locations."))
 	bool bShowNiagaraOwners = false;
 };
 
@@ -139,15 +142,15 @@ class UNDERONEUMBRELLA_API UUOUPerformanceDebugControllerComponent : public UUOU
 public:
 	UUOUPerformanceDebugControllerComponent();
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "디버그|성능", meta = (ToolTip = "성능 정보를 메인 뷰포트에 표시합니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Performance", meta = (ToolTip = "Shows performance information on the main viewport."))
 	bool bShowViewportStats = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "디버그|성능", meta = (ToolTip = "FPS 값을 표시합니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Performance", meta = (ToolTip = "Shows the current FPS value."))
 	bool bShowFPS = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "디버그|성능", meta = (ToolTip = "프레임 시간을 표시합니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Performance", meta = (ToolTip = "Shows frame time in milliseconds."))
 	bool bShowFrameTime = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "디버그|성능", meta = (ToolTip = "액터, 컴포넌트 등 월드 단위 개수를 표시합니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Performance", meta = (ToolTip = "Shows actor, component, and world count summaries."))
 	bool bShowWorldCounts = false;
 };

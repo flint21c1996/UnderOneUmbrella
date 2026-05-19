@@ -43,41 +43,41 @@ FName UUOUDebugControllerComponentBase::GetDebugCategoryName() const
 UUOUPlayerDebugControllerComponent::UUOUPlayerDebugControllerComponent()
 {
 	DebugCategory = EUOUDebugCategory::Player;
-	DebugColor = FColor::Green;
+	DebugColor = FColor::White;
 	Priority = 100;
 }
 
 UUOUNPCDebugControllerComponent::UUOUNPCDebugControllerComponent()
 {
 	DebugCategory = EUOUDebugCategory::NPC;
-	DebugColor = FColor::Orange;
+	DebugColor = FColor::White;
 	Priority = 70;
 }
 
 UUOUPuzzleDebugControllerComponent::UUOUPuzzleDebugControllerComponent()
 {
 	DebugCategory = EUOUDebugCategory::Puzzle;
-	DebugColor = FColor::Cyan;
+	DebugColor = FColor::White;
 	Priority = 80;
 }
 
 UUOUInteractionDebugControllerComponent::UUOUInteractionDebugControllerComponent()
 {
 	DebugCategory = EUOUDebugCategory::Interaction;
-	DebugColor = FColor::Yellow;
+	DebugColor = FColor::White;
 	Priority = 60;
 }
 
 UUOUVFXDebugControllerComponent::UUOUVFXDebugControllerComponent()
 {
 	DebugCategory = EUOUDebugCategory::VFX;
-	DebugColor = FColor::Purple;
+	DebugColor = FColor::White;
 	Priority = 40;
 }
 
 UUOUPerformanceDebugControllerComponent::UUOUPerformanceDebugControllerComponent()
 {
 	DebugCategory = EUOUDebugCategory::Performance;
-	DebugColor = FColor::Silver;
+	DebugColor = FColor::White;
 	Priority = 90;
 }

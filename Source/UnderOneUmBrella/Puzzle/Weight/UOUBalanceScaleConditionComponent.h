@@ -24,6 +24,7 @@ public:
 
 	// 매 틱마다 무게를 다시 읽어서 균형 상태를 갱신합니다.
 	virtual void TickComponent(float DeltaTime, enum ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
+	virtual TArray<FString> GetPuzzleDebugInfo_Implementation() const override;
 
 	// 왼쪽 무게 소스 참조입니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Puzzle|Weight")

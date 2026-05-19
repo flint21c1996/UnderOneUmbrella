@@ -7,6 +7,7 @@
 #include "Components/ArrowComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SceneComponent.h"
+#include "Debug/UOUDebugSubsystem.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "Engine/Engine.h"
@@ -149,7 +150,10 @@ void AUOUCharacter::Tick(float DeltaSeconds)
 		bLoggedMissingPushPullComponent = true;
 	}
 
-	if (!IsLocallyControlled() || GEngine == nullptr)
+	if (!bShowContextInputDebug
+		|| !UUOUDebugSubsystem::IsDebugCategoryEnabled(this, EUOUDebugCategory::Player)
+		|| !IsLocallyControlled()
+		|| GEngine == nullptr)
 	{
 		return;
 	}

@@ -3,6 +3,7 @@
 #include "World/Environment/UOUEnvironmentVisualActor.h"
 
 #include "Components/SceneComponent.h"
+#include "Debug/UOUDebugSubsystem.h"
 #include "DrawDebugHelpers.h"
 #include "NiagaraComponent.h"
 #include "UObject/UnrealType.h"
@@ -281,6 +282,7 @@ void AUOUEnvironmentVisualActor::DrawRainBlockerNiagaraDebug(const UNiagaraCompo
 {
 	if (!bDrawRainBlockerNiagaraDebug
 		|| !bCachedRainBlockerActive
+		|| !UUOUDebugSubsystem::IsDebugCategoryEnabled(this, EUOUDebugCategory::VFX)
 		|| Effect == nullptr
 		|| GetWorld() == nullptr
 		|| EffectiveBlockerRadius <= 0.0f)

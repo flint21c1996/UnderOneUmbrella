@@ -3,6 +3,7 @@
 #include "UOUWeightedButtonComponent.h"
 
 #include "Components/SceneComponent.h"
+#include "Debug/UOUDebugSubsystem.h"
 #include "Engine/Engine.h"
 #include "GameFramework/Actor.h"
 #include "UOUWeightSensorComponent.h"
@@ -38,6 +39,22 @@ void UUOUWeightedButtonComponent::TickComponent(float DeltaTime, ELevelTick Tick
 float UUOUWeightedButtonComponent::GetPuzzleWeight() const
 {
 	return CurrentWeight;
+}
+
+TArray<FString> UUOUWeightedButtonComponent::GetPuzzleDebugInfo_Implementation() const
+{
+	const int32 OverlapCount = Sensor != nullptr ? Sensor->OverlappingActorCount : 0;
+	return {
+		FString::Printf(
+			TEXT("Weighted Button: %s"),
+			IsPressed() ? TEXT("Pressed") : TEXT("Released")),
+		FString::Printf(
+			TEXT("Weight: %.2f (Press %.2f / Release %.2f)"),
+			CurrentWeight,
+			PressWeight,
+			ReleaseWeight),
+		FString::Printf(TEXT("Sensor Overlaps: %d"), OverlapCount)
+	};
 }
 
 bool UUOUWeightedButtonComponent::IsPressed() const
@@ -168,7 +185,9 @@ void UUOUWeightedButtonComponent::SnapVisualToCurrentState()
 
 void UUOUWeightedButtonComponent::DrawScreenDebug() const
 {
-	if (!bShowScreenDebug || GEngine == nullptr)
+	if (!bShowScreenDebug
+		|| !UUOUDebugSubsystem::IsDebugCategoryEnabled(this, EUOUDebugCategory::Puzzle)
+		|| GEngine == nullptr)
 	{
 		return;
 	}

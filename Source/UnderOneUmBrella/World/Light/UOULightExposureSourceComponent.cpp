@@ -6,6 +6,7 @@
 #include "Components/PrimitiveComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/SpotLightComponent.h"
+#include "Debug/UOUDebugSubsystem.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/EngineTypes.h"
 #include "Engine/OverlapResult.h"
@@ -50,6 +51,20 @@ void UUOULightExposureSourceComponent::TickComponent(
 
 	EmitLight(PendingDeltaTime);
 	PendingDeltaTime = 0.0f;
+}
+
+TArray<FString> UUOULightExposureSourceComponent::GetPuzzleDebugInfo_Implementation() const
+{
+	return {
+		FString::Printf(TEXT("Light Source: %s"), bEmitLight ? TEXT("On") : TEXT("Off")),
+		FString::Printf(TEXT("Intensity: %.2f"), Intensity),
+		FString::Printf(
+			TEXT("Receivers / Lit / Blocked: %d / %d / %d"),
+			LastReceiverCount,
+			LastLitCount,
+			LastBlockedCount),
+		FString::Printf(TEXT("Last Lit: %s"), *LastLitTargetName)
+	};
 }
 
 void UUOULightExposureSourceComponent::EmitLight(float DeltaTime)
@@ -778,7 +793,7 @@ float UUOULightExposureSourceComponent::CalculateConeFactor(float Angle, float C
 
 void UUOULightExposureSourceComponent::DrawDebugSource() const
 {
-	if (!bDrawDebug)
+	if (!bDrawDebug || !UUOUDebugSubsystem::IsDebugCategoryEnabled(this, EUOUDebugCategory::Puzzle))
 	{
 		return;
 	}
@@ -825,7 +840,7 @@ void UUOULightExposureSourceComponent::DrawDebugSource() const
 
 void UUOULightExposureSourceComponent::DrawDebugResult(const FUOULightExposureData& ExposureData, bool bLit) const
 {
-	if (!bDrawDebug)
+	if (!bDrawDebug || !UUOUDebugSubsystem::IsDebugCategoryEnabled(this, EUOUDebugCategory::Puzzle))
 	{
 		return;
 	}
@@ -846,7 +861,9 @@ void UUOULightExposureSourceComponent::DrawDebugResult(const FUOULightExposureDa
 
 void UUOULightExposureSourceComponent::DrawDebugBlockedHit(const FVector& SourcePosition, const FHitResult& BlockingHit) const
 {
-	if (!bDrawDebug || !BlockingHit.bBlockingHit)
+	if (!bDrawDebug
+		|| !BlockingHit.bBlockingHit
+		|| !UUOUDebugSubsystem::IsDebugCategoryEnabled(this, EUOUDebugCategory::Puzzle))
 	{
 		return;
 	}
@@ -860,7 +877,7 @@ void UUOULightExposureSourceComponent::DrawDebugBlockedHit(const FVector& Source
 
 void UUOULightExposureSourceComponent::DrawDebugReflectionRay(const FVector& Start, const FVector& End) const
 {
-	if (!bDrawDebug)
+	if (!bDrawDebug || !UUOUDebugSubsystem::IsDebugCategoryEnabled(this, EUOUDebugCategory::Puzzle))
 	{
 		return;
 	}

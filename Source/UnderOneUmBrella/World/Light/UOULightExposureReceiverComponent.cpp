@@ -4,6 +4,7 @@
 
 #include "Components/PrimitiveComponent.h"
 #include "Components/SceneComponent.h"
+#include "Debug/UOUDebugSubsystem.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
@@ -45,6 +46,15 @@ void UUOULightExposureReceiverComponent::TickComponent(
 
 	RecoverTemperature(DeltaTime);
 	DrawTemperatureDebug();
+}
+
+TArray<FString> UUOULightExposureReceiverComponent::GetPuzzleDebugInfo_Implementation() const
+{
+	return {
+		FString::Printf(TEXT("Light Receiver: %s"), bIsReceivingLight ? TEXT("Lit") : TEXT("Not Lit")),
+		FString::Printf(TEXT("Temp: %.1f C"), CurrentTemperature),
+		FString::Printf(TEXT("Exposure: %.2f from %s"), LastExposureIntensity, *LastExposureSourceName)
+	};
 }
 
 FVector UUOULightExposureReceiverComponent::GetLightReceiverPosition_Implementation() const
@@ -226,7 +236,7 @@ void UUOULightExposureReceiverComponent::RecoverTemperature(float DeltaTime)
 
 void UUOULightExposureReceiverComponent::DrawTemperatureDebug() const
 {
-	if (!bDrawTemperatureDebug)
+	if (!bDrawTemperatureDebug || !UUOUDebugSubsystem::IsDebugCategoryEnabled(this, EUOUDebugCategory::Puzzle))
 	{
 		return;
 	}

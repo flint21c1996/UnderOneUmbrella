@@ -24,6 +24,7 @@ public:
 
 	// 종료 시 구독한 물 컨테이너 이벤트를 정리합니다.
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+	virtual TArray<FString> GetPuzzleDebugInfo_Implementation() const override;
 
 	// 같은 액터 안의 물 컨테이너를 자동으로 찾을지 결정합니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Puzzle|Water")

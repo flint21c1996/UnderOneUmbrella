@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Debug/UOUPuzzleDebugInfoProvider.h"
 #include "GameFramework/Actor.h"
 #include "Puzzle/Core/UOUPuzzleResultReceiver.h"
 #include "UOUPuzzleMoverActor.generated.h"
@@ -12,7 +13,7 @@ class USceneComponent;
 // 조건 그룹에서 전달한 결과 액션을 받아 지정된 위치 사이를 이동하는 퍼즐 결과 액터입니다.
 // 문이나 플랫폼처럼 상태에 따라 위치가 바뀌는 기믹의 공통 베이스로 사용합니다.
 UCLASS(meta=(DisplayName="UOU Puzzle Mover Actor"))
-class AUOUPuzzleMoverActor : public AActor, public IUOUPuzzleResultReceiver
+class AUOUPuzzleMoverActor : public AActor, public IUOUPuzzleResultReceiver, public IUOUPuzzleDebugInfoProvider
 {
 	GENERATED_BODY()
 
@@ -76,6 +77,7 @@ public:
 
 	// 인터페이스로 받은 결과 액션을 내부 이동 상태 함수로 연결합니다.
 	virtual void ApplyPuzzleResult_Implementation(EOUUPuzzleResultAction Action) override;
+	virtual TArray<FString> GetPuzzleDebugInfo_Implementation() const override;
 
 protected:
 	// 현재 활성 상태에 따라 목표 위치로 부드럽게 이동합니다.

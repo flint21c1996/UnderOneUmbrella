@@ -5,6 +5,7 @@
 #include "Components/BoxComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Debug/UOUDebugSubsystem.h"
 #include "DrawDebugHelpers.h"
 #include "GameFramework/Actor.h"
 #include "Materials/MaterialInterface.h"
@@ -211,7 +212,9 @@ void AUOUUmbrellaRainArea::ApplyEnvironmentVisualRainBlocker(bool bIsBlocking, c
 
 void AUOUUmbrellaRainArea::DrawRainVisualDebug() const
 {
-	if (!bDrawRainVisualDebug || RainVolume == nullptr)
+	if (!bDrawRainVisualDebug
+		|| !UUOUDebugSubsystem::IsDebugCategoryEnabled(this, EUOUDebugCategory::VFX)
+		|| RainVolume == nullptr)
 	{
 		return;
 	}

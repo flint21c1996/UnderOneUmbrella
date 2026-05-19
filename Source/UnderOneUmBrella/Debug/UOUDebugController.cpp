@@ -90,8 +90,42 @@ bool AUOUDebugController::IsCategoryEnabled(EUOUDebugCategory Category) const
 		return false;
 	}
 
+	bool bCategoryEnabled = false;
+	switch (Category)
+	{
+	case EUOUDebugCategory::Player:
+		bCategoryEnabled = bEnablePlayerDebug;
+		break;
+	case EUOUDebugCategory::NPC:
+		bCategoryEnabled = bEnableNPCDebug;
+		break;
+	case EUOUDebugCategory::Puzzle:
+		bCategoryEnabled = bEnablePuzzleDebug;
+		break;
+	case EUOUDebugCategory::Interaction:
+		bCategoryEnabled = bEnableInteractionDebug;
+		break;
+	case EUOUDebugCategory::VFX:
+		bCategoryEnabled = bEnableVFXDebug;
+		break;
+	case EUOUDebugCategory::Performance:
+		bCategoryEnabled = bEnablePerformanceDebug;
+		break;
+	case EUOUDebugCategory::System:
+		bCategoryEnabled = true;
+		break;
+	default:
+		bCategoryEnabled = false;
+		break;
+	}
+
+	if (!bCategoryEnabled)
+	{
+		return false;
+	}
+
 	const UUOUDebugControllerComponentBase* ControllerComponent = FindDebugControllerComponent(Category);
-	return ControllerComponent != nullptr && ControllerComponent->IsDebugEnabled();
+	return ControllerComponent == nullptr || ControllerComponent->IsDebugEnabled();
 }
 
 UUOUDebugControllerComponentBase* AUOUDebugController::FindDebugControllerComponent(EUOUDebugCategory Category) const

@@ -3,6 +3,7 @@
 #include "Player/UOUPushPullInteractorComponent.h"
 
 #include "Components/PrimitiveComponent.h"
+#include "Debug/UOUDebugSubsystem.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/Engine.h"
 #include "Engine/OverlapResult.h"
@@ -291,7 +292,9 @@ void UUOUPushPullInteractorComponent::UpdateMovementInputFallback()
 
 void UUOUPushPullInteractorComponent::UpdateScreenDebug() const
 {
-	if (!bShowScreenDebug || GEngine == nullptr)
+	if (!bShowScreenDebug
+		|| !UUOUDebugSubsystem::IsDebugCategoryEnabled(this, EUOUDebugCategory::Interaction)
+		|| GEngine == nullptr)
 	{
 		return;
 	}
@@ -318,7 +321,7 @@ void UUOUPushPullInteractorComponent::UpdateScreenDebug() const
 
 void UUOUPushPullInteractorComponent::DrawWorldDebug() const
 {
-	if (!bShowWorldDebug)
+	if (!bShowWorldDebug || !UUOUDebugSubsystem::IsDebugCategoryEnabled(this, EUOUDebugCategory::Interaction))
 	{
 		return;
 	}

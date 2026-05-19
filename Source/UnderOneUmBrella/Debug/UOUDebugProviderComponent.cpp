@@ -72,3 +72,7 @@ FVector UUOUDebugProviderComponent::GetDebugWorldLocation_Implementation() const
 		: WorldLocationOffset;
 }
 
+void UUOUDebugProviderComponent::GetDebugConnections_Implementation(TArray<FUOUDebugConnection>& OutConnections) const
+{
+	OutConnections.Reset();
+}
