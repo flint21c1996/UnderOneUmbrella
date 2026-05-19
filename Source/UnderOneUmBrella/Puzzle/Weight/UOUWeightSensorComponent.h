@@ -67,6 +67,8 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Puzzle|Sensor")
 	void RefreshCurrentWeight();
 
+	void GetOverlappingActors(TArray<AActor*>& OutActors) const;
+
 protected:
 	// 액터별 겹침 횟수를 세어 중복 오버랩을 안정적으로 처리합니다.
 	TMap<TObjectPtr<AActor>, int32> OverlapActorCounts;

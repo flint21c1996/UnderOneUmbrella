@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "Debug/UOUPuzzleDebugInfoProvider.h"
 #include "Engine/EngineTypes.h"
 #include "World/Light/UOULightExposureTypes.h"
 #include "UOULightExposureSourceComponent.generated.h"
@@ -16,7 +17,7 @@ class UUOULightInteractionSurfaceComponent;
 
 // 스포트라이트 형태의 광원에서 주변 수신체로 게임플레이용 빛 노출을 전달합니다.
 UCLASS(ClassGroup=(Light), meta=(BlueprintSpawnableComponent, DisplayName="UOU Light Exposure Source", ToolTip = "광원 원뿔 범위 안의 수신체에 게임플레이용 빛 노출을 전달합니다."))
-class UUOULightExposureSourceComponent : public UActorComponent
+class UUOULightExposureSourceComponent : public UActorComponent, public IUOUPuzzleDebugInfoProvider
 {
 	GENERATED_BODY()
 
@@ -25,6 +26,7 @@ public:
 
 	virtual void BeginPlay() override;
 	virtual void TickComponent(float DeltaTime, enum ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
+	virtual TArray<FString> GetPuzzleDebugInfo_Implementation() const override;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Source", meta = (ToolTip = "이 광원에서 게임플레이용 빛을 발사할지 여부입니다."))
 	bool bEmitLight = true;

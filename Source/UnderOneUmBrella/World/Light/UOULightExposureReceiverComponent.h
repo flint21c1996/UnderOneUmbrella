@@ -4,11 +4,13 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "Debug/UOUPuzzleDebugInfoProvider.h"
 #include "Engine/EngineTypes.h"
 #include "World/Light/UOULightExposureTypes.h"
 #include "World/Light/UOULightReceivableInterface.h"
 #include "UOULightExposureReceiverComponent.generated.h"
 
+class AActor;
 class USceneComponent;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnUOULightExposureReceivedSignature, const FUOULightExposureData&, ExposureData);
@@ -18,7 +20,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnUOULightTemperatureChangedSignat
 
 // 게임플레이용 빛 노출을 받아 온도 값으로 변환하는 컴포넌트입니다.
 UCLASS(ClassGroup=(Light), meta=(BlueprintSpawnableComponent, DisplayName="UOU Light Exposure Receiver", ToolTip = "게임플레이용 빛 노출을 받아 온도를 갱신합니다."))
-class UUOULightExposureReceiverComponent : public UActorComponent, public IUOULightReceivableInterface
+class UUOULightExposureReceiverComponent : public UActorComponent, public IUOULightReceivableInterface, public IUOUPuzzleDebugInfoProvider
 {
 	GENERATED_BODY()
 
@@ -27,6 +29,7 @@ public:
 
 	virtual void BeginPlay() override;
 	virtual void TickComponent(float DeltaTime, enum ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
+	virtual TArray<FString> GetPuzzleDebugInfo_Implementation() const override;
 
 	virtual FVector GetLightReceiverPosition_Implementation() const override;
 	virtual void ReceiveLightExposure_Implementation(const FUOULightExposureData& ExposureData) override;
@@ -84,6 +87,9 @@ public:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Runtime", meta = (ToolTip = "마지막으로 이 수신체에 빛을 준 광원 이름입니다."))
 	FString LastExposureSourceName = TEXT("None");
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Runtime", meta = (ToolTip = "마지막으로 이 수신체에 빛을 준 광원 액터입니다."))
+	TObjectPtr<AActor> LastExposureSourceActor = nullptr;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Debug", meta = (ToolTip = "수신체 위에 온도와 빛 노출 상태를 디버그 텍스트로 표시합니다."))
 	bool bDrawTemperatureDebug = false;

@@ -96,6 +96,22 @@ void AUOUPuzzleMoverActor::ApplyPuzzleResult_Implementation(EOUUPuzzleResultActi
 	}
 }
 
+TArray<FString> AUOUPuzzleMoverActor::GetPuzzleDebugInfo_Implementation() const
+{
+	const FVector CurrentLocation = MovingTarget != nullptr ? MovingTarget->GetComponentLocation() : FVector::ZeroVector;
+	const USceneComponent* TargetPoint = bActivated ? ActivePoint.Get() : InactivePoint.Get();
+	const FVector TargetLocation = TargetPoint != nullptr ? TargetPoint->GetComponentLocation() : FVector::ZeroVector;
+	const float DistanceToTarget = TargetPoint != nullptr && MovingTarget != nullptr
+		? FVector::Distance(CurrentLocation, TargetLocation)
+		: 0.0f;
+
+	return {
+		FString::Printf(TEXT("Mover: %s"), bActivated ? TEXT("Active") : TEXT("Inactive")),
+		FString::Printf(TEXT("Paused: %s"), bPaused ? TEXT("Yes") : TEXT("No")),
+		FString::Printf(TEXT("Distance To Target: %.1f"), DistanceToTarget)
+	};
+}
+
 void AUOUPuzzleMoverActor::MoveTarget(float DeltaSeconds)
 {
 	if (MovingTarget == nullptr)

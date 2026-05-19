@@ -5,6 +5,7 @@
 #include "Components/BoxComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Debug/UOUDebugSubsystem.h"
 #include "DrawDebugHelpers.h"
 #include "GameFramework/Actor.h"
 #include "Materials/MaterialInterface.h"
@@ -211,7 +212,9 @@ void AUOUUmbrellaRainArea::ApplyEnvironmentVisualRainBlocker(bool bIsBlocking, c
 
 void AUOUUmbrellaRainArea::DrawRainVisualDebug() const
 {
-	if (!bDrawRainVisualDebug || RainVolume == nullptr)
+	if (!bDrawRainVisualDebug
+		|| !UUOUDebugSubsystem::IsDebugWorldDrawEnabled(this, EUOUDebugCategory::VFX)
+		|| RainVolume == nullptr)
 	{
 		return;
 	}
@@ -231,13 +234,14 @@ void AUOUUmbrellaRainArea::DrawRainVisualDebug() const
 	const FVector VisualAreaHalfExtent(BoxExtent.X, BoxExtent.Y, 2.0f);
 	const float Thickness = FMath::Max(0.0f, RainVisualDebugThickness);
 	const float LifeTime = 0.0f;
+	const FColor VFXDebugColor = UUOUDebugSubsystem::GetDebugCategoryColor(this, EUOUDebugCategory::VFX, FColor::Cyan);
 
 	DrawDebugBox(
 		World,
 		VolumeCenter,
 		BoxExtent,
 		VolumeRotation,
-		FColor::Green,
+		VFXDebugColor,
 		false,
 		LifeTime,
 		0,
@@ -248,7 +252,7 @@ void AUOUUmbrellaRainArea::DrawRainVisualDebug() const
 		RainWorldPosition,
 		VisualAreaHalfExtent,
 		VolumeRotation,
-		FColor::Cyan,
+		VFXDebugColor,
 		false,
 		LifeTime,
 		0,
@@ -259,7 +263,7 @@ void AUOUUmbrellaRainArea::DrawRainVisualDebug() const
 		GroundSplashWorldPosition,
 		VisualAreaHalfExtent,
 		VolumeRotation,
-		FColor::Blue,
+		VFXDebugColor,
 		false,
 		LifeTime,
 		0,
@@ -269,7 +273,7 @@ void AUOUUmbrellaRainArea::DrawRainVisualDebug() const
 		World,
 		GroundSplashWorldPosition,
 		RainWorldPosition,
-		FColor::Yellow,
+		VFXDebugColor,
 		false,
 		LifeTime,
 		0,
@@ -283,7 +287,7 @@ void AUOUUmbrellaRainArea::DrawRainVisualDebug() const
 			BoxExtent.X * 2.0f,
 			BoxExtent.Y * 2.0f),
 		nullptr,
-		FColor::Cyan,
+		VFXDebugColor,
 		LifeTime,
 		false,
 		1.0f);

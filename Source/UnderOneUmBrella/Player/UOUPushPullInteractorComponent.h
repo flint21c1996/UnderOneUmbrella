@@ -58,7 +58,7 @@ public:
 
 	// 화면 왼쪽 위 디버그 텍스트를 켤지 정한다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PushPull|Debug")
-	bool bShowScreenDebug = true;
+	bool bShowScreenDebug = false;
 
 	// 월드에 탐색 반경과 축 디버그를 그릴지 정한다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PushPull|Debug")

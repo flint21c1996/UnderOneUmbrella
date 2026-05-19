@@ -30,6 +30,29 @@ void UUOULightTemperatureConditionComponent::EndPlay(const EEndPlayReason::Type 
 	Super::EndPlay(EndPlayReason);
 }
 
+TArray<FString> UUOULightTemperatureConditionComponent::GetPuzzleDebugInfo_Implementation() const
+{
+	return {
+		FString::Printf(
+			TEXT("Light Temperature: %s"),
+			IsSatisfied() ? TEXT("Satisfied") : TEXT("Unsatisfied")),
+		FString::Printf(
+			TEXT("Temp: %.1f C (On %.1f / Off %.1f)"),
+			CurrentTemperature,
+			ActivateTemperature,
+			DeactivateTemperature),
+		FString::Printf(TEXT("Receiver: %s"), *GetNameSafe(LightReceiver))
+	};
+}
+
+void UUOULightTemperatureConditionComponent::GetPuzzleDebugInputActors_Implementation(TArray<AActor*>& OutInputActors) const
+{
+	if (LightReceiver != nullptr && IsValid(LightReceiver->LastExposureSourceActor))
+	{
+		OutInputActors.AddUnique(LightReceiver->LastExposureSourceActor);
+	}
+}
+
 void UUOULightTemperatureConditionComponent::HandleTemperatureChanged(float NewTemperature, float PreviousTemperature)
 {
 	RefreshSatisfiedState();

@@ -5,6 +5,7 @@
 #include "Components/PrimitiveComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Debug/UOUDebugSubsystem.h"
 #include "DrawDebugHelpers.h"
 #include "GameFramework/Actor.h"
 #include "UObject/UObjectIterator.h"
@@ -757,12 +758,22 @@ void UUOUWaterBasinTargetComponent::CaptureWaterVisualTransformIfNeeded()
 
 void UUOUWaterBasinTargetComponent::DrawRuntimeDebug()
 {
-	if (!bRuntimeDebugOverlayEnabled || !ShouldDrawTargetDebug())
+	if (!bRuntimeDebugOverlayEnabled
+		|| !UUOUDebugSubsystem::IsDebugCategoryEnabled(this, EUOUDebugCategory::Puzzle)
+		|| !ShouldDrawTargetDebug())
 	{
 		return;
 	}
 
-	DrawTargetDebugString();
+	if (UUOUDebugSubsystem::IsDebugWorldLabelEnabled(this, EUOUDebugCategory::Puzzle))
+	{
+		DrawTargetDebugString();
+	}
+
+	if (!UUOUDebugSubsystem::IsDebugWorldDrawEnabled(this, EUOUDebugCategory::Puzzle))
+	{
+		return;
+	}
 
 	if (RuntimeDebugOverlayScope == EUOUWaterBasinDebugOverlayScope::SpecificConnectedGroup)
 	{
@@ -889,7 +900,15 @@ void UUOUWaterBasinTargetComponent::DrawTargetDebugString() const
 			GroupData.FillRatio * DebugPercentScale,
 			GroupData.SurfaceWorldZ);
 
-		DrawDebugString(World, GetDebugLabelWorld(), Text, nullptr, FColor::Yellow, DebugTextLifeTime, true, DebugTextScale);
+		DrawDebugString(
+			World,
+			GetDebugLabelWorld(),
+			Text,
+			nullptr,
+			UUOUDebugSubsystem::GetDebugCategoryColor(this, EUOUDebugCategory::Puzzle, FColor::Yellow),
+			DebugTextLifeTime,
+			true,
+			DebugTextScale);
 		return;
 	}
 
@@ -901,7 +920,15 @@ void UUOUWaterBasinTargetComponent::DrawTargetDebugString() const
 		CurrentFillRatio * DebugPercentScale,
 		WaterSurfaceWorldZ);
 
-	DrawDebugString(World, GetDebugLabelWorld(), Text, nullptr, FColor::Cyan, DebugTextLifeTime, true, DebugTextScale);
+	DrawDebugString(
+		World,
+		GetDebugLabelWorld(),
+		Text,
+		nullptr,
+		UUOUDebugSubsystem::GetDebugCategoryColor(this, EUOUDebugCategory::Puzzle, FColor::Cyan),
+		DebugTextLifeTime,
+		true,
+		DebugTextScale);
 }
 
 void UUOUWaterBasinTargetComponent::DrawSpecificTargetConnections() const
@@ -913,6 +940,7 @@ void UUOUWaterBasinTargetComponent::DrawSpecificTargetConnections() const
 	}
 
 	const FVector Start = GetDebugCenterWorld();
+	const FColor ConnectionColor = UUOUDebugSubsystem::GetDebugCategoryColor(this, EUOUDebugCategory::Puzzle, FColor::Cyan);
 	for (TObjectIterator<UUOUWaterBasinTargetComponent> It; It; ++It)
 	{
 		UUOUWaterBasinTargetComponent* Candidate = *It;
@@ -923,7 +951,7 @@ void UUOUWaterBasinTargetComponent::DrawSpecificTargetConnections() const
 
 		if (IsDirectlyConnectedTo(Candidate) || Candidate->IsDirectlyConnectedTo(this))
 		{
-			DrawDebugLine(World, Start, Candidate->GetDebugCenterWorld(), FColor::Cyan, false, DebugConnectionLineLifeTime, 0, DebugConnectionLineThickness);
+			DrawDebugLine(World, Start, Candidate->GetDebugCenterWorld(), ConnectionColor, false, DebugConnectionLineLifeTime, 0, DebugConnectionLineThickness);
 		}
 	}
 }
@@ -939,6 +967,7 @@ void UUOUWaterBasinTargetComponent::DrawConnectedGroupConnections() const
 	TArray<UUOUWaterBasinTargetComponent*> Group;
 	GetConnectedGroup(Group);
 
+	const FColor ConnectionColor = UUOUDebugSubsystem::GetDebugCategoryColor(this, EUOUDebugCategory::Puzzle, FColor::Yellow);
 	for (int32 A = 0; A < Group.Num(); ++A)
 	{
 		UUOUWaterBasinTargetComponent* From = Group[A];
@@ -957,7 +986,7 @@ void UUOUWaterBasinTargetComponent::DrawConnectedGroupConnections() const
 
 			if (From->IsDirectlyConnectedTo(To) || To->IsDirectlyConnectedTo(From))
 			{
-				DrawDebugLine(World, From->GetDebugCenterWorld(), To->GetDebugCenterWorld(), FColor::Yellow, false, DebugConnectionLineLifeTime, 0, DebugConnectionLineThickness);
+				DrawDebugLine(World, From->GetDebugCenterWorld(), To->GetDebugCenterWorld(), ConnectionColor, false, DebugConnectionLineLifeTime, 0, DebugConnectionLineThickness);
 			}
 		}
 	}

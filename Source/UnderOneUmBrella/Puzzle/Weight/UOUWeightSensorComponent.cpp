@@ -72,6 +72,18 @@ void UUOUWeightSensorComponent::RefreshCurrentWeight()
 	OnWeightChanged.Broadcast(CurrentWeight);
 }
 
+void UUOUWeightSensorComponent::GetOverlappingActors(TArray<AActor*>& OutActors) const
+{
+	for (const TPair<TObjectPtr<AActor>, int32>& Pair : OverlapActorCounts)
+	{
+		AActor* OverlappingActor = Pair.Key.Get();
+		if (IsValid(OverlappingActor))
+		{
+			OutActors.AddUnique(OverlappingActor);
+		}
+	}
+}
+
 void UUOUWeightSensorComponent::HandleSensorBeginOverlap(
 	UPrimitiveComponent* OverlappedComponent,
 	AActor* OtherActor,

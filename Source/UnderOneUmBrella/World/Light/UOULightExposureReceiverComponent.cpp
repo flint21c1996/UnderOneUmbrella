@@ -4,6 +4,7 @@
 
 #include "Components/PrimitiveComponent.h"
 #include "Components/SceneComponent.h"
+#include "Debug/UOUDebugSubsystem.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
@@ -47,6 +48,15 @@ void UUOULightExposureReceiverComponent::TickComponent(
 	DrawTemperatureDebug();
 }
 
+TArray<FString> UUOULightExposureReceiverComponent::GetPuzzleDebugInfo_Implementation() const
+{
+	return {
+		FString::Printf(TEXT("Light Receiver: %s"), bIsReceivingLight ? TEXT("Lit") : TEXT("Not Lit")),
+		FString::Printf(TEXT("Temp: %.1f C"), CurrentTemperature),
+		FString::Printf(TEXT("Exposure: %.2f from %s"), LastExposureIntensity, *LastExposureSourceName)
+	};
+}
+
 FVector UUOULightExposureReceiverComponent::GetLightReceiverPosition_Implementation() const
 {
 	if (const USceneComponent* ReceiverTransform = GetReferencedReceiverTransform())
@@ -86,6 +96,14 @@ void UUOULightExposureReceiverComponent::ReceiveLightExposure_Implementation(con
 
 	LastExposureIntensity = ExposureData.Intensity;
 	LastExposureSourceName = GetNameSafe(ExposureData.Source);
+	LastExposureSourceActor = Cast<AActor>(ExposureData.Source);
+	if (LastExposureSourceActor == nullptr)
+	{
+		if (const UActorComponent* SourceComponent = Cast<UActorComponent>(ExposureData.Source))
+		{
+			LastExposureSourceActor = SourceComponent->GetOwner();
+		}
+	}
 	SetReceivingLight(true);
 
 	OnLightExposureReceived.Broadcast(ExposureData);
@@ -226,7 +244,7 @@ void UUOULightExposureReceiverComponent::RecoverTemperature(float DeltaTime)
 
 void UUOULightExposureReceiverComponent::DrawTemperatureDebug() const
 {
-	if (!bDrawTemperatureDebug)
+	if (!bDrawTemperatureDebug || !UUOUDebugSubsystem::IsDebugWorldLabelEnabled(this, EUOUDebugCategory::Puzzle))
 	{
 		return;
 	}
@@ -244,12 +262,17 @@ void UUOULightExposureReceiverComponent::DrawTemperatureDebug() const
 		bIsReceivingLight ? TEXT("On") : TEXT("Off"),
 		LastExposureIntensity);
 
+	const FColor TemperatureTextColor = UUOUDebugSubsystem::GetDebugCategoryColor(
+		this,
+		EUOUDebugCategory::Puzzle,
+		bIsReceivingLight ? ExposedTemperatureDebugColor : TemperatureDebugColor);
+
 	DrawDebugString(
 		World,
 		DebugLocation,
 		DebugText,
 		nullptr,
-		bIsReceivingLight ? ExposedTemperatureDebugColor : TemperatureDebugColor,
+		TemperatureTextColor,
 		TemperatureDebugDrawTime,
 		true,
 		TemperatureDebugTextScale);

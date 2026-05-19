@@ -12,6 +12,19 @@ bool UUOUPuzzleConditionSourceComponent::IsSatisfied() const
 	return bIsSatisfied;
 }
 
+TArray<FString> UUOUPuzzleConditionSourceComponent::GetPuzzleDebugInfo_Implementation() const
+{
+	return {
+		FString::Printf(
+			TEXT("Condition: %s"),
+			bIsSatisfied ? TEXT("Satisfied") : TEXT("Unsatisfied"))
+	};
+}
+
+void UUOUPuzzleConditionSourceComponent::GetPuzzleDebugInputActors_Implementation(TArray<AActor*>& OutInputActors) const
+{
+}
+
 bool UUOUPuzzleConditionSourceComponent::SetSatisfiedState(bool bNewSatisfied, bool bBroadcastChange)
 {
 	if (bIsSatisfied == bNewSatisfied)

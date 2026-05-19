@@ -28,6 +28,23 @@ void UUOUBalanceScaleConditionComponent::TickComponent(float DeltaTime, ELevelTi
 	RefreshBalanceState();
 }
 
+TArray<FString> UUOUBalanceScaleConditionComponent::GetPuzzleDebugInfo_Implementation() const
+{
+	return {
+		FString::Printf(
+			TEXT("Balance Scale: %s"),
+			IsSatisfied() ? TEXT("Satisfied") : TEXT("Unsatisfied")),
+		FString::Printf(
+			TEXT("Left / Right: %.1f / %.1f"),
+			LeftWeight,
+			RightWeight),
+		FString::Printf(
+			TEXT("Diff: %.1f / %.1f"),
+			WeightDifference,
+			AllowedDifference)
+	};
+}
+
 void UUOUBalanceScaleConditionComponent::ResolveWeightSources()
 {
 	AActor* Owner = GetOwner();

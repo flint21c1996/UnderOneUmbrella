@@ -29,6 +29,8 @@ public:
 
 	// 현재 버튼이 퍼즐 무게 소스로 제공할 값을 반환합니다.
 	virtual float GetPuzzleWeight() const override;
+	virtual TArray<FString> GetPuzzleDebugInfo_Implementation() const override;
+	virtual void GetPuzzleDebugInputActors_Implementation(TArray<AActor*>& OutInputActors) const override;
 
 	// 같은 액터 안에서 센서 컴포넌트를 자동으로 찾을지 결정합니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Puzzle|Weight")
@@ -96,7 +98,7 @@ public:
 
 	// 화면 디버그를 켜서 현재 무게와 상태를 확인할지 결정합니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Puzzle|Debug")
-	bool bShowScreenDebug = true;
+	bool bShowScreenDebug = false;
 
 	// 현재 센서가 읽은 버튼 무게 값입니다.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Puzzle|Runtime")

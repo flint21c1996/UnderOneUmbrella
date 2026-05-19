@@ -166,6 +166,9 @@ public:
 	FORCEINLINE class UUOUPushPullInteractorComponent* GetPushPullInteractorComponent() const { return PushPullInteractorComponent; }
 
 private:
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Debug, meta = (AllowPrivateAccess = "true"))
+	bool bShowContextInputDebug = false;
+
 	// 문맥 상호작용 눌림 횟수를 화면 디버그로 추적하기 위한 값이다.
 	UPROPERTY(Transient)
 	int32 ContextInteractPressedCount = 0;

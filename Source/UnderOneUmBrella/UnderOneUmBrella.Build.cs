@@ -23,5 +23,13 @@ public class UnderOneUmBrella : ModuleRules
 			"Niagara",
 			"UMG"
         });
+
+		if (Target.bBuildEditor)
+		{
+			PrivateDependencyModuleNames.AddRange(new string[]
+			{
+				"UnrealEd"
+			});
+		}
 	}
 }
