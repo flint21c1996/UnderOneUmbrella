@@ -282,6 +282,12 @@ private:
 	// 현재 RuntimeDebugTarget에 해당하는 경우 디버그 문자열과 연결선을 그립니다.
 	void DrawRuntimeDebug();
 
+	// 현재 Target이 최대로 물을 채울 수 있는 영역을 DebugBox로 표시합니다.
+	void DrawMaxWaterCapacityDebugBox() const;
+
+	// 최대 물 영역 DebugBox에 사용할 중심, 크기, 회전을 계산합니다.
+	bool BuildMaxWaterCapacityDebugBox(FVector& OutCenter, FVector& OutExtent, FQuat& OutRotation) const;
+
 	// 특정 Target 또는 연결 그룹의 수치 디버그 문자열을 그립니다.
 	void DrawTargetDebugString() const;
 

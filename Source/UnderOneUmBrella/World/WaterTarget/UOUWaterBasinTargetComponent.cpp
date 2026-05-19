@@ -24,6 +24,8 @@ namespace
 	constexpr float DebugConnectionLineThickness = 4.0f;
 	constexpr float DebugGroupLabelOffsetZ = 120.0f;
 	constexpr float DebugTargetLabelOffsetZ = 80.0f;
+	constexpr float DebugMaxWaterBoxLifeTime = 0.0f;
+	constexpr float DebugMaxWaterBoxThickness = 3.0f;
 	constexpr float MinWaterVisualDepthWorld = 0.1f;
 
 	// 연결 그룹의 공통 수면 높이는 이분 탐색으로 찾습니다.
@@ -758,6 +760,24 @@ void UUOUWaterBasinTargetComponent::DrawRuntimeDebug()
 
 	DrawTargetDebugString();
 
+	if (RuntimeDebugOverlayScope == EUOUWaterBasinDebugOverlayScope::SpecificConnectedGroup)
+	{
+		TArray<UUOUWaterBasinTargetComponent*> Group;
+		GetConnectedGroup(Group);
+
+		for (const UUOUWaterBasinTargetComponent* Target : Group)
+		{
+			if (IsValid(Target))
+			{
+				Target->DrawMaxWaterCapacityDebugBox();
+			}
+		}
+	}
+	else
+	{
+		DrawMaxWaterCapacityDebugBox();
+	}
+
 	if (!bRuntimeDebugConnectionLinesEnabled)
 	{
 		return;
@@ -771,6 +791,69 @@ void UUOUWaterBasinTargetComponent::DrawRuntimeDebug()
 	{
 		DrawSpecificTargetConnections();
 	}
+}
+
+void UUOUWaterBasinTargetComponent::DrawMaxWaterCapacityDebugBox() const
+{
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	FVector BoxCenter = FVector::ZeroVector;
+	FVector BoxExtent = FVector::ZeroVector;
+	FQuat BoxRotation = FQuat::Identity;
+	if (!BuildMaxWaterCapacityDebugBox(BoxCenter, BoxExtent, BoxRotation))
+	{
+		return;
+	}
+
+	DrawDebugBox(
+		World,
+		BoxCenter,
+		BoxExtent,
+		BoxRotation,
+		FColor::Blue,
+		false,
+		DebugMaxWaterBoxLifeTime,
+		0,
+		DebugMaxWaterBoxThickness);
+}
+
+bool UUOUWaterBasinTargetComponent::BuildMaxWaterCapacityDebugBox(FVector& OutCenter, FVector& OutExtent, FQuat& OutRotation) const
+{
+	const USceneComponent* ResolvedWaterVisualComponent = WaterVisualComponent.Get();
+	if (!ResolvedWaterVisualComponent && bAutoFindWaterVisualComponent)
+	{
+		ResolvedWaterVisualComponent = FindWaterVisualComponent();
+	}
+
+	const UStaticMeshComponent* WaterVisualMeshComponent = Cast<UStaticMeshComponent>(ResolvedWaterVisualComponent);
+	if (!WaterVisualMeshComponent)
+	{
+		return false;
+	}
+
+	FVector LocalMin = FVector::ZeroVector;
+	FVector LocalMax = FVector::ZeroVector;
+	WaterVisualMeshComponent->GetLocalBounds(LocalMin, LocalMax);
+
+	const FVector LocalSize = LocalMax - LocalMin;
+	if (LocalSize.X <= KINDA_SMALL_NUMBER || LocalSize.Y <= KINDA_SMALL_NUMBER || LocalSize.Z <= KINDA_SMALL_NUMBER)
+	{
+		return false;
+	}
+
+	const FTransform WaterVisualTransform = WaterVisualMeshComponent->GetComponentTransform();
+	const FVector LocalCenter = (LocalMin + LocalMax) * 0.5f;
+	const FVector LocalExtent = LocalSize * 0.5f;
+
+	// WaterVisual 큐브 메시와 같은 위치, 같은 회전, 같은 크기의 DebugBox를 그립니다.
+	OutCenter = WaterVisualTransform.TransformPosition(LocalCenter);
+	OutExtent = LocalExtent * WaterVisualTransform.GetScale3D().GetAbs();
+	OutRotation = WaterVisualTransform.GetRotation();
+	return true;
 }
 
 void UUOUWaterBasinTargetComponent::DrawTargetDebugString() const
