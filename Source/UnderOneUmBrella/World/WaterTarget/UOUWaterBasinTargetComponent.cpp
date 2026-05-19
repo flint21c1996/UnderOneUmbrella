@@ -65,7 +65,6 @@ void UUOUWaterBasinTargetComponent::TickComponent(float DeltaTime, ELevelTick Ti
 	DrawRuntimeDebug();
 }
 
-
 //에디터에서 속성 변경시 호출되는 함수
 #if WITH_EDITOR
 void UUOUWaterBasinTargetComponent::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent)
@@ -851,15 +850,22 @@ bool UUOUWaterBasinTargetComponent::BuildMaxWaterCapacityDebugBox(FVector& OutCe
 	}
 
 	const FTransform WaterVisualTransform = WaterVisualMeshComponent->GetComponentTransform();
-	FVector DebugScale = WaterVisualTransform.GetScale3D();
-	DebugScale.Z = 1.0f;
+	const float MaxDepthWorld = GetMaxWaterHeight() * FMath::Max(WorldUnitsPerTile, MinWorldUnitsPerTile);
+	if (MaxDepthWorld <= KINDA_SMALL_NUMBER)
+	{
+		return false;
+	}
 
 	const FVector LocalCenter = (LocalMin + LocalMax) * 0.5f;
 	const FVector LocalExtent = LocalSize * 0.5f;
+	const FVector CurrentVisualCenter = WaterVisualTransform.TransformPosition(LocalCenter);
+	const FVector CurrentVisualExtent = LocalExtent * WaterVisualTransform.GetScale3D().GetAbs();
 
-	// WaterVisual 큐브 메시의 X/Y는 현재 크기를 따르고, Z는 Scale 1 기준의 최대 높이로 표시합니다.
-	OutCenter = WaterVisualTransform.GetLocation() + WaterVisualTransform.GetRotation().RotateVector(LocalCenter * DebugScale);
-	OutExtent = LocalExtent * DebugScale.GetAbs();
+	// X/Y는 현재 WaterVisual과 동일하게 두고, Z만 Fill 100%일 때의 높이로 표시합니다.
+	OutCenter = CurrentVisualCenter;
+	OutCenter.Z = GetBottomWorldZ() + (MaxDepthWorld * 0.5f);
+	OutExtent = CurrentVisualExtent;
+	OutExtent.Z = MaxDepthWorld * 0.5f;
 	OutRotation = WaterVisualTransform.GetRotation();
 	return true;
 }
