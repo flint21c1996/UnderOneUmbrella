@@ -139,7 +139,7 @@ public:
 
 	// 우산 상태와 물 양을 화면 왼쪽에 디버그 텍스트로 표시할지 정합니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Debug")
-	bool bShowScreenDebug = true;
+	bool bShowScreenDebug = false;
 
 	// 우산이 비를 막는 중심과 반지름을 월드 디버그로 보여줄지 정합니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Debug", meta = (ToolTip = "우산이 비를 막는 중심 위치와 반지름을 디버그로 표시합니다."))

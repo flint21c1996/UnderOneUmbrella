@@ -21,6 +21,10 @@ TArray<FString> UUOUPuzzleConditionSourceComponent::GetPuzzleDebugInfo_Implement
 	};
 }
 
+void UUOUPuzzleConditionSourceComponent::GetPuzzleDebugInputActors_Implementation(TArray<AActor*>& OutInputActors) const
+{
+}
+
 bool UUOUPuzzleConditionSourceComponent::SetSatisfiedState(bool bNewSatisfied, bool bBroadcastChange)
 {
 	if (bIsSatisfied == bNewSatisfied)

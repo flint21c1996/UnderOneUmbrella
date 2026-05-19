@@ -737,9 +737,13 @@ void UUOUWaterBasinTargetComponent::DrawRuntimeDebug()
 		return;
 	}
 
-	DrawTargetDebugString();
+	if (UUOUDebugSubsystem::IsDebugWorldLabelEnabled(this, EUOUDebugCategory::Puzzle))
+	{
+		DrawTargetDebugString();
+	}
 
-	if (!bRuntimeDebugConnectionLinesEnabled)
+	if (!bRuntimeDebugConnectionLinesEnabled
+		|| !UUOUDebugSubsystem::IsDebugWorldDrawEnabled(this, EUOUDebugCategory::Puzzle))
 	{
 		return;
 	}

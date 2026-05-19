@@ -326,7 +326,7 @@ void UUOUWaterBasinReactionComponentBase::NotifyReactionResult(const FUOUWaterBa
 void UUOUWaterBasinReactionComponentBase::DrawReactionDebugText()
 {
 	if (!bDrawDebugText
-		|| !UUOUDebugSubsystem::IsDebugCategoryEnabled(this, EUOUDebugCategory::Puzzle)
+		|| !UUOUDebugSubsystem::IsDebugWorldLabelEnabled(this, EUOUDebugCategory::Puzzle)
 		|| !GetWorld()
 		|| !GetOwner())
 	{

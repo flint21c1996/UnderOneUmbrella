@@ -27,7 +27,11 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Puzzle|Condition")
 	bool IsSatisfied() const;
 
+	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Puzzle|Debug")
+	void GetPuzzleDebugInputActors(TArray<AActor*>& OutInputActors) const;
+
 	virtual TArray<FString> GetPuzzleDebugInfo_Implementation() const override;
+	virtual void GetPuzzleDebugInputActors_Implementation(TArray<AActor*>& OutInputActors) const;
 
 protected:
 	// 현재 조건 만족 여부를 저장하는 공통 상태값입니다.

@@ -793,7 +793,7 @@ float UUOULightExposureSourceComponent::CalculateConeFactor(float Angle, float C
 
 void UUOULightExposureSourceComponent::DrawDebugSource() const
 {
-	if (!bDrawDebug || !UUOUDebugSubsystem::IsDebugCategoryEnabled(this, EUOUDebugCategory::Puzzle))
+	if (!bDrawDebug || !UUOUDebugSubsystem::IsDebugWorldDrawEnabled(this, EUOUDebugCategory::Puzzle))
 	{
 		return;
 	}
@@ -841,7 +841,7 @@ void UUOULightExposureSourceComponent::DrawDebugSource() const
 
 void UUOULightExposureSourceComponent::DrawDebugResult(const FUOULightExposureData& ExposureData, bool bLit) const
 {
-	if (!bDrawDebug || !UUOUDebugSubsystem::IsDebugCategoryEnabled(this, EUOUDebugCategory::Puzzle))
+	if (!bDrawDebug || !UUOUDebugSubsystem::IsDebugWorldDrawEnabled(this, EUOUDebugCategory::Puzzle))
 	{
 		return;
 	}
@@ -865,7 +865,7 @@ void UUOULightExposureSourceComponent::DrawDebugBlockedHit(const FVector& Source
 {
 	if (!bDrawDebug
 		|| !BlockingHit.bBlockingHit
-		|| !UUOUDebugSubsystem::IsDebugCategoryEnabled(this, EUOUDebugCategory::Puzzle))
+		|| !UUOUDebugSubsystem::IsDebugWorldDrawEnabled(this, EUOUDebugCategory::Puzzle))
 	{
 		return;
 	}
@@ -880,7 +880,7 @@ void UUOULightExposureSourceComponent::DrawDebugBlockedHit(const FVector& Source
 
 void UUOULightExposureSourceComponent::DrawDebugReflectionRay(const FVector& Start, const FVector& End) const
 {
-	if (!bDrawDebug || !UUOUDebugSubsystem::IsDebugCategoryEnabled(this, EUOUDebugCategory::Puzzle))
+	if (!bDrawDebug || !UUOUDebugSubsystem::IsDebugWorldDrawEnabled(this, EUOUDebugCategory::Puzzle))
 	{
 		return;
 	}

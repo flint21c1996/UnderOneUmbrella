@@ -3,6 +3,7 @@
 #include "Puzzle/Core/UOUPuzzleConditionGroupActor.h"
 
 #include "Components/SceneComponent.h"
+#include "Debug/UOUPuzzleDebugProviderComponent.h"
 #include "Puzzle/Core/UOUPuzzleConditionSourceComponent.h"
 #include "Puzzle/Core/UOUPuzzleResultReceiver.h"
 
@@ -18,6 +19,9 @@ AUOUPuzzleConditionGroupActor::AUOUPuzzleConditionGroupActor()
 	PuzzleConditionGroupComponent = CreateDefaultSubobject<UUOUPuzzleConditionGroupComponent>(
 		TEXT("PuzzleConditionGroupComponent"));
 	PuzzleConditionGroupComponent->bAutoCollectLocalConditionSources = false;
+
+	PuzzleDebugProviderComponent = CreateDefaultSubobject<UUOUPuzzleDebugProviderComponent>(
+		TEXT("PuzzleDebugProviderComponent"));
 }
 
 void AUOUPuzzleConditionGroupActor::OnConstruction(const FTransform& Transform)

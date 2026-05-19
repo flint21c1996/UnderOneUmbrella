@@ -282,7 +282,7 @@ void AUOUEnvironmentVisualActor::DrawRainBlockerNiagaraDebug(const UNiagaraCompo
 {
 	if (!bDrawRainBlockerNiagaraDebug
 		|| !bCachedRainBlockerActive
-		|| !UUOUDebugSubsystem::IsDebugCategoryEnabled(this, EUOUDebugCategory::VFX)
+		|| !UUOUDebugSubsystem::IsDebugWorldDrawEnabled(this, EUOUDebugCategory::VFX)
 		|| Effect == nullptr
 		|| GetWorld() == nullptr
 		|| EffectiveBlockerRadius <= 0.0f)

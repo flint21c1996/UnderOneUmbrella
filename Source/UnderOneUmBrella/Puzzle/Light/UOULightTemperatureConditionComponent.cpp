@@ -45,6 +45,14 @@ TArray<FString> UUOULightTemperatureConditionComponent::GetPuzzleDebugInfo_Imple
 	};
 }
 
+void UUOULightTemperatureConditionComponent::GetPuzzleDebugInputActors_Implementation(TArray<AActor*>& OutInputActors) const
+{
+	if (LightReceiver != nullptr && IsValid(LightReceiver->LastExposureSourceActor))
+	{
+		OutInputActors.AddUnique(LightReceiver->LastExposureSourceActor);
+	}
+}
+
 void UUOULightTemperatureConditionComponent::HandleTemperatureChanged(float NewTemperature, float PreviousTemperature)
 {
 	RefreshSatisfiedState();

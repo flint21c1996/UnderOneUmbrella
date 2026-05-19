@@ -213,7 +213,7 @@ void AUOUUmbrellaRainArea::ApplyEnvironmentVisualRainBlocker(bool bIsBlocking, c
 void AUOUUmbrellaRainArea::DrawRainVisualDebug() const
 {
 	if (!bDrawRainVisualDebug
-		|| !UUOUDebugSubsystem::IsDebugCategoryEnabled(this, EUOUDebugCategory::VFX)
+		|| !UUOUDebugSubsystem::IsDebugWorldDrawEnabled(this, EUOUDebugCategory::VFX)
 		|| RainVolume == nullptr)
 	{
 		return;

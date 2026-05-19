@@ -63,6 +63,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Display", meta = (ClampMin = "1", ToolTip = "한 번에 표시할 월드 디버그 UI의 최대 개수입니다."))
 	int32 MaxVisibleWorldDebugItems = 12;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Display", meta = (ClampMin = "1", ToolTip = "월드 디버그 라벨 하나에 표시할 최대 줄 수입니다."))
+	int32 MaxWorldDebugLabelLines = 8;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Display", meta = (ToolTip = "가장 가까운 액터나 포커스된 액터만 상세 표시하기 위한 예약 옵션입니다."))
 	bool bOnlyShowFocusedActor = false;
 
@@ -129,7 +132,7 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Debug|Controllers")
 	TObjectPtr<UUOUPerformanceDebugControllerComponent> PerformanceDebugController;
 
-	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "Debug|Controllers", meta = (ToolTip = "이 컨트롤러에 붙은 디버그 컨트롤러 컴포넌트 런타임 목록입니다."))
+	UPROPERTY(Transient)
 	TArray<TObjectPtr<UUOUDebugControllerComponentBase>> DebugControllerComponents;
 
 	UFUNCTION(BlueprintCallable, CallInEditor, Category = "Debug")

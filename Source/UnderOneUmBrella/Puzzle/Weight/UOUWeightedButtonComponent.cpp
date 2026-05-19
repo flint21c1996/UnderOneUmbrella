@@ -57,6 +57,14 @@ TArray<FString> UUOUWeightedButtonComponent::GetPuzzleDebugInfo_Implementation()
 	};
 }
 
+void UUOUWeightedButtonComponent::GetPuzzleDebugInputActors_Implementation(TArray<AActor*>& OutInputActors) const
+{
+	if (Sensor != nullptr)
+	{
+		Sensor->GetOverlappingActors(OutInputActors);
+	}
+}
+
 bool UUOUWeightedButtonComponent::IsPressed() const
 {
 	return IsSatisfied();
@@ -186,7 +194,7 @@ void UUOUWeightedButtonComponent::SnapVisualToCurrentState()
 void UUOUWeightedButtonComponent::DrawScreenDebug() const
 {
 	if (!bShowScreenDebug
-		|| !UUOUDebugSubsystem::IsDebugCategoryEnabled(this, EUOUDebugCategory::Puzzle)
+		|| !UUOUDebugSubsystem::IsDebugScreenMessageEnabled(this, EUOUDebugCategory::Puzzle)
 		|| GEngine == nullptr)
 	{
 		return;

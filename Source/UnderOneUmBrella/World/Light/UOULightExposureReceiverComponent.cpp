@@ -96,6 +96,14 @@ void UUOULightExposureReceiverComponent::ReceiveLightExposure_Implementation(con
 
 	LastExposureIntensity = ExposureData.Intensity;
 	LastExposureSourceName = GetNameSafe(ExposureData.Source);
+	LastExposureSourceActor = Cast<AActor>(ExposureData.Source);
+	if (LastExposureSourceActor == nullptr)
+	{
+		if (const UActorComponent* SourceComponent = Cast<UActorComponent>(ExposureData.Source))
+		{
+			LastExposureSourceActor = SourceComponent->GetOwner();
+		}
+	}
 	SetReceivingLight(true);
 
 	OnLightExposureReceived.Broadcast(ExposureData);
@@ -236,7 +244,7 @@ void UUOULightExposureReceiverComponent::RecoverTemperature(float DeltaTime)
 
 void UUOULightExposureReceiverComponent::DrawTemperatureDebug() const
 {
-	if (!bDrawTemperatureDebug || !UUOUDebugSubsystem::IsDebugCategoryEnabled(this, EUOUDebugCategory::Puzzle))
+	if (!bDrawTemperatureDebug || !UUOUDebugSubsystem::IsDebugWorldLabelEnabled(this, EUOUDebugCategory::Puzzle))
 	{
 		return;
 	}

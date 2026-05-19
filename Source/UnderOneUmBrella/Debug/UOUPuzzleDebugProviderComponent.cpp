@@ -6,6 +6,7 @@
 #include "Debug/UOUPuzzleDebugInfoProvider.h"
 #include "GameFramework/Actor.h"
 #include "Puzzle/Core/UOUPuzzleConditionGroupActor.h"
+#include "Puzzle/Core/UOUPuzzleConditionSourceComponent.h"
 
 namespace UOUPuzzleDebugProviderPrivate
 {
@@ -212,8 +213,10 @@ FText UUOUPuzzleDebugProviderComponent::GetDebugSummaryText_Implementation() con
 	if (bShowConnectedActorDebugInfo && MaxConnectedActorDebugInfoLines > 0)
 	{
 		int32 UsedLineCount = 0;
+		TArray<AActor*> ResolvedInputActors;
+		CollectResolvedInputActors(ResolvedInputActors);
 
-		for (const AActor* InputActor : InputActors)
+		for (const AActor* InputActor : ResolvedInputActors)
 		{
 			UOUPuzzleDebugProviderPrivate::AppendActorDebugSection(
 				SummaryLines,
@@ -282,7 +285,10 @@ void UUOUPuzzleDebugProviderComponent::GetDebugConnections_Implementation(TArray
 
 	if (bShowInputConnections)
 	{
-		for (AActor* InputActor : InputActors)
+		TArray<AActor*> ResolvedInputActors;
+		CollectResolvedInputActors(ResolvedInputActors);
+
+		for (AActor* InputActor : ResolvedInputActors)
 		{
 			if (InputActor == nullptr)
 			{
@@ -343,4 +349,67 @@ void UUOUPuzzleDebugProviderComponent::GetDebugConnections_Implementation(TArray
 const AUOUPuzzleConditionGroupActor* UUOUPuzzleDebugProviderComponent::GetConditionGroupActor() const
 {
 	return Cast<AUOUPuzzleConditionGroupActor>(GetOwner());
+}
+
+void UUOUPuzzleDebugProviderComponent::CollectResolvedInputActors(TArray<AActor*>& OutInputActors) const
+{
+	OutInputActors.Reset();
+
+	for (AActor* InputActor : InputActors)
+	{
+		if (IsValid(InputActor))
+		{
+			OutInputActors.AddUnique(InputActor);
+		}
+	}
+
+	if (!bAutoCollectInputActorsFromConditionSources)
+	{
+		return;
+	}
+
+	const AUOUPuzzleConditionGroupActor* GroupActor = GetConditionGroupActor();
+	if (GroupActor == nullptr)
+	{
+		return;
+	}
+
+	for (const UUOUPuzzleConditionSourceComponent* ConditionSource : GroupActor->ResolvedConditionSources)
+	{
+		CollectInputActorsFromConditionSource(ConditionSource, OutInputActors);
+	}
+
+	for (AActor* ConditionActor : GroupActor->ConditionActors)
+	{
+		if (!IsValid(ConditionActor))
+		{
+			continue;
+		}
+
+		TInlineComponentArray<UUOUPuzzleConditionSourceComponent*> ConditionSources(ConditionActor);
+		for (const UUOUPuzzleConditionSourceComponent* ConditionSource : ConditionSources)
+		{
+			CollectInputActorsFromConditionSource(ConditionSource, OutInputActors);
+		}
+	}
+}
+
+void UUOUPuzzleDebugProviderComponent::CollectInputActorsFromConditionSource(
+	const UUOUPuzzleConditionSourceComponent* ConditionSource,
+	TArray<AActor*>& OutInputActors) const
+{
+	if (ConditionSource == nullptr)
+	{
+		return;
+	}
+
+	TArray<AActor*> AutoInputActors;
+	ConditionSource->GetPuzzleDebugInputActors(AutoInputActors);
+	for (AActor* InputActor : AutoInputActors)
+	{
+		if (IsValid(InputActor))
+		{
+			OutInputActors.AddUnique(InputActor);
+		}
+	}
 }

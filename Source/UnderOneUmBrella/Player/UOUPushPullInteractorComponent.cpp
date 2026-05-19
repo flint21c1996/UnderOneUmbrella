@@ -3,6 +3,7 @@
 #include "Player/UOUPushPullInteractorComponent.h"
 
 #include "Components/PrimitiveComponent.h"
+#include "Debug/UOUDebugControllerComponent.h"
 #include "Debug/UOUDebugSubsystem.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/Engine.h"
@@ -293,7 +294,7 @@ void UUOUPushPullInteractorComponent::UpdateMovementInputFallback()
 void UUOUPushPullInteractorComponent::UpdateScreenDebug() const
 {
 	if (!bShowScreenDebug
-		|| !UUOUDebugSubsystem::IsDebugCategoryEnabled(this, EUOUDebugCategory::Interaction)
+		|| !UUOUDebugSubsystem::IsDebugScreenMessageEnabled(this, EUOUDebugCategory::Interaction)
 		|| GEngine == nullptr)
 	{
 		return;
@@ -325,7 +326,7 @@ void UUOUPushPullInteractorComponent::UpdateScreenDebug() const
 
 void UUOUPushPullInteractorComponent::DrawWorldDebug() const
 {
-	if (!bShowWorldDebug || !UUOUDebugSubsystem::IsDebugCategoryEnabled(this, EUOUDebugCategory::Interaction))
+	if (!bShowWorldDebug || !UUOUDebugSubsystem::IsDebugWorldDrawEnabled(this, EUOUDebugCategory::Interaction))
 	{
 		return;
 	}
@@ -336,22 +337,32 @@ void UUOUPushPullInteractorComponent::DrawWorldDebug() const
 		return;
 	}
 
+	const UUOUDebugSubsystem* DebugSubsystem = World->GetSubsystem<UUOUDebugSubsystem>();
+	const UUOUInteractionDebugControllerComponent* InteractionController = DebugSubsystem != nullptr
+		? Cast<UUOUInteractionDebugControllerComponent>(DebugSubsystem->FindDebugControllerComponent(EUOUDebugCategory::Interaction))
+		: nullptr;
+	const bool bShowTrace = InteractionController == nullptr || InteractionController->bShowTrace;
+	const bool bShowCandidate = InteractionController == nullptr || InteractionController->bShowCandidate;
+
 	const FVector DetectionOrigin = GetDetectionOriginLocation();
 	const FColor InteractionDebugColor = UUOUDebugSubsystem::GetDebugCategoryColor(this, EUOUDebugCategory::Interaction, FColor::Orange);
 	const FColor SearchColor = UUOUDebugSubsystem::GetDebugCategoryColor(
 		this,
 		EUOUDebugCategory::Interaction,
 		CurrentCandidateObject != nullptr ? FColor::Green : FColor::Cyan);
-	DrawDebugSphere(World, DetectionOrigin, CandidateSearchRadius, 24, SearchColor, false, 0.0f, 0, 1.5f);
+	if (bShowTrace)
+	{
+		DrawDebugSphere(World, DetectionOrigin, CandidateSearchRadius, 24, SearchColor, false, 0.0f, 0, 1.5f);
+	}
 
-	if (CurrentCandidateObject != nullptr)
+	if (bShowCandidate && CurrentCandidateObject != nullptr)
 	{
 		const FVector CandidateLocation = CurrentCandidateObject->GetGrabReferenceLocation();
 		DrawDebugLine(World, DetectionOrigin, CandidateLocation, InteractionDebugColor, false, 0.0f, 0, 2.0f);
 		DrawDebugSphere(World, CandidateLocation, 14.0f, 12, InteractionDebugColor, false, 0.0f, 0, 1.5f);
 	}
 
-	if (GrabbedObject != nullptr)
+	if (bShowCandidate && GrabbedObject != nullptr)
 	{
 		const FVector GrabbedLocation = GrabbedObject->GetGrabReferenceLocation();
 		DrawDebugDirectionalArrow(

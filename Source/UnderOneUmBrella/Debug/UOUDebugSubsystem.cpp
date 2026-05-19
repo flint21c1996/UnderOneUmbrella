@@ -12,10 +12,42 @@
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "GameFramework/Actor.h"
+#include "GameFramework/PlayerController.h"
 
 namespace UOUDebugSubsystemPrivate
 {
-	FString BuildProviderLabelText(UObject* ProviderObject)
+	const UUOUDebugSubsystem* GetDebugSubsystem(const UObject* WorldContextObject)
+	{
+		if (WorldContextObject == nullptr)
+		{
+			return nullptr;
+		}
+
+		UWorld* World = WorldContextObject->GetWorld();
+		return World != nullptr ? World->GetSubsystem<UUOUDebugSubsystem>() : nullptr;
+	}
+
+	FString ClampDebugTextLines(const FString& Text, int32 MaxLineCount)
+	{
+		if (MaxLineCount <= 0 || Text.IsEmpty())
+		{
+			return Text;
+		}
+
+		TArray<FString> Lines;
+		Text.ParseIntoArrayLines(Lines, false);
+		if (Lines.Num() <= MaxLineCount)
+		{
+			return Text;
+		}
+
+		const int32 ContentLineCount = FMath::Max(0, MaxLineCount - 1);
+		Lines.SetNum(ContentLineCount);
+		Lines.Add(TEXT("..."));
+		return FString::Join(Lines, LINE_TERMINATOR);
+	}
+
+	FString BuildProviderLabelText(UObject* ProviderObject, int32 MaxLineCount)
 	{
 		const FText DisplayName = IUOUDebugProvider::Execute_GetDebugDisplayName(ProviderObject);
 		const FText SummaryText = IUOUDebugProvider::Execute_GetDebugSummaryText(ProviderObject);
@@ -30,7 +62,7 @@ namespace UOUDebugSubsystemPrivate
 			LabelText += SummaryText.ToString();
 		}
 
-		return LabelText;
+		return ClampDebugTextLines(LabelText, MaxLineCount);
 	}
 
 	bool TryGetDebugObjectLocation(const UObject* Object, FVector& OutLocation)
@@ -155,6 +187,93 @@ namespace UOUDebugSubsystemPrivate
 		DrawDebugString(World, Location, Text, nullptr, TextColor, 0.0f, bDrawShadow, TextScale);
 	}
 
+	bool TryGetViewLocation(UWorld* World, FVector& OutViewLocation)
+	{
+		if (World == nullptr)
+		{
+			return false;
+		}
+
+		APlayerController* PlayerController = World->GetFirstPlayerController();
+		if (PlayerController == nullptr)
+		{
+			return false;
+		}
+
+		FRotator ViewRotation = FRotator::ZeroRotator;
+		PlayerController->GetPlayerViewPoint(OutViewLocation, ViewRotation);
+		return true;
+	}
+
+	struct FProviderDrawCandidate
+	{
+		UObject* ProviderObject = nullptr;
+		float DistanceSquared = 0.0f;
+	};
+
+	void GatherProviderDrawCandidates(
+		const TArray<TWeakObjectPtr<UObject>>& RegisteredProviders,
+		UWorld* World,
+		const AUOUDebugController* DebugController,
+		bool bLabelPass,
+		TArray<UObject*>& OutProviderObjects)
+	{
+		OutProviderObjects.Reset();
+
+		FVector ViewLocation = FVector::ZeroVector;
+		const bool bHasViewLocation = TryGetViewLocation(World, ViewLocation);
+		const float MaxVisibleDistance = DebugController != nullptr ? DebugController->WorldDebugVisibleDistance : 0.0f;
+		const float MaxVisibleDistanceSquared = FMath::Square(MaxVisibleDistance);
+
+		TArray<FProviderDrawCandidate> Candidates;
+		for (const TWeakObjectPtr<UObject>& RegisteredProvider : RegisteredProviders)
+		{
+			UObject* ProviderObject = RegisteredProvider.Get();
+			const bool bShouldDraw = bLabelPass
+				? ShouldDrawProviderLabel(ProviderObject, DebugController)
+				: ShouldDrawProviderConnections(ProviderObject, DebugController);
+			if (!bShouldDraw)
+			{
+				continue;
+			}
+
+			float DistanceSquared = 0.0f;
+			if (bHasViewLocation)
+			{
+				FVector ProviderLocation = FVector::ZeroVector;
+				if (TryGetDebugObjectLocation(ProviderObject, ProviderLocation))
+				{
+					DistanceSquared = FVector::DistSquared(ViewLocation, ProviderLocation);
+					if (MaxVisibleDistance > 0.0f && DistanceSquared > MaxVisibleDistanceSquared)
+					{
+						continue;
+					}
+				}
+			}
+
+			Candidates.Add({ ProviderObject, DistanceSquared });
+		}
+
+		if (bHasViewLocation)
+		{
+			Candidates.Sort(
+				[](const FProviderDrawCandidate& Left, const FProviderDrawCandidate& Right)
+				{
+					return Left.DistanceSquared < Right.DistanceSquared;
+				});
+		}
+
+		const int32 MaxVisibleItems = DebugController != nullptr
+			? FMath::Max(1, DebugController->MaxVisibleWorldDebugItems)
+			: Candidates.Num();
+		const int32 VisibleCount = FMath::Min(MaxVisibleItems, Candidates.Num());
+		OutProviderObjects.Reserve(VisibleCount);
+		for (int32 Index = 0; Index < VisibleCount; ++Index)
+		{
+			OutProviderObjects.Add(Candidates[Index].ProviderObject);
+		}
+	}
+
 }
 
 void UUOUDebugSubsystem::Initialize(FSubsystemCollectionBase& Collection)
@@ -255,21 +374,168 @@ bool UUOUDebugSubsystem::IsDebugEnabled(EUOUDebugCategory Category) const
 	return DebugController != nullptr && DebugController->IsCategoryEnabled(Category);
 }
 
+bool UUOUDebugSubsystem::IsScreenMessageEnabled(EUOUDebugCategory Category) const
+{
+	if (!IsDebugEnabled(Category))
+	{
+		return false;
+	}
+
+	switch (Category)
+	{
+	case EUOUDebugCategory::Player:
+		if (const UUOUPlayerDebugControllerComponent* PlayerController =
+			Cast<UUOUPlayerDebugControllerComponent>(FindDebugControllerComponent(Category)))
+		{
+			return PlayerController->bShowViewportHUD;
+		}
+		return true;
+	case EUOUDebugCategory::Interaction:
+		if (const UUOUInteractionDebugControllerComponent* InteractionController =
+			Cast<UUOUInteractionDebugControllerComponent>(FindDebugControllerComponent(Category)))
+		{
+			return InteractionController->bShowScreenDebug;
+		}
+		return true;
+	case EUOUDebugCategory::Puzzle:
+		if (const UUOUPuzzleDebugControllerComponent* PuzzleController =
+			Cast<UUOUPuzzleDebugControllerComponent>(FindDebugControllerComponent(Category)))
+		{
+			return PuzzleController->bShowSummaryText;
+		}
+		return true;
+	case EUOUDebugCategory::Performance:
+		if (const UUOUPerformanceDebugControllerComponent* PerformanceController =
+			Cast<UUOUPerformanceDebugControllerComponent>(FindDebugControllerComponent(Category)))
+		{
+			return PerformanceController->bShowViewportStats;
+		}
+		return true;
+	default:
+		return true;
+	}
+}
+
+bool UUOUDebugSubsystem::IsWorldDrawEnabled(EUOUDebugCategory Category) const
+{
+	if (!IsDebugEnabled(Category))
+	{
+		return false;
+	}
+
+	switch (Category)
+	{
+	case EUOUDebugCategory::Player:
+		if (const UUOUPlayerDebugControllerComponent* PlayerController =
+			Cast<UUOUPlayerDebugControllerComponent>(FindDebugControllerComponent(Category)))
+		{
+			return PlayerController->bShowWorldDebug;
+		}
+		return true;
+	case EUOUDebugCategory::NPC:
+		if (const UUOUNPCDebugControllerComponent* NPCController =
+			Cast<UUOUNPCDebugControllerComponent>(FindDebugControllerComponent(Category)))
+		{
+			return NPCController->bShowMoveTarget || NPCController->bShowPath;
+		}
+		return true;
+	case EUOUDebugCategory::Puzzle:
+		if (const UUOUPuzzleDebugControllerComponent* PuzzleController =
+			Cast<UUOUPuzzleDebugControllerComponent>(FindDebugControllerComponent(Category)))
+		{
+			return PuzzleController->bShowConnections;
+		}
+		return true;
+	case EUOUDebugCategory::Interaction:
+		if (const UUOUInteractionDebugControllerComponent* InteractionController =
+			Cast<UUOUInteractionDebugControllerComponent>(FindDebugControllerComponent(Category)))
+		{
+			return InteractionController->bShowTrace || InteractionController->bShowCandidate;
+		}
+		return true;
+	case EUOUDebugCategory::VFX:
+		if (const UUOUVFXDebugControllerComponent* VFXController =
+			Cast<UUOUVFXDebugControllerComponent>(FindDebugControllerComponent(Category)))
+		{
+			return VFXController->bShowWorldDebug;
+		}
+		return true;
+	default:
+		return true;
+	}
+}
+
+bool UUOUDebugSubsystem::IsWorldLabelEnabled(EUOUDebugCategory Category) const
+{
+	if (!IsDebugEnabled(Category))
+	{
+		return false;
+	}
+
+	switch (Category)
+	{
+	case EUOUDebugCategory::Player:
+		if (const UUOUPlayerDebugControllerComponent* PlayerController =
+			Cast<UUOUPlayerDebugControllerComponent>(FindDebugControllerComponent(Category)))
+		{
+			return PlayerController->bShowWorldDebug;
+		}
+		return true;
+	case EUOUDebugCategory::NPC:
+		if (const UUOUNPCDebugControllerComponent* NPCController =
+			Cast<UUOUNPCDebugControllerComponent>(FindDebugControllerComponent(Category)))
+		{
+			return NPCController->bShowWorldLabels;
+		}
+		return true;
+	case EUOUDebugCategory::Puzzle:
+		if (const UUOUPuzzleDebugControllerComponent* PuzzleController =
+			Cast<UUOUPuzzleDebugControllerComponent>(FindDebugControllerComponent(Category)))
+		{
+			return PuzzleController->bShowWorldLabels;
+		}
+		return true;
+	case EUOUDebugCategory::Interaction:
+		if (const UUOUInteractionDebugControllerComponent* InteractionController =
+			Cast<UUOUInteractionDebugControllerComponent>(FindDebugControllerComponent(Category)))
+		{
+			return InteractionController->bShowCandidate;
+		}
+		return true;
+	case EUOUDebugCategory::VFX:
+		if (const UUOUVFXDebugControllerComponent* VFXController =
+			Cast<UUOUVFXDebugControllerComponent>(FindDebugControllerComponent(Category)))
+		{
+			return VFXController->bShowWorldDebug;
+		}
+		return true;
+	default:
+		return true;
+	}
+}
+
 bool UUOUDebugSubsystem::IsDebugCategoryEnabled(const UObject* WorldContextObject, EUOUDebugCategory Category)
 {
-	if (WorldContextObject == nullptr)
-	{
-		return false;
-	}
-
-	UWorld* World = WorldContextObject->GetWorld();
-	if (World == nullptr)
-	{
-		return false;
-	}
-
-	const UUOUDebugSubsystem* DebugSubsystem = World->GetSubsystem<UUOUDebugSubsystem>();
+	const UUOUDebugSubsystem* DebugSubsystem = UOUDebugSubsystemPrivate::GetDebugSubsystem(WorldContextObject);
 	return DebugSubsystem != nullptr && DebugSubsystem->IsDebugEnabled(Category);
+}
+
+bool UUOUDebugSubsystem::IsDebugScreenMessageEnabled(const UObject* WorldContextObject, EUOUDebugCategory Category)
+{
+	const UUOUDebugSubsystem* DebugSubsystem = UOUDebugSubsystemPrivate::GetDebugSubsystem(WorldContextObject);
+	return DebugSubsystem != nullptr && DebugSubsystem->IsScreenMessageEnabled(Category);
+}
+
+bool UUOUDebugSubsystem::IsDebugWorldDrawEnabled(const UObject* WorldContextObject, EUOUDebugCategory Category)
+{
+	const UUOUDebugSubsystem* DebugSubsystem = UOUDebugSubsystemPrivate::GetDebugSubsystem(WorldContextObject);
+	return DebugSubsystem != nullptr && DebugSubsystem->IsWorldDrawEnabled(Category);
+}
+
+bool UUOUDebugSubsystem::IsDebugWorldLabelEnabled(const UObject* WorldContextObject, EUOUDebugCategory Category)
+{
+	const UUOUDebugSubsystem* DebugSubsystem = UOUDebugSubsystemPrivate::GetDebugSubsystem(WorldContextObject);
+	return DebugSubsystem != nullptr && DebugSubsystem->IsWorldLabelEnabled(Category);
 }
 
 FColor UUOUDebugSubsystem::GetDebugCategoryColor(const UObject* WorldContextObject, EUOUDebugCategory Category, FColor FallbackColor)
@@ -366,16 +632,13 @@ void UUOUDebugSubsystem::DrawRegisteredProviderLabelBoards() const
 		return;
 	}
 
-	for (const TWeakObjectPtr<UObject>& RegisteredProvider : RegisteredProviders)
-	{
-		UObject* ProviderObject = RegisteredProvider.Get();
-		if (!UOUDebugSubsystemPrivate::ShouldDrawProviderLabel(ProviderObject, DebugController))
-		{
-			continue;
-		}
+	TArray<UObject*> ProviderObjects;
+	UOUDebugSubsystemPrivate::GatherProviderDrawCandidates(RegisteredProviders, World, DebugController, true, ProviderObjects);
 
+	for (UObject* ProviderObject : ProviderObjects)
+	{
 		const FVector LabelLocation = IUOUDebugProvider::Execute_GetDebugWorldLocation(ProviderObject);
-		const FString LabelText = UOUDebugSubsystemPrivate::BuildProviderLabelText(ProviderObject);
+		const FString LabelText = UOUDebugSubsystemPrivate::BuildProviderLabelText(ProviderObject, DebugController->MaxWorldDebugLabelLines);
 		const EUOUDebugCategory Category = IUOUDebugProvider::Execute_GetDebugCategory(ProviderObject);
 		const FColor LabelColor = DebugController->GetDebugCategoryColor(Category);
 		UOUDebugSubsystemPrivate::DrawReadableDebugString(World, LabelLocation, LabelText, DebugController, LabelColor, 1.0f);
@@ -391,14 +654,11 @@ void UUOUDebugSubsystem::DrawRegisteredProviderConnections() const
 		return;
 	}
 
-	for (const TWeakObjectPtr<UObject>& RegisteredProvider : RegisteredProviders)
-	{
-		UObject* ProviderObject = RegisteredProvider.Get();
-		if (!UOUDebugSubsystemPrivate::ShouldDrawProviderConnections(ProviderObject, DebugController))
-		{
-			continue;
-		}
+	TArray<UObject*> ProviderObjects;
+	UOUDebugSubsystemPrivate::GatherProviderDrawCandidates(RegisteredProviders, World, DebugController, false, ProviderObjects);
 
+	for (UObject* ProviderObject : ProviderObjects)
+	{
 		TArray<FUOUDebugConnection> Connections;
 		IUOUDebugProvider::Execute_GetDebugConnections(ProviderObject, Connections);
 

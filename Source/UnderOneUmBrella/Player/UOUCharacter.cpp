@@ -151,7 +151,7 @@ void AUOUCharacter::Tick(float DeltaSeconds)
 	}
 
 	if (!bShowContextInputDebug
-		|| !UUOUDebugSubsystem::IsDebugCategoryEnabled(this, EUOUDebugCategory::Player)
+		|| !UUOUDebugSubsystem::IsDebugScreenMessageEnabled(this, EUOUDebugCategory::Player)
 		|| !IsLocallyControlled()
 		|| GEngine == nullptr)
 	{

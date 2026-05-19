@@ -8,7 +8,7 @@
 #include "UOUDebugControllerComponent.generated.h"
 
 // AUOUDebugController가 제어하는 디버그 카테고리별 기본 컴포넌트입니다.
-UCLASS(Abstract, Blueprintable, ClassGroup=(Debug), meta=(BlueprintSpawnableComponent))
+UCLASS(Abstract, Blueprintable, ClassGroup=(Debug), HideCategories=("Debug|Common", Common), meta=(BlueprintSpawnableComponent))
 class UNDERONEUMBRELLA_API UUOUDebugControllerComponentBase : public UActorComponent
 {
 	GENERATED_BODY()
@@ -16,16 +16,16 @@ class UNDERONEUMBRELLA_API UUOUDebugControllerComponentBase : public UActorCompo
 public:
 	UUOUDebugControllerComponentBase();
 
-	UPROPERTY(BlueprintReadWrite, Transient, Category = "Debug|Common", meta = (ToolTip = "런타임에서 이 디버그 카테고리를 켜거나 끕니다."))
+	UPROPERTY(BlueprintReadWrite, Transient, AdvancedDisplay, Category = "Debug|Common", meta = (ToolTip = "런타임에서 이 디버그 카테고리를 켜거나 끕니다."))
 	bool bEnabled = true;
 
-	UPROPERTY(BlueprintReadOnly, Category = "Debug|Common", meta = (ToolTip = "이 컴포넌트가 담당하는 디버그 카테고리입니다."))
+	UPROPERTY(BlueprintReadOnly, AdvancedDisplay, Category = "Debug|Common", meta = (ToolTip = "이 컴포넌트가 담당하는 디버그 카테고리입니다."))
 	EUOUDebugCategory DebugCategory = EUOUDebugCategory::System;
 
-	UPROPERTY(BlueprintReadWrite, Category = "Debug|Common", meta = (ToolTip = "디버그 라인, 라벨, 보조 표시에 사용할 기본 색상입니다."))
+	UPROPERTY(BlueprintReadWrite, AdvancedDisplay, Category = "Debug|Common", meta = (ToolTip = "디버그 라인, 라벨, 보조 표시에 사용할 기본 색상입니다."))
 	FColor DebugColor = FColor::White;
 
-	UPROPERTY(BlueprintReadWrite, Category = "Debug|Common", meta = (ToolTip = "표시 우선순위입니다. 값이 높을수록 예산 제한이 생겼을 때 먼저 표시됩니다."))
+	UPROPERTY(BlueprintReadWrite, AdvancedDisplay, Category = "Debug|Common", meta = (ToolTip = "표시 우선순위입니다. 값이 높을수록 예산 제한이 생겼을 때 먼저 표시됩니다."))
 	int32 Priority = 0;
 
 	UFUNCTION(BlueprintCallable, Category = "Debug")
@@ -38,7 +38,7 @@ public:
 	FName GetDebugCategoryName() const;
 };
 
-UCLASS(ClassGroup=(Debug), meta=(BlueprintSpawnableComponent, DisplayName = "UOU Player Debug Controller"))
+UCLASS(ClassGroup=(Debug), HideCategories=("Debug|Common", Common), meta=(BlueprintSpawnableComponent, DisplayName = "UOU Player Debug Controller"))
 class UNDERONEUMBRELLA_API UUOUPlayerDebugControllerComponent : public UUOUDebugControllerComponentBase
 {
 	GENERATED_BODY()
@@ -47,7 +47,10 @@ public:
 	UUOUPlayerDebugControllerComponent();
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Player", meta = (ToolTip = "메인 뷰포트에 플레이어 디버그 정보를 표시합니다."))
-	bool bShowViewportHUD = true;
+	bool bShowViewportHUD = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Player", meta = (ToolTip = "플레이어 주변 월드 디버그 도형과 보조선을 표시합니다."))
+	bool bShowWorldDebug = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Player", meta = (ToolTip = "현재 플레이어 상호작용 대상을 포함합니다."))
 	bool bShowInteractionTarget = true;
@@ -56,7 +59,7 @@ public:
 	bool bShowMovementState = true;
 };
 
-UCLASS(ClassGroup=(Debug), meta=(BlueprintSpawnableComponent, DisplayName = "UOU NPC Debug Controller"))
+UCLASS(ClassGroup=(Debug), HideCategories=("Debug|Common", Common), meta=(BlueprintSpawnableComponent, DisplayName = "UOU NPC Debug Controller"))
 class UNDERONEUMBRELLA_API UUOUNPCDebugControllerComponent : public UUOUDebugControllerComponentBase
 {
 	GENERATED_BODY()
@@ -80,7 +83,7 @@ public:
 	bool bShowAnimation = true;
 };
 
-UCLASS(ClassGroup=(Debug), meta=(BlueprintSpawnableComponent, DisplayName = "UOU Puzzle Debug Controller"))
+UCLASS(ClassGroup=(Debug), HideCategories=("Debug|Common", Common), meta=(BlueprintSpawnableComponent, DisplayName = "UOU Puzzle Debug Controller"))
 class UNDERONEUMBRELLA_API UUOUPuzzleDebugControllerComponent : public UUOUDebugControllerComponentBase
 {
 	GENERATED_BODY()
@@ -101,13 +104,16 @@ public:
 	bool bShowNodeState = true;
 };
 
-UCLASS(ClassGroup=(Debug), meta=(BlueprintSpawnableComponent, DisplayName = "UOU Interaction Debug Controller"))
+UCLASS(ClassGroup=(Debug), HideCategories=("Debug|Common", Common), meta=(BlueprintSpawnableComponent, DisplayName = "UOU Interaction Debug Controller"))
 class UNDERONEUMBRELLA_API UUOUInteractionDebugControllerComponent : public UUOUDebugControllerComponentBase
 {
 	GENERATED_BODY()
 
 public:
 	UUOUInteractionDebugControllerComponent();
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Interaction", meta = (ToolTip = "메인 뷰포트에 상호작용 디버그 정보를 표시합니다."))
+	bool bShowScreenDebug = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Interaction", meta = (ToolTip = "상호작용 트레이스 범위와 방향을 표시합니다."))
 	bool bShowTrace = true;
@@ -119,13 +125,16 @@ public:
 	bool bShowFailReason = false;
 };
 
-UCLASS(ClassGroup=(Debug), meta=(BlueprintSpawnableComponent, DisplayName = "UOU VFX Debug Controller"))
+UCLASS(ClassGroup=(Debug), HideCategories=("Debug|Common", Common), meta=(BlueprintSpawnableComponent, DisplayName = "UOU VFX Debug Controller"))
 class UNDERONEUMBRELLA_API UUOUVFXDebugControllerComponent : public UUOUDebugControllerComponentBase
 {
 	GENERATED_BODY()
 
 public:
 	UUOUVFXDebugControllerComponent();
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|VFX", meta = (ToolTip = "VFX 관련 월드 디버그 도형과 보조선을 표시합니다."))
+	bool bShowWorldDebug = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|VFX", meta = (ToolTip = "활성 VFX 또는 파티클 수를 표시합니다."))
 	bool bShowParticleCount = true;
@@ -134,7 +143,7 @@ public:
 	bool bShowNiagaraOwners = false;
 };
 
-UCLASS(ClassGroup=(Debug), meta=(BlueprintSpawnableComponent, DisplayName = "UOU Performance Debug Controller"))
+UCLASS(ClassGroup=(Debug), HideCategories=("Debug|Common", Common), meta=(BlueprintSpawnableComponent, DisplayName = "UOU Performance Debug Controller"))
 class UNDERONEUMBRELLA_API UUOUPerformanceDebugControllerComponent : public UUOUDebugControllerComponentBase
 {
 	GENERATED_BODY()

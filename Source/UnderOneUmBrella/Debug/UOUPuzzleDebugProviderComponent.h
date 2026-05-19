@@ -7,6 +7,7 @@
 #include "UOUPuzzleDebugProviderComponent.generated.h"
 
 class AUOUPuzzleConditionGroupActor;
+class UUOUPuzzleConditionSourceComponent;
 
 // 입력, 조건, 결과 액터 관계를 시각화하는 퍼즐 디버그 provider입니다.
 UCLASS(ClassGroup=(Debug), meta=(BlueprintSpawnableComponent, DisplayName = "UOU Puzzle Debug Provider"))
@@ -19,6 +20,9 @@ public:
 
 	UPROPERTY(EditInstanceOnly, BlueprintReadWrite, Category = "Debug|Puzzle", meta = (ToolTip = "버튼, 광원, 레버처럼 퍼즐 조건에 직접 영향을 주는 액터 목록입니다."))
 	TArray<TObjectPtr<AActor>> InputActors;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Puzzle", meta = (ToolTip = "켜면 조건 소스 컴포넌트에서 런타임 input 액터를 자동으로 수집합니다."))
+	bool bAutoCollectInputActorsFromConditionSources = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Puzzle", meta = (ToolTip = "입력 액터에서 조건 액터로 이어지는 연결선을 표시합니다."))
 	bool bShowInputConnections = true;
@@ -73,4 +77,6 @@ public:
 
 private:
 	const AUOUPuzzleConditionGroupActor* GetConditionGroupActor() const;
+	void CollectResolvedInputActors(TArray<AActor*>& OutInputActors) const;
+	void CollectInputActorsFromConditionSource(const UUOUPuzzleConditionSourceComponent* ConditionSource, TArray<AActor*>& OutInputActors) const;
 };

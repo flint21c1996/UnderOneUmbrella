@@ -688,7 +688,7 @@ FTransform UUOUUmbrellaComponent::GetHeldVisualRelativeTransform(const FVector& 
 void UUOUUmbrellaComponent::DrawScreenDebug() const
 {
 	if (!bShowScreenDebug
-		|| !UUOUDebugSubsystem::IsDebugCategoryEnabled(this, EUOUDebugCategory::Player)
+		|| !UUOUDebugSubsystem::IsDebugScreenMessageEnabled(this, EUOUDebugCategory::Player)
 		|| GEngine == nullptr)
 	{
 		return;
@@ -732,7 +732,7 @@ void UUOUUmbrellaComponent::DrawScreenDebug() const
 // 우산이 비를 막는 중심과 범위를 월드에 그려 RainArea 판정 위치를 눈으로 확인합니다.
 void UUOUUmbrellaComponent::DrawRainBlockerDebug() const
 {
-	if (!bDrawRainBlockerDebug || !UUOUDebugSubsystem::IsDebugCategoryEnabled(this, EUOUDebugCategory::Player))
+	if (!bDrawRainBlockerDebug || !UUOUDebugSubsystem::IsDebugWorldDrawEnabled(this, EUOUDebugCategory::Player))
 	{
 		return;
 	}
@@ -806,7 +806,7 @@ void UUOUUmbrellaComponent::DrawPourTraceDebug() const
 {
 	if (!bDrawPourTraceDebug
 		|| !bHasLastPourTrace
-		|| !UUOUDebugSubsystem::IsDebugCategoryEnabled(this, EUOUDebugCategory::Player))
+		|| !UUOUDebugSubsystem::IsDebugWorldDrawEnabled(this, EUOUDebugCategory::Player))
 	{
 		return;
 	}

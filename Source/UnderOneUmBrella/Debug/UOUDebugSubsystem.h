@@ -40,8 +40,21 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Debug")
 	bool IsDebugEnabled(EUOUDebugCategory Category) const;
 
+	bool IsScreenMessageEnabled(EUOUDebugCategory Category) const;
+	bool IsWorldDrawEnabled(EUOUDebugCategory Category) const;
+	bool IsWorldLabelEnabled(EUOUDebugCategory Category) const;
+
 	UFUNCTION(BlueprintPure, Category = "Debug", meta = (WorldContext = "WorldContextObject"))
 	static bool IsDebugCategoryEnabled(const UObject* WorldContextObject, EUOUDebugCategory Category);
+
+	UFUNCTION(BlueprintPure, Category = "Debug", meta = (WorldContext = "WorldContextObject"))
+	static bool IsDebugScreenMessageEnabled(const UObject* WorldContextObject, EUOUDebugCategory Category);
+
+	UFUNCTION(BlueprintPure, Category = "Debug", meta = (WorldContext = "WorldContextObject"))
+	static bool IsDebugWorldDrawEnabled(const UObject* WorldContextObject, EUOUDebugCategory Category);
+
+	UFUNCTION(BlueprintPure, Category = "Debug", meta = (WorldContext = "WorldContextObject"))
+	static bool IsDebugWorldLabelEnabled(const UObject* WorldContextObject, EUOUDebugCategory Category);
 
 	UFUNCTION(BlueprintPure, Category = "Debug", meta = (WorldContext = "WorldContextObject"))
 	static FColor GetDebugCategoryColor(const UObject* WorldContextObject, EUOUDebugCategory Category, FColor FallbackColor);

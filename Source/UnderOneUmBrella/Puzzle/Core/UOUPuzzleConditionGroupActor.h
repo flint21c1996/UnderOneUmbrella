@@ -10,6 +10,7 @@
 
 class USceneComponent;
 class UUOUPuzzleConditionSourceComponent;
+class UUOUPuzzleDebugProviderComponent;
 
 // 조건 그룹이 만족되거나 해제될 때 어떤 액터에 어떤 결과를 보낼지 묶어두는 설정입니다.
 // 하나의 그룹 액터가 여러 결과 액터를 동시에 제어할 수 있게 도와줍니다.
@@ -85,6 +86,9 @@ public:
 	// 실제 조건 만족 계산을 담당하는 내부 그룹 컴포넌트입니다.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Puzzle|Group Actor")
 	TObjectPtr<UUOUPuzzleConditionGroupComponent> PuzzleConditionGroupComponent = nullptr;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Puzzle|Group Actor|Debug")
+	TObjectPtr<UUOUPuzzleDebugProviderComponent> PuzzleDebugProviderComponent = nullptr;
 
 	// 현재 연결된 조건 액터 목록을 다시 해석해서 그룹 상태를 갱신합니다.
 	UFUNCTION(BlueprintCallable, Category = "Puzzle|Group Actor|Conditions")
