@@ -154,11 +154,20 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Performance", meta = (ToolTip = "메인 뷰포트에 성능 정보를 표시합니다."))
 	bool bShowViewportStats = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Performance", meta = (ToolTip = "현재 FPS 값을 표시합니다."))
-	bool bShowFPS = true;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Performance", meta = (ClampMin = "0.05", UIMin = "0.05", ToolTip = "성능 표시 값을 다시 계산하는 주기입니다. 값이 낮을수록 숫자가 빠르게 흔들립니다."))
+	float ViewportStatsUpdateInterval = 0.5f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Performance", meta = (ToolTip = "프레임 시간을 ms 단위로 표시합니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Performance", meta = (ToolTip = "현재 FPS 값을 표시합니다."))
+	bool bShowFPS = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Performance", meta = (ToolTip = "Frame, Game, Draw, RHI, GPU, Input 시간을 ms 단위로 표시합니다."))
 	bool bShowFrameTime = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Performance", meta = (ToolTip = "현재 프로세스 메모리 사용량을 표시합니다."))
+	bool bShowMemory = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Performance", meta = (ToolTip = "렌더 해상도, 드로우콜, 프리미티브 수를 표시합니다."))
+	bool bShowRenderStats = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Performance", meta = (ToolTip = "액터, 컴포넌트, 월드 개수 요약을 표시합니다."))
 	bool bShowWorldCounts = false;

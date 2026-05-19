@@ -6,13 +6,25 @@
 #include "Debug/UOUDebugControllerComponent.h"
 #include "Debug/UOUDebugProvider.h"
 #include "Debug/UOUPuzzleDebugProviderComponent.h"
+#include "CollisionQueryParams.h"
+#include "Components/ActorComponent.h"
 #include "Components/SceneComponent.h"
 #include "DrawDebugHelpers.h"
+#include "DynamicRHI.h"
 #include "Engine/Engine.h"
+#include "Engine/GameViewportClient.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "GameFramework/Actor.h"
 #include "GameFramework/PlayerController.h"
+#include "HAL/PlatformMemory.h"
+#include "NiagaraComponent.h"
+#include "Particles/ParticleSystemComponent.h"
+#include "RHICommandList.h"
+#include "RHIStats.h"
+#include "RenderCounters.h"
+#include "RenderTimer.h"
+#include "UnrealClient.h"
 
 namespace UOUDebugSubsystemPrivate
 {
@@ -45,6 +57,43 @@ namespace UOUDebugSubsystemPrivate
 		Lines.SetNum(ContentLineCount);
 		Lines.Add(TEXT("..."));
 		return FString::Join(Lines, LINE_TERMINATOR);
+	}
+
+	FString FormatMemoryGB(uint64 Bytes)
+	{
+		constexpr double BytesPerGB = 1024.0 * 1024.0 * 1024.0;
+		return FString::Printf(TEXT("%.2f GB"), static_cast<double>(Bytes) / BytesPerGB);
+	}
+
+	FString FormatCompactCount(int32 Count)
+	{
+		if (Count >= 1000000)
+		{
+			return FString::Printf(TEXT("%.1fM"), Count / 1000000.0f);
+		}
+
+		if (Count >= 10000)
+		{
+			return FString::Printf(TEXT("%.1fK"), Count / 1000.0f);
+		}
+
+		return FString::FromInt(Count);
+	}
+
+	FIntPoint GetFallbackViewportSize(const UWorld* World)
+	{
+		if (World == nullptr)
+		{
+			return FIntPoint::ZeroValue;
+		}
+
+		const UGameViewportClient* GameViewport = World->GetGameViewport();
+		if (GameViewport == nullptr || GameViewport->Viewport == nullptr)
+		{
+			return FIntPoint::ZeroValue;
+		}
+
+		return GameViewport->Viewport->GetSizeXY();
 	}
 
 	FString BuildProviderLabelText(UObject* ProviderObject, int32 MaxLineCount)
@@ -187,7 +236,7 @@ namespace UOUDebugSubsystemPrivate
 		DrawDebugString(World, Location, Text, nullptr, TextColor, 0.0f, bDrawShadow, TextScale);
 	}
 
-	bool TryGetViewLocation(UWorld* World, FVector& OutViewLocation)
+	bool TryGetViewPoint(UWorld* World, FVector& OutViewLocation, FRotator& OutViewRotation)
 	{
 		if (World == nullptr)
 		{
@@ -200,16 +249,97 @@ namespace UOUDebugSubsystemPrivate
 			return false;
 		}
 
-		FRotator ViewRotation = FRotator::ZeroRotator;
-		PlayerController->GetPlayerViewPoint(OutViewLocation, ViewRotation);
+		PlayerController->GetPlayerViewPoint(OutViewLocation, OutViewRotation);
 		return true;
+	}
+
+	bool TryGetViewLocation(UWorld* World, FVector& OutViewLocation)
+	{
+		FRotator ViewRotation = FRotator::ZeroRotator;
+		return TryGetViewPoint(World, OutViewLocation, ViewRotation);
+	}
+
+	AActor* GetDebugObjectOwnerActor(UObject* Object)
+	{
+		if (AActor* Actor = Cast<AActor>(Object))
+		{
+			return Actor;
+		}
+
+		if (UActorComponent* ActorComponent = Cast<UActorComponent>(Object))
+		{
+			return ActorComponent->GetOwner();
+		}
+
+		return nullptr;
+	}
+
+	bool IsFocusTraceHitObject(const FHitResult& FocusHit, UObject* Object)
+	{
+		if (Object == nullptr)
+		{
+			return false;
+		}
+
+		if (FocusHit.GetActor() != nullptr && FocusHit.GetActor() == GetDebugObjectOwnerActor(Object))
+		{
+			return true;
+		}
+
+		if (UActorComponent* ActorComponent = Cast<UActorComponent>(Object))
+		{
+			return FocusHit.GetComponent() != nullptr && FocusHit.GetComponent() == ActorComponent;
+		}
+
+		return false;
+	}
+
+	bool TryGetFocusTraceHit(UWorld* World, const FVector& ViewLocation, const FRotator& ViewRotation, float TraceDistance, FHitResult& OutHit)
+	{
+		if (World == nullptr || TraceDistance <= 0.0f)
+		{
+			return false;
+		}
+
+		const FVector TraceStart = ViewLocation;
+		const FVector TraceEnd = TraceStart + (ViewRotation.Vector() * TraceDistance);
+		FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(UOUDebugFocusTrace), true);
+		return World->LineTraceSingleByChannel(OutHit, TraceStart, TraceEnd, ECC_Visibility, QueryParams);
 	}
 
 	struct FProviderDrawCandidate
 	{
 		UObject* ProviderObject = nullptr;
 		float DistanceSquared = 0.0f;
+		float ViewDot = -1.0f;
+		bool bHitByFocusTrace = false;
 	};
+
+	int32 FindFocusedProviderCandidateIndex(const TArray<FProviderDrawCandidate>& Candidates)
+	{
+		int32 BestHitIndex = INDEX_NONE;
+		int32 BestViewIndex = INDEX_NONE;
+
+		for (int32 Index = 0; Index < Candidates.Num(); ++Index)
+		{
+			const FProviderDrawCandidate& Candidate = Candidates[Index];
+			if (Candidate.bHitByFocusTrace
+				&& (BestHitIndex == INDEX_NONE || Candidate.DistanceSquared < Candidates[BestHitIndex].DistanceSquared))
+			{
+				BestHitIndex = Index;
+			}
+
+			if (BestViewIndex == INDEX_NONE
+				|| Candidate.ViewDot > Candidates[BestViewIndex].ViewDot
+				|| (FMath::IsNearlyEqual(Candidate.ViewDot, Candidates[BestViewIndex].ViewDot)
+					&& Candidate.DistanceSquared < Candidates[BestViewIndex].DistanceSquared))
+			{
+				BestViewIndex = Index;
+			}
+		}
+
+		return BestHitIndex != INDEX_NONE ? BestHitIndex : BestViewIndex;
+	}
 
 	void GatherProviderDrawCandidates(
 		const TArray<TWeakObjectPtr<UObject>>& RegisteredProviders,
@@ -221,9 +351,20 @@ namespace UOUDebugSubsystemPrivate
 		OutProviderObjects.Reset();
 
 		FVector ViewLocation = FVector::ZeroVector;
-		const bool bHasViewLocation = TryGetViewLocation(World, ViewLocation);
+		FRotator ViewRotation = FRotator::ZeroRotator;
+		const bool bHasViewLocation = TryGetViewPoint(World, ViewLocation, ViewRotation);
+		const FVector ViewDirection = ViewRotation.Vector();
 		const float MaxVisibleDistance = DebugController != nullptr ? DebugController->WorldDebugVisibleDistance : 0.0f;
 		const float MaxVisibleDistanceSquared = FMath::Square(MaxVisibleDistance);
+		const bool bFocusMode = DebugController != nullptr && DebugController->bOnlyShowFocusedActor;
+
+		FHitResult FocusHit;
+		const bool bHasFocusHit = bFocusMode && bHasViewLocation && TryGetFocusTraceHit(
+			World,
+			ViewLocation,
+			ViewRotation,
+			MaxVisibleDistance > 0.0f ? MaxVisibleDistance : 10000.0f,
+			FocusHit);
 
 		TArray<FProviderDrawCandidate> Candidates;
 		for (const TWeakObjectPtr<UObject>& RegisteredProvider : RegisteredProviders)
@@ -238,6 +379,7 @@ namespace UOUDebugSubsystemPrivate
 			}
 
 			float DistanceSquared = 0.0f;
+			float ViewDot = -1.0f;
 			if (bHasViewLocation)
 			{
 				FVector ProviderLocation = FVector::ZeroVector;
@@ -248,10 +390,23 @@ namespace UOUDebugSubsystemPrivate
 					{
 						continue;
 					}
+
+					const FVector ToProvider = (ProviderLocation - ViewLocation).GetSafeNormal();
+					ViewDot = FVector::DotProduct(ViewDirection, ToProvider);
 				}
 			}
 
-			Candidates.Add({ ProviderObject, DistanceSquared });
+			Candidates.Add({ ProviderObject, DistanceSquared, ViewDot, bHasFocusHit && IsFocusTraceHitObject(FocusHit, ProviderObject) });
+		}
+
+		if (bFocusMode)
+		{
+			const int32 FocusedIndex = FindFocusedProviderCandidateIndex(Candidates);
+			if (Candidates.IsValidIndex(FocusedIndex))
+			{
+				OutProviderObjects.Add(Candidates[FocusedIndex].ProviderObject);
+			}
+			return;
 		}
 
 		if (bHasViewLocation)
@@ -282,12 +437,17 @@ void UUOUDebugSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 
 	ControllerSearchTimeRemaining = 0.0f;
 	ProviderCompactTimeRemaining = 0.0f;
+	PerformanceStatsUpdateTimeRemaining = 0.0f;
+	PerformanceStatsAccumulatedDeltaTime = 0.0f;
+	PerformanceStatsSampleCount = 0;
+	CachedPerformanceStatsText.Reset();
 }
 
 void UUOUDebugSubsystem::Deinitialize()
 {
 	ActiveDebugController.Reset();
 	RegisteredProviders.Reset();
+	CachedPerformanceStatsText.Reset();
 
 	Super::Deinitialize();
 }
@@ -309,6 +469,8 @@ void UUOUDebugSubsystem::Tick(float DeltaTime)
 	}
 
 	DrawControllerStatus();
+	DrawPerformanceStats(DeltaTime);
+	DrawVFXDebug();
 	DrawRegisteredProviderConnections();
 	DrawRegisteredProviderLabelBoards();
 }
@@ -651,6 +813,239 @@ void UUOUDebugSubsystem::DrawControllerStatus() const
 		BuildControllerStatusText());
 }
 
+void UUOUDebugSubsystem::DrawPerformanceStats(float DeltaTime) const
+{
+	const AUOUDebugController* DebugController = ActiveDebugController.Get();
+	if (DebugController == nullptr || GEngine == nullptr || !IsScreenMessageEnabled(EUOUDebugCategory::Performance))
+	{
+		CachedPerformanceStatsText.Reset();
+		PerformanceStatsUpdateTimeRemaining = 0.0f;
+		PerformanceStatsAccumulatedDeltaTime = 0.0f;
+		PerformanceStatsSampleCount = 0;
+		return;
+	}
+
+	const UUOUPerformanceDebugControllerComponent* PerformanceController =
+		Cast<UUOUPerformanceDebugControllerComponent>(FindDebugControllerComponent(EUOUDebugCategory::Performance));
+	if (PerformanceController == nullptr || !PerformanceController->bShowViewportStats)
+	{
+		CachedPerformanceStatsText.Reset();
+		PerformanceStatsUpdateTimeRemaining = 0.0f;
+		PerformanceStatsAccumulatedDeltaTime = 0.0f;
+		PerformanceStatsSampleCount = 0;
+		return;
+	}
+
+	PerformanceStatsAccumulatedDeltaTime += FMath::Max(0.0f, DeltaTime);
+	++PerformanceStatsSampleCount;
+	PerformanceStatsUpdateTimeRemaining -= DeltaTime;
+
+	const float UpdateInterval = FMath::Max(0.05f, PerformanceController->ViewportStatsUpdateInterval);
+	if (PerformanceStatsUpdateTimeRemaining <= 0.0f || CachedPerformanceStatsText.IsEmpty())
+	{
+		const float AverageDeltaTime = PerformanceStatsSampleCount > 0
+			? PerformanceStatsAccumulatedDeltaTime / PerformanceStatsSampleCount
+			: DeltaTime;
+
+		CachedPerformanceStatsText = BuildPerformanceStatsText(AverageDeltaTime, *PerformanceController);
+		PerformanceStatsAccumulatedDeltaTime = 0.0f;
+		PerformanceStatsSampleCount = 0;
+		PerformanceStatsUpdateTimeRemaining = UpdateInterval;
+	}
+
+	if (CachedPerformanceStatsText.IsEmpty())
+	{
+		return;
+	}
+
+	GEngine->AddOnScreenDebugMessage(
+		0x5500D07,
+		UpdateInterval + 0.1f,
+		DebugController->GetDebugCategoryColor(EUOUDebugCategory::Performance),
+		CachedPerformanceStatsText);
+}
+
+void UUOUDebugSubsystem::DrawVFXDebug() const
+{
+	UWorld* World = GetWorld();
+	const AUOUDebugController* DebugController = ActiveDebugController.Get();
+	if (World == nullptr || DebugController == nullptr || !DebugController->IsCategoryEnabled(EUOUDebugCategory::VFX))
+	{
+		return;
+	}
+
+	const UUOUVFXDebugControllerComponent* VFXController =
+		Cast<UUOUVFXDebugControllerComponent>(FindDebugControllerComponent(EUOUDebugCategory::VFX));
+	if (VFXController == nullptr)
+	{
+		return;
+	}
+
+	struct FVFXOwnerStats
+	{
+		int32 ActiveNiagaraCount = 0;
+		int32 ActiveCascadeCount = 0;
+		int32 LocationSampleCount = 0;
+		FVector AccumulatedLocation = FVector::ZeroVector;
+	};
+
+	int32 TotalNiagaraCount = 0;
+	int32 ActiveNiagaraCount = 0;
+	int32 TotalCascadeCount = 0;
+	int32 ActiveCascadeCount = 0;
+	TMap<AActor*, FVFXOwnerStats> OwnerStats;
+
+	for (TActorIterator<AActor> It(World); It; ++It)
+	{
+		AActor* Actor = *It;
+		if (!IsValid(Actor))
+		{
+			continue;
+		}
+
+		TArray<UNiagaraComponent*> NiagaraComponents;
+		Actor->GetComponents<UNiagaraComponent>(NiagaraComponents);
+		TotalNiagaraCount += NiagaraComponents.Num();
+		for (UNiagaraComponent* NiagaraComponent : NiagaraComponents)
+		{
+			if (!IsValid(NiagaraComponent) || !NiagaraComponent->IsRegistered() || !NiagaraComponent->IsActive())
+			{
+				continue;
+			}
+
+			++ActiveNiagaraCount;
+			FVFXOwnerStats& Stats = OwnerStats.FindOrAdd(Actor);
+			++Stats.ActiveNiagaraCount;
+			++Stats.LocationSampleCount;
+			Stats.AccumulatedLocation += NiagaraComponent->GetComponentLocation();
+		}
+
+		TArray<UParticleSystemComponent*> CascadeComponents;
+		Actor->GetComponents<UParticleSystemComponent>(CascadeComponents);
+		TotalCascadeCount += CascadeComponents.Num();
+		for (UParticleSystemComponent* CascadeComponent : CascadeComponents)
+		{
+			if (!IsValid(CascadeComponent) || !CascadeComponent->IsRegistered() || !CascadeComponent->IsActive())
+			{
+				continue;
+			}
+
+			++ActiveCascadeCount;
+			FVFXOwnerStats& Stats = OwnerStats.FindOrAdd(Actor);
+			++Stats.ActiveCascadeCount;
+			++Stats.LocationSampleCount;
+			Stats.AccumulatedLocation += CascadeComponent->GetComponentLocation();
+		}
+	}
+
+	if (VFXController->bShowParticleCount && GEngine != nullptr)
+	{
+		const FString VFXSummary = FString::Printf(
+			TEXT("VFX\nNiagara Components: %d / %d active\nCascade Components: %d / %d active\nOwners: %d"),
+			ActiveNiagaraCount,
+			TotalNiagaraCount,
+			ActiveCascadeCount,
+			TotalCascadeCount,
+			OwnerStats.Num());
+
+		GEngine->AddOnScreenDebugMessage(
+			0x5500D08,
+			0.0f,
+			DebugController->GetDebugCategoryColor(EUOUDebugCategory::VFX),
+			VFXSummary);
+	}
+
+	if (!VFXController->bShowWorldDebug || !VFXController->bShowNiagaraOwners)
+	{
+		return;
+	}
+
+	struct FVFXOwnerDrawCandidate
+	{
+		FString Text;
+		FVector Location = FVector::ZeroVector;
+		float DistanceSquared = 0.0f;
+		float ViewDot = -1.0f;
+	};
+
+	FVector ViewLocation = FVector::ZeroVector;
+	FRotator ViewRotation = FRotator::ZeroRotator;
+	const bool bHasViewLocation = UOUDebugSubsystemPrivate::TryGetViewPoint(World, ViewLocation, ViewRotation);
+	const FVector ViewDirection = ViewRotation.Vector();
+	const float MaxVisibleDistance = DebugController->WorldDebugVisibleDistance;
+	const float MaxVisibleDistanceSquared = FMath::Square(MaxVisibleDistance);
+
+	TArray<FVFXOwnerDrawCandidate> Candidates;
+	for (const TPair<AActor*, FVFXOwnerStats>& Pair : OwnerStats)
+	{
+		const AActor* Owner = Pair.Key;
+		const FVFXOwnerStats& Stats = Pair.Value;
+		if (!IsValid(Owner) || Stats.LocationSampleCount <= 0)
+		{
+			continue;
+		}
+
+		FVector LabelLocation = Stats.AccumulatedLocation / static_cast<float>(Stats.LocationSampleCount);
+		LabelLocation.Z += 120.0f;
+
+		float DistanceSquared = 0.0f;
+		float ViewDot = -1.0f;
+		if (bHasViewLocation)
+		{
+			DistanceSquared = FVector::DistSquared(ViewLocation, LabelLocation);
+			if (MaxVisibleDistance > 0.0f && DistanceSquared > MaxVisibleDistanceSquared)
+			{
+				continue;
+			}
+
+			ViewDot = FVector::DotProduct(ViewDirection, (LabelLocation - ViewLocation).GetSafeNormal());
+		}
+
+		FVFXOwnerDrawCandidate Candidate;
+		Candidate.Text = FString::Printf(
+			TEXT("VFX: %s\nNiagara: %d\nCascade: %d"),
+			*Owner->GetName(),
+			Stats.ActiveNiagaraCount,
+			Stats.ActiveCascadeCount);
+		Candidate.Location = LabelLocation;
+		Candidate.DistanceSquared = DistanceSquared;
+		Candidate.ViewDot = ViewDot;
+		Candidates.Add(MoveTemp(Candidate));
+	}
+
+	if (DebugController->bOnlyShowFocusedActor)
+	{
+		Candidates.Sort(
+			[](const FVFXOwnerDrawCandidate& Left, const FVFXOwnerDrawCandidate& Right)
+			{
+				if (!FMath::IsNearlyEqual(Left.ViewDot, Right.ViewDot))
+				{
+					return Left.ViewDot > Right.ViewDot;
+				}
+
+				return Left.DistanceSquared < Right.DistanceSquared;
+			});
+	}
+	else if (bHasViewLocation)
+	{
+		Candidates.Sort(
+			[](const FVFXOwnerDrawCandidate& Left, const FVFXOwnerDrawCandidate& Right)
+			{
+				return Left.DistanceSquared < Right.DistanceSquared;
+			});
+	}
+
+	const int32 MaxVisibleItems = DebugController->bOnlyShowFocusedActor
+		? 1
+		: FMath::Max(1, DebugController->MaxVisibleWorldDebugItems);
+	const int32 VisibleCount = FMath::Min(MaxVisibleItems, Candidates.Num());
+	const FColor LabelColor = DebugController->GetDebugCategoryColor(EUOUDebugCategory::VFX);
+	for (int32 Index = 0; Index < VisibleCount; ++Index)
+	{
+		UOUDebugSubsystemPrivate::DrawReadableDebugString(World, Candidates[Index].Location, Candidates[Index].Text, DebugController, LabelColor, 0.9f);
+	}
+}
+
 void UUOUDebugSubsystem::DrawRegisteredProviderLabelBoards() const
 {
 	UWorld* World = GetWorld();
@@ -714,6 +1109,91 @@ void UUOUDebugSubsystem::DrawRegisteredProviderConnections() const
 			}
 		}
 	}
+}
+
+FString UUOUDebugSubsystem::BuildPerformanceStatsText(float DeltaTime, const UUOUPerformanceDebugControllerComponent& PerformanceController) const
+{
+	TArray<FString> Lines;
+
+	if (PerformanceController.bShowFPS)
+	{
+		const float FPS = DeltaTime > KINDA_SMALL_NUMBER ? 1.0f / DeltaTime : 0.0f;
+		Lines.Add(FString::Printf(TEXT("FPS: %.1f"), FPS));
+	}
+
+	if (PerformanceController.bShowFrameTime)
+	{
+		Lines.Add(FString::Printf(TEXT("Frame: %.2f ms"), DeltaTime * 1000.0f));
+		Lines.Add(FString::Printf(TEXT("Game: %.2f ms"), FPlatformTime::ToMilliseconds(GGameThreadTime)));
+		Lines.Add(FString::Printf(TEXT("Draw: %.2f ms"), FPlatformTime::ToMilliseconds(GRenderThreadTime)));
+		Lines.Add(FString::Printf(TEXT("RHIT: %.2f ms"), FPlatformTime::ToMilliseconds(GRHIThreadTime)));
+		Lines.Add(FString::Printf(TEXT("GPU Time: %.2f ms"), FPlatformTime::ToMilliseconds(RHIGetGPUFrameCycles())));
+		Lines.Add(FString::Printf(TEXT("Input: %.2f ms"), FPlatformTime::ToMilliseconds64(GInputLatencyTime)));
+	}
+
+	if (PerformanceController.bShowMemory)
+	{
+		const FPlatformMemoryStats MemoryStats = FPlatformMemory::GetStats();
+		Lines.Add(FString::Printf(TEXT("Mem: %s"), *UOUDebugSubsystemPrivate::FormatMemoryGB(MemoryStats.UsedPhysical)));
+	}
+
+	if (PerformanceController.bShowRenderStats)
+	{
+		float ScreenPercentage = GPixelRenderCounters.GetResolutionFraction() * 100.0f;
+		FIntPoint RenderResolution = GPixelRenderCounters.GetRenderResolution();
+		if (ScreenPercentage <= 0.0f || RenderResolution.X <= 0 || RenderResolution.Y <= 0)
+		{
+			ScreenPercentage = 100.0f;
+			RenderResolution = UOUDebugSubsystemPrivate::GetFallbackViewportSize(GetWorld());
+		}
+
+		Lines.Add(FString::Printf(TEXT("RenderRes: %.1f%% (%dx%d)"), ScreenPercentage, RenderResolution.X, RenderResolution.Y));
+		Lines.Add(FString::Printf(TEXT("Draws: %d"), GNumDrawCallsRHI[0]));
+		Lines.Add(FString::Printf(TEXT("Prims: %s"), *UOUDebugSubsystemPrivate::FormatCompactCount(GNumPrimitivesDrawnRHI[0])));
+	}
+
+	if (PerformanceController.bShowWorldCounts)
+	{
+		UWorld* World = GetWorld();
+		int32 ActorCount = 0;
+		int32 ComponentCount = 0;
+		if (World != nullptr)
+		{
+			for (TActorIterator<AActor> It(World); It; ++It)
+			{
+				AActor* Actor = *It;
+				if (!IsValid(Actor))
+				{
+					continue;
+				}
+
+				++ActorCount;
+				TInlineComponentArray<UActorComponent*> Components(Actor);
+				ComponentCount += Components.Num();
+			}
+		}
+
+		int32 WorldCount = 0;
+		if (GEngine != nullptr)
+		{
+			for (const FWorldContext& WorldContext : GEngine->GetWorldContexts())
+			{
+				if (WorldContext.World() != nullptr)
+				{
+					++WorldCount;
+				}
+			}
+		}
+
+		Lines.Add(FString::Printf(TEXT("Actors: %d | Components: %d | Worlds: %d"), ActorCount, ComponentCount, WorldCount));
+	}
+
+	if (Lines.Num() == 0)
+	{
+		return FString();
+	}
+
+	return FString::Join(Lines, LINE_TERMINATOR);
 }
 
 FString UUOUDebugSubsystem::BuildControllerStatusText() const

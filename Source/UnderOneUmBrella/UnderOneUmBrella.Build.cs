@@ -24,6 +24,12 @@ public class UnderOneUmBrella : ModuleRules
 			"UMG"
         });
 
+		PrivateDependencyModuleNames.AddRange(new string[]
+		{
+			"RenderCore",
+			"RHI"
+		});
+
 		if (Target.bBuildEditor)
 		{
 			PrivateDependencyModuleNames.AddRange(new string[]
