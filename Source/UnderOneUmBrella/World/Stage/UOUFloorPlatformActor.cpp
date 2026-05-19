@@ -1,0 +1,512 @@
+// Copyright Epic Games, Inc. All Rights Reserved.
+
+#include "World/Stage/UOUFloorPlatformActor.h"
+
+#include "Components/BoxComponent.h"
+#include "Components/PrimitiveComponent.h"
+#include "Components/SceneComponent.h"
+#include "Components/StaticMeshComponent.h"
+#include "Curves/CurveFloat.h"
+#include "Engine/OverlapResult.h"
+#include "Engine/World.h"
+#include "GameFramework/Character.h"
+
+AUOUFloorPlatformActor::AUOUFloorPlatformActor()
+{
+	// 플랫폼 이동은 시간 보간이 필요하므로 Tick을 사용합니다.
+	PrimaryActorTick.bCanEverTick = true;
+
+	RootScene = CreateDefaultSubobject<USceneComponent>(TEXT("RootScene"));
+	SetRootComponent(RootScene);
+	RootScene->SetMobility(EComponentMobility::Movable);
+
+	PlatformMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("PlatformMesh"));
+	PlatformMesh->SetupAttachment(RootScene);
+	PlatformMesh->SetMobility(EComponentMobility::Movable);
+
+	CarryDetectionBox = CreateDefaultSubobject<UBoxComponent>(TEXT("CarryDetectionBox"));
+	CarryDetectionBox->SetupAttachment(RootScene);
+	CarryDetectionBox->SetMobility(EComponentMobility::Movable);
+	CarryDetectionBox->SetBoxExtent(FVector(300.0f, 300.0f, 160.0f));
+	CarryDetectionBox->SetRelativeLocation(FVector(0.0f, 0.0f, 170.0f));
+	CarryDetectionBox->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+	CarryDetectionBox->SetCollisionResponseToAllChannels(ECR_Overlap);
+	CarryDetectionBox->SetGenerateOverlapEvents(true);
+}
+
+void AUOUFloorPlatformActor::BeginPlay()
+{
+	Super::BeginPlay();
+
+	CaptureCurrentAsStart();
+
+	if (bStartAtTarget)
+	{
+		SnapToTarget();
+	}
+	else
+	{
+		bIsAtTarget = false;
+		ApplyTargetCollisionState();
+	}
+}
+
+void AUOUFloorPlatformActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	DetachCarriedActors();
+
+	Super::EndPlay(EndPlayReason);
+}
+
+void AUOUFloorPlatformActor::OnConstruction(const FTransform& Transform)
+{
+	Super::OnConstruction(Transform);
+
+	if (!bHasCapturedStartTransform)
+	{
+		StartTransform = GetActorTransform();
+		bHasCapturedStartTransform = true;
+	}
+
+	RefreshTargetTransforms();
+}
+
+void AUOUFloorPlatformActor::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+
+	if (!bIsMoving)
+	{
+		return;
+	}
+
+	MoveElapsedTime += DeltaSeconds;
+
+	const float SafeDuration = FMath::Max(UE_KINDA_SMALL_NUMBER, MoveDuration);
+	const float RawAlpha = FMath::Clamp(MoveElapsedTime / SafeDuration, 0.0f, 1.0f);
+	const float MoveAlpha = ResolveMoveAlpha(RawAlpha);
+
+	const FVector NewLocation = FMath::Lerp(StartTransform.GetLocation(), TargetTransform.GetLocation(), MoveAlpha);
+	const FQuat NewRotation = FQuat::Slerp(StartTransform.GetRotation(), TargetTransform.GetRotation(), MoveAlpha);
+	const FVector NewScale = FMath::Lerp(StartTransform.GetScale3D(), TargetTransform.GetScale3D(), MoveAlpha);
+
+	SetActorTransform(FTransform(NewRotation, NewLocation, NewScale), false, nullptr, ETeleportType::TeleportPhysics);
+
+	if (RawAlpha >= 1.0f)
+	{
+		FinishMoveToTarget();
+	}
+}
+
+void AUOUFloorPlatformActor::CaptureCurrentAsStart()
+{
+	StartTransform = GetActorTransform();
+	bHasCapturedStartTransform = true;
+
+	RefreshTargetTransforms();
+}
+
+void AUOUFloorPlatformActor::MoveToTarget()
+{
+	if (bIsMoving || bIsAtTarget)
+	{
+		return;
+	}
+
+	if (!bHasCapturedStartTransform)
+	{
+		CaptureCurrentAsStart();
+	}
+
+	RefreshTargetTransforms();
+
+	bIsMoving = true;
+	bIsAtTarget = false;
+	MoveElapsedTime = 0.0f;
+	ApplyTargetCollisionState();
+
+	SetActorTransform(StartTransform, false, nullptr, ETeleportType::TeleportPhysics);
+	AttachCarriedActors();
+}
+
+void AUOUFloorPlatformActor::ResetPlatform()
+{
+	if (!bHasCapturedStartTransform)
+	{
+		CaptureCurrentAsStart();
+	}
+
+	RefreshTargetTransforms();
+	AttachLastMovedActors();
+	if (CarriedActors.Num() == 0)
+	{
+		AttachCarriedActors();
+	}
+
+	bIsMoving = false;
+	bIsAtTarget = false;
+	MoveElapsedTime = 0.0f;
+
+	SetActorTransform(StartTransform, false, nullptr, ETeleportType::TeleportPhysics);
+	ApplyTargetCollisionState();
+	CacheLastMovedActors();
+	DetachCarriedActors();
+}
+
+void AUOUFloorPlatformActor::SnapToTarget()
+{
+	if (!bHasCapturedStartTransform)
+	{
+		CaptureCurrentAsStart();
+	}
+
+	RefreshTargetTransforms();
+
+	AttachCarriedActors();
+
+	bIsMoving = false;
+	bIsAtTarget = true;
+	MoveElapsedTime = MoveDuration;
+
+	SetActorTransform(TargetTransform, false, nullptr, ETeleportType::TeleportPhysics);
+	ApplyTargetCollisionState();
+	CacheLastMovedActors();
+	DetachCarriedActors();
+}
+
+bool AUOUFloorPlatformActor::IsMoving() const
+{
+	return bIsMoving;
+}
+
+bool AUOUFloorPlatformActor::IsAtTarget() const
+{
+	return bIsAtTarget;
+}
+
+void AUOUFloorPlatformActor::ApplyPuzzleResult_Implementation(EOUUPuzzleResultAction Action)
+{
+	// 퍼즐 결과는 플랫폼 기준에서 필요한 동작으로만 해석합니다.
+	switch (Action)
+	{
+	case EOUUPuzzleResultAction::Activate:
+		MoveToTarget();
+		break;
+	case EOUUPuzzleResultAction::Deactivate:
+		ResetPlatform();
+		break;
+	case EOUUPuzzleResultAction::Toggle:
+		if (bIsAtTarget)
+		{
+			ResetPlatform();
+		}
+		else
+		{
+			MoveToTarget();
+		}
+		break;
+	case EOUUPuzzleResultAction::None:
+	case EOUUPuzzleResultAction::Pause:
+	case EOUUPuzzleResultAction::Resume:
+	default:
+		break;
+	}
+}
+
+#if WITH_EDITOR
+bool AUOUFloorPlatformActor::ShouldTickIfViewportsOnly() const
+{
+	return bIsMoving;
+}
+#endif
+
+void AUOUFloorPlatformActor::RefreshTargetTransforms()
+{
+	if (!bHasCapturedStartTransform)
+	{
+		StartTransform = GetActorTransform();
+		bHasCapturedStartTransform = true;
+	}
+
+	TargetTransform = StartTransform;
+	const FVector TargetWorldOffset = StartTransform.TransformVectorNoScale(TargetLocalOffset);
+	TargetTransform.SetLocation(StartTransform.GetLocation() + TargetWorldOffset);
+}
+
+void AUOUFloorPlatformActor::FinishMoveToTarget()
+{
+	bIsMoving = false;
+	bIsAtTarget = true;
+	MoveElapsedTime = MoveDuration;
+
+	SetActorTransform(TargetTransform, false, nullptr, ETeleportType::TeleportPhysics);
+	ApplyTargetCollisionState();
+	CacheLastMovedActors();
+	DetachCarriedActors();
+
+	OnMoveFinished.Broadcast(this);
+}
+
+void AUOUFloorPlatformActor::ApplyTargetCollisionState()
+{
+	if (!bDisableCollisionAtTarget)
+	{
+		SetActorEnableCollision(true);
+		return;
+	}
+
+	SetActorEnableCollision(!bIsAtTarget);
+}
+
+void AUOUFloorPlatformActor::AttachCarriedActors()
+{
+	DetachCarriedActors();
+
+	if (!bCarryActorsOnMove || CarryDetectionBox == nullptr)
+	{
+		return;
+	}
+
+	TArray<AActor*> OverlappingActors;
+	CollectCarryCandidateActors(OverlappingActors);
+
+	for (AActor* CandidateActor : OverlappingActors)
+	{
+		if (!CanCarryActor(CandidateActor))
+		{
+			continue;
+		}
+
+		PrepareCarriedActorForAttach(CandidateActor);
+		CandidateActor->AttachToActor(this, FAttachmentTransformRules::KeepWorldTransform);
+		CarriedActors.Add(CandidateActor);
+	}
+}
+
+void AUOUFloorPlatformActor::AttachLastMovedActors()
+{
+	DetachCarriedActors();
+
+	if (!bCarryActorsOnMove)
+	{
+		return;
+	}
+
+	for (const TWeakObjectPtr<AActor>& LastMovedActor : LastMovedActors)
+	{
+		AActor* CandidateActor = LastMovedActor.Get();
+		if (!CanCarryActor(CandidateActor))
+		{
+			continue;
+		}
+
+		PrepareCarriedActorForAttach(CandidateActor);
+		CandidateActor->AttachToActor(this, FAttachmentTransformRules::KeepWorldTransform);
+		CarriedActors.Add(CandidateActor);
+	}
+}
+
+void AUOUFloorPlatformActor::CollectCarryCandidateActors(TArray<AActor*>& OutCandidateActors) const
+{
+	OutCandidateActors.Reset();
+
+	if (CarryDetectionBox == nullptr || GetWorld() == nullptr)
+	{
+		return;
+	}
+
+	FCollisionObjectQueryParams ObjectQueryParams;
+	ObjectQueryParams.AddObjectTypesToQuery(ECC_WorldStatic);
+	ObjectQueryParams.AddObjectTypesToQuery(ECC_WorldDynamic);
+	ObjectQueryParams.AddObjectTypesToQuery(ECC_Pawn);
+	ObjectQueryParams.AddObjectTypesToQuery(ECC_PhysicsBody);
+	ObjectQueryParams.AddObjectTypesToQuery(ECC_Vehicle);
+	ObjectQueryParams.AddObjectTypesToQuery(ECC_Destructible);
+
+	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(UOUFloorPlatformCarryOverlap), false, this);
+	QueryParams.AddIgnoredActor(this);
+
+	TArray<FOverlapResult> OverlapResults;
+	GetWorld()->OverlapMultiByObjectType(
+		OverlapResults,
+		CarryDetectionBox->GetComponentLocation(),
+		CarryDetectionBox->GetComponentQuat(),
+		ObjectQueryParams,
+		FCollisionShape::MakeBox(CarryDetectionBox->GetScaledBoxExtent()),
+		QueryParams);
+
+	for (const FOverlapResult& OverlapResult : OverlapResults)
+	{
+		AActor* CandidateActor = OverlapResult.GetActor();
+		if (CandidateActor == nullptr || OutCandidateActors.Contains(CandidateActor))
+		{
+			continue;
+		}
+
+		OutCandidateActors.Add(CandidateActor);
+	}
+}
+
+void AUOUFloorPlatformActor::DetachCarriedActors()
+{
+	for (AActor* CarriedActor : CarriedActors)
+	{
+		if (IsValid(CarriedActor) && CarriedActor->GetAttachParentActor() == this)
+		{
+			CarriedActor->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
+		}
+	}
+
+	CarriedActors.Reset();
+	RestoreCarriedPhysicsStates();
+}
+
+bool AUOUFloorPlatformActor::CanCarryActor(AActor* CandidateActor) const
+{
+	if (!IsValid(CandidateActor) || CandidateActor == this)
+	{
+		return false;
+	}
+
+	for (const TObjectPtr<AActor>& IgnoredActor : IgnoredCarryActors)
+	{
+		if (IgnoredActor.Get() == CandidateActor)
+		{
+			return false;
+		}
+	}
+
+	if (CandidateActor->GetAttachParentActor() != nullptr && CandidateActor->GetAttachParentActor() != this)
+	{
+		return false;
+	}
+
+	const bool bIsCharacter = CandidateActor->IsA<ACharacter>();
+	if (bIsCharacter && !bCarryPlayerCharacters)
+	{
+		return false;
+	}
+
+	if (!bCarryPhysicsSimulatingActors && HasSimulatingPhysicsComponent(CandidateActor))
+	{
+		return false;
+	}
+
+	return MatchesCarryFilters(CandidateActor);
+}
+
+void AUOUFloorPlatformActor::PrepareCarriedActorForAttach(AActor* CandidateActor)
+{
+	if (!bPauseCarriedPhysicsDuringMove || CandidateActor == nullptr)
+	{
+		return;
+	}
+
+	TInlineComponentArray<UPrimitiveComponent*> PrimitiveComponents(CandidateActor);
+
+	for (UPrimitiveComponent* PrimitiveComponent : PrimitiveComponents)
+	{
+		if (PrimitiveComponent == nullptr || !PrimitiveComponent->IsSimulatingPhysics())
+		{
+			continue;
+		}
+
+		FUOUFloorPlatformCarriedPhysicsState PhysicsState;
+		PhysicsState.Component = PrimitiveComponent;
+		PhysicsState.bWasSimulatingPhysics = true;
+		CarriedPhysicsStates.Add(PhysicsState);
+
+		PrimitiveComponent->SetSimulatePhysics(false);
+	}
+}
+
+void AUOUFloorPlatformActor::RestoreCarriedPhysicsStates()
+{
+	for (const FUOUFloorPlatformCarriedPhysicsState& PhysicsState : CarriedPhysicsStates)
+	{
+		UPrimitiveComponent* PrimitiveComponent = PhysicsState.Component.Get();
+		if (PrimitiveComponent != nullptr)
+		{
+			PrimitiveComponent->SetSimulatePhysics(PhysicsState.bWasSimulatingPhysics);
+		}
+	}
+
+	CarriedPhysicsStates.Reset();
+}
+
+bool AUOUFloorPlatformActor::HasSimulatingPhysicsComponent(AActor* CandidateActor) const
+{
+	if (CandidateActor == nullptr)
+	{
+		return false;
+	}
+
+	TInlineComponentArray<UPrimitiveComponent*> PrimitiveComponents(CandidateActor);
+
+	for (const UPrimitiveComponent* PrimitiveComponent : PrimitiveComponents)
+	{
+		if (PrimitiveComponent != nullptr && PrimitiveComponent->IsSimulatingPhysics())
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+bool AUOUFloorPlatformActor::MatchesCarryFilters(AActor* CandidateActor) const
+{
+	if (CandidateActor == nullptr)
+	{
+		return false;
+	}
+
+	const bool bHasClassFilter = CarryActorClasses.Num() > 0;
+	const bool bHasTagFilter = CarryActorTags.Num() > 0;
+
+	if (!bHasClassFilter && !bHasTagFilter)
+	{
+		return true;
+	}
+
+	for (const TSubclassOf<AActor>& CarryActorClass : CarryActorClasses)
+	{
+		if (*CarryActorClass != nullptr && CandidateActor->IsA(CarryActorClass))
+		{
+			return true;
+		}
+	}
+
+	for (const FName& CarryActorTag : CarryActorTags)
+	{
+		if (!CarryActorTag.IsNone() && CandidateActor->ActorHasTag(CarryActorTag))
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+void AUOUFloorPlatformActor::CacheLastMovedActors()
+{
+	LastMovedActors.Reset();
+
+	for (AActor* CarriedActor : CarriedActors)
+	{
+		if (IsValid(CarriedActor))
+		{
+			LastMovedActors.Add(CarriedActor);
+		}
+	}
+}
+
+float AUOUFloorPlatformActor::ResolveMoveAlpha(float RawAlpha) const
+{
+	if (MoveCurve == nullptr)
+	{
+		return RawAlpha;
+	}
+
+	return FMath::Clamp(MoveCurve->GetFloatValue(RawAlpha), 0.0f, 1.0f);
+}
