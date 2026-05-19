@@ -43,6 +43,9 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Debug", meta = (WorldContext = "WorldContextObject"))
 	static bool IsDebugCategoryEnabled(const UObject* WorldContextObject, EUOUDebugCategory Category);
 
+	UFUNCTION(BlueprintPure, Category = "Debug", meta = (WorldContext = "WorldContextObject"))
+	static FColor GetDebugCategoryColor(const UObject* WorldContextObject, EUOUDebugCategory Category, FColor FallbackColor);
+
 	UFUNCTION(BlueprintPure, Category = "Debug")
 	UUOUDebugControllerComponentBase* FindDebugControllerComponent(EUOUDebugCategory Category) const;
 

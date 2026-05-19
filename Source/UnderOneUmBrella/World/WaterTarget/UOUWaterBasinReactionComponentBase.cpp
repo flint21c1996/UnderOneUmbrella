@@ -334,9 +334,10 @@ void UUOUWaterBasinReactionComponentBase::DrawReactionDebugText()
 	}
 
 	const FVector DrawLocation = GetOwner()->GetActorLocation() + DrawDebugOffset;
-	const FColor TextColor = bHasEvaluated
-		? (bIsConditionSatisfied ? DebugSatisfiedColor : DebugUnsatisfiedColor)
-		: DebugWaitingColor;
+	const FColor TextColor = UUOUDebugSubsystem::GetDebugCategoryColor(
+		this,
+		EUOUDebugCategory::Puzzle,
+		bHasEvaluated ? (bIsConditionSatisfied ? DebugSatisfiedColor : DebugUnsatisfiedColor) : DebugWaitingColor);
 
 	const FString DebugText = FString::Printf(
 		TEXT("%s\nSatisfied: %s\nValue: %.3f / %.3f\nWater Z: %.1f\nDepth: %.3f\nFill: %.3f\nVolume: %.3f\nEvents: +%d / -%d"),

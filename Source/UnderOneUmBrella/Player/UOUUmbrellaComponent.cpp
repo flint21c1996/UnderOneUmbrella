@@ -723,7 +723,7 @@ void UUOUUmbrellaComponent::DrawScreenDebug() const
 	GEngine->AddOnScreenDebugMessage(
 		0x554F5531,
 		0.0f,
-		FColor::Cyan,
+		UUOUDebugSubsystem::GetDebugCategoryColor(this, EUOUDebugCategory::Player, FColor::Cyan),
 		DebugText,
 		false,
 		FVector2D(1.0f, 1.0f));
@@ -753,13 +753,14 @@ void UUOUUmbrellaComponent::DrawRainBlockerDebug() const
 
 	const float Thickness = FMath::Max(0.0f, RainBlockerDebugThickness);
 	const float LifeTime = 0.0f;
+	const FColor PlayerDebugColor = UUOUDebugSubsystem::GetDebugCategoryColor(this, EUOUDebugCategory::Player, FColor::Cyan);
 
 	DrawDebugSphere(
 		World,
 		BlockerWorldLocation,
 		8.0f,
 		12,
-		FColor::Yellow,
+		PlayerDebugColor,
 		false,
 		LifeTime,
 		0,
@@ -770,7 +771,7 @@ void UUOUUmbrellaComponent::DrawRainBlockerDebug() const
 		BlockerWorldLocation,
 		BlockerRadius,
 		64,
-		FColor::Cyan,
+		PlayerDebugColor,
 		false,
 		LifeTime,
 		0,
@@ -783,7 +784,7 @@ void UUOUUmbrellaComponent::DrawRainBlockerDebug() const
 		World,
 		BlockerWorldLocation + FVector(0.0f, 0.0f, 20.0f),
 		BlockerWorldLocation - FVector(0.0f, 0.0f, 20.0f),
-		FColor::Yellow,
+		PlayerDebugColor,
 		false,
 		LifeTime,
 		0,
@@ -794,7 +795,7 @@ void UUOUUmbrellaComponent::DrawRainBlockerDebug() const
 		BlockerWorldLocation + FVector(0.0f, 0.0f, 18.0f),
 		FString::Printf(TEXT("RainBlocker R=%.1f"), BlockerRadius),
 		nullptr,
-		FColor::Yellow,
+		PlayerDebugColor,
 		LifeTime,
 		false,
 		1.0f);
@@ -819,9 +820,10 @@ void UUOUUmbrellaComponent::DrawPourTraceDebug() const
 	const float LifeTime = FMath::Max(0.0f, PourTraceDebugLifeTime);
 	const float Thickness = FMath::Max(0.0f, PourTraceDebugThickness);
 	const FVector DrawEnd = bLastPourTraceHit ? LastPourTraceImpactPoint : LastPourTraceEnd;
-	const FColor TraceColor = bLastPourDeliveredWater
-		? FColor::Green
-		: (bLastPourTraceHit ? FColor::Red : FColor::Cyan);
+	const FColor TraceColor = UUOUDebugSubsystem::GetDebugCategoryColor(
+		this,
+		EUOUDebugCategory::Player,
+		bLastPourDeliveredWater ? FColor::Green : (bLastPourTraceHit ? FColor::Red : FColor::Cyan));
 
 	DrawDebugLine(
 		World,
@@ -838,7 +840,7 @@ void UUOUUmbrellaComponent::DrawPourTraceDebug() const
 		LastPourTraceStart,
 		6.0f,
 		12,
-		FColor::Cyan,
+		TraceColor,
 		false,
 		LifeTime,
 		0,

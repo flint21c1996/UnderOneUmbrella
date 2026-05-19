@@ -813,12 +813,13 @@ void UUOULightExposureSourceComponent::DrawDebugSource() const
 	}
 
 	const float OuterConeRadians = FMath::DegreesToRadians(GetEffectiveOuterConeAngle());
-	DrawDebugPoint(World, SourcePosition, 10.0f, FColor::Cyan, false, DebugDrawTime);
+	const FColor SourceDebugColor = UUOUDebugSubsystem::GetDebugCategoryColor(this, EUOUDebugCategory::Puzzle, FColor::Cyan);
+	DrawDebugPoint(World, SourcePosition, 10.0f, SourceDebugColor, false, DebugDrawTime);
 	DrawDebugLine(
 		World,
 		SourcePosition,
 		SourcePosition + SourceForward * ExposureRange,
-		FColor::Cyan,
+		SourceDebugColor,
 		false,
 		DebugDrawTime,
 		0,
@@ -831,7 +832,7 @@ void UUOULightExposureSourceComponent::DrawDebugSource() const
 		OuterConeRadians,
 		OuterConeRadians,
 		24,
-		FColor::Yellow,
+		UUOUDebugSubsystem::GetDebugCategoryColor(this, EUOUDebugCategory::Puzzle, FColor::Yellow),
 		false,
 		DebugDrawTime,
 		0,
@@ -847,11 +848,12 @@ void UUOULightExposureSourceComponent::DrawDebugResult(const FUOULightExposureDa
 
 	if (UWorld* World = GetWorld())
 	{
+		const FColor ResultColor = UUOUDebugSubsystem::GetDebugCategoryColor(this, EUOUDebugCategory::Puzzle, bLit ? FColor::Green : FColor::Red);
 		DrawDebugLine(
 			World,
 			ExposureData.SourcePosition,
 			ExposureData.ReceiverPosition,
-			bLit ? FColor::Green : FColor::Red,
+			ResultColor,
 			false,
 			DebugDrawTime,
 			0,
@@ -870,8 +872,9 @@ void UUOULightExposureSourceComponent::DrawDebugBlockedHit(const FVector& Source
 
 	if (UWorld* World = GetWorld())
 	{
-		DrawDebugLine(World, SourcePosition, BlockingHit.ImpactPoint, FColor::Red, false, DebugDrawTime, 0, 2.0f);
-		DrawDebugPoint(World, BlockingHit.ImpactPoint, 8.0f, FColor::Red, false, DebugDrawTime);
+		const FColor BlockedColor = UUOUDebugSubsystem::GetDebugCategoryColor(this, EUOUDebugCategory::Puzzle, FColor::Red);
+		DrawDebugLine(World, SourcePosition, BlockingHit.ImpactPoint, BlockedColor, false, DebugDrawTime, 0, 2.0f);
+		DrawDebugPoint(World, BlockingHit.ImpactPoint, 8.0f, BlockedColor, false, DebugDrawTime);
 	}
 }
 
@@ -884,8 +887,9 @@ void UUOULightExposureSourceComponent::DrawDebugReflectionRay(const FVector& Sta
 
 	if (UWorld* World = GetWorld())
 	{
-		DrawDebugLine(World, Start, End, FColor::Blue, false, DebugDrawTime, 0, 1.5f);
-		DrawDebugPoint(World, Start, 8.0f, FColor::Blue, false, DebugDrawTime);
+		const FColor ReflectionColor = UUOUDebugSubsystem::GetDebugCategoryColor(this, EUOUDebugCategory::Puzzle, FColor::Blue);
+		DrawDebugLine(World, Start, End, ReflectionColor, false, DebugDrawTime, 0, 1.5f);
+		DrawDebugPoint(World, Start, 8.0f, ReflectionColor, false, DebugDrawTime);
 	}
 }
 

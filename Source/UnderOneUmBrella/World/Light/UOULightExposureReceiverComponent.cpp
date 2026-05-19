@@ -254,12 +254,17 @@ void UUOULightExposureReceiverComponent::DrawTemperatureDebug() const
 		bIsReceivingLight ? TEXT("On") : TEXT("Off"),
 		LastExposureIntensity);
 
+	const FColor TemperatureTextColor = UUOUDebugSubsystem::GetDebugCategoryColor(
+		this,
+		EUOUDebugCategory::Puzzle,
+		bIsReceivingLight ? ExposedTemperatureDebugColor : TemperatureDebugColor);
+
 	DrawDebugString(
 		World,
 		DebugLocation,
 		DebugText,
 		nullptr,
-		bIsReceivingLight ? ExposedTemperatureDebugColor : TemperatureDebugColor,
+		TemperatureTextColor,
 		TemperatureDebugDrawTime,
 		true,
 		TemperatureDebugTextScale);

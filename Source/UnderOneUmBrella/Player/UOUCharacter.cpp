@@ -171,7 +171,11 @@ void AUOUCharacter::Tick(float DeltaSeconds)
 		PushPullInteractorComponent != nullptr ? TEXT("Valid") : TEXT("Null"),
 		(PushPullInteractorComponent != nullptr && PushPullInteractorComponent->IsGrabbing()) ? TEXT("Yes") : TEXT("No"));
 
-	GEngine->AddOnScreenDebugMessage(0xC07E, 0.0f, FColor::Magenta, ContextDebugText);
+	GEngine->AddOnScreenDebugMessage(
+		0xC07E,
+		0.0f,
+		UUOUDebugSubsystem::GetDebugCategoryColor(this, EUOUDebugCategory::Player, FColor::Magenta),
+		ContextDebugText);
 }
 
 void AUOUCharacter::NotifyControllerChanged()

@@ -218,7 +218,7 @@ void UUOUWeightedButtonComponent::DrawScreenDebug() const
 	GEngine->AddOnScreenDebugMessage(
 		MessageKey,
 		0.0f,
-		IsPressed() ? FColor::Green : FColor::Yellow,
+		UUOUDebugSubsystem::GetDebugCategoryColor(this, EUOUDebugCategory::Puzzle, IsPressed() ? FColor::Green : FColor::Yellow),
 		DebugText,
 		false,
 		FVector2D(1.0f, 1.0f));

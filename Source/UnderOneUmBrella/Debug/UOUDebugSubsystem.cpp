@@ -272,6 +272,29 @@ bool UUOUDebugSubsystem::IsDebugCategoryEnabled(const UObject* WorldContextObjec
 	return DebugSubsystem != nullptr && DebugSubsystem->IsDebugEnabled(Category);
 }
 
+FColor UUOUDebugSubsystem::GetDebugCategoryColor(const UObject* WorldContextObject, EUOUDebugCategory Category, FColor FallbackColor)
+{
+	if (WorldContextObject == nullptr)
+	{
+		return FallbackColor;
+	}
+
+	UWorld* World = WorldContextObject->GetWorld();
+	if (World == nullptr)
+	{
+		return FallbackColor;
+	}
+
+	const UUOUDebugSubsystem* DebugSubsystem = World->GetSubsystem<UUOUDebugSubsystem>();
+	const AUOUDebugController* DebugController = DebugSubsystem != nullptr
+		? DebugSubsystem->GetActiveDebugController()
+		: nullptr;
+
+	return DebugController != nullptr
+		? DebugController->GetDebugCategoryColor(Category)
+		: FallbackColor;
+}
+
 UUOUDebugControllerComponentBase* UUOUDebugSubsystem::FindDebugControllerComponent(EUOUDebugCategory Category) const
 {
 	const AUOUDebugController* DebugController = ActiveDebugController.Get();

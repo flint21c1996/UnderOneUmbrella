@@ -292,13 +292,14 @@ void AUOUEnvironmentVisualActor::DrawRainBlockerNiagaraDebug(const UNiagaraCompo
 
 	const FVector DebugWorldLocation = Effect->GetComponentTransform().TransformPosition(EffectLocalBlockerPosition);
 	const float CenterRadius = FMath::Max(6.0f, RainBlockerNiagaraDebugThickness * 2.0f);
+	const FColor VFXDebugColor = UUOUDebugSubsystem::GetDebugCategoryColor(this, EUOUDebugCategory::VFX, FColor::Magenta);
 
 	DrawDebugSphere(
 		GetWorld(),
 		DebugWorldLocation,
 		EffectiveBlockerRadius,
 		24,
-		FColor::Magenta,
+		VFXDebugColor,
 		false,
 		0.0f,
 		0,
@@ -309,7 +310,7 @@ void AUOUEnvironmentVisualActor::DrawRainBlockerNiagaraDebug(const UNiagaraCompo
 		DebugWorldLocation,
 		CenterRadius,
 		8,
-		FColor::White,
+		VFXDebugColor,
 		false,
 		0.0f,
 		0,

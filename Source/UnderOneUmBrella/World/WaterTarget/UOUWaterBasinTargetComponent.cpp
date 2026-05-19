@@ -773,7 +773,15 @@ void UUOUWaterBasinTargetComponent::DrawTargetDebugString() const
 			GroupData.FillRatio * 100.0f,
 			GroupData.SurfaceWorldZ);
 
-		DrawDebugString(World, GetDebugLabelWorld(), Text, nullptr, FColor::Yellow, 0.0f, true, 1.0f);
+		DrawDebugString(
+			World,
+			GetDebugLabelWorld(),
+			Text,
+			nullptr,
+			UUOUDebugSubsystem::GetDebugCategoryColor(this, EUOUDebugCategory::Puzzle, FColor::Yellow),
+			0.0f,
+			true,
+			1.0f);
 		return;
 	}
 
@@ -785,7 +793,15 @@ void UUOUWaterBasinTargetComponent::DrawTargetDebugString() const
 		CurrentFillRatio * 100.0f,
 		WaterSurfaceWorldZ);
 
-	DrawDebugString(World, GetDebugLabelWorld(), Text, nullptr, FColor::Cyan, 0.0f, true, 1.0f);
+	DrawDebugString(
+		World,
+		GetDebugLabelWorld(),
+		Text,
+		nullptr,
+		UUOUDebugSubsystem::GetDebugCategoryColor(this, EUOUDebugCategory::Puzzle, FColor::Cyan),
+		0.0f,
+		true,
+		1.0f);
 }
 
 void UUOUWaterBasinTargetComponent::DrawSpecificTargetConnections() const
@@ -797,6 +813,7 @@ void UUOUWaterBasinTargetComponent::DrawSpecificTargetConnections() const
 	}
 
 	const FVector Start = GetDebugCenterWorld();
+	const FColor ConnectionColor = UUOUDebugSubsystem::GetDebugCategoryColor(this, EUOUDebugCategory::Puzzle, FColor::Cyan);
 	for (TObjectIterator<UUOUWaterBasinTargetComponent> It; It; ++It)
 	{
 		UUOUWaterBasinTargetComponent* Candidate = *It;
@@ -807,7 +824,7 @@ void UUOUWaterBasinTargetComponent::DrawSpecificTargetConnections() const
 
 		if (IsDirectlyConnectedTo(Candidate) || Candidate->IsDirectlyConnectedTo(this))
 		{
-			DrawDebugLine(World, Start, Candidate->GetDebugCenterWorld(), FColor::Cyan, false, 0.0f, 0, 4.0f);
+			DrawDebugLine(World, Start, Candidate->GetDebugCenterWorld(), ConnectionColor, false, 0.0f, 0, 4.0f);
 		}
 	}
 }
@@ -823,6 +840,7 @@ void UUOUWaterBasinTargetComponent::DrawConnectedGroupConnections() const
 	TArray<UUOUWaterBasinTargetComponent*> Group;
 	GetConnectedGroup(Group);
 
+	const FColor ConnectionColor = UUOUDebugSubsystem::GetDebugCategoryColor(this, EUOUDebugCategory::Puzzle, FColor::Yellow);
 	for (int32 A = 0; A < Group.Num(); ++A)
 	{
 		UUOUWaterBasinTargetComponent* From = Group[A];
@@ -841,7 +859,7 @@ void UUOUWaterBasinTargetComponent::DrawConnectedGroupConnections() const
 
 			if (From->IsDirectlyConnectedTo(To) || To->IsDirectlyConnectedTo(From))
 			{
-				DrawDebugLine(World, From->GetDebugCenterWorld(), To->GetDebugCenterWorld(), FColor::Yellow, false, 0.0f, 0, 4.0f);
+				DrawDebugLine(World, From->GetDebugCenterWorld(), To->GetDebugCenterWorld(), ConnectionColor, false, 0.0f, 0, 4.0f);
 			}
 		}
 	}
