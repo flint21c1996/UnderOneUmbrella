@@ -53,6 +53,8 @@ void UUOUWaterBasinPlatformComponent::TickComponent(float DeltaTime, ELevelTick 
 
 	if (bUseInterpolation && InterpSpeed > KINDA_SMALL_NUMBER)
 	{
+		// FInterpTo의 InterpSpeed는 cm/s 같은 고정 속도가 아니라 목표값으로 가까워지는 반응성 계수입니다.
+		// 그래서 수면 이동을 일정 속도로 맞추는 장치가 아니라, 부드럽게 따라오는 연출이 필요할 때만 사용합니다.
 		NextLocation.Z = FMath::FInterpTo(NextLocation.Z, CurrentTargetWorldZ, DeltaTime, InterpSpeed);
 	}
 	else
@@ -118,6 +120,8 @@ float UUOUWaterBasinPlatformComponent::GetTargetSurfaceWorldZ() const
 	const UUOUWaterBasinTargetComponent* TargetComponent = GetTargetComponent();
 	if (!TargetComponent)
 	{
+		// TargetActor가 아직 설정되지 않은 초기 편집 상태에서는 Owner 위치를 임시 수면 높이로 사용해
+		// 플랫폼이 월드 원점으로 튀지 않도록 합니다.
 		return GetOwner() ? GetOwner()->GetActorLocation().Z : 0.0f;
 	}
 

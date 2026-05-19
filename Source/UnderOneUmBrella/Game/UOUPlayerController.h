@@ -21,8 +21,11 @@ public:
 protected:
 	virtual void BeginPlay() override;
 	virtual void SetupInputComponent() override;
+	virtual void RestoreInputModeAfterSettingsMenu() override;
 
 private:
+	void ApplyInGameInputMode();
+
 	UPROPERTY(EditDefaultsOnly, Config, Category = "HUD")
 	TSoftClassPtr<UUserWidget> InGameHUDWidgetClass;
 

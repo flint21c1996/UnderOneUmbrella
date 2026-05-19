@@ -8,6 +8,16 @@
 #include "World/WaterTarget/UOUWaterBasinPlatformComponent.h"
 #include "World/WaterTarget/UOUWaterBasinTargetComponent.h"
 
+namespace
+{
+	// ValueSource를 해석할 수 없을 때 사용하는 안전한 기본값입니다.
+	constexpr float InvalidReactionValue = 0.0f;
+
+	// DrawDebugString에서 0초는 한 프레임 표시를 의미합니다.
+	// 이 컴포넌트는 Tick마다 다시 그리므로 지속 시간을 길게 주면 이전 텍스트가 겹쳐 보일 수 있습니다.
+	constexpr float ReactionDebugTextLifeTime = 0.0f;
+}
+
 UUOUWaterBasinReactionComponentBase::UUOUWaterBasinReactionComponentBase()
 {
 	PrimaryComponentTick.bCanEverTick = true;
@@ -230,12 +240,14 @@ float UUOUWaterBasinReactionComponentBase::ResolveCurrentValue(const FUOUWaterBa
 	case EUOUWaterBasinReactionValueSource::PlatformWorldZ:
 		return Context.PlatformWorldZ;
 	default:
-		return 0.0f;
+		return InvalidReactionValue;
 	}
 }
 
 bool UUOUWaterBasinReactionComponentBase::DoesValueSatisfyCondition(float CurrentValue) const
 {
+	// 수면과 플랫폼 위치는 Tick 보간과 float 계산을 거치므로 정확히 같은 값이 되지 않을 수 있습니다.
+	// Equal/NotEqual/포함 범위와 같은 경계 비교에는 Tolerance를 적용하고, Greater/Less는 의도한 엄격 비교를 유지합니다.
 	switch (CompareMode)
 	{
 	case EUOUWaterBasinReactionCompareMode::GreaterOrEqual:
@@ -352,5 +364,5 @@ void UUOUWaterBasinReactionComponentBase::DrawReactionDebugText()
 		SatisfiedEventCount,
 		UnsatisfiedEventCount);
 
-	DrawDebugString(GetWorld(), DrawLocation, DebugText, nullptr, TextColor, 0.0f, true);
+	DrawDebugString(GetWorld(), DrawLocation, DebugText, nullptr, TextColor, ReactionDebugTextLifeTime, true);
 }

@@ -88,22 +88,22 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin|Connection", meta = (ToolTip = "물을 공유할 다른 WaterBasinTarget Actor 목록입니다. 목록에 넣은 Actor에 WaterBasinTargetComponent가 붙어 있어야 연결로 사용됩니다."))
 	TArray<TObjectPtr<AActor>> ConnectedTargets;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin|Volume", meta = (ToolTip = "물 바닥 월드 Z를 어떤 기준으로 계산할지 정합니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, AdvancedDisplay, Category = "Water Basin|Volume", meta = (ToolTip = "물 바닥 월드 Z를 어떤 기준으로 계산할지 정합니다. 기본값은 Actor Bounds Min Z이며, 일반적인 블록 배치에서는 이 값을 바꿀 필요가 없습니다."))
 	EUOUWaterBasinBottomHeightMode BottomHeightMode = EUOUWaterBasinBottomHeightMode::ActorBoundsMinZ;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin|Volume", meta = (ToolTip = "수면 면적과 최대 물 높이를 어떤 기준으로 계산할지 정합니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, AdvancedDisplay, Category = "Water Basin|Volume", meta = (ToolTip = "수면 면적과 최대 물 높이를 어떤 기준으로 계산할지 정합니다. 기본값은 Actor Bounds이며, Actor Scale/Bounds를 기준으로 부피가 자동 계산됩니다."))
 	EUOUWaterBasinVolumeSizeMode VolumeSizeMode = EUOUWaterBasinVolumeSizeMode::ActorBounds;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin|Volume", meta = (ClampMin = "1.0", ToolTip = "언리얼 월드 단위(cm) 몇 개를 퍼즐의 1칸으로 볼지 정합니다. 기본값 100이면 UE 기본 큐브 한 변이 1 부피 단위입니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, AdvancedDisplay, Category = "Water Basin|Volume", meta = (ClampMin = "1.0", ToolTip = "언리얼 월드 단위(cm) 몇 개를 퍼즐의 1칸으로 볼지 정합니다. 기본값 100이면 UE 기본 큐브 한 변이 1 부피 단위입니다. 프로젝트 단위 기준이 바뀔 때만 수정합니다."))
 	float WorldUnitsPerTile = 100.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin|Volume", meta = (ToolTip = "Bottom Height Mode가 Manual World Z일 때 사용하는 물 바닥 월드 Z입니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, AdvancedDisplay, Category = "Water Basin|Volume", meta = (EditCondition = "BottomHeightMode == EUOUWaterBasinBottomHeightMode::ManualWorldZ", EditConditionHides, ToolTip = "Bottom Height Mode가 Manual World Z일 때 사용하는 물 바닥 월드 Z입니다."))
 	float ManualBottomWorldZ = 0.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin|Volume", meta = (ClampMin = "0.0001", ToolTip = "Volume Size Mode가 Manual일 때 사용하는 Scale 1 기준 수면 면적입니다. 최종 면적은 이 값에 Actor Scale X/Y를 곱합니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, AdvancedDisplay, Category = "Water Basin|Volume", meta = (ClampMin = "0.0001", EditCondition = "VolumeSizeMode == EUOUWaterBasinVolumeSizeMode::Manual", EditConditionHides, ToolTip = "Volume Size Mode가 Manual일 때 사용하는 Scale 1 기준 수면 면적입니다. 최종 면적은 이 값에 Actor Scale X/Y를 곱합니다."))
 	float ManualSurfaceArea = 1.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin|Volume", meta = (ClampMin = "0.0001", ToolTip = "Volume Size Mode가 Manual일 때 사용하는 Scale 1 기준 최대 물 높이입니다. 최종 높이는 이 값에 Actor Scale Z를 곱합니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, AdvancedDisplay, Category = "Water Basin|Volume", meta = (ClampMin = "0.0001", EditCondition = "VolumeSizeMode == EUOUWaterBasinVolumeSizeMode::Manual", EditConditionHides, ToolTip = "Volume Size Mode가 Manual일 때 사용하는 Scale 1 기준 최대 물 높이입니다. 최종 높이는 이 값에 Actor Scale Z를 곱합니다."))
 	float ManualMaxWaterHeight = 1.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin|Volume", meta = (ClampMin = "0.0", ToolTip = "게임 시작 시 이 Target이 가진 초기 물 부피입니다. 연결 그룹이면 시작 직후 그룹 전체 부피로 다시 분배됩니다."))
@@ -112,34 +112,34 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin|Visual", meta = (ToolTip = "지정한 Water Visual 컴포넌트를 현재 수위에 맞춰 자동 갱신합니다."))
 	bool bUpdateWaterVisual = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin|Visual", meta = (ToolTip = "Water Visual Component가 비어 있으면 소유 Actor 안에서 이름 또는 Component Tag로 자동 탐색합니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, AdvancedDisplay, Category = "Water Basin|Visual", meta = (EditCondition = "bUpdateWaterVisual", EditConditionHides, ToolTip = "Water Visual Component가 비어 있으면 소유 Actor 안에서 이름 또는 Component Tag로 자동 탐색합니다. 기본 구조에서는 켜둔 채 사용합니다."))
 	bool bAutoFindWaterVisualComponent = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin|Visual", meta = (ToolTip = "Water Visual을 자동 탐색할 때 사용할 Component 이름 또는 Component Tag입니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, AdvancedDisplay, Category = "Water Basin|Visual", meta = (EditCondition = "bUpdateWaterVisual && bAutoFindWaterVisualComponent", EditConditionHides, ToolTip = "Water Visual을 자동 탐색할 때 사용할 Component 이름 또는 Component Tag입니다. 기본 프리팹 구조에서는 WaterVisual 이름을 사용합니다."))
 	FName WaterVisualComponentName = TEXT("WaterVisual");
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin|Visual", meta = (ToolTip = "물 높이를 시각화할 SceneComponent입니다. 보통 반투명 물 머티리얼이 적용된 StaticMeshComponent를 지정합니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin|Visual", meta = (EditCondition = "bUpdateWaterVisual", EditConditionHides, ToolTip = "물 높이를 시각화할 SceneComponent입니다. 보통 반투명 물 머티리얼이 적용된 StaticMeshComponent를 지정합니다. 비워두면 자동 탐색을 사용할 수 있습니다."))
 	TObjectPtr<USceneComponent> WaterVisualComponent = nullptr;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin|Visual", meta = (ToolTip = "Water Visual의 X/Y를 Basin 영역에 맞추고, Z를 현재 물 깊이에 맞춰 변경합니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, AdvancedDisplay, Category = "Water Basin|Visual", meta = (EditCondition = "bUpdateWaterVisual", EditConditionHides, ToolTip = "Water Visual의 X/Y를 Basin 영역에 맞추고, Z를 현재 물 깊이에 맞춰 변경합니다. 특수한 Visual Mesh를 직접 제어할 때만 끕니다."))
 	bool bFitWaterVisualToBasinBounds = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin|Visual", meta = (ToolTip = "켜져 있으면 Visual의 XY 위치는 Basin 영역 중심, Z 위치는 현재 물 깊이의 중심으로 맞춥니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, AdvancedDisplay, Category = "Water Basin|Visual", meta = (EditCondition = "bUpdateWaterVisual", EditConditionHides, ToolTip = "켜져 있으면 Visual의 XY 위치는 Basin 영역 중심, Z 위치는 현재 물 깊이의 중심으로 맞춥니다. 기본 큐브 수면 표현에서는 켜둡니다."))
 	bool bAutoPlaceWaterVisual = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin|Visual", meta = (ToolTip = "물이 없을 때 Water Visual을 숨깁니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, AdvancedDisplay, Category = "Water Basin|Visual", meta = (EditCondition = "bUpdateWaterVisual", EditConditionHides, ToolTip = "물이 없을 때 Water Visual을 숨깁니다."))
 	bool bHideWaterVisualWhenEmpty = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Transient, Category = "Water Basin|Runtime Test", meta = (ClampMin = "0.0", ToolTip = "테스트용 현재 물 부피입니다. 에디터에서 바꾸면 깊이, 비율, 수면 Z, Water Visual이 즉시 갱신됩니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Transient, AdvancedDisplay, Category = "Water Basin|Runtime Test", meta = (ClampMin = "0.0", ToolTip = "테스트용 현재 물 부피입니다. 에디터에서 바꾸면 깊이, 비율, 수면 Z, Water Visual이 즉시 갱신됩니다."))
 	float CurrentWaterVolume = 0.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Transient, Category = "Water Basin|Runtime Test", meta = (ClampMin = "0.0", ToolTip = "테스트용 현재 물 깊이입니다. 에디터에서 바꾸면 Current Water Volume으로 환산됩니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Transient, AdvancedDisplay, Category = "Water Basin|Runtime Test", meta = (ClampMin = "0.0", ToolTip = "테스트용 현재 물 깊이입니다. 에디터에서 바꾸면 Current Water Volume으로 환산됩니다."))
 	float CurrentWaterDepth = 0.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Transient, Category = "Water Basin|Runtime Test", meta = (ClampMin = "0.0", ClampMax = "1.0", ToolTip = "테스트용 현재 물 채움 비율입니다. 에디터에서 바꾸면 Current Water Volume으로 환산됩니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Transient, AdvancedDisplay, Category = "Water Basin|Runtime Test", meta = (ClampMin = "0.0", ClampMax = "1.0", ToolTip = "테스트용 현재 물 채움 비율입니다. 에디터에서 바꾸면 Current Water Volume으로 환산됩니다."))
 	float CurrentFillRatio = 0.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Transient, Category = "Water Basin|Runtime Test", meta = (ToolTip = "테스트용 현재 수면 월드 Z입니다. 에디터에서 바꾸면 Current Water Volume으로 환산됩니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Transient, AdvancedDisplay, Category = "Water Basin|Runtime Test", meta = (ToolTip = "테스트용 현재 수면 월드 Z입니다. 에디터에서 바꾸면 Current Water Volume으로 환산됩니다."))
 	float WaterSurfaceWorldZ = 0.0f;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Water Basin|Runtime")
@@ -281,6 +281,12 @@ private:
 
 	// 현재 RuntimeDebugTarget에 해당하는 경우 디버그 문자열과 연결선을 그립니다.
 	void DrawRuntimeDebug();
+
+	// 현재 Target이 최대로 물을 채울 수 있는 영역을 DebugBox로 표시합니다.
+	void DrawMaxWaterCapacityDebugBox() const;
+
+	// 최대 물 영역 DebugBox에 사용할 중심, 크기, 회전을 계산합니다.
+	bool BuildMaxWaterCapacityDebugBox(FVector& OutCenter, FVector& OutExtent, FQuat& OutRotation) const;
 
 	// 특정 Target 또는 연결 그룹의 수치 디버그 문자열을 그립니다.
 	void DrawTargetDebugString() const;

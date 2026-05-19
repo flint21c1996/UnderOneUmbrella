@@ -3,6 +3,7 @@
 #include "UOUPlayerController.h"
 
 #include "Blueprint/UserWidget.h"
+#include "GameFramework/PlayerController.h"
 #include "InputCoreTypes.h"
 #include "UObject/SoftObjectPath.h"
 
@@ -21,6 +22,8 @@ AUOUPlayerController::AUOUPlayerController()
 void AUOUPlayerController::BeginPlay()
 {
 	Super::BeginPlay();
+
+	ApplyInGameInputMode();
 
 	// 인게임 HUD는 실제 플레이 화면 위에 얹는 최소 UI입니다.
 	if (InGameHUDWidgetClass.IsNull())
@@ -50,6 +53,26 @@ void AUOUPlayerController::BeginPlay()
 	}
 
 	InGameHUDWidget->AddToViewport();
+}
+
+void AUOUPlayerController::RestoreInputModeAfterSettingsMenu()
+{
+	ApplyInGameInputMode();
+}
+
+void AUOUPlayerController::ApplyInGameInputMode()
+{
+	FInputModeGameAndUI InputMode;
+	InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+	InputMode.SetHideCursorDuringCapture(false);
+	SetInputMode(InputMode);
+
+	bShowMouseCursor = true;
+	bEnableClickEvents = true;
+	bEnableMouseOverEvents = true;
+
+	ResetIgnoreMoveInput();
+	ResetIgnoreLookInput();
 }
 
 void AUOUPlayerController::SetupInputComponent()

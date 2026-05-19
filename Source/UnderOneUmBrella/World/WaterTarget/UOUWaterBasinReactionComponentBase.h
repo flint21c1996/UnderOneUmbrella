@@ -142,8 +142,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Reaction|Condition", meta = (ToolTip = "BetweenInclusive 비교에서 사용하는 상한 값입니다."))
 	float UpperThresholdValue = 1.0f;
 
-	// Equal, NotEqual 판정에서 허용할 오차입니다.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Reaction|Condition", meta = (ClampMin = "0.0", ToolTip = "Equal, NotEqual 판정에서 허용할 오차입니다."))
+	// Equal, NotEqual, GreaterOrEqual, LessOrEqual, BetweenInclusive처럼 경계에 걸리는 판정에서 허용할 오차입니다.
+	// 수면과 플랫폼 위치는 Tick 보간과 float 계산을 거치므로 기본값 0.001은 눈에 보이지 않는 작은 흔들림을 무시하기 위한 값입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Reaction|Condition", meta = (ClampMin = "0.0", ToolTip = "경계 조건 판정에서 허용할 오차입니다. Tick 보간/float 계산으로 생기는 아주 작은 흔들림을 무시하기 위해 사용합니다."))
 	float Tolerance = 0.001f;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Water Basin Reaction|Runtime")
@@ -160,7 +161,8 @@ public:
 	bool bDrawDebugText = false;
 
 	// Owner Actor 위치에서 어느 정도 떨어진 곳에 텍스트를 표시할지 정합니다.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Reaction|Debug", meta = (ToolTip = "Owner Actor 위치 기준 Debug Draw 텍스트 표시 오프셋입니다."))
+	// 기본 Z 160은 플랫폼/캐릭터 메시와 겹치지 않도록 머리 위쪽에 띄우기 위한 디버그 표시용 거리입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Reaction|Debug", meta = (ToolTip = "Owner Actor 위치 기준 Debug Draw 텍스트 표시 오프셋입니다. 기본 Z 160은 메시와 겹치지 않도록 위쪽에 띄우기 위한 값입니다."))
 	FVector DrawDebugOffset = FVector(0.0f, 0.0f, 160.0f);
 
 	// 아직 조건 평가가 한 번도 없을 때 사용할 텍스트 색상입니다.

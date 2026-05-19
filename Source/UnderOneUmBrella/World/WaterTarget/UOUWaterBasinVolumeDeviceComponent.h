@@ -55,25 +55,25 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Device", meta = (ToolTip = "장치가 작동할 때 수행할 물 제어 방식입니다."))
 	EUOUWaterBasinVolumeDeviceOperation Operation = EUOUWaterBasinVolumeDeviceOperation::AddAmount;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Device", meta = (ClampMin = "0.0", ToolTip = "Add Amount 또는 Remove Amount에서 한 번에 추가/제거할 물 부피입니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Device", meta = (ClampMin = "0.0", EditCondition = "Operation == EUOUWaterBasinVolumeDeviceOperation::AddAmount || Operation == EUOUWaterBasinVolumeDeviceOperation::RemoveAmount", EditConditionHides, ToolTip = "Add Amount 또는 Remove Amount에서 한 번에 추가/제거할 물 부피입니다."))
 	float Amount = 1.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Device", meta = (ClampMin = "0.0", ToolTip = "Set Water Depth에서 사용할 목표 물 깊이입니다. 단위는 퍼즐 타일 높이입니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Device", meta = (ClampMin = "0.0", EditCondition = "Operation == EUOUWaterBasinVolumeDeviceOperation::SetWaterDepth", EditConditionHides, ToolTip = "Set Water Depth에서 사용할 목표 물 깊이입니다. 단위는 퍼즐 타일 높이입니다."))
 	float TargetWaterDepth = 1.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Device", meta = (ToolTip = "Set Surface World Z에서 사용할 목표 수면 월드 Z입니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Device", meta = (EditCondition = "Operation == EUOUWaterBasinVolumeDeviceOperation::SetSurfaceWorldZ", EditConditionHides, ToolTip = "Set Surface World Z에서 사용할 목표 수면 월드 Z입니다."))
 	float TargetSurfaceWorldZ = 0.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Device|Continuous", meta = (ToolTip = "켜져 있으면 TriggerDevice는 한 번 실행 대신 장치를 활성화하고, 활성화된 동안 Tick마다 서서히 물을 바꿉니다."))
 	bool bUseContinuousChange = false;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Device|Continuous", meta = (ClampMin = "0.0", ToolTip = "연속 동작 중 초당 추가/제거할 물 부피입니다. Fill All과 Drain All도 이 속도로 천천히 진행됩니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Device|Continuous", meta = (ClampMin = "0.0", EditCondition = "bUseContinuousChange && (Operation == EUOUWaterBasinVolumeDeviceOperation::AddAmount || Operation == EUOUWaterBasinVolumeDeviceOperation::RemoveAmount || Operation == EUOUWaterBasinVolumeDeviceOperation::FillAll || Operation == EUOUWaterBasinVolumeDeviceOperation::DrainAll)", EditConditionHides, ToolTip = "연속 동작 중 초당 추가/제거할 물 부피입니다. Fill All과 Drain All도 이 속도로 천천히 진행됩니다."))
 	float ContinuousVolumePerSecond = 1.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Device|Continuous", meta = (ClampMin = "0.0", ToolTip = "Set Water Depth 또는 Set Surface World Z를 연속 동작으로 사용할 때 초당 이동할 수면 높이입니다. 단위는 퍼즐 타일 높이입니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Device|Continuous", meta = (ClampMin = "0.0", EditCondition = "bUseContinuousChange && (Operation == EUOUWaterBasinVolumeDeviceOperation::SetWaterDepth || Operation == EUOUWaterBasinVolumeDeviceOperation::SetSurfaceWorldZ)", EditConditionHides, ToolTip = "Set Water Depth 또는 Set Surface World Z를 연속 동작으로 사용할 때 초당 이동할 수면 높이입니다. 단위는 퍼즐 타일 높이입니다."))
 	float ContinuousHeightPerSecond = 1.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Device|Continuous", meta = (ToolTip = "연속 동작 중 목표 수위, 가득 참, 비어 있음에 도달하면 자동으로 비활성화합니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Device|Continuous", meta = (EditCondition = "bUseContinuousChange", EditConditionHides, ToolTip = "연속 동작 중 목표 수위, 가득 참, 비어 있음에 도달하면 자동으로 비활성화합니다."))
 	bool bDeactivateWhenReachedGoal = true;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Water Device|Runtime")
