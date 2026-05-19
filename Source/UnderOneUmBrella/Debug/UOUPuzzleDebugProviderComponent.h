@@ -8,7 +8,7 @@
 
 class AUOUPuzzleConditionGroupActor;
 
-// Puzzle debug provider that visualizes input, condition, and result actor relationships.
+// 입력, 조건, 결과 액터 관계를 시각화하는 퍼즐 디버그 provider입니다.
 UCLASS(ClassGroup=(Debug), meta=(BlueprintSpawnableComponent, DisplayName = "UOU Puzzle Debug Provider"))
 class UNDERONEUMBRELLA_API UUOUPuzzleDebugProviderComponent : public UUOUDebugProviderComponent
 {
@@ -17,19 +17,19 @@ class UNDERONEUMBRELLA_API UUOUPuzzleDebugProviderComponent : public UUOUDebugPr
 public:
 	UUOUPuzzleDebugProviderComponent();
 
-	UPROPERTY(EditInstanceOnly, BlueprintReadWrite, Category = "Debug|Puzzle", meta = (ToolTip = "Actors that directly influence the puzzle conditions, such as buttons, light sources, or levers."))
+	UPROPERTY(EditInstanceOnly, BlueprintReadWrite, Category = "Debug|Puzzle", meta = (ToolTip = "버튼, 광원, 레버처럼 퍼즐 조건에 직접 영향을 주는 액터 목록입니다."))
 	TArray<TObjectPtr<AActor>> InputActors;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Puzzle", meta = (ToolTip = "Draws links from input actors to condition actors."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Puzzle", meta = (ToolTip = "입력 액터에서 조건 액터로 이어지는 연결선을 표시합니다."))
 	bool bShowInputConnections = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Puzzle", meta = (ToolTip = "Draws links from condition actors to the condition group node."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Puzzle", meta = (ToolTip = "조건 액터에서 컨디션 그룹 노드로 이어지는 연결선을 표시합니다."))
 	bool bShowConditionConnections = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Puzzle", meta = (ToolTip = "Draws links from the condition group node to result actors."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Puzzle", meta = (ToolTip = "컨디션 그룹 노드에서 결과 액터로 이어지는 연결선을 표시합니다."))
 	bool bShowResultConnections = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Puzzle", meta = (ToolTip = "Draws a small point at the invisible condition group node."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Puzzle", meta = (ToolTip = "보이지 않는 컨디션 그룹 노드 위치에 작은 점을 표시합니다."))
 	bool bShowConditionGroupNode = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Puzzle", meta = (ClampMin = "0.0"))
@@ -50,16 +50,16 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Puzzle", meta = (ClampMin = "0.0"))
 	float ConnectionThickness = 3.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Puzzle", meta = (ToolTip = "Shows text labels on puzzle connection lines. Off by default to keep the view readable."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Puzzle", meta = (ToolTip = "퍼즐 연결선 위에 텍스트 라벨을 표시합니다. 화면을 덜 어지럽히기 위해 기본값은 꺼져 있습니다."))
 	bool bShowConnectionLabels = false;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Puzzle", meta = (ToolTip = "Shows compact runtime condition values on the label board."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Puzzle", meta = (ToolTip = "라벨 보드에 간단한 런타임 조건 값을 표시합니다."))
 	bool bShowConditionDetails = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Puzzle", meta = (EditCondition = "bShowConditionDetails", ClampMin = "0"))
 	int32 MaxConditionDetailLines = 1;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Puzzle", meta = (ToolTip = "Collects compact debug values from connected actors and components into this condition group label."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Puzzle", meta = (ToolTip = "연결된 액터와 컴포넌트의 간단한 디버그 값을 컨디션 그룹 라벨에 모아 표시합니다."))
 	bool bShowConnectedActorDebugInfo = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Puzzle", meta = (EditCondition = "bShowConnectedActorDebugInfo", ClampMin = "0"))
