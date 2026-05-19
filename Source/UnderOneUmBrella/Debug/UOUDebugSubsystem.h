@@ -9,6 +9,8 @@
 
 class AUOUDebugController;
 class UUOUDebugControllerComponentBase;
+class UUOUPerformanceDebugControllerComponent;
+class UUOUVFXDebugControllerComponent;
 
 // 월드마다 자동 생성되어 DebugController와 DebugProvider를 연결하는 실행부입니다.
 UCLASS()
@@ -71,9 +73,12 @@ private:
 	bool ShouldAutoCreateRuntimeDebugController(const UWorld* World) const;
 	void CompactRegisteredProviders();
 	void DrawControllerStatus() const;
+	void DrawPerformanceStats(float DeltaTime) const;
+	void DrawVFXDebug() const;
 	void DrawRegisteredProviderConnections() const;
 	void DrawRegisteredProviderLabelBoards() const;
 	FString BuildControllerStatusText() const;
+	FString BuildPerformanceStatsText(float DeltaTime, const UUOUPerformanceDebugControllerComponent& PerformanceController) const;
 
 	TWeakObjectPtr<AUOUDebugController> ActiveDebugController;
 	TArray<TWeakObjectPtr<UObject>> RegisteredProviders;
