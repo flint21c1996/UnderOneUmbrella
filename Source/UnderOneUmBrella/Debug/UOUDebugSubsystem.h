@@ -84,4 +84,8 @@ private:
 	TArray<TWeakObjectPtr<UObject>> RegisteredProviders;
 	float ControllerSearchTimeRemaining = 0.0f;
 	float ProviderCompactTimeRemaining = 0.0f;
+	mutable float PerformanceStatsUpdateTimeRemaining = 0.0f;
+	mutable float PerformanceStatsAccumulatedDeltaTime = 0.0f;
+	mutable int32 PerformanceStatsSampleCount = 0;
+	mutable FString CachedPerformanceStatsText;
 };

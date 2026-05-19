@@ -10,13 +10,21 @@
 #include "Components/ActorComponent.h"
 #include "Components/SceneComponent.h"
 #include "DrawDebugHelpers.h"
+#include "DynamicRHI.h"
 #include "Engine/Engine.h"
+#include "Engine/GameViewportClient.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "GameFramework/Actor.h"
 #include "GameFramework/PlayerController.h"
+#include "HAL/PlatformMemory.h"
 #include "NiagaraComponent.h"
 #include "Particles/ParticleSystemComponent.h"
+#include "RHICommandList.h"
+#include "RHIStats.h"
+#include "RenderCounters.h"
+#include "RenderTimer.h"
+#include "UnrealClient.h"
 
 namespace UOUDebugSubsystemPrivate
 {
@@ -49,6 +57,43 @@ namespace UOUDebugSubsystemPrivate
 		Lines.SetNum(ContentLineCount);
 		Lines.Add(TEXT("..."));
 		return FString::Join(Lines, LINE_TERMINATOR);
+	}
+
+	FString FormatMemoryGB(uint64 Bytes)
+	{
+		constexpr double BytesPerGB = 1024.0 * 1024.0 * 1024.0;
+		return FString::Printf(TEXT("%.2f GB"), static_cast<double>(Bytes) / BytesPerGB);
+	}
+
+	FString FormatCompactCount(int32 Count)
+	{
+		if (Count >= 1000000)
+		{
+			return FString::Printf(TEXT("%.1fM"), Count / 1000000.0f);
+		}
+
+		if (Count >= 10000)
+		{
+			return FString::Printf(TEXT("%.1fK"), Count / 1000.0f);
+		}
+
+		return FString::FromInt(Count);
+	}
+
+	FIntPoint GetFallbackViewportSize(const UWorld* World)
+	{
+		if (World == nullptr)
+		{
+			return FIntPoint::ZeroValue;
+		}
+
+		const UGameViewportClient* GameViewport = World->GetGameViewport();
+		if (GameViewport == nullptr || GameViewport->Viewport == nullptr)
+		{
+			return FIntPoint::ZeroValue;
+		}
+
+		return GameViewport->Viewport->GetSizeXY();
 	}
 
 	FString BuildProviderLabelText(UObject* ProviderObject, int32 MaxLineCount)
@@ -392,12 +437,17 @@ void UUOUDebugSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 
 	ControllerSearchTimeRemaining = 0.0f;
 	ProviderCompactTimeRemaining = 0.0f;
+	PerformanceStatsUpdateTimeRemaining = 0.0f;
+	PerformanceStatsAccumulatedDeltaTime = 0.0f;
+	PerformanceStatsSampleCount = 0;
+	CachedPerformanceStatsText.Reset();
 }
 
 void UUOUDebugSubsystem::Deinitialize()
 {
 	ActiveDebugController.Reset();
 	RegisteredProviders.Reset();
+	CachedPerformanceStatsText.Reset();
 
 	Super::Deinitialize();
 }
@@ -768,6 +818,10 @@ void UUOUDebugSubsystem::DrawPerformanceStats(float DeltaTime) const
 	const AUOUDebugController* DebugController = ActiveDebugController.Get();
 	if (DebugController == nullptr || GEngine == nullptr || !IsScreenMessageEnabled(EUOUDebugCategory::Performance))
 	{
+		CachedPerformanceStatsText.Reset();
+		PerformanceStatsUpdateTimeRemaining = 0.0f;
+		PerformanceStatsAccumulatedDeltaTime = 0.0f;
+		PerformanceStatsSampleCount = 0;
 		return;
 	}
 
@@ -775,20 +829,40 @@ void UUOUDebugSubsystem::DrawPerformanceStats(float DeltaTime) const
 		Cast<UUOUPerformanceDebugControllerComponent>(FindDebugControllerComponent(EUOUDebugCategory::Performance));
 	if (PerformanceController == nullptr || !PerformanceController->bShowViewportStats)
 	{
+		CachedPerformanceStatsText.Reset();
+		PerformanceStatsUpdateTimeRemaining = 0.0f;
+		PerformanceStatsAccumulatedDeltaTime = 0.0f;
+		PerformanceStatsSampleCount = 0;
 		return;
 	}
 
-	const FString StatsText = BuildPerformanceStatsText(DeltaTime, *PerformanceController);
-	if (StatsText.IsEmpty())
+	PerformanceStatsAccumulatedDeltaTime += FMath::Max(0.0f, DeltaTime);
+	++PerformanceStatsSampleCount;
+	PerformanceStatsUpdateTimeRemaining -= DeltaTime;
+
+	const float UpdateInterval = FMath::Max(0.05f, PerformanceController->ViewportStatsUpdateInterval);
+	if (PerformanceStatsUpdateTimeRemaining <= 0.0f || CachedPerformanceStatsText.IsEmpty())
+	{
+		const float AverageDeltaTime = PerformanceStatsSampleCount > 0
+			? PerformanceStatsAccumulatedDeltaTime / PerformanceStatsSampleCount
+			: DeltaTime;
+
+		CachedPerformanceStatsText = BuildPerformanceStatsText(AverageDeltaTime, *PerformanceController);
+		PerformanceStatsAccumulatedDeltaTime = 0.0f;
+		PerformanceStatsSampleCount = 0;
+		PerformanceStatsUpdateTimeRemaining = UpdateInterval;
+	}
+
+	if (CachedPerformanceStatsText.IsEmpty())
 	{
 		return;
 	}
 
 	GEngine->AddOnScreenDebugMessage(
 		0x5500D07,
-		0.0f,
+		UpdateInterval + 0.1f,
 		DebugController->GetDebugCategoryColor(EUOUDebugCategory::Performance),
-		StatsText);
+		CachedPerformanceStatsText);
 }
 
 void UUOUDebugSubsystem::DrawVFXDebug() const
@@ -1050,6 +1124,32 @@ FString UUOUDebugSubsystem::BuildPerformanceStatsText(float DeltaTime, const UUO
 	if (PerformanceController.bShowFrameTime)
 	{
 		Lines.Add(FString::Printf(TEXT("Frame: %.2f ms"), DeltaTime * 1000.0f));
+		Lines.Add(FString::Printf(TEXT("Game: %.2f ms"), FPlatformTime::ToMilliseconds(GGameThreadTime)));
+		Lines.Add(FString::Printf(TEXT("Draw: %.2f ms"), FPlatformTime::ToMilliseconds(GRenderThreadTime)));
+		Lines.Add(FString::Printf(TEXT("RHIT: %.2f ms"), FPlatformTime::ToMilliseconds(GRHIThreadTime)));
+		Lines.Add(FString::Printf(TEXT("GPU Time: %.2f ms"), FPlatformTime::ToMilliseconds(RHIGetGPUFrameCycles())));
+		Lines.Add(FString::Printf(TEXT("Input: %.2f ms"), FPlatformTime::ToMilliseconds64(GInputLatencyTime)));
+	}
+
+	if (PerformanceController.bShowMemory)
+	{
+		const FPlatformMemoryStats MemoryStats = FPlatformMemory::GetStats();
+		Lines.Add(FString::Printf(TEXT("Mem: %s"), *UOUDebugSubsystemPrivate::FormatMemoryGB(MemoryStats.UsedPhysical)));
+	}
+
+	if (PerformanceController.bShowRenderStats)
+	{
+		float ScreenPercentage = GPixelRenderCounters.GetResolutionFraction() * 100.0f;
+		FIntPoint RenderResolution = GPixelRenderCounters.GetRenderResolution();
+		if (ScreenPercentage <= 0.0f || RenderResolution.X <= 0 || RenderResolution.Y <= 0)
+		{
+			ScreenPercentage = 100.0f;
+			RenderResolution = UOUDebugSubsystemPrivate::GetFallbackViewportSize(GetWorld());
+		}
+
+		Lines.Add(FString::Printf(TEXT("RenderRes: %.1f%% (%dx%d)"), ScreenPercentage, RenderResolution.X, RenderResolution.Y));
+		Lines.Add(FString::Printf(TEXT("Draws: %d"), GNumDrawCallsRHI[0]));
+		Lines.Add(FString::Printf(TEXT("Prims: %s"), *UOUDebugSubsystemPrivate::FormatCompactCount(GNumPrimitivesDrawnRHI[0])));
 	}
 
 	if (PerformanceController.bShowWorldCounts)
@@ -1093,7 +1193,7 @@ FString UUOUDebugSubsystem::BuildPerformanceStatsText(float DeltaTime, const UUO
 		return FString();
 	}
 
-	return FString::Printf(TEXT("Performance\n%s"), *FString::Join(Lines, LINE_TERMINATOR));
+	return FString::Join(Lines, LINE_TERMINATOR);
 }
 
 FString UUOUDebugSubsystem::BuildControllerStatusText() const
