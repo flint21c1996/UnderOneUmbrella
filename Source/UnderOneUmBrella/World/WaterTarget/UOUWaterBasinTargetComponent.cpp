@@ -592,13 +592,15 @@ void UUOUWaterBasinTargetComponent::UpdateWaterVisual()
 
 	CaptureWaterVisualTransformIfNeeded();
 
-	FVector NewScale = InitialWaterVisualScale;
+	FVector NewScale = WaterVisualComponent->GetComponentScale();
 
 	FVector LocalMin = FVector::ZeroVector;
 	FVector LocalMax = FVector::ZeroVector;
+	FVector LocalCenter = FVector::ZeroVector;
 	if (UStaticMeshComponent* WaterVisualMeshComponent = Cast<UStaticMeshComponent>(WaterVisualComponent.Get()))
 	{
 		WaterVisualMeshComponent->GetLocalBounds(LocalMin, LocalMax);
+		LocalCenter = (LocalMin + LocalMax) * 0.5f;
 
 		const FVector LocalSize = LocalMax - LocalMin;
 		if (LocalSize.Z > KINDA_SMALL_NUMBER)
@@ -617,24 +619,27 @@ void UUOUWaterBasinTargetComponent::UpdateWaterVisual()
 		NewScale.Z = InitialWaterVisualScale.Z * HeightRatio;
 	}
 
+	const FTransform CurrentWaterVisualTransform = WaterVisualComponent->GetComponentTransform();
+	const FVector CurrentVisualCenter = CurrentWaterVisualTransform.TransformPosition(LocalCenter);
+
 	WaterVisualComponent->SetWorldScale3D(NewScale);
 
 	if (bAutoPlaceWaterVisual)
 	{
-		FVector NewLocation = InitialWaterVisualLocation;
+		FVector DesiredCenter = CurrentVisualCenter;
 
 		FBox BasinBounds;
 		if (TryGetBasinBounds(BasinBounds))
 		{
 			const FVector BasinCenter = BasinBounds.GetCenter();
-			NewLocation.X = BasinCenter.X;
-			NewLocation.Y = BasinCenter.Y;
+			DesiredCenter.X = BasinCenter.X;
+			DesiredCenter.Y = BasinCenter.Y;
 		}
 
-		const FVector LocalCenter = (LocalMin + LocalMax) * 0.5f;
-		const FVector PivotOffset = LocalCenter * NewScale;
-		NewLocation.Z = GetBottomWorldZ() + (VisibleDepthWorld * 0.5f);
-		WaterVisualComponent->SetWorldLocation(NewLocation - PivotOffset);
+		const FQuat WaterVisualRotation = WaterVisualComponent->GetComponentQuat();
+		const FVector PivotOffset = WaterVisualRotation.RotateVector(LocalCenter * NewScale);
+		DesiredCenter.Z = GetBottomWorldZ() + (VisibleDepthWorld * 0.5f);
+		WaterVisualComponent->SetWorldLocation(DesiredCenter - PivotOffset);
 	}
 }
 
@@ -846,12 +851,15 @@ bool UUOUWaterBasinTargetComponent::BuildMaxWaterCapacityDebugBox(FVector& OutCe
 	}
 
 	const FTransform WaterVisualTransform = WaterVisualMeshComponent->GetComponentTransform();
+	FVector DebugScale = WaterVisualTransform.GetScale3D();
+	DebugScale.Z = 1.0f;
+
 	const FVector LocalCenter = (LocalMin + LocalMax) * 0.5f;
 	const FVector LocalExtent = LocalSize * 0.5f;
 
-	// WaterVisual 큐브 메시와 같은 위치, 같은 회전, 같은 크기의 DebugBox를 그립니다.
-	OutCenter = WaterVisualTransform.TransformPosition(LocalCenter);
-	OutExtent = LocalExtent * WaterVisualTransform.GetScale3D().GetAbs();
+	// WaterVisual 큐브 메시의 X/Y는 현재 크기를 따르고, Z는 Scale 1 기준의 최대 높이로 표시합니다.
+	OutCenter = WaterVisualTransform.GetLocation() + WaterVisualTransform.GetRotation().RotateVector(LocalCenter * DebugScale);
+	OutExtent = LocalExtent * DebugScale.GetAbs();
 	OutRotation = WaterVisualTransform.GetRotation();
 	return true;
 }
