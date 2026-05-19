@@ -24,6 +24,7 @@ namespace
 	constexpr float DebugConnectionLineThickness = 4.0f;
 	constexpr float DebugGroupLabelOffsetZ = 120.0f;
 	constexpr float DebugTargetLabelOffsetZ = 80.0f;
+	constexpr float MinWaterVisualDepthWorld = 0.1f;
 
 	// 연결 그룹의 공통 수면 높이는 이분 탐색으로 찾습니다.
 	// 40회 반복하면 탐색 높이 범위가 2^40번 쪼개지므로,
@@ -577,8 +578,11 @@ void UUOUWaterBasinTargetComponent::UpdateWaterVisual()
 	WaterVisualComponent->SetHiddenInGame(bShouldHide, true);
 	WaterVisualComponent->SetVisibility(!bShouldHide, true);
 
-	// WaterVisual의 최상단이 실제 수면 위치와 같아야 하므로 보정값 없이 실제 DepthWorld를 사용합니다.
-	const float VisibleDepthWorld = bShouldHide ? 0.0f : DepthWorld;
+	// 수위 표현은 WaterVisual의 Z Scale을 계속 사용합니다.
+	// 다만 StaticMeshComponent의 Scale 한 축이 정확히 0이면 Physics/Query Body가 비정상 상태가 될 수 있으므로,
+	// 물이 비어 있을 때는 Hidden으로 숨기고 Mesh 자체는 아주 작은 최소 두께를 유지합니다.
+	const float SafeMinVisualDepthWorld = FMath::Min(MaxDepthWorld, MinWaterVisualDepthWorld);
+	const float VisibleDepthWorld = FMath::Clamp(DepthWorld, SafeMinVisualDepthWorld, MaxDepthWorld);
 	if (ApplyWaterVisualBounds(VisibleDepthWorld))
 	{
 		return;
