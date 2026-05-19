@@ -123,7 +123,7 @@ namespace UOUDebugSubsystemPrivate
 		return true;
 	}
 
-	void DrawPuzzleConditionGroupNode(UWorld* World, const UObject* ProviderObject)
+	void DrawPuzzleConditionGroupNode(UWorld* World, const UObject* ProviderObject, const AUOUDebugController* DebugController)
 	{
 		const UUOUPuzzleDebugProviderComponent* PuzzleDebugProvider = Cast<UUOUPuzzleDebugProviderComponent>(ProviderObject);
 		if (World == nullptr || PuzzleDebugProvider == nullptr || !PuzzleDebugProvider->bShowConditionGroupNode)
@@ -132,7 +132,10 @@ namespace UOUDebugSubsystemPrivate
 		}
 
 		const float NodeSize = FMath::Max(1.0f, PuzzleDebugProvider->ConditionGroupNodeSize);
-		DrawDebugPoint(World, PuzzleDebugProvider->GetConditionGroupNodeWorldLocation(), NodeSize, FColor::White, false, 0.0f, 0);
+		const FColor NodeColor = DebugController != nullptr
+			? DebugController->PuzzleConditionGroupNodeColor
+			: FColor::White;
+		DrawDebugPoint(World, PuzzleDebugProvider->GetConditionGroupNodeWorldLocation(), NodeSize, NodeColor, false, 0.0f, 0);
 	}
 
 	void DrawReadableDebugString(
@@ -350,7 +353,9 @@ void UUOUDebugSubsystem::DrawRegisteredProviderLabelBoards() const
 
 		const FVector LabelLocation = IUOUDebugProvider::Execute_GetDebugWorldLocation(ProviderObject);
 		const FString LabelText = UOUDebugSubsystemPrivate::BuildProviderLabelText(ProviderObject);
-		UOUDebugSubsystemPrivate::DrawReadableDebugString(World, LabelLocation, LabelText, DebugController, FColor::White, 1.0f);
+		const EUOUDebugCategory Category = IUOUDebugProvider::Execute_GetDebugCategory(ProviderObject);
+		const FColor LabelColor = DebugController->GetDebugCategoryColor(Category);
+		UOUDebugSubsystemPrivate::DrawReadableDebugString(World, LabelLocation, LabelText, DebugController, LabelColor, 1.0f);
 	}
 }
 
@@ -374,7 +379,7 @@ void UUOUDebugSubsystem::DrawRegisteredProviderConnections() const
 		TArray<FUOUDebugConnection> Connections;
 		IUOUDebugProvider::Execute_GetDebugConnections(ProviderObject, Connections);
 
-		UOUDebugSubsystemPrivate::DrawPuzzleConditionGroupNode(World, ProviderObject);
+		UOUDebugSubsystemPrivate::DrawPuzzleConditionGroupNode(World, ProviderObject, DebugController);
 
 		for (const FUOUDebugConnection& Connection : Connections)
 		{
@@ -387,7 +392,7 @@ void UUOUDebugSubsystem::DrawRegisteredProviderConnections() const
 				continue;
 			}
 
-			const FColor ConnectionColor = FColor::White;
+			const FColor ConnectionColor = DebugController->GetDebugConnectionColor(Connection);
 			const float Thickness = FMath::Max(0.0f, Connection.Thickness);
 			DrawDebugDirectionalArrow(World, SourceLocation, TargetLocation, 80.0f, ConnectionColor, false, 0.0f, 0, Thickness);
 

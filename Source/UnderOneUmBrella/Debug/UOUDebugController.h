@@ -69,6 +69,48 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Display", meta = (ToolTip = "Uses the built-in DrawDebugString shadow for world debug text."))
 	bool bUseWorldTextShadow = true;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Colors", meta = (ToolTip = "Default color for player debug text and helpers."))
+	FColor PlayerDebugColor = FColor::White;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Colors", meta = (ToolTip = "Default color for NPC debug text."))
+	FColor NPCDebugColor = FColor::White;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Colors", meta = (ToolTip = "Default color for puzzle debug labels."))
+	FColor PuzzleDebugColor = FColor::White;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Colors", meta = (ToolTip = "Default color for interaction debug text and helpers."))
+	FColor InteractionDebugColor = FColor::White;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Colors", meta = (ToolTip = "Default color for VFX debug text and helpers."))
+	FColor VFXDebugColor = FColor::White;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Colors", meta = (ToolTip = "Default color for performance debug text."))
+	FColor PerformanceDebugColor = FColor::White;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Colors", meta = (ToolTip = "Default color for system debug text."))
+	FColor SystemDebugColor = FColor::White;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Colors|NPC", meta = (ToolTip = "Color for NPC movement target arrows and acceptance radius."))
+	FColor NPCMoveTargetColor = FColor::Green;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Colors|NPC", meta = (ToolTip = "Color for NPC path points and path lines."))
+	FColor NPCPathColor = FColor::Cyan;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Colors|Puzzle", meta = (ToolTip = "When enabled, controller puzzle connection colors override provider connection colors."))
+	bool bOverrideProviderPuzzleConnectionColors = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Colors|Puzzle", meta = (ToolTip = "Controller color for input-to-condition puzzle connections."))
+	FColor PuzzleInputConnectionColor = FColor::White;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Colors|Puzzle", meta = (ToolTip = "Controller color for condition-to-group puzzle connections."))
+	FColor PuzzleConditionConnectionColor = FColor::White;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Colors|Puzzle", meta = (ToolTip = "Controller color for group-to-result puzzle connections."))
+	FColor PuzzleResultConnectionColor = FColor::White;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Colors|Puzzle", meta = (ToolTip = "Color for invisible condition group node points."))
+	FColor PuzzleConditionGroupNodeColor = FColor::White;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Debug|Controllers")
 	TObjectPtr<UUOUPlayerDebugControllerComponent> PlayerDebugController;
 
@@ -95,6 +137,15 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Debug")
 	bool IsCategoryEnabled(EUOUDebugCategory Category) const;
+
+	UFUNCTION(BlueprintPure, Category = "Debug|Colors")
+	FColor GetDebugCategoryColor(EUOUDebugCategory Category) const;
+
+	UFUNCTION(BlueprintPure, Category = "Debug|Colors")
+	FColor GetPuzzleConnectionColor(EUOUDebugConnectionType ConnectionType) const;
+
+	UFUNCTION(BlueprintPure, Category = "Debug|Colors")
+	FColor GetDebugConnectionColor(const FUOUDebugConnection& Connection) const;
 
 	UFUNCTION(BlueprintPure, Category = "Debug")
 	UUOUDebugControllerComponentBase* FindDebugControllerComponent(EUOUDebugCategory Category) const;

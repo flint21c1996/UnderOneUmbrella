@@ -160,6 +160,6 @@ protected:
 	FVector CalculateJumpLaunchVelocity(const FVector& TargetLocation, float TravelTime) const;
 	void DrawNPCDebug();
 	FString BuildNPCDebugText(const class UUOUNPCDebugControllerComponent& DebugController) const;
-	void DrawNPCMoveTargetDebug(const class UUOUNPCDebugControllerComponent& DebugController) const;
-	void DrawNPCPathDebug(const class UUOUNPCDebugControllerComponent& DebugController) const;
+	void DrawNPCMoveTargetDebug(const class UUOUNPCDebugControllerComponent& DebugController, FColor DebugColor) const;
+	void DrawNPCPathDebug(const class UUOUNPCDebugControllerComponent& DebugController, FColor DebugColor) const;
 };

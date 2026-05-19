@@ -128,6 +128,59 @@ bool AUOUDebugController::IsCategoryEnabled(EUOUDebugCategory Category) const
 	return ControllerComponent == nullptr || ControllerComponent->IsDebugEnabled();
 }
 
+FColor AUOUDebugController::GetDebugCategoryColor(EUOUDebugCategory Category) const
+{
+	switch (Category)
+	{
+	case EUOUDebugCategory::Player:
+		return PlayerDebugColor;
+	case EUOUDebugCategory::NPC:
+		return NPCDebugColor;
+	case EUOUDebugCategory::Puzzle:
+		return PuzzleDebugColor;
+	case EUOUDebugCategory::Interaction:
+		return InteractionDebugColor;
+	case EUOUDebugCategory::VFX:
+		return VFXDebugColor;
+	case EUOUDebugCategory::Performance:
+		return PerformanceDebugColor;
+	case EUOUDebugCategory::System:
+		return SystemDebugColor;
+	default:
+		return FColor::White;
+	}
+}
+
+FColor AUOUDebugController::GetPuzzleConnectionColor(EUOUDebugConnectionType ConnectionType) const
+{
+	switch (ConnectionType)
+	{
+	case EUOUDebugConnectionType::PuzzleInput:
+		return PuzzleInputConnectionColor;
+	case EUOUDebugConnectionType::PuzzleCondition:
+		return PuzzleConditionConnectionColor;
+	case EUOUDebugConnectionType::PuzzleResult:
+		return PuzzleResultConnectionColor;
+	default:
+		return PuzzleDebugColor;
+	}
+}
+
+FColor AUOUDebugController::GetDebugConnectionColor(const FUOUDebugConnection& Connection) const
+{
+	const bool bPuzzleConnection =
+		Connection.ConnectionType == EUOUDebugConnectionType::PuzzleInput
+		|| Connection.ConnectionType == EUOUDebugConnectionType::PuzzleCondition
+		|| Connection.ConnectionType == EUOUDebugConnectionType::PuzzleResult;
+
+	if (bPuzzleConnection && bOverrideProviderPuzzleConnectionColors)
+	{
+		return GetPuzzleConnectionColor(Connection.ConnectionType);
+	}
+
+	return Connection.Color;
+}
+
 UUOUDebugControllerComponentBase* AUOUDebugController::FindDebugControllerComponent(EUOUDebugCategory Category) const
 {
 	for (UUOUDebugControllerComponentBase* Component : DebugControllerComponents)

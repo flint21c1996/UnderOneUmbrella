@@ -5,6 +5,7 @@
 #include "Animation/AnimInstance.h"
 #include "Animation/AnimMontage.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Debug/UOUDebugController.h"
 #include "Debug/UOUDebugControllerComponent.h"
 #include "Debug/UOUDebugSubsystem.h"
 #include "DrawDebugHelpers.h"
@@ -492,6 +493,17 @@ void AUOUNPCCharacter::DrawNPCDebug()
 		return;
 	}
 
+	const AUOUDebugController* DebugController = DebugSubsystem->GetActiveDebugController();
+	const FColor NPCLabelColor = DebugController != nullptr
+		? DebugController->GetDebugCategoryColor(EUOUDebugCategory::NPC)
+		: FColor::White;
+	const FColor MoveTargetColor = DebugController != nullptr
+		? DebugController->NPCMoveTargetColor
+		: FColor::Green;
+	const FColor PathColor = DebugController != nullptr
+		? DebugController->NPCPathColor
+		: FColor::Cyan;
+
 	if (NPCDebugController->bShowWorldLabels)
 	{
 		const FVector LabelLocation = GetActorLocation() + FVector(0.0f, 0.0f, GetSimpleCollisionHalfHeight() + 60.0f);
@@ -500,14 +512,14 @@ void AUOUNPCCharacter::DrawNPCDebug()
 			LabelLocation,
 			BuildNPCDebugText(*NPCDebugController),
 			nullptr,
-			FColor::White,
+			NPCLabelColor,
 			0.0f,
 			true,
 			0.9f);
 	}
 
-	DrawNPCMoveTargetDebug(*NPCDebugController);
-	DrawNPCPathDebug(*NPCDebugController);
+	DrawNPCMoveTargetDebug(*NPCDebugController, MoveTargetColor);
+	DrawNPCPathDebug(*NPCDebugController, PathColor);
 }
 
 FString AUOUNPCCharacter::BuildNPCDebugText(const UUOUNPCDebugControllerComponent& DebugController) const
@@ -569,7 +581,7 @@ FString AUOUNPCCharacter::BuildNPCDebugText(const UUOUNPCDebugControllerComponen
 	return FString::Join(Lines, LINE_TERMINATOR);
 }
 
-void AUOUNPCCharacter::DrawNPCMoveTargetDebug(const UUOUNPCDebugControllerComponent& DebugController) const
+void AUOUNPCCharacter::DrawNPCMoveTargetDebug(const UUOUNPCDebugControllerComponent& DebugController, FColor DebugColor) const
 {
 	if (!DebugController.bShowMoveTarget)
 	{
@@ -587,8 +599,8 @@ void AUOUNPCCharacter::DrawNPCMoveTargetDebug(const UUOUNPCDebugControllerCompon
 	const FVector EndLocation = TargetLocation + FVector(0.0f, 0.0f, 40.0f);
 	const float CurrentAcceptanceRadius = FMath::Max(0.0f, GetCurrentActionAcceptanceRadius());
 
-	DrawDebugDirectionalArrow(World, StartLocation, EndLocation, 80.0f, FColor::Green, false, 0.0f, 0, 2.0f);
-	DrawDebugSphere(World, TargetLocation, 24.0f, 12, FColor::Green, false, 0.0f, 0, 2.0f);
+	DrawDebugDirectionalArrow(World, StartLocation, EndLocation, 80.0f, DebugColor, false, 0.0f, 0, 2.0f);
+	DrawDebugSphere(World, TargetLocation, 24.0f, 12, DebugColor, false, 0.0f, 0, 2.0f);
 
 	if (CurrentAcceptanceRadius > 0.0f)
 	{
@@ -598,7 +610,7 @@ void AUOUNPCCharacter::DrawNPCMoveTargetDebug(const UUOUNPCDebugControllerCompon
 			TargetLocation + FVector(0.0f, 0.0f, 80.0f),
 			CurrentAcceptanceRadius,
 			24,
-			FColor::Green,
+			DebugColor,
 			false,
 			0.0f,
 			0,
@@ -606,7 +618,7 @@ void AUOUNPCCharacter::DrawNPCMoveTargetDebug(const UUOUNPCDebugControllerCompon
 	}
 }
 
-void AUOUNPCCharacter::DrawNPCPathDebug(const UUOUNPCDebugControllerComponent& DebugController) const
+void AUOUNPCCharacter::DrawNPCPathDebug(const UUOUNPCDebugControllerComponent& DebugController, FColor DebugColor) const
 {
 	if (!DebugController.bShowPath)
 	{
@@ -633,12 +645,12 @@ void AUOUNPCCharacter::DrawNPCPathDebug(const UUOUNPCDebugControllerComponent& D
 	for (int32 Index = 0; Index < PathPoints.Num(); ++Index)
 	{
 		const FVector PointLocation = PathPoints[Index].Location + FVector(0.0f, 0.0f, 20.0f);
-		DrawDebugSphere(World, PointLocation, 12.0f, 8, FColor::Cyan, false, 0.0f, 0, 1.0f);
+		DrawDebugSphere(World, PointLocation, 12.0f, 8, DebugColor, false, 0.0f, 0, 1.0f);
 
 		if (Index > 0)
 		{
 			const FVector PreviousLocation = PathPoints[Index - 1].Location + FVector(0.0f, 0.0f, 20.0f);
-			DrawDebugLine(World, PreviousLocation, PointLocation, FColor::Cyan, false, 0.0f, 0, 2.0f);
+			DrawDebugLine(World, PreviousLocation, PointLocation, DebugColor, false, 0.0f, 0, 2.0f);
 		}
 	}
 }
