@@ -135,8 +135,35 @@ public:
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UUOUDebugControllerComponentBase>> DebugControllerComponents;
 
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Debug|Utilities", meta = (ToolTip = "마지막 디버그 설정 검사 결과입니다."))
+	FString LastValidationSummary;
+
 	UFUNCTION(BlueprintCallable, CallInEditor, Category = "Debug")
 	void RefreshDebugControllerComponents();
+
+	UFUNCTION(BlueprintCallable, CallInEditor, Category = "Debug|Utilities", meta = (ToolTip = "전체 디버그 시스템과 모든 카테고리를 켭니다."))
+	void EnableAllDebug();
+
+	UFUNCTION(BlueprintCallable, CallInEditor, Category = "Debug|Utilities", meta = (ToolTip = "전체 디버그 시스템과 모든 카테고리를 끕니다."))
+	void DisableAllDebug();
+
+	UFUNCTION(BlueprintCallable, CallInEditor, Category = "Debug|Utilities", meta = (ToolTip = "퍼즐 디버그만 켜고 나머지 카테고리는 끕니다."))
+	void ShowPuzzleOnly();
+
+	UFUNCTION(BlueprintCallable, CallInEditor, Category = "Debug|Utilities", meta = (ToolTip = "플레이어, NPC, 퍼즐, 상호작용 디버그만 켭니다."))
+	void ShowGameplayDebug();
+
+	UFUNCTION(BlueprintCallable, CallInEditor, Category = "Debug|Utilities", meta = (ToolTip = "월드 라벨 거리, 표시 개수, 그림자 같은 표시 옵션을 기본값으로 되돌립니다."))
+	void ResetDisplayDefaults();
+
+	UFUNCTION(BlueprintCallable, CallInEditor, Category = "Debug|Utilities", meta = (ToolTip = "현재 월드의 디버그 컨트롤러, provider 중복, 꺼진 카테고리 상태를 검사합니다."))
+	void ValidateDebugSetup();
+
+	UFUNCTION(BlueprintCallable, CallInEditor, Category = "Debug|Utilities", meta = (DisplayName = "Find Or Create Debug Controller", ToolTip = "현재 월드에서 디버그 컨트롤러를 찾고, 없으면 새로 생성합니다."))
+	void FindOrCreateDebugControllerInLevel();
+
+	UFUNCTION(BlueprintCallable, Category = "Debug|Utilities", meta = (WorldContext = "WorldContextObject", DisplayName = "Find Or Create UOU Debug Controller", ToolTip = "World Context 기준으로 디버그 컨트롤러를 찾고, 없으면 새로 생성합니다. Editor Utility에서 호출할 수 있습니다."))
+	static AUOUDebugController* FindOrCreateDebugController(const UObject* WorldContextObject);
 
 	UFUNCTION(BlueprintPure, Category = "Debug")
 	bool IsCategoryEnabled(EUOUDebugCategory Category) const;

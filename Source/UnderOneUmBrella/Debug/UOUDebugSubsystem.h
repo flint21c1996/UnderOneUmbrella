@@ -67,6 +67,8 @@ public:
 
 private:
 	void ResolveDebugController();
+	void TryAutoCreateRuntimeDebugController(UWorld* World);
+	bool ShouldAutoCreateRuntimeDebugController(const UWorld* World) const;
 	void CompactRegisteredProviders();
 	void DrawControllerStatus() const;
 	void DrawRegisteredProviderConnections() const;
