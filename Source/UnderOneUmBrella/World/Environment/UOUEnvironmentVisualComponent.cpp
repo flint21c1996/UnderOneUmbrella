@@ -48,7 +48,7 @@ namespace
 		}
 	}
 
-	FVector GetSafeEffectScale(const UNiagaraComponent* Effect)
+	FVector GetEnvironmentVisualComponentSafeEffectScale(const UNiagaraComponent* Effect)
 	{
 		if (Effect == nullptr)
 		{
@@ -338,7 +338,7 @@ void UUOUEnvironmentVisualComponent::ApplyNiagaraParameters()
 
 	if (ActivePrimaryEffect != nullptr && !PrimaryAreaSizeParameterName.IsNone())
 	{
-		const FVector EffectScale = GetSafeEffectScale(ActivePrimaryEffect);
+		const FVector EffectScale = GetEnvironmentVisualComponentSafeEffectScale(ActivePrimaryEffect);
 		const FVector2D EffectLocalAreaSize(
 			CachedAreaSize.X / EffectScale.X,
 			CachedAreaSize.Y / EffectScale.Y);
@@ -355,7 +355,7 @@ void UUOUEnvironmentVisualComponent::ApplyNiagaraParameters()
 
 	if (ActivePrimaryEffect != nullptr && !RainKillVolumeSizeParameterName.IsNone())
 	{
-		const FVector EffectScale = GetSafeEffectScale(ActivePrimaryEffect);
+		const FVector EffectScale = GetEnvironmentVisualComponentSafeEffectScale(ActivePrimaryEffect);
 		const FVector EffectLocalKillVolumeSize(
 			CachedRainKillVolumeSize.X / EffectScale.X,
 			CachedRainKillVolumeSize.Y / EffectScale.Y,
@@ -375,7 +375,7 @@ void UUOUEnvironmentVisualComponent::ApplyNiagaraParameters()
 
 	if (ActiveSecondaryEffect != nullptr && !SecondaryAreaSizeParameterName.IsNone())
 	{
-		const FVector EffectScale = GetSafeEffectScale(ActiveSecondaryEffect);
+		const FVector EffectScale = GetEnvironmentVisualComponentSafeEffectScale(ActiveSecondaryEffect);
 		const FVector2D EffectLocalAreaSize(
 			CachedAreaSize.X / EffectScale.X,
 			CachedAreaSize.Y / EffectScale.Y);
