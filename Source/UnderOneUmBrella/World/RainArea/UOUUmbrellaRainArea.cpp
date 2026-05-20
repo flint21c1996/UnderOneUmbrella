@@ -91,6 +91,37 @@ void AUOUUmbrellaRainArea::OnConstruction(const FTransform& Transform)
 	ApplyEnvironmentVisualSettings();
 }
 
+#if WITH_EDITOR
+void AUOUUmbrellaRainArea::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent)
+{
+	Super::PostEditChangeProperty(PropertyChangedEvent);
+
+	RainFillRate = FMath::Max(0.0f, RainFillRate);
+	RainVisualIntensity = FMath::Clamp(RainVisualIntensity, 0.0f, 1.0f);
+	RainSpawnRate = FMath::Max(0.0f, RainSpawnRate);
+	GroundSplashIntensityMultiplier = FMath::Max(0.0f, GroundSplashIntensityMultiplier);
+	RainBlockerKillRadiusPadding = FMath::Max(0.0f, RainBlockerKillRadiusPadding);
+	if (RainVisual != nullptr)
+	{
+		RainVisual->SetEffectComponents(PrimaryRainEffect, SecondaryRainEffect);
+	}
+	ApplyPreviewSettings();
+	ApplyEnvironmentVisualSettings();
+}
+
+void AUOUUmbrellaRainArea::PostEditMove(bool bFinished)
+{
+	Super::PostEditMove(bFinished);
+
+	if (RainVisual != nullptr)
+	{
+		RainVisual->SetEffectComponents(PrimaryRainEffect, SecondaryRainEffect);
+	}
+	ApplyPreviewSettings();
+	ApplyEnvironmentVisualSettings();
+}
+#endif
+
 void AUOUUmbrellaRainArea::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
@@ -161,14 +192,16 @@ void AUOUUmbrellaRainArea::ApplyEnvironmentVisualGeometry()
 	const FVector BoxExtent = RainVolume->GetScaledBoxExtent();
 	const FVector VolumeCenter = RainVolume->GetComponentLocation();
 	const FVector VolumeUp = RainVolume->GetUpVector();
-	const FVector RainWorldPosition = VolumeCenter;
+	const FVector RainSpawnPlaneWorldPosition = VolumeCenter + VolumeUp * BoxExtent.Z;
 	const FVector GroundSplashWorldPosition = VolumeCenter - VolumeUp * (BoxExtent.Z - GroundSplashHeightOffset);
 
+	RainVisual->SetWorldLocationAndRotation(VolumeCenter, RainVolume->GetComponentRotation());
+
 	const FTransform VisualTransform = RainVisual->GetComponentTransform();
-	const FVector RainLocalPosition = VisualTransform.InverseTransformPosition(RainWorldPosition);
+	const FVector RainLocalPosition = VisualTransform.InverseTransformPosition(RainSpawnPlaneWorldPosition);
 	const FVector GroundSplashLocalPosition = VisualTransform.InverseTransformPosition(GroundSplashWorldPosition);
-	const FVector RainKillVolumeLocalCenter = VisualTransform.InverseTransformPosition(VolumeCenter);
-	const FRotator EffectLocalRotation = (VisualTransform.GetRotation().Inverse() * RainVolume->GetComponentQuat()).Rotator();
+	const FVector RainKillVolumeLocalCenter = FVector::ZeroVector;
+	const FRotator EffectLocalRotation = FRotator::ZeroRotator;
 	const FVector2D AreaSize(BoxExtent.X * 2.0f, BoxExtent.Y * 2.0f);
 	const FVector KillVolumeSize(BoxExtent.X * 2.0f, BoxExtent.Y * 2.0f, BoxExtent.Z * 2.0f);
 

@@ -27,6 +27,11 @@ protected:
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void OnConstruction(const FTransform& Transform) override;
 
+#if WITH_EDITOR
+	virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
+	virtual void PostEditMove(bool bFinished) override;
+#endif
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Rain")
 	TObjectPtr<USceneComponent> RootScene = nullptr;
 
