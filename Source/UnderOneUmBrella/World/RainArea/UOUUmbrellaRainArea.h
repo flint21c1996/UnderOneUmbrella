@@ -35,7 +35,7 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Rain|Preview")
 	TObjectPtr<UStaticMeshComponent> PreviewVolumeMesh = nullptr;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Visual")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|References", meta = (ToolTip = "이 RainArea와 연동되는 EnvironmentVisualActor입니다. 비 Niagara 재생과 파라미터 전달을 담당합니다."))
 	// 비 영역과 연동되는 환경 비주얼 액터를 연결하는 참조값입니다.
 	TObjectPtr<AUOUEnvironmentVisualActor> EnvironmentVisual = nullptr;
 
@@ -58,27 +58,27 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Preview")
 	TObjectPtr<UMaterialInterface> PreviewMaterial = nullptr;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain", meta = (ClampMin = "0.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Gameplay", meta = (ClampMin = "0.0", ToolTip = "플레이어가 RainArea 안에 있을 때 물이 차오르는 게임플레이 속도입니다. 비주얼 양과는 별도로 사용됩니다."))
 	// 비 영역 안에서 물이 차는 속도를 정한 값입니다.
 	float RainFillRate = 1.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Visual")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Falling", meta = (DisplayPriority = "1", ToolTip = "이 RainArea의 비 내림 Niagara 표시 여부입니다. 게임플레이 RainFillRate와는 별도입니다."))
 	// 환경 비주얼 액터에도 비주얼 세팅을 함께 밀어넣을지 정한 값입니다.
 	bool bEnableRainVisuals = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Visual", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Falling", meta = (ClampMin = "0.0", ClampMax = "1.0", DisplayPriority = "2", ToolTip = "비 내림 표현의 전체 강도입니다. 0이면 보이지 않고, 1이면 RainSpawnRate가 그대로 적용됩니다."))
 	float RainVisualIntensity = 1.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Visual", meta = (ClampMin = "0.0", ToolTip = "비 Niagara가 초당 생성할 기본 파티클 수입니다. RainVisualIntensity와 곱해져 최종 Spawn Rate로 전달됩니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Falling", meta = (ClampMin = "0.0", UIMin = "0.0", UIMax = "6000.0", DisplayPriority = "3", ToolTip = "비 Niagara가 초당 생성할 기본 파티클 수입니다. 최종 Spawn Rate는 RainSpawnRate와 RainVisualIntensity를 곱한 값입니다."))
 	float RainSpawnRate = 2400.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Visual", meta = (ClampMin = "0.0", ClampMax = "2.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Ground Splash", meta = (ClampMin = "0.0", ClampMax = "2.0", ToolTip = "바닥 물 튐 표현의 강도 배율입니다. RainVisualIntensity와 곱해져 GroundSplashIntensity로 전달됩니다."))
 	float GroundSplashIntensityMultiplier = 0.45f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Visual", meta = (ClampMin = "0.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Falling", meta = (ClampMin = "0.0", DisplayPriority = "4", ToolTip = "RainVolume 상단에서 비 Niagara를 얼마나 위로 띄워 생성할지 정합니다."))
 	float RainEmitterTopPadding = 25.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Visual", meta = (ClampMin = "0.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Ground Splash", meta = (ClampMin = "0.0", ToolTip = "RainVolume 바닥에서 바닥 물 튐 Niagara를 얼마나 위로 띄울지 정합니다."))
 	float GroundSplashHeightOffset = 5.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Debug", meta = (ToolTip = "RainArea가 비주얼에 전달하는 영역 계산값을 월드에 표시합니다."))
