@@ -8,9 +8,10 @@
 
 class UBoxComponent;
 class UMaterialInterface;
+class UNiagaraComponent;
 class USceneComponent;
 class UStaticMeshComponent;
-class AUOUEnvironmentVisualActor;
+class UUOUEnvironmentVisualComponent;
 
 // 이 클래스는 우산 플레이어가 들어가면 시간당 비 노출과 물 받기를 적용하는 테스트용 비 영역을 담당한다.
 UCLASS(meta=(DisplayName="UOU Umbrella Rain Area"))
@@ -35,9 +36,14 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Rain|Preview")
 	TObjectPtr<UStaticMeshComponent> PreviewVolumeMesh = nullptr;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|References", meta = (ToolTip = "이 RainArea와 연동되는 EnvironmentVisualActor입니다. 비 Niagara 재생과 파라미터 전달을 담당합니다."))
-	// 비 영역과 연동되는 환경 비주얼 액터를 연결하는 참조값입니다.
-	TObjectPtr<AUOUEnvironmentVisualActor> EnvironmentVisual = nullptr;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Rain|Visual")
+	TObjectPtr<UUOUEnvironmentVisualComponent> RainVisual = nullptr;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Rain|Visual")
+	TObjectPtr<UNiagaraComponent> PrimaryRainEffect = nullptr;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Rain|Visual")
+	TObjectPtr<UNiagaraComponent> SecondaryRainEffect = nullptr;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Preview")
 	// 에디터 안에서 프리뷰 메쉬를 보여줄지 정한 값입니다.
@@ -63,7 +69,7 @@ protected:
 	float RainFillRate = 1.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Falling", meta = (DisplayPriority = "1", ToolTip = "이 RainArea의 비 내림 Niagara 표시 여부입니다. 게임플레이 RainFillRate와는 별도입니다."))
-	// 환경 비주얼 액터에도 비주얼 세팅을 함께 밀어넣을지 정한 값입니다.
+	// RainVisual 컴포넌트에도 비주얼 세팅을 함께 밀어넣을지 정한 값입니다.
 	bool bEnableRainVisuals = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Falling", meta = (ClampMin = "0.0", ClampMax = "1.0", DisplayPriority = "2", ToolTip = "비 내림 표현의 전체 강도입니다. 0이면 보이지 않고, 1이면 RainSpawnRate가 그대로 적용됩니다."))
@@ -89,15 +95,13 @@ protected:
 
 	// 현재 프리뷰 메쉬의 표시 상태와 스케일을 설정값에 맞게 다시 맞춥니다.
 	void ApplyPreviewSettings();
-	// 연결된 환경 비주얼 액터를 자동으로 찾거나 다시 연결합니다.
-	void ResolveEnvironmentVisual();
-	// 환경 비주얼 액터에 강도와 표시 옵션 같은 공통 설정을 넘깁니다.
+	// RainVisual 컴포넌트에 강도와 표시 옵션 같은 공통 설정을 넘깁니다.
 	void ApplyEnvironmentVisualSettings();
-	// 비 영역 크기에 맞춰 환경 비주얼의 배치 범위를 갱신합니다.
+	// 비 영역 크기에 맞춰 RainVisual 컴포넌트의 배치 범위를 갱신합니다.
 	void ApplyEnvironmentVisualGeometry();
-	// 현재 비 영역이 켜져 있는지에 따라 환경 비주얼의 활성 상태를 맞춥니다.
+	// 현재 비 영역이 켜져 있는지에 따라 RainVisual 컴포넌트의 활성 상태를 맞춥니다.
 	void ApplyEnvironmentVisualState();
-	// 우산이 비를 막을 때 환경 비주얼에도 차단 위치와 강도를 전달합니다.
+	// 우산이 비를 막을 때 RainVisual 컴포넌트에도 차단 위치와 강도를 전달합니다.
 	void ApplyEnvironmentVisualRainBlocker(bool bIsBlocking, const FVector& BlockerWorldLocation, float BlockerRadius, float BlockerIntensity);
 	// 비주얼 디버그 박스를 그려서 환경 연동 범위를 확인합니다.
 	void DrawRainVisualDebug() const;
