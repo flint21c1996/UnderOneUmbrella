@@ -36,6 +36,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Environment Visual")
 	void SetVisualIntensities(float PrimaryIntensity, float SecondaryIntensity);
 
+	UFUNCTION(BlueprintCallable, Category = "Environment Visual|Rain")
+	void SetRainSpawnRate(float NewRainSpawnRate);
+
 	UFUNCTION(BlueprintCallable, Category = "Environment Visual")
 	void SetVisualsEnabled(bool bNewEnabled);
 
@@ -101,6 +104,9 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Environment Visual|Runtime")
 	float CachedSecondaryIntensity = 1.0f;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Environment Visual|Runtime")
+	float CachedRainSpawnRate = 2400.0f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual|Parameters")
 	FName PrimaryAreaSizeParameterName = TEXT("RainAreaSize");
 
@@ -112,6 +118,9 @@ protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual|Parameters")
 	FName SecondaryIntensityParameterName = TEXT("GroundSplashIntensity");
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual|Parameters", meta = (ToolTip = "비 Niagara의 Spawn Rate에 전달할 User Parameter 이름입니다."))
+	FName RainSpawnRateParameterName = TEXT("RainSpawnRate");
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual|Parameters", meta = (ToolTip = "우산이 현재 비를 막고 있는지 Niagara에 전달할 User Parameter 이름입니다."))
 	FName RainBlockerActiveParameterName = TEXT("RainBlockerActive");
