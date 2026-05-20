@@ -45,6 +45,20 @@ namespace
 			LastAppliedSystem = DesiredSystem;
 		}
 	}
+
+	FVector GetSafeEffectScale(const UNiagaraComponent* Effect)
+	{
+		if (Effect == nullptr)
+		{
+			return FVector::OneVector;
+		}
+
+		const FVector AbsScale = Effect->GetComponentTransform().GetScale3D().GetAbs();
+		return FVector(
+			FMath::Max(AbsScale.X, UE_KINDA_SMALL_NUMBER),
+			FMath::Max(AbsScale.Y, UE_KINDA_SMALL_NUMBER),
+			FMath::Max(AbsScale.Z, UE_KINDA_SMALL_NUMBER));
+	}
 }
 
 AUOUEnvironmentVisualActor::AUOUEnvironmentVisualActor()
@@ -221,7 +235,11 @@ void AUOUEnvironmentVisualActor::ApplyNiagaraParameters()
 {
 	if (PrimaryEffect != nullptr && !PrimaryAreaSizeParameterName.IsNone())
 	{
-		PrimaryEffect->SetVariableVec2(PrimaryAreaSizeParameterName, CachedAreaSize);
+		const FVector EffectScale = GetSafeEffectScale(PrimaryEffect);
+		const FVector2D EffectLocalAreaSize(
+			CachedAreaSize.X / EffectScale.X,
+			CachedAreaSize.Y / EffectScale.Y);
+		PrimaryEffect->SetVariableVec2(PrimaryAreaSizeParameterName, EffectLocalAreaSize);
 	}
 
 	if (PrimaryEffect != nullptr && !RainKillVolumeCenterParameterName.IsNone())
@@ -234,7 +252,12 @@ void AUOUEnvironmentVisualActor::ApplyNiagaraParameters()
 
 	if (PrimaryEffect != nullptr && !RainKillVolumeSizeParameterName.IsNone())
 	{
-		PrimaryEffect->SetVariableVec3(RainKillVolumeSizeParameterName, CachedRainKillVolumeSize);
+		const FVector EffectScale = GetSafeEffectScale(PrimaryEffect);
+		const FVector EffectLocalKillVolumeSize(
+			CachedRainKillVolumeSize.X / EffectScale.X,
+			CachedRainKillVolumeSize.Y / EffectScale.Y,
+			CachedRainKillVolumeSize.Z / EffectScale.Z);
+		PrimaryEffect->SetVariableVec3(RainKillVolumeSizeParameterName, EffectLocalKillVolumeSize);
 	}
 
 	if (PrimaryEffect != nullptr && !PrimaryIntensityParameterName.IsNone())
@@ -249,7 +272,11 @@ void AUOUEnvironmentVisualActor::ApplyNiagaraParameters()
 
 	if (SecondaryEffect != nullptr && !SecondaryAreaSizeParameterName.IsNone())
 	{
-		SecondaryEffect->SetVariableVec2(SecondaryAreaSizeParameterName, CachedAreaSize);
+		const FVector EffectScale = GetSafeEffectScale(SecondaryEffect);
+		const FVector2D EffectLocalAreaSize(
+			CachedAreaSize.X / EffectScale.X,
+			CachedAreaSize.Y / EffectScale.Y);
+		SecondaryEffect->SetVariableVec2(SecondaryAreaSizeParameterName, EffectLocalAreaSize);
 	}
 
 	if (SecondaryEffect != nullptr && !SecondaryIntensityParameterName.IsNone())
