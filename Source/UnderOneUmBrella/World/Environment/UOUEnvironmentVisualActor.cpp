@@ -108,6 +108,13 @@ void AUOUEnvironmentVisualActor::SetRainSpawnRate(float NewRainSpawnRate)
 	ApplyNiagaraParameters();
 }
 
+void AUOUEnvironmentVisualActor::SetRainBlockerKillRadiusPadding(float NewKillRadiusPadding)
+{
+	RainBlockerKillRadiusPadding = FMath::Max(0.0f, NewKillRadiusPadding);
+
+	ApplyNiagaraParameters();
+}
+
 void AUOUEnvironmentVisualActor::SetVisualsEnabled(bool bNewEnabled)
 {
 	bEnableVisuals = bNewEnabled;

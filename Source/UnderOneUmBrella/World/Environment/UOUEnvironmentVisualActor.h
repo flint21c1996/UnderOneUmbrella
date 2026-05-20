@@ -39,6 +39,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Environment Visual|Rain")
 	void SetRainSpawnRate(float NewRainSpawnRate);
 
+	UFUNCTION(BlueprintCallable, Category = "Environment Visual|Rain")
+	void SetRainBlockerKillRadiusPadding(float NewKillRadiusPadding);
+
 	UFUNCTION(BlueprintCallable, Category = "Environment Visual")
 	void SetVisualsEnabled(bool bNewEnabled);
 
@@ -59,7 +62,7 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Environment Visual")
 	TObjectPtr<UNiagaraComponent> SecondaryEffect = nullptr;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Environment Visual")
 	bool bEnableVisuals = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual")
@@ -134,7 +137,7 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual|Parameters", meta = (ToolTip = "우산이 비를 막는 표현 강도를 Niagara에 전달할 User Parameter 이름입니다."))
 	FName RainBlockerIntensityParameterName = TEXT("RainBlockerIntensity");
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual|Rain Block", meta = (ClampMin = "0.0", ToolTip = "빠른 비 파티클이 작은 우산 차단 영역을 지나치지 않도록 Niagara kill 반지름에 더해지는 여유 값입니다."))
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Environment Visual|Rain Block", meta = (ToolTip = "RainArea에서 전달된 Niagara kill 반지름 여유 값입니다. 직접 수정하지 않고 RainArea에서 관리합니다."))
 	float RainBlockerKillRadiusPadding = 75.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual|Debug", meta = (ToolTip = "Niagara에 전달된 우산 비 차단 영역을 월드에 표시합니다."))

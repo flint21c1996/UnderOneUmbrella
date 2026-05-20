@@ -51,6 +51,7 @@ void AUOUUmbrellaRainArea::BeginPlay()
 	RainVisualIntensity = FMath::Clamp(RainVisualIntensity, 0.0f, 1.0f);
 	RainSpawnRate = FMath::Max(0.0f, RainSpawnRate);
 	GroundSplashIntensityMultiplier = FMath::Max(0.0f, GroundSplashIntensityMultiplier);
+	RainBlockerKillRadiusPadding = FMath::Max(0.0f, RainBlockerKillRadiusPadding);
 	ResolveEnvironmentVisual();
 	ApplyPreviewSettings();
 	ApplyEnvironmentVisualSettings();
@@ -64,6 +65,7 @@ void AUOUUmbrellaRainArea::OnConstruction(const FTransform& Transform)
 	RainVisualIntensity = FMath::Clamp(RainVisualIntensity, 0.0f, 1.0f);
 	RainSpawnRate = FMath::Max(0.0f, RainSpawnRate);
 	GroundSplashIntensityMultiplier = FMath::Max(0.0f, GroundSplashIntensityMultiplier);
+	RainBlockerKillRadiusPadding = FMath::Max(0.0f, RainBlockerKillRadiusPadding);
 	ResolveEnvironmentVisual();
 	ApplyPreviewSettings();
 	ApplyEnvironmentVisualSettings();
@@ -185,6 +187,7 @@ void AUOUUmbrellaRainArea::ApplyEnvironmentVisualState()
 	const float PrimaryIntensity = FMath::Clamp(RainVisualIntensity, 0.0f, 1.0f);
 	const float SecondaryIntensity = FMath::Clamp(RainVisualIntensity * GroundSplashIntensityMultiplier, 0.0f, 1.0f);
 
+	EnvironmentVisual->SetRainBlockerKillRadiusPadding(RainBlockerKillRadiusPadding);
 	EnvironmentVisual->SetRainSpawnRate(RainSpawnRate);
 	EnvironmentVisual->SetVisualIntensities(PrimaryIntensity, SecondaryIntensity);
 	EnvironmentVisual->SetVisualsEnabled(bEnableRainVisuals);
