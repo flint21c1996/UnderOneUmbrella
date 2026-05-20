@@ -161,20 +161,24 @@ void AUOUUmbrellaRainArea::ApplyEnvironmentVisualGeometry()
 	const FVector BoxExtent = RainVolume->GetScaledBoxExtent();
 	const FVector VolumeCenter = RainVolume->GetComponentLocation();
 	const FVector VolumeUp = RainVolume->GetUpVector();
-	const FVector RainWorldPosition = VolumeCenter + VolumeUp * (BoxExtent.Z + RainEmitterTopPadding);
+	const FVector RainWorldPosition = VolumeCenter;
 	const FVector GroundSplashWorldPosition = VolumeCenter - VolumeUp * (BoxExtent.Z - GroundSplashHeightOffset);
 
 	const FTransform VisualTransform = EnvironmentVisual->GetActorTransform();
 	const FVector RainLocalPosition = VisualTransform.InverseTransformPosition(RainWorldPosition);
 	const FVector GroundSplashLocalPosition = VisualTransform.InverseTransformPosition(GroundSplashWorldPosition);
+	const FVector RainKillVolumeLocalCenter = VisualTransform.InverseTransformPosition(VolumeCenter);
 	const FRotator EffectLocalRotation = (VisualTransform.GetRotation().Inverse() * RainVolume->GetComponentQuat()).Rotator();
 	const FVector2D AreaSize(BoxExtent.X * 2.0f, BoxExtent.Y * 2.0f);
+	const FVector KillVolumeSize(BoxExtent.X * 2.0f, BoxExtent.Y * 2.0f, BoxExtent.Z * 2.0f);
 
 	EnvironmentVisual->ConfigureRainVisual(
 		RainLocalPosition,
 		GroundSplashLocalPosition,
 		EffectLocalRotation,
-		AreaSize);
+		AreaSize,
+		RainKillVolumeLocalCenter,
+		KillVolumeSize);
 }
 
 void AUOUUmbrellaRainArea::ApplyEnvironmentVisualState()
@@ -235,7 +239,7 @@ void AUOUUmbrellaRainArea::DrawRainVisualDebug() const
 	const FVector VolumeCenter = RainVolume->GetComponentLocation();
 	const FQuat VolumeRotation = RainVolume->GetComponentQuat();
 	const FVector VolumeUp = RainVolume->GetUpVector();
-	const FVector RainWorldPosition = VolumeCenter + VolumeUp * (BoxExtent.Z + RainEmitterTopPadding);
+	const FVector RainSpawnPlaneWorldPosition = VolumeCenter + VolumeUp * BoxExtent.Z;
 	const FVector GroundSplashWorldPosition = VolumeCenter - VolumeUp * (BoxExtent.Z - GroundSplashHeightOffset);
 	const FVector VisualAreaHalfExtent(BoxExtent.X, BoxExtent.Y, 2.0f);
 	const float Thickness = FMath::Max(0.0f, RainVisualDebugThickness);
@@ -255,7 +259,7 @@ void AUOUUmbrellaRainArea::DrawRainVisualDebug() const
 
 	DrawDebugBox(
 		World,
-		RainWorldPosition,
+		RainSpawnPlaneWorldPosition,
 		VisualAreaHalfExtent,
 		VolumeRotation,
 		VFXDebugColor,
@@ -278,7 +282,7 @@ void AUOUUmbrellaRainArea::DrawRainVisualDebug() const
 	DrawDebugLine(
 		World,
 		GroundSplashWorldPosition,
-		RainWorldPosition,
+		RainSpawnPlaneWorldPosition,
 		VFXDebugColor,
 		false,
 		LifeTime,
@@ -287,7 +291,7 @@ void AUOUUmbrellaRainArea::DrawRainVisualDebug() const
 
 	DrawDebugString(
 		World,
-		RainWorldPosition + VolumeUp * 20.0f,
+		RainSpawnPlaneWorldPosition + VolumeUp * 20.0f,
 		FString::Printf(
 			TEXT("RainAreaSize %.1f x %.1f"),
 			BoxExtent.X * 2.0f,

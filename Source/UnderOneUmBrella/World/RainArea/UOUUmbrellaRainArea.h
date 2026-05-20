@@ -75,9 +75,6 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Ground Splash", meta = (ClampMin = "0.0", ClampMax = "2.0", ToolTip = "바닥 물 튐 표현의 강도 배율입니다. RainVisualIntensity와 곱해져 GroundSplashIntensity로 전달됩니다."))
 	float GroundSplashIntensityMultiplier = 0.45f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Falling", meta = (ClampMin = "0.0", DisplayPriority = "4", ToolTip = "RainVolume 상단에서 비 Niagara를 얼마나 위로 띄워 생성할지 정합니다."))
-	float RainEmitterTopPadding = 25.0f;
-
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Ground Splash", meta = (ClampMin = "0.0", ToolTip = "RainVolume 바닥에서 바닥 물 튐 Niagara를 얼마나 위로 띄울지 정합니다."))
 	float GroundSplashHeightOffset = 5.0f;
 
