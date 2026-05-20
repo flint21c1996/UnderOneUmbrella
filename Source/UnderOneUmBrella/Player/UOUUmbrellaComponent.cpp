@@ -687,52 +687,13 @@ FTransform UUOUUmbrellaComponent::GetHeldVisualRelativeTransform(const FVector& 
 // 플레이 중 우산 보유 상태, 저장된 물, 마지막 붓기 대상을 화면에 표시합니다.
 void UUOUUmbrellaComponent::DrawScreenDebug() const
 {
-	if (!bShowScreenDebug
-		|| !UUOUDebugSubsystem::IsDebugScreenMessageEnabled(this, EUOUDebugCategory::Player)
-		|| GEngine == nullptr)
-	{
-		return;
-	}
-
-	const APawn* OwnerPawn = Cast<APawn>(GetOwner());
-	if (OwnerPawn == nullptr || !OwnerPawn->IsLocallyControlled())
-	{
-		// 로컬 플레이어 화면에만 디버그를 출력해서 중복 표시를 피합니다.
-		return;
-	}
-
-	const UEnum* UmbrellaStateEnum = StaticEnum<EUOUUmbrellaState>();
-	const FString StateText = UmbrellaStateEnum != nullptr
-		? UmbrellaStateEnum->GetNameStringByValue(static_cast<int64>(CurrentState))
-		: TEXT("Unknown");
-
-	const FString DebugText = FString::Printf(
-		TEXT("Umbrella Owned: %s\nState: %s\nStored Water: %.2f\nRain Exposure: %.2f\nBlocks Jump: %s\nPour Hit: %s\nPour Target: %s\nPour Receiver: %s\nPour Amount: %.2f\nStored Before/After: %.2f -> %.2f"),
-		bHasUmbrella ? TEXT("Yes") : TEXT("No"),
-		*StateText,
-		GetCurrentStoredWater(),
-		GetCurrentPlayerRainAmount(),
-		BlocksJumping() ? TEXT("Yes") : TEXT("No"),
-		*LastPourHitName,
-		*LastPourTargetName,
-		GetPourReceiverTypeText(LastPourReceiverType),
-		LastPourAmount,
-		LastPourStoredWaterBefore,
-		LastPourStoredWaterAfter);
-
-	GEngine->AddOnScreenDebugMessage(
-		0x554F5531,
-		0.0f,
-		UUOUDebugSubsystem::GetDebugCategoryColor(this, EUOUDebugCategory::Player, FColor::Cyan),
-		DebugText,
-		false,
-		FVector2D(1.0f, 1.0f));
+	// 플레이어/우산 화면 디버그는 Debug Controller의 Player HUD에서 통합 표시합니다.
 }
 
 // 우산이 비를 막는 중심과 범위를 월드에 그려 RainArea 판정 위치를 눈으로 확인합니다.
 void UUOUUmbrellaComponent::DrawRainBlockerDebug() const
 {
-	if (!bDrawRainBlockerDebug || !UUOUDebugSubsystem::IsDebugWorldDrawEnabled(this, EUOUDebugCategory::Player))
+	if (!UUOUDebugSubsystem::IsDebugWorldDrawEnabled(this, EUOUDebugCategory::Player))
 	{
 		return;
 	}
@@ -804,8 +765,7 @@ void UUOUUmbrellaComponent::DrawRainBlockerDebug() const
 // 물 붓기 라인트레이스의 마지막 결과를 월드에 그려 어느 대상에 닿았는지 확인합니다.
 void UUOUUmbrellaComponent::DrawPourTraceDebug() const
 {
-	if (!bDrawPourTraceDebug
-		|| !bHasLastPourTrace
+	if (!bHasLastPourTrace
 		|| !UUOUDebugSubsystem::IsDebugWorldDrawEnabled(this, EUOUDebugCategory::Player))
 	{
 		return;
@@ -860,7 +820,7 @@ void UUOUUmbrellaComponent::DrawPourTraceDebug() const
 			Thickness);
 	}
 
-	if (bDrawPourTraceDebugLabel)
+	if (UUOUDebugSubsystem::IsDebugWorldLabelEnabled(this, EUOUDebugCategory::Player))
 	{
 		const FVector LabelLocation = DrawEnd + FVector(0.0f, 0.0f, 24.0f);
 		const FString LabelText = FString::Printf(

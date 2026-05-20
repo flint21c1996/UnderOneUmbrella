@@ -137,24 +137,24 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Visual")
 	bool bUsePickupMeshRelativeScale = true;
 
-	// 우산 상태와 물 양을 화면 왼쪽에 디버그 텍스트로 표시할지 정합니다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Debug")
+	// 화면 디버그 표시 여부는 이제 Debug Controller의 Player HUD가 결정합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, AdvancedDisplay, Category = "Umbrella|Debug", meta = (ToolTip = "이 값은 더 이상 화면 디버그 표시 여부를 결정하지 않습니다. Debug Controller의 Player HUD 옵션을 사용합니다."))
 	bool bShowScreenDebug = false;
 
-	// 우산이 비를 막는 중심과 반지름을 월드 디버그로 보여줄지 정합니다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Debug", meta = (ToolTip = "우산이 비를 막는 중심 위치와 반지름을 디버그로 표시합니다."))
+	// 우산 월드 디버그 표시 여부는 이제 Debug Controller의 Player 카테고리가 결정합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, AdvancedDisplay, Category = "Umbrella|Debug", meta = (ToolTip = "이 값은 더 이상 비 차단 월드 디버그 표시 여부를 결정하지 않습니다. Debug Controller의 Player World Debug 옵션을 사용합니다."))
 	bool bDrawRainBlockerDebug = true;
 
 	// 비 차단 디버그 선과 중심점의 두께입니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Debug", meta = (ClampMin = "0.0", ToolTip = "비 차단 디버그 선과 중심점의 두께입니다."))
 	float RainBlockerDebugThickness = 2.0f;
 
-	// 물 붓기 라인트레이스를 월드에 보여줄지 정합니다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Debug", meta = (ToolTip = "물을 붓는 동안 우산 물줄기 라인트레이스를 월드에 표시합니다."))
+	// 물 붓기 라인트레이스 표시 여부는 이제 Debug Controller의 Player 카테고리가 결정합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, AdvancedDisplay, Category = "Umbrella|Debug", meta = (ToolTip = "이 값은 더 이상 물 붓기 라인트레이스 표시 여부를 결정하지 않습니다. Debug Controller의 Player World Debug 옵션을 사용합니다."))
 	bool bDrawPourTraceDebug = true;
 
-	// 마지막 물 붓기 결과 라벨을 월드에 보여줄지 정합니다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Debug", meta = (ToolTip = "마지막 물 붓기 히트 지점이나 끝점 옆에 디버그 라벨을 표시합니다."))
+	// 물 붓기 라벨 표시 여부는 이제 Debug Controller의 Player 카테고리가 결정합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, AdvancedDisplay, Category = "Umbrella|Debug", meta = (ToolTip = "이 값은 더 이상 물 붓기 라벨 표시 여부를 결정하지 않습니다. Debug Controller의 Player World Label 옵션을 사용합니다."))
 	bool bDrawPourTraceDebugLabel = true;
 
 	// 물 붓기 라인트레이스 디버그 선의 두께입니다.

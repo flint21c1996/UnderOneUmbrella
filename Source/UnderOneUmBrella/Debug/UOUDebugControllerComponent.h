@@ -47,16 +47,31 @@ public:
 	UUOUPlayerDebugControllerComponent();
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Player", meta = (ToolTip = "메인 뷰포트에 플레이어 디버그 정보를 표시합니다."))
-	bool bShowViewportHUD = false;
+	bool bShowViewportHUD = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Player", meta = (ToolTip = "플레이어 주변 월드 디버그 도형과 보조선을 표시합니다."))
 	bool bShowWorldDebug = true;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Player", meta = (ToolTip = "플레이어 보유 우산 상태와 물, 비 노출 정보를 포함합니다."))
+	bool bShowUmbrellaState = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Player", meta = (ToolTip = "마지막 물 붓기 라인트레이스와 전달 결과를 포함합니다."))
+	bool bShowPourState = true;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Player", meta = (ToolTip = "현재 플레이어 상호작용 대상을 포함합니다."))
 	bool bShowInteractionTarget = true;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Player", meta = (ToolTip = "밀고 당기기 후보, 잡기 상태, 실패 이유를 포함합니다."))
+	bool bShowPushPullState = true;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Player", meta = (ToolTip = "플레이어 이동, 입력, 상태 값을 포함합니다."))
 	bool bShowMovementState = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Player", meta = (ToolTip = "플레이어 입력 분기와 입력 이벤트 카운트를 포함합니다."))
+	bool bShowInputState = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Player", meta = (ToolTip = "카메라 yaw, 거리, 가림 처리 개수를 포함합니다."))
+	bool bShowCameraState = false;
 };
 
 UCLASS(ClassGroup=(Debug), HideCategories=("Debug|Common", Common), meta=(BlueprintSpawnableComponent, DisplayName = "UOU NPC Debug Controller"))
