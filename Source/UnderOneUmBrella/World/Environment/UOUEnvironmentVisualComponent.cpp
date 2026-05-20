@@ -446,7 +446,7 @@ void UUOUEnvironmentVisualComponent::ApplyVisualEffectTransforms()
 	}
 }
 
-void UUOUEnvironmentVisualComponent::DrawRainBlockerNiagaraDebug(const UNiagaraComponent* Effect, const FVector& EffectLocalBlockerPosition, float EffectiveBlockerRadius) const
+void UUOUEnvironmentVisualComponent::DrawRainBlockerNiagaraDebug(const UNiagaraComponent* Effect, const FVector& VisualLocalBlockerPosition, float EffectiveBlockerRadius) const
 {
 	if (!bDrawRainBlockerNiagaraDebug
 		|| !bCachedRainBlockerActive
@@ -458,7 +458,7 @@ void UUOUEnvironmentVisualComponent::DrawRainBlockerNiagaraDebug(const UNiagaraC
 		return;
 	}
 
-	const FVector DebugWorldLocation = Effect->GetComponentTransform().TransformPosition(EffectLocalBlockerPosition);
+	const FVector DebugWorldLocation = GetComponentTransform().TransformPosition(VisualLocalBlockerPosition);
 	const float CenterRadius = FMath::Max(6.0f, RainBlockerNiagaraDebugThickness * 2.0f);
 	const FColor VFXDebugColor = UUOUDebugSubsystem::GetDebugCategoryColor(this, EUOUDebugCategory::VFX, FColor::Magenta);
 

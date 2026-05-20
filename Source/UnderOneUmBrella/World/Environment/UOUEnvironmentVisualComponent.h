@@ -177,7 +177,7 @@ protected:
 	void ApplyVisualEffectTransforms();
 	void ApplyNiagaraParameters();
 	void RefreshNiagaraActivation();
-	void DrawRainBlockerNiagaraDebug(const UNiagaraComponent* Effect, const FVector& EffectLocalBlockerPosition, float EffectiveBlockerRadius) const;
+	void DrawRainBlockerNiagaraDebug(const UNiagaraComponent* Effect, const FVector& VisualLocalBlockerPosition, float EffectiveBlockerRadius) const;
 	void EnsureInternalEffectComponents();
 	UNiagaraComponent* GetPrimaryEffectComponent() const;
 	UNiagaraComponent* GetSecondaryEffectComponent() const;
