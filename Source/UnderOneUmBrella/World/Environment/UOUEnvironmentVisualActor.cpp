@@ -20,7 +20,7 @@ namespace
 		{
 			return;
 		}
-
+		
 		UNiagaraSystem* DesiredSystem = StoredSystem.Get();
 		UNiagaraSystem* ComponentSystem = NiagaraComponent->GetAsset();
 		UNiagaraSystem* PreviousSystem = LastAppliedSystem.Get();

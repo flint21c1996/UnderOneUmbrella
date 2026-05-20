@@ -52,6 +52,7 @@ public:
 	void SetVisualsEnabled(bool bNewEnabled);
 
 protected:
+	virtual void OnRegister() override;
 	virtual void BeginPlay() override;
 
 #if WITH_EDITOR
@@ -64,8 +65,20 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual|Effects", meta = (ToolTip = "바닥 물 튐처럼 보조 표현을 담당하는 Niagara 컴포넌트입니다."))
 	TObjectPtr<UNiagaraComponent> SecondaryEffect = nullptr;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual|Effects", meta = (ToolTip = "연결된 NiagaraComponent가 없을 때 내부 재생용 NiagaraComponent를 자동으로 생성할지 정합니다."))
+	bool bAutoCreateMissingEffectComponents = true;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UNiagaraComponent> InternalPrimaryEffect = nullptr;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UNiagaraComponent> InternalSecondaryEffect = nullptr;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Environment Visual")
 	bool bEnableVisuals = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual|Editor Preview", meta = (ToolTip = "에디터 배치 상태에서도 Niagara 프리뷰를 재생할지 정합니다. 실제 게임 실행 중에는 bEnableVisuals와 강도 값이 활성 상태를 결정합니다."))
+	bool bEnableEditorPreview = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual")
 	TObjectPtr<UNiagaraSystem> PrimarySystem = nullptr;
@@ -165,4 +178,7 @@ protected:
 	void ApplyNiagaraParameters();
 	void RefreshNiagaraActivation();
 	void DrawRainBlockerNiagaraDebug(const UNiagaraComponent* Effect, const FVector& EffectLocalBlockerPosition, float EffectiveBlockerRadius) const;
+	void EnsureInternalEffectComponents();
+	UNiagaraComponent* GetPrimaryEffectComponent() const;
+	UNiagaraComponent* GetSecondaryEffectComponent() const;
 };

@@ -4,8 +4,11 @@
 
 #include "Debug/UOUDebugSubsystem.h"
 #include "DrawDebugHelpers.h"
+#include "Engine/World.h"
+#include "GameFramework/Actor.h"
 #include "NiagaraComponent.h"
 #include "UObject/UnrealType.h"
+#include "UObject/UObjectGlobals.h"
 
 namespace
 {
@@ -70,14 +73,19 @@ void UUOUEnvironmentVisualComponent::SetEffectComponents(UNiagaraComponent* NewP
 	PrimaryEffect = NewPrimaryEffect;
 	SecondaryEffect = NewSecondaryEffect;
 
-	if (PrimaryEffect != nullptr)
+	EnsureInternalEffectComponents();
+
+	UNiagaraComponent* ActivePrimaryEffect = GetPrimaryEffectComponent();
+	UNiagaraComponent* ActiveSecondaryEffect = GetSecondaryEffectComponent();
+
+	if (ActivePrimaryEffect != nullptr)
 	{
-		PrimaryEffect->SetAutoActivate(false);
+		ActivePrimaryEffect->SetAutoActivate(false);
 	}
 
-	if (SecondaryEffect != nullptr)
+	if (ActiveSecondaryEffect != nullptr)
 	{
-		SecondaryEffect->SetAutoActivate(false);
+		ActiveSecondaryEffect->SetAutoActivate(false);
 	}
 
 	ApplyVisualEffectSettings();
@@ -148,10 +156,22 @@ void UUOUEnvironmentVisualComponent::SetVisualsEnabled(bool bNewEnabled)
 	RefreshNiagaraActivation();
 }
 
+void UUOUEnvironmentVisualComponent::OnRegister()
+{
+	Super::OnRegister();
+
+	EnsureInternalEffectComponents();
+	ApplyVisualEffectSettings();
+	ApplyVisualEffectTransforms();
+	ApplyNiagaraParameters();
+	RefreshNiagaraActivation();
+}
+
 void UUOUEnvironmentVisualComponent::BeginPlay()
 {
 	Super::BeginPlay();
 
+	EnsureInternalEffectComponents();
 	ApplyVisualEffectSettings();
 	ApplyVisualEffectTransforms();
 	ApplyNiagaraParameters();
@@ -168,10 +188,12 @@ void UUOUEnvironmentVisualComponent::PostEditChangeProperty(FPropertyChangedEven
 	const bool bPrimarySystemChanged = PropertyName == GET_MEMBER_NAME_CHECKED(UUOUEnvironmentVisualComponent, PrimarySystem);
 	const bool bSecondarySystemChanged = PropertyName == GET_MEMBER_NAME_CHECKED(UUOUEnvironmentVisualComponent, SecondarySystem);
 
+	EnsureInternalEffectComponents();
 	ApplyVisualEffectSettings(bPrimarySystemChanged, bSecondarySystemChanged);
 
 	Super::PostEditChangeProperty(PropertyChangedEvent);
 
+	EnsureInternalEffectComponents();
 	ApplyVisualEffectSettings(bPrimarySystemChanged, bSecondarySystemChanged);
 	ApplyVisualEffectTransforms();
 	ApplyNiagaraParameters();
@@ -179,108 +201,190 @@ void UUOUEnvironmentVisualComponent::PostEditChangeProperty(FPropertyChangedEven
 }
 #endif
 
+void UUOUEnvironmentVisualComponent::EnsureInternalEffectComponents()
+{
+	if (!bAutoCreateMissingEffectComponents
+		|| HasAnyFlags(RF_ClassDefaultObject)
+		|| GetOwner() == nullptr
+		|| GetOwner()->HasAnyFlags(RF_ClassDefaultObject))
+	{
+		return;
+	}
+
+	AActor* Owner = GetOwner();
+
+	if (PrimaryEffect == nullptr && InternalPrimaryEffect == nullptr)
+	{
+		const FName ComponentName = MakeUniqueObjectName(Owner, UNiagaraComponent::StaticClass(), TEXT("RainVisualPrimaryEffect"));
+		InternalPrimaryEffect = NewObject<UNiagaraComponent>(Owner, ComponentName, RF_Transient);
+		if (InternalPrimaryEffect != nullptr)
+		{
+			InternalPrimaryEffect->CreationMethod = EComponentCreationMethod::Instance;
+			InternalPrimaryEffect->SetAutoActivate(false);
+			InternalPrimaryEffect->SetupAttachment(this);
+			Owner->AddInstanceComponent(InternalPrimaryEffect);
+			if (IsRegistered() && !InternalPrimaryEffect->IsRegistered())
+			{
+				InternalPrimaryEffect->RegisterComponent();
+			}
+		}
+	}
+
+	if (SecondaryEffect == nullptr && InternalSecondaryEffect == nullptr)
+	{
+		const FName ComponentName = MakeUniqueObjectName(Owner, UNiagaraComponent::StaticClass(), TEXT("RainVisualSecondaryEffect"));
+		InternalSecondaryEffect = NewObject<UNiagaraComponent>(Owner, ComponentName, RF_Transient);
+		if (InternalSecondaryEffect != nullptr)
+		{
+			InternalSecondaryEffect->CreationMethod = EComponentCreationMethod::Instance;
+			InternalSecondaryEffect->SetAutoActivate(false);
+			InternalSecondaryEffect->SetupAttachment(this);
+			Owner->AddInstanceComponent(InternalSecondaryEffect);
+			if (IsRegistered() && !InternalSecondaryEffect->IsRegistered())
+			{
+				InternalSecondaryEffect->RegisterComponent();
+			}
+		}
+	}
+}
+
+UNiagaraComponent* UUOUEnvironmentVisualComponent::GetPrimaryEffectComponent() const
+{
+	return PrimaryEffect != nullptr
+		? PrimaryEffect.Get()
+		: (bAutoCreateMissingEffectComponents ? InternalPrimaryEffect.Get() : nullptr);
+}
+
+UNiagaraComponent* UUOUEnvironmentVisualComponent::GetSecondaryEffectComponent() const
+{
+	return SecondaryEffect != nullptr
+		? SecondaryEffect.Get()
+		: (bAutoCreateMissingEffectComponents ? InternalSecondaryEffect.Get() : nullptr);
+}
+
 void UUOUEnvironmentVisualComponent::ApplyVisualEffectSettings(bool bForcePrimarySystem, bool bForceSecondarySystem)
 {
-	ApplyNiagaraSystemSelection(PrimaryEffect, PrimarySystem, LastAppliedPrimarySystem, bForcePrimarySystem);
-	ApplyNiagaraSystemSelection(SecondaryEffect, SecondarySystem, LastAppliedSecondarySystem, bForceSecondarySystem);
+	ApplyNiagaraSystemSelection(GetPrimaryEffectComponent(), PrimarySystem, LastAppliedPrimarySystem, bForcePrimarySystem);
+	ApplyNiagaraSystemSelection(GetSecondaryEffectComponent(), SecondarySystem, LastAppliedSecondarySystem, bForceSecondarySystem);
 }
 
 void UUOUEnvironmentVisualComponent::RefreshNiagaraActivation()
 {
-	const bool bShouldShowPrimary = bEnableVisuals
-		&& PrimaryEffect != nullptr
-		&& PrimaryEffect->GetAsset() != nullptr
+	const UWorld* World = GetWorld();
+	const bool bIsGameWorld = World != nullptr && World->IsGameWorld();
+	const bool bShouldAllowVisuals = bEnableVisuals && (bIsGameWorld || bEnableEditorPreview);
+	UNiagaraComponent* ActivePrimaryEffect = GetPrimaryEffectComponent();
+	UNiagaraComponent* ActiveSecondaryEffect = GetSecondaryEffectComponent();
+
+	if ((PrimaryEffect != nullptr || !bAutoCreateMissingEffectComponents) && InternalPrimaryEffect != nullptr)
+	{
+		InternalPrimaryEffect->SetVisibility(false, true);
+		InternalPrimaryEffect->Deactivate();
+	}
+
+	if ((SecondaryEffect != nullptr || !bAutoCreateMissingEffectComponents) && InternalSecondaryEffect != nullptr)
+	{
+		InternalSecondaryEffect->SetVisibility(false, true);
+		InternalSecondaryEffect->Deactivate();
+	}
+
+	const bool bShouldShowPrimary = bShouldAllowVisuals
+		&& ActivePrimaryEffect != nullptr
+		&& ActivePrimaryEffect->GetAsset() != nullptr
 		&& CachedPrimaryIntensity > UE_KINDA_SMALL_NUMBER;
 
-	if (PrimaryEffect != nullptr)
+	if (ActivePrimaryEffect != nullptr)
 	{
-		const bool bWasPrimaryVisible = PrimaryEffect->IsVisible();
-		PrimaryEffect->SetVisibility(bShouldShowPrimary, true);
+		const bool bWasPrimaryVisible = ActivePrimaryEffect->IsVisible();
+		ActivePrimaryEffect->SetVisibility(bShouldShowPrimary, true);
 
-		if (bShouldShowPrimary && (!PrimaryEffect->IsActive() || !bWasPrimaryVisible))
+		if (bShouldShowPrimary && (!ActivePrimaryEffect->IsActive() || !bWasPrimaryVisible))
 		{
-			PrimaryEffect->Activate(true);
+			ActivePrimaryEffect->Activate(true);
 			ApplyNiagaraParameters();
 		}
-		else if (!bShouldShowPrimary && PrimaryEffect->IsActive())
+		else if (!bShouldShowPrimary && ActivePrimaryEffect->IsActive())
 		{
-			PrimaryEffect->Deactivate();
+			ActivePrimaryEffect->Deactivate();
 		}
 	}
 
-	const bool bShouldShowSecondary = bEnableVisuals
-		&& SecondaryEffect != nullptr
-		&& SecondaryEffect->GetAsset() != nullptr
+	const bool bShouldShowSecondary = bShouldAllowVisuals
+		&& ActiveSecondaryEffect != nullptr
+		&& ActiveSecondaryEffect->GetAsset() != nullptr
 		&& CachedSecondaryIntensity > UE_KINDA_SMALL_NUMBER;
 
-	if (SecondaryEffect != nullptr)
+	if (ActiveSecondaryEffect != nullptr)
 	{
-		const bool bWasSecondaryVisible = SecondaryEffect->IsVisible();
-		SecondaryEffect->SetVisibility(bShouldShowSecondary, true);
+		const bool bWasSecondaryVisible = ActiveSecondaryEffect->IsVisible();
+		ActiveSecondaryEffect->SetVisibility(bShouldShowSecondary, true);
 
-		if (bShouldShowSecondary && (!SecondaryEffect->IsActive() || !bWasSecondaryVisible))
+		if (bShouldShowSecondary && (!ActiveSecondaryEffect->IsActive() || !bWasSecondaryVisible))
 		{
-			SecondaryEffect->Activate(true);
+			ActiveSecondaryEffect->Activate(true);
 			ApplyNiagaraParameters();
 		}
-		else if (!bShouldShowSecondary && SecondaryEffect->IsActive())
+		else if (!bShouldShowSecondary && ActiveSecondaryEffect->IsActive())
 		{
-			SecondaryEffect->Deactivate();
+			ActiveSecondaryEffect->Deactivate();
 		}
 	}
 }
 
 void UUOUEnvironmentVisualComponent::ApplyNiagaraParameters()
 {
-	if (PrimaryEffect != nullptr && !PrimaryAreaSizeParameterName.IsNone())
+	UNiagaraComponent* ActivePrimaryEffect = GetPrimaryEffectComponent();
+	UNiagaraComponent* ActiveSecondaryEffect = GetSecondaryEffectComponent();
+
+	if (ActivePrimaryEffect != nullptr && !PrimaryAreaSizeParameterName.IsNone())
 	{
-		const FVector EffectScale = GetSafeEffectScale(PrimaryEffect);
+		const FVector EffectScale = GetSafeEffectScale(ActivePrimaryEffect);
 		const FVector2D EffectLocalAreaSize(
 			CachedAreaSize.X / EffectScale.X,
 			CachedAreaSize.Y / EffectScale.Y);
-		PrimaryEffect->SetVariableVec2(PrimaryAreaSizeParameterName, EffectLocalAreaSize);
+		ActivePrimaryEffect->SetVariableVec2(PrimaryAreaSizeParameterName, EffectLocalAreaSize);
 	}
 
-	if (PrimaryEffect != nullptr && !RainKillVolumeCenterParameterName.IsNone())
+	if (ActivePrimaryEffect != nullptr && !RainKillVolumeCenterParameterName.IsNone())
 	{
 		const FVector KillVolumeWorldCenter = GetComponentTransform().TransformPosition(CachedRainKillVolumeLocalCenter);
-		const FVector KillVolumeEffectLocalCenter = PrimaryEffect->GetComponentTransform().InverseTransformPosition(KillVolumeWorldCenter);
+		const FVector KillVolumeEffectLocalCenter = ActivePrimaryEffect->GetComponentTransform().InverseTransformPosition(KillVolumeWorldCenter);
 
-		PrimaryEffect->SetVariableVec3(RainKillVolumeCenterParameterName, KillVolumeEffectLocalCenter);
+		ActivePrimaryEffect->SetVariableVec3(RainKillVolumeCenterParameterName, KillVolumeEffectLocalCenter);
 	}
 
-	if (PrimaryEffect != nullptr && !RainKillVolumeSizeParameterName.IsNone())
+	if (ActivePrimaryEffect != nullptr && !RainKillVolumeSizeParameterName.IsNone())
 	{
-		const FVector EffectScale = GetSafeEffectScale(PrimaryEffect);
+		const FVector EffectScale = GetSafeEffectScale(ActivePrimaryEffect);
 		const FVector EffectLocalKillVolumeSize(
 			CachedRainKillVolumeSize.X / EffectScale.X,
 			CachedRainKillVolumeSize.Y / EffectScale.Y,
 			CachedRainKillVolumeSize.Z / EffectScale.Z);
-		PrimaryEffect->SetVariableVec3(RainKillVolumeSizeParameterName, EffectLocalKillVolumeSize);
+		ActivePrimaryEffect->SetVariableVec3(RainKillVolumeSizeParameterName, EffectLocalKillVolumeSize);
 	}
 
-	if (PrimaryEffect != nullptr && !PrimaryIntensityParameterName.IsNone())
+	if (ActivePrimaryEffect != nullptr && !PrimaryIntensityParameterName.IsNone())
 	{
-		PrimaryEffect->SetVariableFloat(PrimaryIntensityParameterName, CachedPrimaryIntensity);
+		ActivePrimaryEffect->SetVariableFloat(PrimaryIntensityParameterName, CachedPrimaryIntensity);
 	}
 
-	if (PrimaryEffect != nullptr && !RainSpawnRateParameterName.IsNone())
+	if (ActivePrimaryEffect != nullptr && !RainSpawnRateParameterName.IsNone())
 	{
-		PrimaryEffect->SetVariableFloat(RainSpawnRateParameterName, CachedRainSpawnRate * CachedPrimaryIntensity);
+		ActivePrimaryEffect->SetVariableFloat(RainSpawnRateParameterName, CachedRainSpawnRate * CachedPrimaryIntensity);
 	}
 
-	if (SecondaryEffect != nullptr && !SecondaryAreaSizeParameterName.IsNone())
+	if (ActiveSecondaryEffect != nullptr && !SecondaryAreaSizeParameterName.IsNone())
 	{
-		const FVector EffectScale = GetSafeEffectScale(SecondaryEffect);
+		const FVector EffectScale = GetSafeEffectScale(ActiveSecondaryEffect);
 		const FVector2D EffectLocalAreaSize(
 			CachedAreaSize.X / EffectScale.X,
 			CachedAreaSize.Y / EffectScale.Y);
-		SecondaryEffect->SetVariableVec2(SecondaryAreaSizeParameterName, EffectLocalAreaSize);
+		ActiveSecondaryEffect->SetVariableVec2(SecondaryAreaSizeParameterName, EffectLocalAreaSize);
 	}
 
-	if (SecondaryEffect != nullptr && !SecondaryIntensityParameterName.IsNone())
+	if (ActiveSecondaryEffect != nullptr && !SecondaryIntensityParameterName.IsNone())
 	{
-		SecondaryEffect->SetVariableFloat(SecondaryIntensityParameterName, CachedSecondaryIntensity);
+		ActiveSecondaryEffect->SetVariableFloat(SecondaryIntensityParameterName, CachedSecondaryIntensity);
 	}
 
 	auto ApplyRainBlockerParameters = [this](UNiagaraComponent* Effect)
@@ -290,9 +394,8 @@ void UUOUEnvironmentVisualComponent::ApplyNiagaraParameters()
 			return;
 		}
 
-		const FVector BlockerWorldPosition = GetComponentTransform().TransformPosition(CachedRainBlockerLocalPosition);
-		const FVector EffectLocalBlockerPosition = bCachedRainBlockerActive
-			? Effect->GetComponentTransform().InverseTransformPosition(BlockerWorldPosition)
+		const FVector VisualLocalBlockerPosition = bCachedRainBlockerActive
+			? CachedRainBlockerLocalPosition
 			: FVector::ZeroVector;
 		const float EffectiveBlockerRadius = bCachedRainBlockerActive
 			? CachedRainBlockerRadius + FMath::Max(0.0f, RainBlockerKillRadiusPadding)
@@ -305,7 +408,7 @@ void UUOUEnvironmentVisualComponent::ApplyNiagaraParameters()
 
 		if (!RainBlockerLocalPositionParameterName.IsNone())
 		{
-			Effect->SetVariableVec3(RainBlockerLocalPositionParameterName, EffectLocalBlockerPosition);
+			Effect->SetVariableVec3(RainBlockerLocalPositionParameterName, VisualLocalBlockerPosition);
 		}
 
 		if (!RainBlockerRadiusParameterName.IsNone())
@@ -318,25 +421,28 @@ void UUOUEnvironmentVisualComponent::ApplyNiagaraParameters()
 			Effect->SetVariableFloat(RainBlockerIntensityParameterName, CachedRainBlockerIntensity);
 		}
 
-		DrawRainBlockerNiagaraDebug(Effect, EffectLocalBlockerPosition, EffectiveBlockerRadius);
+		DrawRainBlockerNiagaraDebug(Effect, VisualLocalBlockerPosition, EffectiveBlockerRadius);
 	};
 
-	ApplyRainBlockerParameters(PrimaryEffect);
-	ApplyRainBlockerParameters(SecondaryEffect);
+	ApplyRainBlockerParameters(ActivePrimaryEffect);
+	ApplyRainBlockerParameters(ActiveSecondaryEffect);
 }
 
 void UUOUEnvironmentVisualComponent::ApplyVisualEffectTransforms()
 {
-	if (PrimaryEffect != nullptr)
+	UNiagaraComponent* ActivePrimaryEffect = GetPrimaryEffectComponent();
+	UNiagaraComponent* ActiveSecondaryEffect = GetSecondaryEffectComponent();
+
+	if (ActivePrimaryEffect != nullptr)
 	{
-		PrimaryEffect->SetRelativeLocation(CachedPrimaryLocalPosition);
-		PrimaryEffect->SetRelativeRotation(CachedEffectLocalRotation);
+		ActivePrimaryEffect->SetRelativeLocation(CachedPrimaryLocalPosition);
+		ActivePrimaryEffect->SetRelativeRotation(CachedEffectLocalRotation);
 	}
 
-	if (SecondaryEffect != nullptr)
+	if (ActiveSecondaryEffect != nullptr)
 	{
-		SecondaryEffect->SetRelativeLocation(CachedSecondaryLocalPosition);
-		SecondaryEffect->SetRelativeRotation(CachedEffectLocalRotation);
+		ActiveSecondaryEffect->SetRelativeLocation(CachedSecondaryLocalPosition);
+		ActiveSecondaryEffect->SetRelativeRotation(CachedEffectLocalRotation);
 	}
 }
 
