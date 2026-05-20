@@ -24,7 +24,9 @@ public:
 		const FVector& RainLocalPosition,
 		const FVector& GroundSplashLocalPosition,
 		const FRotator& EffectLocalRotation,
-		const FVector2D& AreaSize);
+		const FVector2D& AreaSize,
+		const FVector& RainKillVolumeLocalCenter,
+		const FVector& RainKillVolumeSize);
 
 	UFUNCTION(BlueprintCallable, Category = "Environment Visual|Rain")
 	void SetRainBlockerData(
@@ -90,6 +92,12 @@ protected:
 	FVector2D CachedAreaSize = FVector2D::ZeroVector;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Environment Visual|Runtime")
+	FVector CachedRainKillVolumeLocalCenter = FVector::ZeroVector;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Environment Visual|Runtime")
+	FVector CachedRainKillVolumeSize = FVector::ZeroVector;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Environment Visual|Runtime")
 	bool bCachedRainBlockerActive = false;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Environment Visual|Runtime")
@@ -112,6 +120,12 @@ protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual|Parameters")
 	FName PrimaryAreaSizeParameterName = TEXT("RainAreaSize");
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual|Parameters", meta = (ToolTip = "비 파티클을 유지할 RainArea 박스 중심을 Niagara에 전달할 User Parameter 이름입니다."))
+	FName RainKillVolumeCenterParameterName = TEXT("RainKillVolumeCenter");
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual|Parameters", meta = (ToolTip = "비 파티클을 유지할 RainArea 박스 크기를 Niagara에 전달할 User Parameter 이름입니다."))
+	FName RainKillVolumeSizeParameterName = TEXT("RainKillVolumeSize");
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual|Parameters")
 	FName SecondaryAreaSizeParameterName = TEXT("GroundSplashAreaSize");

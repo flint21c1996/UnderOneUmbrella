@@ -67,12 +67,16 @@ void AUOUEnvironmentVisualActor::ConfigureRainVisual(
 	const FVector& RainLocalPosition,
 	const FVector& GroundSplashLocalPosition,
 	const FRotator& EffectLocalRotation,
-	const FVector2D& AreaSize)
+	const FVector2D& AreaSize,
+	const FVector& RainKillVolumeLocalCenter,
+	const FVector& RainKillVolumeSize)
 {
 	CachedPrimaryLocalPosition = RainLocalPosition;
 	CachedSecondaryLocalPosition = GroundSplashLocalPosition;
 	CachedEffectLocalRotation = EffectLocalRotation;
 	CachedAreaSize = AreaSize;
+	CachedRainKillVolumeLocalCenter = RainKillVolumeLocalCenter;
+	CachedRainKillVolumeSize = RainKillVolumeSize;
 
 	ApplyVisualEffectTransforms();
 	ApplyNiagaraParameters();
@@ -218,6 +222,19 @@ void AUOUEnvironmentVisualActor::ApplyNiagaraParameters()
 	if (PrimaryEffect != nullptr && !PrimaryAreaSizeParameterName.IsNone())
 	{
 		PrimaryEffect->SetVariableVec2(PrimaryAreaSizeParameterName, CachedAreaSize);
+	}
+
+	if (PrimaryEffect != nullptr && !RainKillVolumeCenterParameterName.IsNone())
+	{
+		const FVector KillVolumeWorldCenter = GetActorTransform().TransformPosition(CachedRainKillVolumeLocalCenter);
+		const FVector KillVolumeEffectLocalCenter = PrimaryEffect->GetComponentTransform().InverseTransformPosition(KillVolumeWorldCenter);
+
+		PrimaryEffect->SetVariableVec3(RainKillVolumeCenterParameterName, KillVolumeEffectLocalCenter);
+	}
+
+	if (PrimaryEffect != nullptr && !RainKillVolumeSizeParameterName.IsNone())
+	{
+		PrimaryEffect->SetVariableVec3(RainKillVolumeSizeParameterName, CachedRainKillVolumeSize);
 	}
 
 	if (PrimaryEffect != nullptr && !PrimaryIntensityParameterName.IsNone())
