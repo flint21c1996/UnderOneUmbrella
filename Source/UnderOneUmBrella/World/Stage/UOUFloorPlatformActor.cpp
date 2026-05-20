@@ -2,6 +2,7 @@
 
 #include "World/Stage/UOUFloorPlatformActor.h"
 
+#include "Components/ArrowComponent.h"
 #include "Components/BoxComponent.h"
 #include "Components/PrimitiveComponent.h"
 #include "Components/SceneComponent.h"
@@ -32,6 +33,14 @@ AUOUFloorPlatformActor::AUOUFloorPlatformActor()
 	CarryDetectionBox->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 	CarryDetectionBox->SetCollisionResponseToAllChannels(ECR_Overlap);
 	CarryDetectionBox->SetGenerateOverlapEvents(true);
+
+	RotationPivot = CreateDefaultSubobject<UArrowComponent>(TEXT("RotationPivot"));
+	RotationPivot->SetupAttachment(RootScene);
+	RotationPivot->SetMobility(EComponentMobility::Movable);
+	RotationPivot->SetRelativeLocation(FVector::ZeroVector);
+	RotationPivot->SetRelativeRotation(FRotator::ZeroRotator);
+	RotationPivot->SetArrowSize(1.5f);
+	RotationPivot->SetHiddenInGame(true);
 }
 
 void AUOUFloorPlatformActor::BeginPlay()
@@ -86,11 +95,7 @@ void AUOUFloorPlatformActor::Tick(float DeltaSeconds)
 	const float RawAlpha = FMath::Clamp(MoveElapsedTime / SafeDuration, 0.0f, 1.0f);
 	const float MoveAlpha = ResolveMoveAlpha(RawAlpha);
 
-	const FVector NewLocation = FMath::Lerp(StartTransform.GetLocation(), TargetTransform.GetLocation(), MoveAlpha);
-	const FQuat NewRotation = FQuat::Slerp(StartTransform.GetRotation(), TargetTransform.GetRotation(), MoveAlpha);
-	const FVector NewScale = FMath::Lerp(StartTransform.GetScale3D(), TargetTransform.GetScale3D(), MoveAlpha);
-
-	SetActorTransform(FTransform(NewRotation, NewLocation, NewScale), false, nullptr, ETeleportType::TeleportPhysics);
+	SetActorTransform(BuildPlatformTransformAtAlpha(MoveAlpha), false, nullptr, ETeleportType::TeleportPhysics);
 
 	if (RawAlpha >= 1.0f)
 	{
@@ -229,8 +234,7 @@ void AUOUFloorPlatformActor::RefreshTargetTransforms()
 	}
 
 	TargetTransform = StartTransform;
-	const FVector TargetWorldOffset = StartTransform.TransformVectorNoScale(TargetLocalOffset);
-	TargetTransform.SetLocation(StartTransform.GetLocation() + TargetWorldOffset);
+	TargetTransform = BuildPlatformTransformAtAlpha(1.0f);
 }
 
 void AUOUFloorPlatformActor::FinishMoveToTarget()
@@ -499,6 +503,56 @@ void AUOUFloorPlatformActor::CacheLastMovedActors()
 			LastMovedActors.Add(CarriedActor);
 		}
 	}
+}
+
+FTransform AUOUFloorPlatformActor::BuildPlatformTransformAtAlpha(float Alpha) const
+{
+	const float SafeAlpha = FMath::Clamp(Alpha, 0.0f, 1.0f);
+	const FVector MoveOffsetWorld = StartTransform.TransformVectorNoScale(TargetLocalOffset) * SafeAlpha;
+
+	FQuat RotationDelta = FQuat::Identity;
+	FVector RotationLocationOffset = FVector::ZeroVector;
+
+	if (bUseTargetRotation && !FMath::IsNearlyZero(TargetRotationAngleDegrees))
+	{
+		const FVector RotationAxisWorld = GetRotationAxisWorldDirection();
+		if (!RotationAxisWorld.IsNearlyZero())
+		{
+			const FVector PivotWorldLocation = GetRotationPivotWorldLocation();
+			const float RotationRadians = FMath::DegreesToRadians(TargetRotationAngleDegrees * SafeAlpha);
+
+			RotationDelta = FQuat(RotationAxisWorld, RotationRadians);
+			RotationLocationOffset = PivotWorldLocation
+				+ RotationDelta.RotateVector(StartTransform.GetLocation() - PivotWorldLocation)
+				- StartTransform.GetLocation();
+		}
+	}
+
+	const FVector NewLocation = StartTransform.GetLocation() + MoveOffsetWorld + RotationLocationOffset;
+	const FQuat NewRotation = RotationDelta * StartTransform.GetRotation();
+
+	return FTransform(NewRotation, NewLocation, StartTransform.GetScale3D());
+}
+
+FVector AUOUFloorPlatformActor::GetRotationPivotWorldLocation() const
+{
+	if (RotationPivot == nullptr)
+	{
+		return StartTransform.GetLocation();
+	}
+
+	return StartTransform.TransformPosition(RotationPivot->GetRelativeLocation());
+}
+
+FVector AUOUFloorPlatformActor::GetRotationAxisWorldDirection() const
+{
+	if (RotationPivot == nullptr)
+	{
+		return StartTransform.GetRotation().GetAxisX();
+	}
+
+	const FVector PivotAxisLocal = RotationPivot->GetRelativeTransform().TransformVectorNoScale(FVector::ForwardVector);
+	return StartTransform.TransformVectorNoScale(PivotAxisLocal).GetSafeNormal();
 }
 
 float AUOUFloorPlatformActor::ResolveMoveAlpha(float RawAlpha) const
