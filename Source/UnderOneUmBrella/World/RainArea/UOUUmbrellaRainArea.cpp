@@ -64,7 +64,6 @@ void AUOUUmbrellaRainArea::BeginPlay()
 	RainFillRate = FMath::Max(0.0f, RainFillRate);
 	RainVisualIntensity = FMath::Clamp(RainVisualIntensity, 0.0f, 1.0f);
 	RainSpawnRate = FMath::Max(0.0f, RainSpawnRate);
-	RainFallSpeed = FMath::Max(0.0f, RainFallSpeed);
 	GroundSplashIntensityMultiplier = FMath::Max(0.0f, GroundSplashIntensityMultiplier);
 	if (RainVisual != nullptr)
 	{
@@ -81,7 +80,6 @@ void AUOUUmbrellaRainArea::OnConstruction(const FTransform& Transform)
 	RainFillRate = FMath::Max(0.0f, RainFillRate);
 	RainVisualIntensity = FMath::Clamp(RainVisualIntensity, 0.0f, 1.0f);
 	RainSpawnRate = FMath::Max(0.0f, RainSpawnRate);
-	RainFallSpeed = FMath::Max(0.0f, RainFallSpeed);
 	GroundSplashIntensityMultiplier = FMath::Max(0.0f, GroundSplashIntensityMultiplier);
 	if (RainVisual != nullptr)
 	{
@@ -99,7 +97,6 @@ void AUOUUmbrellaRainArea::PostEditChangeProperty(FPropertyChangedEvent& Propert
 	RainFillRate = FMath::Max(0.0f, RainFillRate);
 	RainVisualIntensity = FMath::Clamp(RainVisualIntensity, 0.0f, 1.0f);
 	RainSpawnRate = FMath::Max(0.0f, RainSpawnRate);
-	RainFallSpeed = FMath::Max(0.0f, RainFallSpeed);
 	GroundSplashIntensityMultiplier = FMath::Max(0.0f, GroundSplashIntensityMultiplier);
 	if (RainVisual != nullptr)
 	{
@@ -131,6 +128,7 @@ void AUOUUmbrellaRainArea::Tick(float DeltaSeconds)
 		return;
 	}
 
+	ApplyEnvironmentVisualState();
 	DrawRainVisualDebug();
 
 	TArray<AActor*> OverlappingActors;

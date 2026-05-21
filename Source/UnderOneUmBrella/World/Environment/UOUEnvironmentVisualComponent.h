@@ -132,7 +132,7 @@ protected:
 	float CachedRainSpawnRate = 2400.0f;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Environment Visual|Runtime")
-	float CachedRainFallSpeed = 1000.0f;
+	float CachedRainFallSpeed = -900.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual|Parameters")
 	FName PrimaryAreaSizeParameterName = TEXT("RainAreaSize");

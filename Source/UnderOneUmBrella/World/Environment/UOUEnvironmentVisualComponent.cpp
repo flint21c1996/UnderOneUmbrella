@@ -150,7 +150,7 @@ void UUOUEnvironmentVisualComponent::SetRainSpawnRate(float NewRainSpawnRate)
 
 void UUOUEnvironmentVisualComponent::SetRainFallSpeed(float NewRainFallSpeed)
 {
-	CachedRainFallSpeed = FMath::Max(0.0f, NewRainFallSpeed);
+	CachedRainFallSpeed = NewRainFallSpeed;
 
 	ApplyNiagaraParameters();
 }
