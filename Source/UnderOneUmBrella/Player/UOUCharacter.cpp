@@ -149,33 +149,6 @@ void AUOUCharacter::Tick(float DeltaSeconds)
 		LogPushPullComponentState(this, TEXT("TickMissingPtr"));
 		bLoggedMissingPushPullComponent = true;
 	}
-
-	if (!bShowContextInputDebug
-		|| !UUOUDebugSubsystem::IsDebugScreenMessageEnabled(this, EUOUDebugCategory::Player)
-		|| !IsLocallyControlled()
-		|| GEngine == nullptr)
-	{
-		return;
-	}
-
-	const APlayerController* PlayerController = Cast<APlayerController>(GetController());
-	const bool bPhysicalContextKeyDown = PlayerController != nullptr && PlayerController->IsInputKeyDown(EKeys::RightMouseButton);
-	const FString ContextDebugText = FString::Printf(
-		TEXT("Context Action: %s\nPhysical RMB: %s\nContext Pressed Count: %d\nContext Released Count: %d\nPushPull Pressed Count: %d\nPushPull Released Count: %d\nPushPull Ptr: %s\nPushPull IsGrabbing: %s"),
-		ContextInteractAction != nullptr ? *ContextInteractAction->GetName() : TEXT("None"),
-		bPhysicalContextKeyDown ? TEXT("Yes") : TEXT("No"),
-		ContextInteractPressedCount,
-		ContextInteractReleasedCount,
-		PushPullPressedCount,
-		PushPullReleasedCount,
-		PushPullInteractorComponent != nullptr ? TEXT("Valid") : TEXT("Null"),
-		(PushPullInteractorComponent != nullptr && PushPullInteractorComponent->IsGrabbing()) ? TEXT("Yes") : TEXT("No"));
-
-	GEngine->AddOnScreenDebugMessage(
-		0xC07E,
-		0.0f,
-		UUOUDebugSubsystem::GetDebugCategoryColor(this, EUOUDebugCategory::Player, FColor::Magenta),
-		ContextDebugText);
 }
 
 void AUOUCharacter::NotifyControllerChanged()

@@ -16,15 +16,28 @@
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "GameFramework/Actor.h"
+#include "GameFramework/Character.h"
+#include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/PlayerController.h"
 #include "HAL/PlatformMemory.h"
+#include "InputCoreTypes.h"
 #include "NiagaraComponent.h"
 #include "Particles/ParticleSystemComponent.h"
+#include "Player/UOUCameraControllerComponent.h"
+#include "Player/UOUCharacter.h"
+#include "Player/UOUInteractionComponent.h"
+#include "Player/UOUPushPullInteractorComponent.h"
+#include "Player/UOURainReceiverComponent.h"
+#include "Player/UOUUmbrellaComponent.h"
+#include "Player/UOUUmbrellaLightInteractionComponent.h"
+#include "Player/UOUWaterContainerComponent.h"
+#include "Puzzle/PushPull/UOUPushPullObjectComponent.h"
 #include "RHICommandList.h"
 #include "RHIStats.h"
 #include "RenderCounters.h"
 #include "RenderTimer.h"
 #include "UnrealClient.h"
+#include "World/Light/UOULightInteractionSurfaceComponent.h"
 
 namespace UOUDebugSubsystemPrivate
 {
@@ -78,6 +91,82 @@ namespace UOUDebugSubsystemPrivate
 		}
 
 		return FString::FromInt(Count);
+	}
+
+	const TCHAR* GetYesNo(bool bValue)
+	{
+		return bValue ? TEXT("Yes") : TEXT("No");
+	}
+
+	FString GetActorDebugName(const AActor* Actor)
+	{
+		return Actor != nullptr ? Actor->GetName() : TEXT("None");
+	}
+
+	FString GetComponentDebugName(const UActorComponent* Component)
+	{
+		if (Component == nullptr)
+		{
+			return TEXT("None");
+		}
+
+		const AActor* Owner = Component->GetOwner();
+		return Owner != nullptr
+			? FString::Printf(TEXT("%s.%s"), *Owner->GetName(), *Component->GetName())
+			: Component->GetName();
+	}
+
+	FString GetMovementModeName(const UCharacterMovementComponent* MovementComponent)
+	{
+		if (MovementComponent == nullptr)
+		{
+			return TEXT("None");
+		}
+
+		switch (MovementComponent->MovementMode)
+		{
+		case MOVE_None:
+			return TEXT("None");
+		case MOVE_Walking:
+			return TEXT("Walking");
+		case MOVE_NavWalking:
+			return TEXT("NavWalking");
+		case MOVE_Falling:
+			return TEXT("Falling");
+		case MOVE_Swimming:
+			return TEXT("Swimming");
+		case MOVE_Flying:
+			return TEXT("Flying");
+		case MOVE_Custom:
+			return FString::Printf(TEXT("Custom(%d)"), MovementComponent->CustomMovementMode);
+		default:
+			return TEXT("Unknown");
+		}
+	}
+
+	FString GetEnumValueName(const UEnum* Enum, int64 Value)
+	{
+		return Enum != nullptr ? Enum->GetNameStringByValue(Value) : TEXT("Unknown");
+	}
+
+	FString GetUmbrellaStateName(EUOUUmbrellaState UmbrellaState)
+	{
+		return GetEnumValueName(StaticEnum<EUOUUmbrellaState>(), static_cast<int64>(UmbrellaState));
+	}
+
+	FString GetPourReceiverTypeName(EUOUUmbrellaPourReceiverType ReceiverType)
+	{
+		return GetEnumValueName(StaticEnum<EUOUUmbrellaPourReceiverType>(), static_cast<int64>(ReceiverType));
+	}
+
+	FString GetLightInteractionModeName(EUOULightInteractionMode LightInteractionMode)
+	{
+		return GetEnumValueName(StaticEnum<EUOULightInteractionMode>(), static_cast<int64>(LightInteractionMode));
+	}
+
+	FString FormatVectorCompact(const FVector& Vector)
+	{
+		return FString::Printf(TEXT("%.0f, %.0f, %.0f"), Vector.X, Vector.Y, Vector.Z);
 	}
 
 	FIntPoint GetFallbackViewportSize(const UWorld* World)
@@ -469,6 +558,7 @@ void UUOUDebugSubsystem::Tick(float DeltaTime)
 	}
 
 	DrawControllerStatus();
+	DrawPlayerDebug();
 	DrawPerformanceStats(DeltaTime);
 	DrawVFXDebug();
 	DrawRegisteredProviderConnections();
@@ -813,6 +903,36 @@ void UUOUDebugSubsystem::DrawControllerStatus() const
 		BuildControllerStatusText());
 }
 
+void UUOUDebugSubsystem::DrawPlayerDebug() const
+{
+	const AUOUDebugController* DebugController = ActiveDebugController.Get();
+	if (DebugController == nullptr || GEngine == nullptr || !IsScreenMessageEnabled(EUOUDebugCategory::Player))
+	{
+		return;
+	}
+
+	const UUOUPlayerDebugControllerComponent* PlayerController =
+		Cast<UUOUPlayerDebugControllerComponent>(FindDebugControllerComponent(EUOUDebugCategory::Player));
+	if (PlayerController == nullptr || !PlayerController->bShowViewportHUD)
+	{
+		return;
+	}
+
+	const FString PlayerDebugText = BuildPlayerDebugText(*PlayerController);
+	if (PlayerDebugText.IsEmpty())
+	{
+		return;
+	}
+
+	GEngine->AddOnScreenDebugMessage(
+		0x5500D09,
+		0.0f,
+		DebugController->GetDebugCategoryColor(EUOUDebugCategory::Player),
+		PlayerDebugText,
+		false,
+		FVector2D(1.0f, 1.0f));
+}
+
 void UUOUDebugSubsystem::DrawPerformanceStats(float DeltaTime) const
 {
 	const AUOUDebugController* DebugController = ActiveDebugController.Get();
@@ -1109,6 +1229,216 @@ void UUOUDebugSubsystem::DrawRegisteredProviderConnections() const
 			}
 		}
 	}
+}
+
+FString UUOUDebugSubsystem::BuildPlayerDebugText(const UUOUPlayerDebugControllerComponent& PlayerController) const
+{
+	UWorld* World = GetWorld();
+	if (World == nullptr)
+	{
+		return FString();
+	}
+
+	const APlayerController* LocalPlayerController = World->GetFirstPlayerController();
+	APawn* PlayerPawn = LocalPlayerController != nullptr ? LocalPlayerController->GetPawn() : nullptr;
+	if (PlayerPawn == nullptr)
+	{
+		return TEXT("Player\nPawn: None");
+	}
+
+	AUOUCharacter* UOUCharacter = Cast<AUOUCharacter>(PlayerPawn);
+	ACharacter* Character = Cast<ACharacter>(PlayerPawn);
+	const UCharacterMovementComponent* MovementComponent = Character != nullptr ? Character->GetCharacterMovement() : nullptr;
+	const UUOUUmbrellaComponent* UmbrellaComponent = PlayerPawn->FindComponentByClass<UUOUUmbrellaComponent>();
+	const UUOUPushPullInteractorComponent* PushPullComponent = UOUCharacter != nullptr
+		? UOUCharacter->GetPushPullInteractorComponent()
+		: PlayerPawn->FindComponentByClass<UUOUPushPullInteractorComponent>();
+	const UUOUInteractionComponent* InteractionComponent = PlayerPawn->FindComponentByClass<UUOUInteractionComponent>();
+	const UUOUCameraControllerComponent* CameraControllerComponent = UOUCharacter != nullptr
+		? UOUCharacter->GetCameraControllerComponent()
+		: PlayerPawn->FindComponentByClass<UUOUCameraControllerComponent>();
+	const UUOUUmbrellaLightInteractionComponent* UmbrellaLightInteractionComponent =
+		PlayerPawn->FindComponentByClass<UUOUUmbrellaLightInteractionComponent>();
+
+	TArray<FString> Lines;
+	Lines.Add(TEXT("Player"));
+
+	if (PlayerController.bShowMovementState)
+	{
+		const FVector Velocity = PlayerPawn->GetVelocity();
+		TArray<FString> JumpBlockedReasons;
+		if (PushPullComponent != nullptr && PushPullComponent->BlocksJumping())
+		{
+			JumpBlockedReasons.Add(TEXT("PushPull"));
+		}
+		if (UmbrellaComponent != nullptr && UmbrellaComponent->BlocksJumping())
+		{
+			JumpBlockedReasons.Add(TEXT("Umbrella"));
+		}
+
+		Lines.Add(FString::Printf(
+			TEXT("State: %s | Grounded: %s | Speed: %.1f"),
+			*UOUDebugSubsystemPrivate::GetMovementModeName(MovementComponent),
+			UOUDebugSubsystemPrivate::GetYesNo(MovementComponent != nullptr && MovementComponent->IsMovingOnGround()),
+			Velocity.Size2D()));
+		Lines.Add(FString::Printf(
+			TEXT("Location: %s | ZVel: %.1f"),
+			*UOUDebugSubsystemPrivate::FormatVectorCompact(PlayerPawn->GetActorLocation()),
+			Velocity.Z));
+		Lines.Add(FString::Printf(
+			TEXT("Jump: %s | Blocked: %s"),
+			UOUDebugSubsystemPrivate::GetYesNo(Character != nullptr && Character->CanJump()),
+			JumpBlockedReasons.Num() > 0 ? *FString::Join(JumpBlockedReasons, TEXT(", ")) : TEXT("No")));
+	}
+
+	if (PlayerController.bShowInputState)
+	{
+		const bool bPhysicalContextKeyDown = LocalPlayerController != nullptr
+			&& LocalPlayerController->IsInputKeyDown(EKeys::RightMouseButton);
+		const bool bRoutesToPour = UmbrellaComponent != nullptr
+			&& UmbrellaComponent->HasUmbrella()
+			&& UmbrellaComponent->IsUpsideDown()
+			&& UmbrellaComponent->GetCurrentStoredWater() > 0.0f;
+
+		Lines.Add(FString::Printf(
+			TEXT("Input: RMB %s | Context Route: %s"),
+			UOUDebugSubsystemPrivate::GetYesNo(bPhysicalContextKeyDown),
+			bRoutesToPour ? TEXT("Pour") : TEXT("PushPull")));
+
+		if (UOUCharacter != nullptr)
+		{
+			Lines.Add(FString::Printf(
+				TEXT("Counts: Context %d/%d | PushPull %d/%d"),
+				UOUCharacter->GetContextInteractPressedCount(),
+				UOUCharacter->GetContextInteractReleasedCount(),
+				UOUCharacter->GetPushPullPressedCount(),
+				UOUCharacter->GetPushPullReleasedCount()));
+		}
+	}
+
+	if (PlayerController.bShowUmbrellaState)
+	{
+		if (UmbrellaComponent == nullptr)
+		{
+			Lines.Add(TEXT("Umbrella: None"));
+		}
+		else
+		{
+			const float StoredWater = UmbrellaComponent->GetCurrentStoredWater();
+			const float MaxWater = UmbrellaComponent->StoredWaterContainer != nullptr
+				? UmbrellaComponent->StoredWaterContainer->MaxAmount
+				: 0.0f;
+			const float RainExposure = UmbrellaComponent->GetCurrentPlayerRainAmount();
+			const float MaxRainExposure = UmbrellaComponent->RainReceiver != nullptr
+				? UmbrellaComponent->RainReceiver->MaxExposure
+				: 0.0f;
+
+			Lines.Add(FString::Printf(
+				TEXT("Umbrella: Owned %s | State: %s"),
+				UOUDebugSubsystemPrivate::GetYesNo(UmbrellaComponent->HasUmbrella()),
+				*UOUDebugSubsystemPrivate::GetUmbrellaStateName(UmbrellaComponent->CurrentState)));
+			Lines.Add(FString::Printf(
+				TEXT("Water: %.2f / %.2f | Rain: %.2f / %.2f"),
+				StoredWater,
+				MaxWater,
+				RainExposure,
+				MaxRainExposure));
+			Lines.Add(FString::Printf(
+				TEXT("Collect: %s | BlockRain: %s | BlocksJump: %s"),
+				UOUDebugSubsystemPrivate::GetYesNo(UmbrellaComponent->CanCollectWater()),
+				UOUDebugSubsystemPrivate::GetYesNo(UmbrellaComponent->IsBlockingRain()),
+				UOUDebugSubsystemPrivate::GetYesNo(UmbrellaComponent->BlocksJumping())));
+
+			if (UmbrellaLightInteractionComponent != nullptr)
+			{
+				const UUOULightInteractionSurfaceComponent* LightSurfaceComponent =
+					UmbrellaLightInteractionComponent->LightSurfaceComponent;
+				Lines.Add(FString::Printf(
+					TEXT("Light Surface: %s | Mode: %s"),
+					LightSurfaceComponent != nullptr ? *LightSurfaceComponent->GetName() : TEXT("None"),
+					LightSurfaceComponent != nullptr
+						? *UOUDebugSubsystemPrivate::GetLightInteractionModeName(LightSurfaceComponent->LightInteractionMode)
+						: TEXT("None")));
+			}
+		}
+	}
+
+	if (PlayerController.bShowPourState && UmbrellaComponent != nullptr)
+	{
+		Lines.Add(FString::Printf(
+			TEXT("Pour: %s | Hit: %s | Delivered: %s"),
+			UOUDebugSubsystemPrivate::GetYesNo(UmbrellaComponent->IsPouring()),
+			UOUDebugSubsystemPrivate::GetYesNo(UmbrellaComponent->bLastPourTraceHit),
+			UOUDebugSubsystemPrivate::GetYesNo(UmbrellaComponent->bLastPourDeliveredWater)));
+		Lines.Add(FString::Printf(
+			TEXT("Pour Target: %s | Receiver: %s"),
+			*UmbrellaComponent->LastPourTargetName,
+			*UOUDebugSubsystemPrivate::GetPourReceiverTypeName(UmbrellaComponent->LastPourReceiverType)));
+		Lines.Add(FString::Printf(
+			TEXT("Pour Amount: %.2f | Stored: %.2f -> %.2f"),
+			UmbrellaComponent->LastPourAmount,
+			UmbrellaComponent->LastPourStoredWaterBefore,
+			UmbrellaComponent->LastPourStoredWaterAfter));
+	}
+
+	if (PlayerController.bShowInteractionTarget)
+	{
+		if (InteractionComponent == nullptr)
+		{
+			Lines.Add(TEXT("Interaction: None"));
+		}
+		else
+		{
+			Lines.Add(FString::Printf(
+				TEXT("Interaction: Enabled %s | Candidate: %s"),
+				UOUDebugSubsystemPrivate::GetYesNo(InteractionComponent->bInteractionEnabled),
+				*UOUDebugSubsystemPrivate::GetComponentDebugName(InteractionComponent->CurrentCandidateComponent)));
+			Lines.Add(FString::Printf(
+				TEXT("Interaction Range: %.1f | Radius: %.1f"),
+				InteractionComponent->InteractionRange,
+				InteractionComponent->InteractionProbeRadius));
+		}
+	}
+
+	if (PlayerController.bShowPushPullState)
+	{
+		if (PushPullComponent == nullptr)
+		{
+			Lines.Add(TEXT("PushPull: None"));
+		}
+		else
+		{
+			const UUOUPushPullObjectComponent* CandidateObject = PushPullComponent->GetCurrentCandidateObject();
+			const UUOUPushPullObjectComponent* GrabbedObject = PushPullComponent->GetGrabbedObject();
+			Lines.Add(FString::Printf(
+				TEXT("PushPull: Candidate %s | Grabbed %s"),
+				CandidateObject != nullptr ? *UOUDebugSubsystemPrivate::GetActorDebugName(CandidateObject->GetOwner()) : TEXT("None"),
+				GrabbedObject != nullptr ? *UOUDebugSubsystemPrivate::GetActorDebugName(GrabbedObject->GetOwner()) : TEXT("None")));
+			Lines.Add(FString::Printf(
+				TEXT("Hands: %s | Held: %s | TooFar: %s"),
+				UOUDebugSubsystemPrivate::GetYesNo(PushPullComponent->CanUseHandsForDebug()),
+				UOUDebugSubsystemPrivate::GetYesNo(PushPullComponent->IsGrabInputHeld()),
+				UOUDebugSubsystemPrivate::GetYesNo(PushPullComponent->IsGrabbedObjectTooFarForDebug())));
+			Lines.Add(FString::Printf(
+				TEXT("Axis: %s | Input: %.2f | Last: %s"),
+				*UOUDebugSubsystemPrivate::FormatVectorCompact(PushPullComponent->GetGrabbedMoveAxis()),
+				PushPullComponent->GetCurrentAxisInput(),
+				*PushPullComponent->GetLastFailureReason()));
+		}
+	}
+
+	if (PlayerController.bShowCameraState && CameraControllerComponent != nullptr)
+	{
+		Lines.Add(FString::Printf(
+			TEXT("Camera: Yaw %.1f -> %.1f | Dist %.1f -> %.1f | Occluded %d"),
+			CameraControllerComponent->GetMovementYaw(),
+			CameraControllerComponent->GetTargetCameraYaw(),
+			CameraControllerComponent->GetCurrentCameraDistance(),
+			CameraControllerComponent->GetTargetCameraDistance(),
+			CameraControllerComponent->GetOccludedMeshCount()));
+	}
+
+	return FString::Join(Lines, LINE_TERMINATOR);
 }
 
 FString UUOUDebugSubsystem::BuildPerformanceStatsText(float DeltaTime, const UUOUPerformanceDebugControllerComponent& PerformanceController) const

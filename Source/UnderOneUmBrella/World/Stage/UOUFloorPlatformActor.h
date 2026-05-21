@@ -8,6 +8,7 @@
 #include "UOUFloorPlatformActor.generated.h"
 
 class UCurveFloat;
+class UArrowComponent;
 class UBoxComponent;
 class UPrimitiveComponent;
 class USceneComponent;
@@ -48,6 +49,11 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Floor Platform|Carry")
 	TObjectPtr<UBoxComponent> CarryDetectionBox = nullptr;
 
+	// 회전 중심과 회전 축을 에디터에서 직접 조정하기 위한 기준 화살표입니다.
+	// 화살표 위치는 회전 중심, 화살표가 바라보는 X 방향은 회전 축으로 사용됩니다.
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Floor Platform|Rotation")
+	TObjectPtr<UArrowComponent> RotationPivot = nullptr;
+
 	// 이 플랫폼이 어떤 층에 속하는지 구분하기 위한 값입니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform")
 	int32 FloorIndex = 4;
@@ -63,6 +69,14 @@ public:
 	// 이동 알파 값을 보정할 때 사용하는 선택 곡선입니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Movement")
 	TObjectPtr<UCurveFloat> MoveCurve = nullptr;
+
+	// 목표 위치로 이동하는 동안 회전도 함께 적용할지 정합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Rotation")
+	bool bUseTargetRotation = false;
+
+	// RotationPivot의 축을 기준으로 목표 지점까지 회전할 각도입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Rotation")
+	float TargetRotationAngleDegrees = 0.0f;
 
 	// 목표 위치에 도착한 뒤 플레이어와 다른 오브젝트가 이 플랫폼과 충돌하지 않게 할지 정합니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Rules")
@@ -179,6 +193,15 @@ protected:
 
 	// 이동 완료 후 다음 반대 이동에서도 같은 액터를 찾을 수 있도록 기록합니다.
 	void CacheLastMovedActors();
+
+	// 현재 알파 값에 맞는 플랫폼 트랜스폼을 계산합니다.
+	FTransform BuildPlatformTransformAtAlpha(float Alpha) const;
+
+	// 시작 트랜스폼 기준으로 회전 중심의 월드 위치를 계산합니다.
+	FVector GetRotationPivotWorldLocation() const;
+
+	// 시작 트랜스폼 기준으로 회전에 사용할 월드 축을 계산합니다.
+	FVector GetRotationAxisWorldDirection() const;
 
 	// 이동 곡선이 있으면 곡선 값을 사용하고 없으면 기본 알파를 그대로 사용합니다.
 	float ResolveMoveAlpha(float RawAlpha) const;
