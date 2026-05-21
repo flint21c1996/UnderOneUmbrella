@@ -65,7 +65,6 @@ void AUOUUmbrellaRainArea::BeginPlay()
 	RainVisualIntensity = FMath::Clamp(RainVisualIntensity, 0.0f, 1.0f);
 	RainSpawnRate = FMath::Max(0.0f, RainSpawnRate);
 	GroundSplashIntensityMultiplier = FMath::Max(0.0f, GroundSplashIntensityMultiplier);
-	RainBlockerKillRadiusPadding = FMath::Max(0.0f, RainBlockerKillRadiusPadding);
 	if (RainVisual != nullptr)
 	{
 		RainVisual->SetEffectComponents(PrimaryRainEffect, SecondaryRainEffect);
@@ -82,7 +81,6 @@ void AUOUUmbrellaRainArea::OnConstruction(const FTransform& Transform)
 	RainVisualIntensity = FMath::Clamp(RainVisualIntensity, 0.0f, 1.0f);
 	RainSpawnRate = FMath::Max(0.0f, RainSpawnRate);
 	GroundSplashIntensityMultiplier = FMath::Max(0.0f, GroundSplashIntensityMultiplier);
-	RainBlockerKillRadiusPadding = FMath::Max(0.0f, RainBlockerKillRadiusPadding);
 	if (RainVisual != nullptr)
 	{
 		RainVisual->SetEffectComponents(PrimaryRainEffect, SecondaryRainEffect);
@@ -100,7 +98,6 @@ void AUOUUmbrellaRainArea::PostEditChangeProperty(FPropertyChangedEvent& Propert
 	RainVisualIntensity = FMath::Clamp(RainVisualIntensity, 0.0f, 1.0f);
 	RainSpawnRate = FMath::Max(0.0f, RainSpawnRate);
 	GroundSplashIntensityMultiplier = FMath::Max(0.0f, GroundSplashIntensityMultiplier);
-	RainBlockerKillRadiusPadding = FMath::Max(0.0f, RainBlockerKillRadiusPadding);
 	if (RainVisual != nullptr)
 	{
 		RainVisual->SetEffectComponents(PrimaryRainEffect, SecondaryRainEffect);
@@ -138,7 +135,6 @@ void AUOUUmbrellaRainArea::Tick(float DeltaSeconds)
 
 	bool bHasRainBlocker = false;
 	FVector RainBlockerWorldCenter = FVector::ZeroVector;
-	FRotator RainBlockerWorldRotation = FRotator::ZeroRotator;
 	FVector RainBlockerHalfExtent = FVector::ZeroVector;
 
 	for (AActor* OverlappingActor : OverlappingActors)
@@ -163,7 +159,6 @@ void AUOUUmbrellaRainArea::Tick(float DeltaSeconds)
 			{
 				bHasRainBlocker = true;
 				RainBlockerWorldCenter = CandidateBlockerWorldCenter;
-				RainBlockerWorldRotation = CandidateBlockerWorldRotation;
 				RainBlockerHalfExtent = CandidateBlockerHalfExtent;
 			}
 		}
@@ -172,7 +167,6 @@ void AUOUUmbrellaRainArea::Tick(float DeltaSeconds)
 	ApplyEnvironmentVisualRainBlocker(
 		bHasRainBlocker,
 		RainBlockerWorldCenter,
-		RainBlockerWorldRotation,
 		RainBlockerHalfExtent,
 		bHasRainBlocker ? RainVisualIntensity : 0.0f);
 }
@@ -225,13 +219,12 @@ void AUOUUmbrellaRainArea::ApplyEnvironmentVisualState()
 	const float PrimaryIntensity = FMath::Clamp(RainVisualIntensity, 0.0f, 1.0f);
 	const float SecondaryIntensity = FMath::Clamp(RainVisualIntensity * GroundSplashIntensityMultiplier, 0.0f, 1.0f);
 
-	RainVisual->SetRainBlockerKillRadiusPadding(RainBlockerKillRadiusPadding);
 	RainVisual->SetRainSpawnRate(RainSpawnRate);
 	RainVisual->SetVisualIntensities(PrimaryIntensity, SecondaryIntensity);
 	RainVisual->SetVisualsEnabled(bEnableRainVisuals);
 }
 
-void AUOUUmbrellaRainArea::ApplyEnvironmentVisualRainBlocker(bool bIsBlocking, const FVector& BlockerWorldCenter, const FRotator& BlockerWorldRotation, const FVector& BlockerHalfExtent, float BlockerIntensity)
+void AUOUUmbrellaRainArea::ApplyEnvironmentVisualRainBlocker(bool bIsBlocking, const FVector& BlockerWorldCenter, const FVector& BlockerHalfExtent, float BlockerIntensity)
 {
 	if (RainVisual == nullptr)
 	{
@@ -242,14 +235,10 @@ void AUOUUmbrellaRainArea::ApplyEnvironmentVisualRainBlocker(bool bIsBlocking, c
 	const FVector BlockerLocalCenter = bIsBlocking
 		? VisualTransform.InverseTransformPosition(BlockerWorldCenter)
 		: FVector::ZeroVector;
-	const FRotator BlockerLocalRotation = bIsBlocking
-		? (VisualTransform.GetRotation().Inverse() * BlockerWorldRotation.Quaternion()).Rotator()
-		: FRotator::ZeroRotator;
 
 	RainVisual->SetRainBlockerData(
 		bIsBlocking,
 		BlockerLocalCenter,
-		BlockerLocalRotation,
 		BlockerHalfExtent,
 		BlockerIntensity);
 }
