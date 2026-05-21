@@ -116,12 +116,19 @@ void UUOUEnvironmentVisualComponent::ConfigureRainVisual(
 void UUOUEnvironmentVisualComponent::SetRainBlockerData(
 	bool bIsBlocking,
 	const FVector& BlockerLocalPosition,
-	float BlockerRadius,
+	const FRotator& BlockerLocalRotation,
+	const FVector& BlockerHalfExtent,
 	float BlockerIntensity)
 {
-	bCachedRainBlockerActive = bIsBlocking && BlockerRadius > 0.0f && BlockerIntensity > 0.0f;
+	const FVector SafeHalfExtent(
+		FMath::Max(0.0f, BlockerHalfExtent.X),
+		FMath::Max(0.0f, BlockerHalfExtent.Y),
+		FMath::Max(0.0f, BlockerHalfExtent.Z));
+
+	bCachedRainBlockerActive = bIsBlocking && !SafeHalfExtent.IsNearlyZero() && BlockerIntensity > 0.0f;
 	CachedRainBlockerLocalPosition = bCachedRainBlockerActive ? BlockerLocalPosition : FVector::ZeroVector;
-	CachedRainBlockerRadius = bCachedRainBlockerActive ? FMath::Max(0.0f, BlockerRadius) : 0.0f;
+	CachedRainBlockerLocalRotation = bCachedRainBlockerActive ? BlockerLocalRotation : FRotator::ZeroRotator;
+	CachedRainBlockerHalfExtent = bCachedRainBlockerActive ? SafeHalfExtent : FVector::ZeroVector;
 	CachedRainBlockerIntensity = bCachedRainBlockerActive ? FMath::Clamp(BlockerIntensity, 0.0f, 1.0f) : 0.0f;
 
 	ApplyNiagaraParameters();

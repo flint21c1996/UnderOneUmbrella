@@ -36,7 +36,8 @@ public:
 	void SetRainBlockerData(
 		bool bIsBlocking,
 		const FVector& BlockerLocalPosition,
-		float BlockerRadius,
+		const FRotator& BlockerLocalRotation,
+		const FVector& BlockerHalfExtent,
 		float BlockerIntensity);
 
 	UFUNCTION(BlueprintCallable, Category = "Environment Visual")
@@ -117,7 +118,10 @@ protected:
 	FVector CachedRainBlockerLocalPosition = FVector::ZeroVector;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Environment Visual|Runtime")
-	float CachedRainBlockerRadius = 0.0f;
+	FRotator CachedRainBlockerLocalRotation = FRotator::ZeroRotator;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Environment Visual|Runtime")
+	FVector CachedRainBlockerHalfExtent = FVector::ZeroVector;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Environment Visual|Runtime")
 	float CachedRainBlockerIntensity = 0.0f;
@@ -160,6 +164,18 @@ protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual|Parameters", meta = (ToolTip = "우산이 비를 막는 반지름을 Niagara에 전달할 User Parameter 이름입니다."))
 	FName RainBlockerRadiusParameterName = TEXT("RainBlockerRadius");
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual|Parameters", meta = (ToolTip = "우산 Kill Volume Box의 절반 크기를 Niagara에 전달할 User Parameter 이름입니다."))
+	FName RainBlockerHalfExtentParameterName = TEXT("RainBlockerHalfExtent");
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual|Parameters", meta = (ToolTip = "우산 Kill Volume Box의 로컬 Right 축을 Niagara에 전달할 User Parameter 이름입니다."))
+	FName RainBlockerRightVectorParameterName = TEXT("RainBlockerRightVector");
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual|Parameters", meta = (ToolTip = "우산 Kill Volume Box의 로컬 Forward 축을 Niagara에 전달할 User Parameter 이름입니다."))
+	FName RainBlockerForwardVectorParameterName = TEXT("RainBlockerForwardVector");
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual|Parameters", meta = (ToolTip = "우산 Kill Volume Box의 로컬 Up 축을 Niagara에 전달할 User Parameter 이름입니다."))
+	FName RainBlockerUpVectorParameterName = TEXT("RainBlockerUpVector");
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual|Parameters", meta = (ToolTip = "우산이 비를 막는 표현 강도를 Niagara에 전달할 User Parameter 이름입니다."))
 	FName RainBlockerIntensityParameterName = TEXT("RainBlockerIntensity");
