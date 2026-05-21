@@ -790,9 +790,10 @@ void UUOUUmbrellaComponent::DrawRainBlockerDebug() const
 		return;
 	}
 
-	FVector BlockerWorldLocation = FVector::ZeroVector;
-	float BlockerRadius = 0.0f;
-	if (!TryGetRainBlockerData(BlockerWorldLocation, BlockerRadius))
+	FVector BlockerWorldCenter = FVector::ZeroVector;
+	FRotator BlockerWorldRotation = FRotator::ZeroRotator;
+	FVector BlockerHalfExtent = FVector::ZeroVector;
+	if (!TryGetRainBlockerVolumeData(BlockerWorldCenter, BlockerWorldRotation, BlockerHalfExtent))
 	{
 		// 비를 막는 상태가 아니면 그릴 기준 데이터가 없으므로 바로 종료합니다.
 		return;
@@ -804,7 +805,7 @@ void UUOUUmbrellaComponent::DrawRainBlockerDebug() const
 
 	DrawDebugSphere(
 		World,
-		BlockerWorldLocation,
+		BlockerWorldCenter,
 		8.0f,
 		12,
 		PlayerDebugColor,
@@ -813,24 +814,21 @@ void UUOUUmbrellaComponent::DrawRainBlockerDebug() const
 		0,
 		Thickness);
 
-	DrawDebugCircle(
+	DrawDebugBox(
 		World,
-		BlockerWorldLocation,
-		BlockerRadius,
-		64,
+		BlockerWorldCenter,
+		BlockerHalfExtent,
+		BlockerWorldRotation.Quaternion(),
 		PlayerDebugColor,
 		false,
 		LifeTime,
 		0,
-		Thickness,
-		FVector::ForwardVector,
-		FVector::RightVector,
-		false);
+		Thickness);
 
 	DrawDebugLine(
 		World,
-		BlockerWorldLocation + FVector(0.0f, 0.0f, 20.0f),
-		BlockerWorldLocation - FVector(0.0f, 0.0f, 20.0f),
+		BlockerWorldCenter + BlockerWorldRotation.Quaternion().GetAxisZ() * BlockerHalfExtent.Z,
+		BlockerWorldCenter - BlockerWorldRotation.Quaternion().GetAxisZ() * BlockerHalfExtent.Z,
 		PlayerDebugColor,
 		false,
 		LifeTime,
@@ -839,8 +837,8 @@ void UUOUUmbrellaComponent::DrawRainBlockerDebug() const
 
 	DrawDebugString(
 		World,
-		BlockerWorldLocation + FVector(0.0f, 0.0f, 18.0f),
-		FString::Printf(TEXT("RainBlocker R=%.1f"), BlockerRadius),
+		BlockerWorldCenter + BlockerWorldRotation.Quaternion().GetAxisZ() * (BlockerHalfExtent.Z + 18.0f),
+		FString::Printf(TEXT("RainBlocker Box %.1f %.1f %.1f"), BlockerHalfExtent.X, BlockerHalfExtent.Y, BlockerHalfExtent.Z),
 		nullptr,
 		PlayerDebugColor,
 		LifeTime,
