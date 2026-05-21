@@ -374,49 +374,7 @@ bool UUOUUmbrellaComponent::IsBlockingRain() const
 	return IsOpen();
 }
 
-// RainArea나 디버그 표시가 사용할 비 차단 중심과 반지름을 계산합니다.
-bool UUOUUmbrellaComponent::TryGetRainBlockerData(FVector& OutWorldLocation, float& OutRadius) const
-{
-	OutWorldLocation = FVector::ZeroVector;
-	OutRadius = 0.0f;
-
-	if (!IsBlockingRain() || RainBlockerRadius <= 0.0f)
-	{
-		return false;
-	}
-
-	// 상태 전용 펼친 비주얼이 있으면 가장 먼저 기준점으로 사용합니다.
-	const USceneComponent* BlockerComponent = OpenVisual;
-	if (BlockerComponent == nullptr)
-	{
-		BlockerComponent = RuntimeHeldVisual;
-	}
-	if (BlockerComponent == nullptr)
-	{
-		// 전용 비주얼이 없으면 우산 부착 위치를 차선 기준점으로 사용합니다.
-		BlockerComponent = PickupAttachPoint;
-	}
-
-	if (BlockerComponent != nullptr)
-	{
-		// 컴포넌트 로컬 오프셋을 월드 좌표로 변환해 실제 차단 중심을 만듭니다.
-		OutWorldLocation = BlockerComponent->GetComponentTransform().TransformPosition(RainBlockerLocalOffset);
-		OutRadius = RainBlockerRadius;
-		return true;
-	}
-
-	if (const AActor* Owner = GetOwner())
-	{
-		// 모든 기준 컴포넌트가 없을 때는 소유 액터 위치를 최후의 기준으로 삼습니다.
-		OutWorldLocation = Owner->GetActorTransform().TransformPosition(RainBlockerLocalOffset);
-		OutRadius = RainBlockerRadius;
-		return true;
-	}
-
-	return false;
-}
-
-// 저장 컨테이너가 없을 때도 호출부가 안전하게 0을 받을 수 있게 감쌉니다.
+// RainArea나 디버그 표시가 사용할 비 차단 박스의 중심, 회전, 절반 크기를 계산합니다.
 bool UUOUUmbrellaComponent::TryGetRainBlockerVolumeData(FVector& OutWorldCenter, FRotator& OutWorldRotation, FVector& OutHalfExtent) const
 {
 	OutWorldCenter = FVector::ZeroVector;
