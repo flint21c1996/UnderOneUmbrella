@@ -116,7 +116,6 @@ void UUOUEnvironmentVisualComponent::ConfigureRainVisual(
 void UUOUEnvironmentVisualComponent::SetRainBlockerData(
 	bool bIsBlocking,
 	const FVector& BlockerLocalPosition,
-	const FRotator& BlockerLocalRotation,
 	const FVector& BlockerHalfExtent,
 	float BlockerIntensity)
 {
@@ -127,7 +126,6 @@ void UUOUEnvironmentVisualComponent::SetRainBlockerData(
 
 	bCachedRainBlockerActive = bIsBlocking && !SafeHalfExtent.IsNearlyZero() && BlockerIntensity > 0.0f;
 	CachedRainBlockerLocalPosition = bCachedRainBlockerActive ? BlockerLocalPosition : FVector::ZeroVector;
-	CachedRainBlockerLocalRotation = bCachedRainBlockerActive ? BlockerLocalRotation : FRotator::ZeroRotator;
 	CachedRainBlockerHalfExtent = bCachedRainBlockerActive ? SafeHalfExtent : FVector::ZeroVector;
 	CachedRainBlockerIntensity = bCachedRainBlockerActive ? FMath::Clamp(BlockerIntensity, 0.0f, 1.0f) : 0.0f;
 
@@ -146,13 +144,6 @@ void UUOUEnvironmentVisualComponent::SetVisualIntensities(float PrimaryIntensity
 void UUOUEnvironmentVisualComponent::SetRainSpawnRate(float NewRainSpawnRate)
 {
 	CachedRainSpawnRate = FMath::Max(0.0f, NewRainSpawnRate);
-
-	ApplyNiagaraParameters();
-}
-
-void UUOUEnvironmentVisualComponent::SetRainBlockerKillRadiusPadding(float NewKillRadiusPadding)
-{
-	RainBlockerKillRadiusPadding = FMath::Max(0.0f, NewKillRadiusPadding);
 
 	ApplyNiagaraParameters();
 }
@@ -401,29 +392,17 @@ void UUOUEnvironmentVisualComponent::ApplyNiagaraParameters()
 			return;
 		}
 
-		const FVector BlockerWorldPosition = GetComponentTransform().TransformPosition(CachedRainBlockerLocalPosition);
-		const FQuat BlockerWorldRotation = GetComponentTransform().GetRotation() * CachedRainBlockerLocalRotation.Quaternion();
-		const FVector BlockerWorldForward = BlockerWorldRotation.GetAxisX();
-		const FVector BlockerWorldRight = BlockerWorldRotation.GetAxisY();
-		const FVector BlockerWorldUp = BlockerWorldRotation.GetAxisZ();
 		const FTransform EffectTransform = Effect->GetComponentTransform();
+		const FVector EffectScale = GetEnvironmentVisualComponentSafeEffectScale(Effect);
+		const FVector BlockerWorldPosition = GetComponentTransform().TransformPosition(CachedRainBlockerLocalPosition);
 		const FVector EffectLocalBlockerPosition = bCachedRainBlockerActive
 			? EffectTransform.InverseTransformPosition(BlockerWorldPosition)
 			: FVector::ZeroVector;
-		const FVector EffectLocalForward = bCachedRainBlockerActive
-			? EffectTransform.InverseTransformVectorNoScale(BlockerWorldForward).GetSafeNormal()
-			: FVector::ForwardVector;
-		const FVector EffectLocalRight = bCachedRainBlockerActive
-			? EffectTransform.InverseTransformVectorNoScale(BlockerWorldRight).GetSafeNormal()
-			: FVector::RightVector;
-		const FVector EffectLocalUp = bCachedRainBlockerActive
-			? EffectTransform.InverseTransformVectorNoScale(BlockerWorldUp).GetSafeNormal()
-			: FVector::UpVector;
 		const FVector EffectLocalHalfExtent = bCachedRainBlockerActive
 			? FVector(
-				EffectTransform.InverseTransformVector(BlockerWorldForward * CachedRainBlockerHalfExtent.X).Size(),
-				EffectTransform.InverseTransformVector(BlockerWorldRight * CachedRainBlockerHalfExtent.Y).Size(),
-				EffectTransform.InverseTransformVector(BlockerWorldUp * CachedRainBlockerHalfExtent.Z).Size())
+				CachedRainBlockerHalfExtent.X / EffectScale.X,
+				CachedRainBlockerHalfExtent.Y / EffectScale.Y,
+				CachedRainBlockerHalfExtent.Z / EffectScale.Z)
 			: FVector::ZeroVector;
 
 		if (!RainBlockerActiveParameterName.IsNone())
@@ -436,29 +415,9 @@ void UUOUEnvironmentVisualComponent::ApplyNiagaraParameters()
 			Effect->SetVariableVec3(RainBlockerLocalPositionParameterName, EffectLocalBlockerPosition);
 		}
 
-		if (!RainBlockerRadiusParameterName.IsNone())
-		{
-			Effect->SetVariableFloat(RainBlockerRadiusParameterName, 0.0f);
-		}
-
 		if (!RainBlockerHalfExtentParameterName.IsNone())
 		{
 			Effect->SetVariableVec3(RainBlockerHalfExtentParameterName, EffectLocalHalfExtent);
-		}
-
-		if (!RainBlockerRightVectorParameterName.IsNone())
-		{
-			Effect->SetVariableVec3(RainBlockerRightVectorParameterName, EffectLocalRight);
-		}
-
-		if (!RainBlockerForwardVectorParameterName.IsNone())
-		{
-			Effect->SetVariableVec3(RainBlockerForwardVectorParameterName, EffectLocalForward);
-		}
-
-		if (!RainBlockerUpVectorParameterName.IsNone())
-		{
-			Effect->SetVariableVec3(RainBlockerUpVectorParameterName, EffectLocalUp);
 		}
 
 		if (!RainBlockerIntensityParameterName.IsNone())
@@ -466,7 +425,7 @@ void UUOUEnvironmentVisualComponent::ApplyNiagaraParameters()
 			Effect->SetVariableFloat(RainBlockerIntensityParameterName, CachedRainBlockerIntensity);
 		}
 
-		DrawRainBlockerNiagaraDebug(Effect, BlockerWorldPosition, BlockerWorldRotation, CachedRainBlockerHalfExtent);
+		DrawRainBlockerNiagaraDebug(Effect, BlockerWorldPosition, CachedRainBlockerHalfExtent);
 	};
 
 	ApplyRainBlockerParameters(ActivePrimaryEffect);
@@ -491,7 +450,7 @@ void UUOUEnvironmentVisualComponent::ApplyVisualEffectTransforms()
 	}
 }
 
-void UUOUEnvironmentVisualComponent::DrawRainBlockerNiagaraDebug(const UNiagaraComponent* Effect, const FVector& BlockerWorldCenter, const FQuat& BlockerWorldRotation, const FVector& BlockerHalfExtent) const
+void UUOUEnvironmentVisualComponent::DrawRainBlockerNiagaraDebug(const UNiagaraComponent* Effect, const FVector& BlockerWorldCenter, const FVector& BlockerHalfExtent) const
 {
 	if (!bDrawRainBlockerNiagaraDebug
 		|| !bCachedRainBlockerActive
@@ -510,7 +469,7 @@ void UUOUEnvironmentVisualComponent::DrawRainBlockerNiagaraDebug(const UNiagaraC
 		GetWorld(),
 		BlockerWorldCenter,
 		BlockerHalfExtent,
-		BlockerWorldRotation,
+		Effect->GetComponentQuat(),
 		VFXDebugColor,
 		false,
 		0.0f,

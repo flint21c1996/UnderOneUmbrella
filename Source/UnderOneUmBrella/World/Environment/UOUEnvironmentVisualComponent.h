@@ -36,7 +36,6 @@ public:
 	void SetRainBlockerData(
 		bool bIsBlocking,
 		const FVector& BlockerLocalPosition,
-		const FRotator& BlockerLocalRotation,
 		const FVector& BlockerHalfExtent,
 		float BlockerIntensity);
 
@@ -45,9 +44,6 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Environment Visual|Rain")
 	void SetRainSpawnRate(float NewRainSpawnRate);
-
-	UFUNCTION(BlueprintCallable, Category = "Environment Visual|Rain")
-	void SetRainBlockerKillRadiusPadding(float NewKillRadiusPadding);
 
 	UFUNCTION(BlueprintCallable, Category = "Environment Visual")
 	void SetVisualsEnabled(bool bNewEnabled);
@@ -118,9 +114,6 @@ protected:
 	FVector CachedRainBlockerLocalPosition = FVector::ZeroVector;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Environment Visual|Runtime")
-	FRotator CachedRainBlockerLocalRotation = FRotator::ZeroRotator;
-
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Environment Visual|Runtime")
 	FVector CachedRainBlockerHalfExtent = FVector::ZeroVector;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Environment Visual|Runtime")
@@ -162,26 +155,11 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual|Parameters", meta = (ToolTip = "우산이 비를 막는 중심 위치를 Niagara에 전달할 User Parameter 이름입니다. Visual Component 기준 로컬 좌표입니다."))
 	FName RainBlockerLocalPositionParameterName = TEXT("RainBlockerLocalPosition");
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual|Parameters", meta = (ToolTip = "우산이 비를 막는 반지름을 Niagara에 전달할 User Parameter 이름입니다."))
-	FName RainBlockerRadiusParameterName = TEXT("RainBlockerRadius");
-
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual|Parameters", meta = (ToolTip = "우산 Kill Volume Box의 절반 크기를 Niagara에 전달할 User Parameter 이름입니다."))
 	FName RainBlockerHalfExtentParameterName = TEXT("RainBlockerHalfExtent");
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual|Parameters", meta = (ToolTip = "우산 Kill Volume Box의 로컬 Right 축을 Niagara에 전달할 User Parameter 이름입니다."))
-	FName RainBlockerRightVectorParameterName = TEXT("RainBlockerRightVector");
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual|Parameters", meta = (ToolTip = "우산 Kill Volume Box의 로컬 Forward 축을 Niagara에 전달할 User Parameter 이름입니다."))
-	FName RainBlockerForwardVectorParameterName = TEXT("RainBlockerForwardVector");
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual|Parameters", meta = (ToolTip = "우산 Kill Volume Box의 로컬 Up 축을 Niagara에 전달할 User Parameter 이름입니다."))
-	FName RainBlockerUpVectorParameterName = TEXT("RainBlockerUpVector");
-
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual|Parameters", meta = (ToolTip = "우산이 비를 막는 표현 강도를 Niagara에 전달할 User Parameter 이름입니다."))
 	FName RainBlockerIntensityParameterName = TEXT("RainBlockerIntensity");
-
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Environment Visual|Rain Block", meta = (ToolTip = "RainArea에서 전달된 Niagara kill 반지름 여유 값입니다. 직접 수정하지 않고 RainArea에서 관리합니다."))
-	float RainBlockerKillRadiusPadding = 75.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual|Debug", meta = (ToolTip = "Niagara에 전달된 우산 비 차단 영역을 월드에 표시합니다."))
 	bool bDrawRainBlockerNiagaraDebug = true;
@@ -193,7 +171,7 @@ protected:
 	void ApplyVisualEffectTransforms();
 	void ApplyNiagaraParameters();
 	void RefreshNiagaraActivation();
-	void DrawRainBlockerNiagaraDebug(const UNiagaraComponent* Effect, const FVector& BlockerWorldCenter, const FQuat& BlockerWorldRotation, const FVector& BlockerHalfExtent) const;
+	void DrawRainBlockerNiagaraDebug(const UNiagaraComponent* Effect, const FVector& BlockerWorldCenter, const FVector& BlockerHalfExtent) const;
 	void EnsureInternalEffectComponents();
 	UNiagaraComponent* GetPrimaryEffectComponent() const;
 	UNiagaraComponent* GetSecondaryEffectComponent() const;
