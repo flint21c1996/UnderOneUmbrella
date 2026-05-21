@@ -81,6 +81,7 @@ void AUOUUmbrellaRainArea::OnConstruction(const FTransform& Transform)
 	RainVisualIntensity = FMath::Clamp(RainVisualIntensity, 0.0f, 1.0f);
 	RainSpawnRate = FMath::Max(0.0f, RainSpawnRate);
 	GroundSplashIntensityMultiplier = FMath::Max(0.0f, GroundSplashIntensityMultiplier);
+	RainFallSpeed = FMath::Clamp(RainFallSpeed, -3000.0f, 0.0f);
 	if (RainVisual != nullptr)
 	{
 		RainVisual->SetEffectComponents(PrimaryRainEffect, SecondaryRainEffect);

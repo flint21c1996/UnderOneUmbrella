@@ -66,7 +66,7 @@ protected:
 	TObjectPtr<UNiagaraComponent> SecondaryEffect = nullptr;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual|Effects", meta = (ToolTip = "연결된 NiagaraComponent가 없을 때 내부 재생용 NiagaraComponent를 자동으로 생성할지 정합니다."))
-	bool bAutoCreateMissingEffectComponents = true;
+	bool bAutoCreateMissingEffectComponents = false;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UNiagaraComponent> InternalPrimaryEffect = nullptr;

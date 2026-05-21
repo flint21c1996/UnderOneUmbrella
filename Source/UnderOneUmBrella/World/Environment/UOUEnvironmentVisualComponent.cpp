@@ -202,6 +202,8 @@ void UUOUEnvironmentVisualComponent::PostEditChangeProperty(FPropertyChangedEven
 	ApplyVisualEffectSettings(bPrimarySystemChanged, bSecondarySystemChanged);
 	ApplyVisualEffectTransforms();
 	ApplyNiagaraParameters();
+
+	// 마우스 드래그를 끝냈거나 단순 수치 입력 완료 시에만 안전하게 이펙트 상태를 갱신합니다.
 	RefreshNiagaraActivation();
 }
 #endif
@@ -398,47 +400,47 @@ void UUOUEnvironmentVisualComponent::ApplyNiagaraParameters()
 	}
 
 	auto ApplyRainBlockerParameters = [this](UNiagaraComponent* Effect)
-	{
-		if (Effect == nullptr)
 		{
-			return;
-		}
+			if (Effect == nullptr)
+			{
+				return;
+			}
 
-		const FTransform EffectTransform = Effect->GetComponentTransform();
-		const FVector EffectScale = GetEnvironmentVisualComponentSafeEffectScale(Effect);
-		const FVector BlockerWorldPosition = GetComponentTransform().TransformPosition(CachedRainBlockerLocalPosition);
-		const FVector EffectLocalBlockerPosition = bCachedRainBlockerActive
-			? EffectTransform.InverseTransformPosition(BlockerWorldPosition)
-			: FVector::ZeroVector;
-		const FVector EffectLocalHalfExtent = bCachedRainBlockerActive
-			? FVector(
-				CachedRainBlockerHalfExtent.X / EffectScale.X,
-				CachedRainBlockerHalfExtent.Y / EffectScale.Y,
-				CachedRainBlockerHalfExtent.Z / EffectScale.Z)
-			: FVector::ZeroVector;
+			const FTransform EffectTransform = Effect->GetComponentTransform();
+			const FVector EffectScale = GetEnvironmentVisualComponentSafeEffectScale(Effect);
+			const FVector BlockerWorldPosition = GetComponentTransform().TransformPosition(CachedRainBlockerLocalPosition);
+			const FVector EffectLocalBlockerPosition = bCachedRainBlockerActive
+				? EffectTransform.InverseTransformPosition(BlockerWorldPosition)
+				: FVector::ZeroVector;
+			const FVector EffectLocalHalfExtent = bCachedRainBlockerActive
+				? FVector(
+					CachedRainBlockerHalfExtent.X / EffectScale.X,
+					CachedRainBlockerHalfExtent.Y / EffectScale.Y,
+					CachedRainBlockerHalfExtent.Z / EffectScale.Z)
+				: FVector::ZeroVector;
 
-		if (!RainBlockerActiveParameterName.IsNone())
-		{
-			Effect->SetVariableBool(RainBlockerActiveParameterName, bCachedRainBlockerActive);
-		}
+			if (!RainBlockerActiveParameterName.IsNone())
+			{
+				Effect->SetVariableBool(RainBlockerActiveParameterName, bCachedRainBlockerActive);
+			}
 
-		if (!RainBlockerLocalPositionParameterName.IsNone())
-		{
-			Effect->SetVariableVec3(RainBlockerLocalPositionParameterName, EffectLocalBlockerPosition);
-		}
+			if (!RainBlockerLocalPositionParameterName.IsNone())
+			{
+				Effect->SetVariableVec3(RainBlockerLocalPositionParameterName, EffectLocalBlockerPosition);
+			}
 
-		if (!RainBlockerHalfExtentParameterName.IsNone())
-		{
-			Effect->SetVariableVec3(RainBlockerHalfExtentParameterName, EffectLocalHalfExtent);
-		}
+			if (!RainBlockerHalfExtentParameterName.IsNone())
+			{
+				Effect->SetVariableVec3(RainBlockerHalfExtentParameterName, EffectLocalHalfExtent);
+			}
 
-		if (!RainBlockerIntensityParameterName.IsNone())
-		{
-			Effect->SetVariableFloat(RainBlockerIntensityParameterName, CachedRainBlockerIntensity);
-		}
+			if (!RainBlockerIntensityParameterName.IsNone())
+			{
+				Effect->SetVariableFloat(RainBlockerIntensityParameterName, CachedRainBlockerIntensity);
+			}
 
-		DrawRainBlockerNiagaraDebug(Effect, BlockerWorldPosition, CachedRainBlockerHalfExtent);
-	};
+			DrawRainBlockerNiagaraDebug(Effect, BlockerWorldPosition, CachedRainBlockerHalfExtent);
+		};
 
 	ApplyRainBlockerParameters(ActivePrimaryEffect);
 	ApplyRainBlockerParameters(ActiveSecondaryEffect);
