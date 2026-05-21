@@ -107,7 +107,7 @@ protected:
 	// 현재 비 영역이 켜져 있는지에 따라 RainVisual 컴포넌트의 활성 상태를 맞춥니다.
 	void ApplyEnvironmentVisualState();
 	// 우산이 비를 막을 때 RainVisual 컴포넌트에도 차단 위치와 강도를 전달합니다.
-	void ApplyEnvironmentVisualRainBlocker(bool bIsBlocking, const FVector& BlockerWorldLocation, float BlockerRadius, float BlockerIntensity);
+	void ApplyEnvironmentVisualRainBlocker(bool bIsBlocking, const FVector& BlockerWorldCenter, const FRotator& BlockerWorldRotation, const FVector& BlockerHalfExtent, float BlockerIntensity);
 	// 비주얼 디버그 박스를 그려서 환경 연동 범위를 확인합니다.
 	void DrawRainVisualDebug() const;
 };

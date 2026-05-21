@@ -133,18 +133,13 @@ void AUOUUmbrellaRainArea::Tick(float DeltaSeconds)
 
 	DrawRainVisualDebug();
 
-	if (RainFillRate <= 0.0f)
-	{
-		ApplyEnvironmentVisualRainBlocker(false, FVector::ZeroVector, 0.0f, 0.0f);
-		return;
-	}
-
 	TArray<AActor*> OverlappingActors;
 	RainVolume->GetOverlappingActors(OverlappingActors);
 
 	bool bHasRainBlocker = false;
-	FVector RainBlockerWorldLocation = FVector::ZeroVector;
-	float RainBlockerRadius = 0.0f;
+	FVector RainBlockerWorldCenter = FVector::ZeroVector;
+	FRotator RainBlockerWorldRotation = FRotator::ZeroRotator;
+	FVector RainBlockerHalfExtent = FVector::ZeroVector;
 
 	for (AActor* OverlappingActor : OverlappingActors)
 	{
@@ -155,24 +150,30 @@ void AUOUUmbrellaRainArea::Tick(float DeltaSeconds)
 
 		if (UUOUUmbrellaComponent* UmbrellaComponent = OverlappingActor->FindComponentByClass<UUOUUmbrellaComponent>())
 		{
-			UmbrellaComponent->ApplyRainExposure(RainFillRate * DeltaSeconds);
+			if (RainFillRate > 0.0f)
+			{
+				UmbrellaComponent->ApplyRainExposure(RainFillRate * DeltaSeconds);
+			}
 
-			FVector CandidateBlockerWorldLocation = FVector::ZeroVector;
-			float CandidateBlockerRadius = 0.0f;
-			if (UmbrellaComponent->TryGetRainBlockerData(CandidateBlockerWorldLocation, CandidateBlockerRadius)
-				&& CandidateBlockerRadius > RainBlockerRadius)
+			FVector CandidateBlockerWorldCenter = FVector::ZeroVector;
+			FRotator CandidateBlockerWorldRotation = FRotator::ZeroRotator;
+			FVector CandidateBlockerHalfExtent = FVector::ZeroVector;
+			if (UmbrellaComponent->TryGetRainBlockerVolumeData(CandidateBlockerWorldCenter, CandidateBlockerWorldRotation, CandidateBlockerHalfExtent)
+				&& CandidateBlockerHalfExtent.SizeSquared() > RainBlockerHalfExtent.SizeSquared())
 			{
 				bHasRainBlocker = true;
-				RainBlockerWorldLocation = CandidateBlockerWorldLocation;
-				RainBlockerRadius = CandidateBlockerRadius;
+				RainBlockerWorldCenter = CandidateBlockerWorldCenter;
+				RainBlockerWorldRotation = CandidateBlockerWorldRotation;
+				RainBlockerHalfExtent = CandidateBlockerHalfExtent;
 			}
 		}
 	}
 
 	ApplyEnvironmentVisualRainBlocker(
 		bHasRainBlocker,
-		RainBlockerWorldLocation,
-		RainBlockerRadius,
+		RainBlockerWorldCenter,
+		RainBlockerWorldRotation,
+		RainBlockerHalfExtent,
 		bHasRainBlocker ? RainVisualIntensity : 0.0f);
 }
 
@@ -230,21 +231,26 @@ void AUOUUmbrellaRainArea::ApplyEnvironmentVisualState()
 	RainVisual->SetVisualsEnabled(bEnableRainVisuals);
 }
 
-void AUOUUmbrellaRainArea::ApplyEnvironmentVisualRainBlocker(bool bIsBlocking, const FVector& BlockerWorldLocation, float BlockerRadius, float BlockerIntensity)
+void AUOUUmbrellaRainArea::ApplyEnvironmentVisualRainBlocker(bool bIsBlocking, const FVector& BlockerWorldCenter, const FRotator& BlockerWorldRotation, const FVector& BlockerHalfExtent, float BlockerIntensity)
 {
 	if (RainVisual == nullptr)
 	{
 		return;
 	}
 
-	const FVector BlockerLocalPosition = bIsBlocking
-		? RainVisual->GetComponentTransform().InverseTransformPosition(BlockerWorldLocation)
+	const FTransform VisualTransform = RainVisual->GetComponentTransform();
+	const FVector BlockerLocalCenter = bIsBlocking
+		? VisualTransform.InverseTransformPosition(BlockerWorldCenter)
 		: FVector::ZeroVector;
+	const FRotator BlockerLocalRotation = bIsBlocking
+		? (VisualTransform.GetRotation().Inverse() * BlockerWorldRotation.Quaternion()).Rotator()
+		: FRotator::ZeroRotator;
 
 	RainVisual->SetRainBlockerData(
 		bIsBlocking,
-		BlockerLocalPosition,
-		BlockerRadius,
+		BlockerLocalCenter,
+		BlockerLocalRotation,
+		BlockerHalfExtent,
 		BlockerIntensity);
 }
 
