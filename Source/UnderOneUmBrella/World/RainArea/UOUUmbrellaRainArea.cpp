@@ -64,6 +64,7 @@ void AUOUUmbrellaRainArea::BeginPlay()
 	RainFillRate = FMath::Max(0.0f, RainFillRate);
 	RainVisualIntensity = FMath::Clamp(RainVisualIntensity, 0.0f, 1.0f);
 	RainSpawnRate = FMath::Max(0.0f, RainSpawnRate);
+	RainFallSpeed = FMath::Max(0.0f, RainFallSpeed);
 	GroundSplashIntensityMultiplier = FMath::Max(0.0f, GroundSplashIntensityMultiplier);
 	if (RainVisual != nullptr)
 	{
@@ -80,6 +81,7 @@ void AUOUUmbrellaRainArea::OnConstruction(const FTransform& Transform)
 	RainFillRate = FMath::Max(0.0f, RainFillRate);
 	RainVisualIntensity = FMath::Clamp(RainVisualIntensity, 0.0f, 1.0f);
 	RainSpawnRate = FMath::Max(0.0f, RainSpawnRate);
+	RainFallSpeed = FMath::Max(0.0f, RainFallSpeed);
 	GroundSplashIntensityMultiplier = FMath::Max(0.0f, GroundSplashIntensityMultiplier);
 	if (RainVisual != nullptr)
 	{
@@ -97,6 +99,7 @@ void AUOUUmbrellaRainArea::PostEditChangeProperty(FPropertyChangedEvent& Propert
 	RainFillRate = FMath::Max(0.0f, RainFillRate);
 	RainVisualIntensity = FMath::Clamp(RainVisualIntensity, 0.0f, 1.0f);
 	RainSpawnRate = FMath::Max(0.0f, RainSpawnRate);
+	RainFallSpeed = FMath::Max(0.0f, RainFallSpeed);
 	GroundSplashIntensityMultiplier = FMath::Max(0.0f, GroundSplashIntensityMultiplier);
 	if (RainVisual != nullptr)
 	{
@@ -221,6 +224,7 @@ void AUOUUmbrellaRainArea::ApplyEnvironmentVisualState()
 	const float SecondaryIntensity = FMath::Clamp(RainVisualIntensity * GroundSplashIntensityMultiplier, 0.0f, 1.0f);
 
 	RainVisual->SetRainSpawnRate(RainSpawnRate);
+	RainVisual->SetRainFallSpeed(RainFallSpeed);
 	RainVisual->SetVisualIntensities(PrimaryIntensity, SecondaryIntensity);
 	RainVisual->SetVisualsEnabled(bEnableRainVisuals);
 }

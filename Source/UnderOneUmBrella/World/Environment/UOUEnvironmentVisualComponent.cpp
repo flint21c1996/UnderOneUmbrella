@@ -148,6 +148,13 @@ void UUOUEnvironmentVisualComponent::SetRainSpawnRate(float NewRainSpawnRate)
 	ApplyNiagaraParameters();
 }
 
+void UUOUEnvironmentVisualComponent::SetRainFallSpeed(float NewRainFallSpeed)
+{
+	CachedRainFallSpeed = FMath::Max(0.0f, NewRainFallSpeed);
+
+	ApplyNiagaraParameters();
+}
+
 void UUOUEnvironmentVisualComponent::SetVisualsEnabled(bool bNewEnabled)
 {
 	bEnableVisuals = bNewEnabled;
@@ -369,6 +376,11 @@ void UUOUEnvironmentVisualComponent::ApplyNiagaraParameters()
 	if (ActivePrimaryEffect != nullptr && !RainSpawnRateParameterName.IsNone())
 	{
 		ActivePrimaryEffect->SetVariableFloat(RainSpawnRateParameterName, CachedRainSpawnRate * CachedPrimaryIntensity);
+	}
+
+	if (ActivePrimaryEffect != nullptr && !RainFallSpeedParameterName.IsNone())
+	{
+		ActivePrimaryEffect->SetVariableFloat(RainFallSpeedParameterName, CachedRainFallSpeed);
 	}
 
 	if (ActiveSecondaryEffect != nullptr && !SecondaryAreaSizeParameterName.IsNone())

@@ -83,6 +83,9 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Falling", meta = (ClampMin = "0.0", UIMin = "0.0", UIMax = "6000.0", DisplayPriority = "3", ToolTip = "비 Niagara가 초당 생성할 기본 파티클 수입니다. 최종 Spawn Rate는 RainSpawnRate와 RainVisualIntensity를 곱한 값입니다."))
 	float RainSpawnRate = 2400.0f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Falling", meta = (ClampMin = "0.0", UIMin = "0.0", UIMax = "3000.0", DisplayPriority = "4", ToolTip = "비 파티클이 아래로 떨어지는 속도입니다. Niagara의 RainFallSpeed User Parameter로 전달됩니다."))
+	float RainFallSpeed = -900.0f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Ground Splash", meta = (ClampMin = "0.0", ClampMax = "2.0", ToolTip = "바닥 물 튐 표현의 강도 배율입니다. RainVisualIntensity와 곱해져 GroundSplashIntensity로 전달됩니다."))
 	float GroundSplashIntensityMultiplier = 0.45f;
 
