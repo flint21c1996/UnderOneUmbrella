@@ -12,7 +12,7 @@
 
 namespace
 {
-	void ApplyNiagaraSystemSelection(
+	void ApplyEnvironmentVisualComponentNiagaraSystemSelection(
 		UNiagaraComponent* NiagaraComponent,
 		TObjectPtr<UNiagaraSystem>& StoredSystem,
 		TObjectPtr<UNiagaraSystem>& LastAppliedSystem,
@@ -271,8 +271,8 @@ UNiagaraComponent* UUOUEnvironmentVisualComponent::GetSecondaryEffectComponent()
 
 void UUOUEnvironmentVisualComponent::ApplyVisualEffectSettings(bool bForcePrimarySystem, bool bForceSecondarySystem)
 {
-	ApplyNiagaraSystemSelection(GetPrimaryEffectComponent(), PrimarySystem, LastAppliedPrimarySystem, bForcePrimarySystem);
-	ApplyNiagaraSystemSelection(GetSecondaryEffectComponent(), SecondarySystem, LastAppliedSecondarySystem, bForceSecondarySystem);
+	ApplyEnvironmentVisualComponentNiagaraSystemSelection(GetPrimaryEffectComponent(), PrimarySystem, LastAppliedPrimarySystem, bForcePrimarySystem);
+	ApplyEnvironmentVisualComponentNiagaraSystemSelection(GetSecondaryEffectComponent(), SecondarySystem, LastAppliedSecondarySystem, bForceSecondarySystem);
 }
 
 void UUOUEnvironmentVisualComponent::RefreshNiagaraActivation()
