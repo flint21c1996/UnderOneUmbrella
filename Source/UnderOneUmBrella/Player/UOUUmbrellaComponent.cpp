@@ -374,7 +374,7 @@ bool UUOUUmbrellaComponent::IsBlockingRain() const
 	return IsOpen();
 }
 
-// RainArea나 디버그 표시가 사용할 비 차단 박스의 중심, 회전, 절반 크기를 계산합니다.
+// 현재 설정된 비 차단 박스의 중심, 회전, 절반 크기를 계산합니다. 실제 차단 활성 여부는 호출자가 IsBlockingRain()으로 판단합니다.
 bool UUOUUmbrellaComponent::TryGetRainBlockerVolumeData(FVector& OutWorldCenter, FRotator& OutWorldRotation, FVector& OutHalfExtent) const
 {
 	OutWorldCenter = FVector::ZeroVector;
@@ -386,7 +386,7 @@ bool UUOUUmbrellaComponent::TryGetRainBlockerVolumeData(FVector& OutWorldCenter,
 		FMath::Max(0.0f, RainBlockerVolumeHalfExtent.Y),
 		FMath::Max(0.0f, RainBlockerVolumeHalfExtent.Z));
 
-	if (!IsBlockingRain() || SafeHalfExtent.IsNearlyZero())
+	if (SafeHalfExtent.IsNearlyZero())
 	{
 		return false;
 	}
@@ -759,7 +759,10 @@ void UUOUUmbrellaComponent::DrawRainBlockerDebug() const
 
 	const float Thickness = FMath::Max(0.0f, RainBlockerDebugThickness);
 	const float LifeTime = 0.0f;
-	const FColor PlayerDebugColor = UUOUDebugSubsystem::GetDebugCategoryColor(this, EUOUDebugCategory::Player, FColor::Cyan);
+	const bool bIsActiveBlocker = IsBlockingRain();
+	const FColor PlayerDebugColor = bIsActiveBlocker
+		? UUOUDebugSubsystem::GetDebugCategoryColor(this, EUOUDebugCategory::Player, FColor::Cyan)
+		: FColor(90, 90, 90);
 
 	DrawDebugSphere(
 		World,
@@ -796,7 +799,15 @@ void UUOUUmbrellaComponent::DrawRainBlockerDebug() const
 	DrawDebugString(
 		World,
 		BlockerWorldCenter + BlockerWorldRotation.Quaternion().GetAxisZ() * (BlockerHalfExtent.Z + 18.0f),
-		FString::Printf(TEXT("RainBlocker Box %.1f %.1f %.1f"), BlockerHalfExtent.X, BlockerHalfExtent.Y, BlockerHalfExtent.Z),
+		FString::Printf(
+			TEXT("RainBlocker %s Half %.1f %.1f %.1f Offset %.1f %.1f %.1f"),
+			bIsActiveBlocker ? TEXT("Active") : TEXT("Inactive"),
+			BlockerHalfExtent.X,
+			BlockerHalfExtent.Y,
+			BlockerHalfExtent.Z,
+			RainBlockerLocalOffset.X,
+			RainBlockerLocalOffset.Y,
+			RainBlockerLocalOffset.Z),
 		nullptr,
 		PlayerDebugColor,
 		LifeTime,

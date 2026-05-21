@@ -352,7 +352,7 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Umbrella")
 	bool IsBlockingRain() const;
 
-	// 비 파티클을 제거할 우산 박스 볼륨의 중심, 회전, 절반 크기를 계산합니다.
+	// 현재 설정된 우산 비 차단 박스의 중심, 회전, 절반 크기를 계산합니다. 실제 차단 활성 여부는 IsBlockingRain()으로 따로 확인합니다.
 	UFUNCTION(BlueprintPure, Category = "Umbrella")
 	bool TryGetRainBlockerVolumeData(FVector& OutWorldCenter, FRotator& OutWorldRotation, FVector& OutHalfExtent) const;
 

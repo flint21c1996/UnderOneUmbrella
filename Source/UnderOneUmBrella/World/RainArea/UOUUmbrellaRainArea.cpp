@@ -154,7 +154,8 @@ void AUOUUmbrellaRainArea::Tick(float DeltaSeconds)
 			FVector CandidateBlockerWorldCenter = FVector::ZeroVector;
 			FRotator CandidateBlockerWorldRotation = FRotator::ZeroRotator;
 			FVector CandidateBlockerHalfExtent = FVector::ZeroVector;
-			if (UmbrellaComponent->TryGetRainBlockerVolumeData(CandidateBlockerWorldCenter, CandidateBlockerWorldRotation, CandidateBlockerHalfExtent)
+			if (UmbrellaComponent->IsBlockingRain()
+				&& UmbrellaComponent->TryGetRainBlockerVolumeData(CandidateBlockerWorldCenter, CandidateBlockerWorldRotation, CandidateBlockerHalfExtent)
 				&& CandidateBlockerHalfExtent.SizeSquared() > RainBlockerHalfExtent.SizeSquared())
 			{
 				bHasRainBlocker = true;
