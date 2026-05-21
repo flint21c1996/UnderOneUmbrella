@@ -8,7 +8,6 @@
 #include "GameFramework/Actor.h"
 #include "NiagaraComponent.h"
 #include "UObject/UnrealType.h"
-#include "UObject/UObjectGlobals.h"
 
 namespace
 {
@@ -72,8 +71,6 @@ void UUOUEnvironmentVisualComponent::SetEffectComponents(UNiagaraComponent* NewP
 {
 	PrimaryEffect = NewPrimaryEffect;
 	SecondaryEffect = NewSecondaryEffect;
-
-	EnsureInternalEffectComponents();
 
 	UNiagaraComponent* ActivePrimaryEffect = GetPrimaryEffectComponent();
 	UNiagaraComponent* ActiveSecondaryEffect = GetSecondaryEffectComponent();
@@ -164,8 +161,6 @@ void UUOUEnvironmentVisualComponent::SetVisualsEnabled(bool bNewEnabled)
 void UUOUEnvironmentVisualComponent::OnRegister()
 {
 	Super::OnRegister();
-
-	EnsureInternalEffectComponents();
 	ApplyVisualEffectSettings();
 	ApplyVisualEffectTransforms();
 	ApplyNiagaraParameters();
@@ -175,8 +170,6 @@ void UUOUEnvironmentVisualComponent::OnRegister()
 void UUOUEnvironmentVisualComponent::BeginPlay()
 {
 	Super::BeginPlay();
-
-	EnsureInternalEffectComponents();
 	ApplyVisualEffectSettings();
 	ApplyVisualEffectTransforms();
 	ApplyNiagaraParameters();
@@ -192,13 +185,9 @@ void UUOUEnvironmentVisualComponent::PostEditChangeProperty(FPropertyChangedEven
 
 	const bool bPrimarySystemChanged = PropertyName == GET_MEMBER_NAME_CHECKED(UUOUEnvironmentVisualComponent, PrimarySystem);
 	const bool bSecondarySystemChanged = PropertyName == GET_MEMBER_NAME_CHECKED(UUOUEnvironmentVisualComponent, SecondarySystem);
-
-	EnsureInternalEffectComponents();
 	ApplyVisualEffectSettings(bPrimarySystemChanged, bSecondarySystemChanged);
 
 	Super::PostEditChangeProperty(PropertyChangedEvent);
-
-	EnsureInternalEffectComponents();
 	ApplyVisualEffectSettings(bPrimarySystemChanged, bSecondarySystemChanged);
 	ApplyVisualEffectTransforms();
 	ApplyNiagaraParameters();
@@ -208,65 +197,14 @@ void UUOUEnvironmentVisualComponent::PostEditChangeProperty(FPropertyChangedEven
 }
 #endif
 
-void UUOUEnvironmentVisualComponent::EnsureInternalEffectComponents()
-{
-	if (!bAutoCreateMissingEffectComponents
-		|| HasAnyFlags(RF_ClassDefaultObject)
-		|| GetOwner() == nullptr
-		|| GetOwner()->HasAnyFlags(RF_ClassDefaultObject))
-	{
-		return;
-	}
-
-	AActor* Owner = GetOwner();
-
-	if (PrimaryEffect == nullptr && InternalPrimaryEffect == nullptr)
-	{
-		const FName ComponentName = MakeUniqueObjectName(Owner, UNiagaraComponent::StaticClass(), TEXT("RainVisualPrimaryEffect"));
-		InternalPrimaryEffect = NewObject<UNiagaraComponent>(Owner, ComponentName, RF_Transient);
-		if (InternalPrimaryEffect != nullptr)
-		{
-			InternalPrimaryEffect->CreationMethod = EComponentCreationMethod::Instance;
-			InternalPrimaryEffect->SetAutoActivate(false);
-			InternalPrimaryEffect->SetupAttachment(this);
-			Owner->AddInstanceComponent(InternalPrimaryEffect);
-			if (IsRegistered() && !InternalPrimaryEffect->IsRegistered())
-			{
-				InternalPrimaryEffect->RegisterComponent();
-			}
-		}
-	}
-
-	if (SecondaryEffect == nullptr && InternalSecondaryEffect == nullptr)
-	{
-		const FName ComponentName = MakeUniqueObjectName(Owner, UNiagaraComponent::StaticClass(), TEXT("RainVisualSecondaryEffect"));
-		InternalSecondaryEffect = NewObject<UNiagaraComponent>(Owner, ComponentName, RF_Transient);
-		if (InternalSecondaryEffect != nullptr)
-		{
-			InternalSecondaryEffect->CreationMethod = EComponentCreationMethod::Instance;
-			InternalSecondaryEffect->SetAutoActivate(false);
-			InternalSecondaryEffect->SetupAttachment(this);
-			Owner->AddInstanceComponent(InternalSecondaryEffect);
-			if (IsRegistered() && !InternalSecondaryEffect->IsRegistered())
-			{
-				InternalSecondaryEffect->RegisterComponent();
-			}
-		}
-	}
-}
-
 UNiagaraComponent* UUOUEnvironmentVisualComponent::GetPrimaryEffectComponent() const
 {
-	return PrimaryEffect != nullptr
-		? PrimaryEffect.Get()
-		: (bAutoCreateMissingEffectComponents ? InternalPrimaryEffect.Get() : nullptr);
+	return PrimaryEffect.Get();
 }
 
 UNiagaraComponent* UUOUEnvironmentVisualComponent::GetSecondaryEffectComponent() const
 {
-	return SecondaryEffect != nullptr
-		? SecondaryEffect.Get()
-		: (bAutoCreateMissingEffectComponents ? InternalSecondaryEffect.Get() : nullptr);
+	return SecondaryEffect.Get();
 }
 
 void UUOUEnvironmentVisualComponent::ApplyVisualEffectSettings(bool bForcePrimarySystem, bool bForceSecondarySystem)
@@ -282,18 +220,6 @@ void UUOUEnvironmentVisualComponent::RefreshNiagaraActivation()
 	const bool bShouldAllowVisuals = bEnableVisuals && (bIsGameWorld || bEnableEditorPreview);
 	UNiagaraComponent* ActivePrimaryEffect = GetPrimaryEffectComponent();
 	UNiagaraComponent* ActiveSecondaryEffect = GetSecondaryEffectComponent();
-
-	if ((PrimaryEffect != nullptr || !bAutoCreateMissingEffectComponents) && InternalPrimaryEffect != nullptr)
-	{
-		InternalPrimaryEffect->SetVisibility(false, true);
-		InternalPrimaryEffect->Deactivate();
-	}
-
-	if ((SecondaryEffect != nullptr || !bAutoCreateMissingEffectComponents) && InternalSecondaryEffect != nullptr)
-	{
-		InternalSecondaryEffect->SetVisibility(false, true);
-		InternalSecondaryEffect->Deactivate();
-	}
 
 	const bool bShouldShowPrimary = bShouldAllowVisuals
 		&& ActivePrimaryEffect != nullptr

@@ -65,15 +65,6 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual|Effects", meta = (ToolTip = "바닥 물 튐처럼 보조 표현을 담당하는 Niagara 컴포넌트입니다."))
 	TObjectPtr<UNiagaraComponent> SecondaryEffect = nullptr;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual|Effects", meta = (ToolTip = "연결된 NiagaraComponent가 없을 때 내부 재생용 NiagaraComponent를 자동으로 생성할지 정합니다."))
-	bool bAutoCreateMissingEffectComponents = false;
-
-	UPROPERTY(Transient)
-	TObjectPtr<UNiagaraComponent> InternalPrimaryEffect = nullptr;
-
-	UPROPERTY(Transient)
-	TObjectPtr<UNiagaraComponent> InternalSecondaryEffect = nullptr;
-
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Environment Visual")
 	bool bEnableVisuals = true;
 
@@ -181,7 +172,6 @@ protected:
 	void ApplyNiagaraParameters();
 	void RefreshNiagaraActivation();
 	void DrawRainBlockerNiagaraDebug(const UNiagaraComponent* Effect, const FVector& BlockerWorldCenter, const FVector& BlockerHalfExtent) const;
-	void EnsureInternalEffectComponents();
 	UNiagaraComponent* GetPrimaryEffectComponent() const;
 	UNiagaraComponent* GetSecondaryEffectComponent() const;
 };
