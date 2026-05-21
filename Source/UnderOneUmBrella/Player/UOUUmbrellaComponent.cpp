@@ -417,6 +417,53 @@ bool UUOUUmbrellaComponent::TryGetRainBlockerData(FVector& OutWorldLocation, flo
 }
 
 // 저장 컨테이너가 없을 때도 호출부가 안전하게 0을 받을 수 있게 감쌉니다.
+bool UUOUUmbrellaComponent::TryGetRainBlockerVolumeData(FVector& OutWorldCenter, FRotator& OutWorldRotation, FVector& OutHalfExtent) const
+{
+	OutWorldCenter = FVector::ZeroVector;
+	OutWorldRotation = FRotator::ZeroRotator;
+	OutHalfExtent = FVector::ZeroVector;
+
+	const FVector SafeHalfExtent(
+		FMath::Max(0.0f, RainBlockerVolumeHalfExtent.X),
+		FMath::Max(0.0f, RainBlockerVolumeHalfExtent.Y),
+		FMath::Max(0.0f, RainBlockerVolumeHalfExtent.Z));
+
+	if (!IsBlockingRain() || SafeHalfExtent.IsNearlyZero())
+	{
+		return false;
+	}
+
+	const USceneComponent* BlockerComponent = OpenVisual;
+	if (BlockerComponent == nullptr)
+	{
+		BlockerComponent = RuntimeHeldVisual;
+	}
+	if (BlockerComponent == nullptr)
+	{
+		BlockerComponent = PickupAttachPoint;
+	}
+
+	if (BlockerComponent != nullptr)
+	{
+		const FTransform BlockerTransform = BlockerComponent->GetComponentTransform();
+		OutWorldCenter = BlockerTransform.TransformPosition(RainBlockerLocalOffset);
+		OutWorldRotation = BlockerTransform.Rotator();
+		OutHalfExtent = SafeHalfExtent;
+		return true;
+	}
+
+	if (const AActor* Owner = GetOwner())
+	{
+		const FTransform OwnerTransform = Owner->GetActorTransform();
+		OutWorldCenter = OwnerTransform.TransformPosition(RainBlockerLocalOffset);
+		OutWorldRotation = OwnerTransform.Rotator();
+		OutHalfExtent = SafeHalfExtent;
+		return true;
+	}
+
+	return false;
+}
+
 float UUOUUmbrellaComponent::GetCurrentStoredWater() const
 {
 	return StoredWaterContainer != nullptr ? StoredWaterContainer->CurrentAmount : 0.0f;
