@@ -23,6 +23,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Environment Visual")
 	void SetEffectComponents(UNiagaraComponent* NewPrimaryEffect, UNiagaraComponent* NewSecondaryEffect);
 
+	UFUNCTION(BlueprintCallable, Category = "Environment Visual")
+	void SetEffectSystems(UNiagaraSystem* NewPrimarySystem, UNiagaraSystem* NewSecondarySystem);
+
 	UFUNCTION(BlueprintCallable, Category = "Environment Visual|Rain")
 	void ConfigureRainVisual(
 		const FVector& RainLocalPosition,
@@ -59,22 +62,22 @@ protected:
 	virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
 #endif
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual|Effects", meta = (ToolTip = "비 내림 표현을 담당하는 Niagara 컴포넌트입니다."))
+	UPROPERTY(Transient)
 	TObjectPtr<UNiagaraComponent> PrimaryEffect = nullptr;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual|Effects", meta = (ToolTip = "바닥 물 튐처럼 보조 표현을 담당하는 Niagara 컴포넌트입니다."))
+	UPROPERTY(Transient)
 	TObjectPtr<UNiagaraComponent> SecondaryEffect = nullptr;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Environment Visual")
+	UPROPERTY()
 	bool bEnableVisuals = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual|Editor Preview", meta = (ToolTip = "에디터 배치 상태에서도 Niagara 프리뷰를 재생할지 정합니다. 실제 게임 실행 중에는 bEnableVisuals와 강도 값이 활성 상태를 결정합니다."))
+	UPROPERTY()
 	bool bEnableEditorPreview = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual")
+	UPROPERTY()
 	TObjectPtr<UNiagaraSystem> PrimarySystem = nullptr;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual")
+	UPROPERTY()
 	TObjectPtr<UNiagaraSystem> SecondarySystem = nullptr;
 
 	UPROPERTY(Transient)
@@ -83,88 +86,88 @@ protected:
 	UPROPERTY(Transient)
 	TObjectPtr<UNiagaraSystem> LastAppliedSecondarySystem = nullptr;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Environment Visual|Runtime")
+	UPROPERTY(Transient)
 	FVector CachedPrimaryLocalPosition = FVector::ZeroVector;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Environment Visual|Runtime")
+	UPROPERTY(Transient)
 	FVector CachedSecondaryLocalPosition = FVector::ZeroVector;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Environment Visual|Runtime")
+	UPROPERTY(Transient)
 	FRotator CachedEffectLocalRotation = FRotator::ZeroRotator;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Environment Visual|Runtime")
+	UPROPERTY(Transient)
 	FVector2D CachedAreaSize = FVector2D::ZeroVector;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Environment Visual|Runtime")
+	UPROPERTY(Transient)
 	FVector CachedRainKillVolumeLocalCenter = FVector::ZeroVector;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Environment Visual|Runtime")
+	UPROPERTY(Transient)
 	FVector CachedRainKillVolumeSize = FVector::ZeroVector;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Environment Visual|Runtime")
+	UPROPERTY(Transient)
 	bool bCachedRainBlockerActive = false;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Environment Visual|Runtime")
+	UPROPERTY(Transient)
 	FVector CachedRainBlockerLocalPosition = FVector::ZeroVector;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Environment Visual|Runtime")
+	UPROPERTY(Transient)
 	FVector CachedRainBlockerHalfExtent = FVector::ZeroVector;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Environment Visual|Runtime")
+	UPROPERTY(Transient)
 	float CachedRainBlockerIntensity = 0.0f;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Environment Visual|Runtime")
+	UPROPERTY(Transient)
 	float CachedPrimaryIntensity = 1.0f;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Environment Visual|Runtime")
+	UPROPERTY(Transient)
 	float CachedSecondaryIntensity = 1.0f;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Environment Visual|Runtime")
+	UPROPERTY(Transient)
 	float CachedRainSpawnRate = 2400.0f;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Environment Visual|Runtime")
+	UPROPERTY(Transient)
 	float CachedRainFallSpeed = -900.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual|Parameters")
+	UPROPERTY()
 	FName PrimaryAreaSizeParameterName = TEXT("RainAreaSize");
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual|Parameters", meta = (ToolTip = "비 파티클을 유지할 RainArea 박스 중심을 Niagara에 전달할 User Parameter 이름입니다."))
+	UPROPERTY()
 	FName RainKillVolumeCenterParameterName = TEXT("RainKillVolumeCenter");
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual|Parameters", meta = (ToolTip = "비 파티클을 유지할 RainArea 박스 크기를 Niagara에 전달할 User Parameter 이름입니다."))
+	UPROPERTY()
 	FName RainKillVolumeSizeParameterName = TEXT("RainKillVolumeSize");
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual|Parameters")
+	UPROPERTY()
 	FName SecondaryAreaSizeParameterName = TEXT("GroundSplashAreaSize");
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual|Parameters")
+	UPROPERTY()
 	FName PrimaryIntensityParameterName = TEXT("RainIntensity");
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual|Parameters")
+	UPROPERTY()
 	FName SecondaryIntensityParameterName = TEXT("GroundSplashIntensity");
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual|Parameters", meta = (ToolTip = "비 Niagara의 Spawn Rate에 전달할 User Parameter 이름입니다."))
+	UPROPERTY()
 	FName RainSpawnRateParameterName = TEXT("RainSpawnRate");
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual|Parameters", meta = (ToolTip = "비 파티클 낙하 속도에 전달할 User Parameter 이름입니다."))
+	UPROPERTY()
 	FName RainFallSpeedParameterName = TEXT("RainFallSpeed");
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual|Parameters", meta = (ToolTip = "우산이 현재 비를 막고 있는지 Niagara에 전달할 User Parameter 이름입니다."))
+	UPROPERTY()
 	FName RainBlockerActiveParameterName = TEXT("RainBlockerActive");
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual|Parameters", meta = (ToolTip = "우산이 비를 막는 중심 위치를 Niagara에 전달할 User Parameter 이름입니다. Visual Component 기준 로컬 좌표입니다."))
+	UPROPERTY()
 	FName RainBlockerLocalPositionParameterName = TEXT("RainBlockerLocalPosition");
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual|Parameters", meta = (ToolTip = "우산 Kill Volume Box의 절반 크기를 Niagara에 전달할 User Parameter 이름입니다."))
+	UPROPERTY()
 	FName RainBlockerHalfExtentParameterName = TEXT("RainBlockerHalfExtent");
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual|Parameters", meta = (ToolTip = "우산이 비를 막는 표현 강도를 Niagara에 전달할 User Parameter 이름입니다."))
+	UPROPERTY()
 	FName RainBlockerIntensityParameterName = TEXT("RainBlockerIntensity");
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual|Debug", meta = (ToolTip = "Niagara에 전달된 우산 비 차단 영역을 월드에 표시합니다."))
+	UPROPERTY()
 	bool bDrawRainBlockerNiagaraDebug = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Environment Visual|Debug", meta = (ClampMin = "0.0", ToolTip = "Niagara 비 차단 디버그 구체의 선 두께입니다."))
+	UPROPERTY()
 	float RainBlockerNiagaraDebugThickness = 2.0f;
 
 	void ApplyVisualEffectSettings(bool bForcePrimarySystem = false, bool bForceSecondarySystem = false);

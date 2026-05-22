@@ -91,6 +91,16 @@ void UUOUEnvironmentVisualComponent::SetEffectComponents(UNiagaraComponent* NewP
 	RefreshNiagaraActivation();
 }
 
+void UUOUEnvironmentVisualComponent::SetEffectSystems(UNiagaraSystem* NewPrimarySystem, UNiagaraSystem* NewSecondarySystem)
+{
+	PrimarySystem = NewPrimarySystem;
+	SecondarySystem = NewSecondarySystem;
+
+	ApplyVisualEffectSettings(true, true);
+	ApplyNiagaraParameters();
+	RefreshNiagaraActivation();
+}
+
 void UUOUEnvironmentVisualComponent::ConfigureRainVisual(
 	const FVector& RainLocalPosition,
 	const FVector& GroundSplashLocalPosition,

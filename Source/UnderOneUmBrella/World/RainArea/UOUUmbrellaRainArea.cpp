@@ -93,6 +93,13 @@ void AUOUUmbrellaRainArea::OnConstruction(const FTransform& Transform)
 #if WITH_EDITOR
 void AUOUUmbrellaRainArea::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent)
 {
+	const FName PropertyName = PropertyChangedEvent.Property != nullptr
+		? PropertyChangedEvent.Property->GetFName()
+		: NAME_None;
+
+	bHasExplicitRainEffectSystemSelection |= PropertyName == GET_MEMBER_NAME_CHECKED(AUOUUmbrellaRainArea, RainEffectSystem);
+	bHasExplicitGroundSplashEffectSystemSelection |= PropertyName == GET_MEMBER_NAME_CHECKED(AUOUUmbrellaRainArea, GroundSplashEffectSystem);
+
 	Super::PostEditChangeProperty(PropertyChangedEvent);
 
 	RainFillRate = FMath::Max(0.0f, RainFillRate);
@@ -174,8 +181,37 @@ void AUOUUmbrellaRainArea::Tick(float DeltaSeconds)
 		bHasRainBlocker ? RainVisualIntensity : 0.0f);
 }
 
+void AUOUUmbrellaRainArea::ApplyEnvironmentVisualEffectSystems()
+{
+	if (RainEffectSystem != nullptr)
+	{
+		bHasExplicitRainEffectSystemSelection = true;
+	}
+	else if (!bHasExplicitRainEffectSystemSelection && PrimaryRainEffect != nullptr)
+	{
+		RainEffectSystem = PrimaryRainEffect->GetAsset();
+		bHasExplicitRainEffectSystemSelection = RainEffectSystem != nullptr;
+	}
+
+	if (GroundSplashEffectSystem != nullptr)
+	{
+		bHasExplicitGroundSplashEffectSystemSelection = true;
+	}
+	else if (!bHasExplicitGroundSplashEffectSystemSelection && SecondaryRainEffect != nullptr)
+	{
+		GroundSplashEffectSystem = SecondaryRainEffect->GetAsset();
+		bHasExplicitGroundSplashEffectSystemSelection = GroundSplashEffectSystem != nullptr;
+	}
+
+	if (RainVisual != nullptr)
+	{
+		RainVisual->SetEffectSystems(RainEffectSystem, GroundSplashEffectSystem);
+	}
+}
+
 void AUOUUmbrellaRainArea::ApplyEnvironmentVisualSettings()
 {
+	ApplyEnvironmentVisualEffectSystems();
 	ApplyEnvironmentVisualGeometry();
 	ApplyEnvironmentVisualState();
 }
