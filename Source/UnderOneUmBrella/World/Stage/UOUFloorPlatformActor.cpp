@@ -39,7 +39,13 @@ AUOUFloorPlatformActor::AUOUFloorPlatformActor()
 	RotationPivot->SetMobility(EComponentMobility::Movable);
 	RotationPivot->SetRelativeLocation(FVector::ZeroVector);
 	RotationPivot->SetRelativeRotation(FRotator::ZeroRotator);
-	RotationPivot->SetArrowSize(1.5f);
+	// 플랫폼 크기 조절과 상관없이 회전축 표시가 과하게 커지지 않도록 화살표 표시 스케일만 고정합니다.
+	RotationPivot->SetUsingAbsoluteScale(true);
+	RotationPivot->SetRelativeScale3D(FVector::OneVector);
+	RotationPivot->SetArrowLength(140.0f);
+	RotationPivot->SetArrowSize(0.45f);
+	RotationPivot->SetIsScreenSizeScaled(true);
+	RotationPivot->SetScreenSize(0.0025f);
 	RotationPivot->SetHiddenInGame(true);
 }
 
