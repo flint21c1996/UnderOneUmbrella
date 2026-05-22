@@ -123,13 +123,13 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin|Pour", meta = (ToolTip = "플레이어가 붓는 물을 이 Target이 해석하는 방식입니다. Volume은 기존 부피 기반 동작을 유지합니다."))
 	EUOUWaterBasinPouredWaterFillMode PouredWaterFillMode = EUOUWaterBasinPouredWaterFillMode::Volume;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin|Pour", meta = (ClampMin = "0.0", ToolTip = "Poured Water Fill Mode가 Fill Ratio일 때 초당 더할 용량 비율입니다. 0.1이면 Target 또는 그룹이 약 10초에 가득 찹니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin|Pour", meta = (ClampMin = "0.0", EditCondition = "PouredWaterFillMode == EUOUWaterBasinPouredWaterFillMode::FillRatio", EditConditionHides, ToolTip = "Poured Water Fill Mode가 Fill Ratio일 때 초당 더할 용량 비율입니다. 0.1이면 Target 또는 그룹이 약 10초에 가득 찹니다."))
 	float PouredWaterFillRatioPerSecond = 0.1f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin|Pour", meta = (ClampMin = "0.0", ToolTip = "Poured Water Fill Mode가 Water Depth일 때 초당 더할 타일 깊이입니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin|Pour", meta = (ClampMin = "0.0", EditCondition = "PouredWaterFillMode == EUOUWaterBasinPouredWaterFillMode::WaterDepth", EditConditionHides, ToolTip = "Poured Water Fill Mode가 Water Depth일 때 초당 더할 타일 깊이입니다."))
 	float PouredWaterDepthPerSecond = 1.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin|Pour", meta = (ClampMin = "0.0", ToolTip = "Poured Water Fill Mode가 Surface World Z일 때 초당 더할 월드 Z 높이입니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin|Pour", meta = (ClampMin = "0.0", EditCondition = "PouredWaterFillMode == EUOUWaterBasinPouredWaterFillMode::SurfaceWorldZ", EditConditionHides, ToolTip = "Poured Water Fill Mode가 Surface World Z일 때 초당 더할 월드 Z 높이입니다."))
 	float PouredWaterSurfaceWorldZPerSecond = 100.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin|Visual", meta = (ToolTip = "지정한 Water Visual 컴포넌트를 현재 수위에 맞춰 자동 갱신합니다."))
