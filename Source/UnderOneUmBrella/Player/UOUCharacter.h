@@ -164,9 +164,14 @@ public:
 	FORCEINLINE class UCameraComponent* GetFollowCamera() const { return FollowCamera; }
 	FORCEINLINE class UUOUCameraControllerComponent* GetCameraControllerComponent() const { return CameraControllerComponent; }
 	FORCEINLINE class UUOUPushPullInteractorComponent* GetPushPullInteractorComponent() const { return PushPullInteractorComponent; }
+	FORCEINLINE int32 GetContextInteractPressedCount() const { return ContextInteractPressedCount; }
+	FORCEINLINE int32 GetContextInteractReleasedCount() const { return ContextInteractReleasedCount; }
+	FORCEINLINE int32 GetPushPullPressedCount() const { return PushPullPressedCount; }
+	FORCEINLINE int32 GetPushPullReleasedCount() const { return PushPullReleasedCount; }
 
 private:
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Debug, meta = (AllowPrivateAccess = "true"))
+	// 화면 디버그 표시 여부는 이제 Debug Controller의 Player HUD가 결정합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, AdvancedDisplay, Category = Debug, meta = (AllowPrivateAccess = "true", ToolTip = "이 값은 더 이상 화면 디버그 표시 여부를 결정하지 않습니다. Debug Controller의 Player HUD 옵션을 사용합니다."))
 	bool bShowContextInputDebug = false;
 
 	// 문맥 상호작용 눌림 횟수를 화면 디버그로 추적하기 위한 값이다.

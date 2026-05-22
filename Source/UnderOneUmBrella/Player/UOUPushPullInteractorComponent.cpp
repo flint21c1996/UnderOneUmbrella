@@ -21,7 +21,6 @@ namespace UOUPushPullInteractorPrivate
 {
 	constexpr float MoveInputThreshold = 0.0001f;
 	constexpr float MinCardinalGrabDot = 0.82f;
-	const int32 DebugMessageKey = 0x5A11;
 }
 
 UUOUPushPullInteractorComponent::UUOUPushPullInteractorComponent()
@@ -293,40 +292,12 @@ void UUOUPushPullInteractorComponent::UpdateMovementInputFallback()
 
 void UUOUPushPullInteractorComponent::UpdateScreenDebug() const
 {
-	if (!bShowScreenDebug
-		|| !UUOUDebugSubsystem::IsDebugScreenMessageEnabled(this, EUOUDebugCategory::Interaction)
-		|| GEngine == nullptr)
-	{
-		return;
-	}
-
-	const FString CandidateName = CurrentCandidateObject != nullptr ? CurrentCandidateObject->GetOwner()->GetName() : TEXT("None");
-	const FString GrabbedName = GrabbedObject != nullptr ? GrabbedObject->GetOwner()->GetName() : TEXT("None");
-	const FString UmbrellaStateText = UmbrellaComponent == nullptr
-		? TEXT("No UmbrellaComponent")
-		: (UmbrellaComponent->HasUmbrella()
-			? (UmbrellaComponent->IsClosed() ? TEXT("Closed") : TEXT("Not Closed"))
-			: TEXT("No Umbrella"));
-	const FString DebugText = FString::Printf(
-		TEXT("PushPull Candidate: %s\nGrabbed: %s\nHeld: %s\nCanUseHands: %s\nUmbrella: %s\nAxisInput: %.2f\nLast Result: %s"),
-		*CandidateName,
-		*GrabbedName,
-		bGrabInputHeld ? TEXT("Yes") : TEXT("No"),
-		CanUseHands() ? TEXT("Yes") : TEXT("No"),
-		*UmbrellaStateText,
-		CurrentAxisInput,
-		*LastFailureReason);
-
-	GEngine->AddOnScreenDebugMessage(
-		UOUPushPullInteractorPrivate::DebugMessageKey,
-		0.0f,
-		UUOUDebugSubsystem::GetDebugCategoryColor(this, EUOUDebugCategory::Interaction, FColor::Orange),
-		DebugText);
+	// 플레이어와 관련된 화면 디버그는 Debug Controller의 Player HUD에서 통합 표시합니다.
 }
 
 void UUOUPushPullInteractorComponent::DrawWorldDebug() const
 {
-	if (!bShowWorldDebug || !UUOUDebugSubsystem::IsDebugWorldDrawEnabled(this, EUOUDebugCategory::Interaction))
+	if (!UUOUDebugSubsystem::IsDebugWorldDrawEnabled(this, EUOUDebugCategory::Interaction))
 	{
 		return;
 	}

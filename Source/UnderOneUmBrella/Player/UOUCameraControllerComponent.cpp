@@ -68,6 +68,11 @@ float UUOUCameraControllerComponent::GetMovementYaw() const
 	return CameraBoom != nullptr ? CameraBoom->GetComponentRotation().Yaw : 0.0f;
 }
 
+float UUOUCameraControllerComponent::GetCurrentCameraDistance() const
+{
+	return CameraBoom != nullptr ? CameraBoom->TargetArmLength : 0.0f;
+}
+
 void UUOUCameraControllerComponent::CacheCameraComponents()
 {
 	if (!bAutoFindCameraComponents)

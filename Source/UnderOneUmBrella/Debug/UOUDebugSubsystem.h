@@ -9,6 +9,7 @@
 
 class AUOUDebugController;
 class UUOUDebugControllerComponentBase;
+class UUOUPlayerDebugControllerComponent;
 class UUOUPerformanceDebugControllerComponent;
 class UUOUVFXDebugControllerComponent;
 
@@ -73,11 +74,13 @@ private:
 	bool ShouldAutoCreateRuntimeDebugController(const UWorld* World) const;
 	void CompactRegisteredProviders();
 	void DrawControllerStatus() const;
+	void DrawPlayerDebug() const;
 	void DrawPerformanceStats(float DeltaTime) const;
 	void DrawVFXDebug() const;
 	void DrawRegisteredProviderConnections() const;
 	void DrawRegisteredProviderLabelBoards() const;
 	FString BuildControllerStatusText() const;
+	FString BuildPlayerDebugText(const UUOUPlayerDebugControllerComponent& PlayerController) const;
 	FString BuildPerformanceStatsText(float DeltaTime, const UUOUPerformanceDebugControllerComponent& PerformanceController) const;
 
 	TWeakObjectPtr<AUOUDebugController> ActiveDebugController;

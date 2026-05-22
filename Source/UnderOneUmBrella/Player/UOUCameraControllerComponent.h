@@ -52,6 +52,18 @@ public:
 	// 플레이어 이동 계산에 쓸 현재 카메라 yaw 값을 돌려준다.
 	float GetMovementYaw() const;
 
+	// 통합 플레이어 디버그 HUD에서 목표 yaw 값을 확인합니다.
+	float GetTargetCameraYaw() const { return TargetCameraYaw; }
+
+	// 통합 플레이어 디버그 HUD에서 현재 카메라 거리를 확인합니다.
+	float GetCurrentCameraDistance() const;
+
+	// 통합 플레이어 디버그 HUD에서 목표 카메라 거리를 확인합니다.
+	float GetTargetCameraDistance() const { return TargetCameraDistance; }
+
+	// 통합 플레이어 디버그 HUD에서 현재 가림 처리 중인 메시 수를 확인합니다.
+	int32 GetOccludedMeshCount() const { return OccludedMeshStates.Num(); }
+
 protected:
 	// 참조를 수동으로 넣지 않아도 기본 카메라 구성을 자동으로 찾게 한다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Camera|References")

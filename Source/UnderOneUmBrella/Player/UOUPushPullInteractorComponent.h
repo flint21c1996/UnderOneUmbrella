@@ -56,12 +56,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PushPull|Detection")
 	bool bDetectPuzzleWeight = true;
 
-	// 화면 왼쪽 위 디버그 텍스트를 켤지 정한다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PushPull|Debug")
+	// 화면 디버그 표시 여부는 이제 Debug Controller의 Player HUD가 결정합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, AdvancedDisplay, Category = "PushPull|Debug", meta = (ToolTip = "이 값은 더 이상 화면 디버그 표시 여부를 결정하지 않습니다. Debug Controller의 Player HUD 옵션을 사용합니다."))
 	bool bShowScreenDebug = false;
 
-	// 월드에 탐색 반경과 축 디버그를 그릴지 정한다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PushPull|Debug")
+	// 월드 디버그 표시 여부는 이제 Debug Controller의 Interaction 카테고리가 결정합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, AdvancedDisplay, Category = "PushPull|Debug", meta = (ToolTip = "이 값은 더 이상 월드 디버그 표시 여부를 결정하지 않습니다. Debug Controller의 Interaction 옵션을 사용합니다."))
 	bool bShowWorldDebug = true;
 
 	// 현재 가장 적합하다고 판단한 후보 오브젝트다.
@@ -91,6 +91,38 @@ public:
 	// 이동 입력을 밀기와 당기기 축으로 바꿔 현재 오브젝트에 전달한다.
 	UFUNCTION(BlueprintCallable, Category = "PushPull")
 	bool HandleMoveInput(const FVector2D& MovementVector, float MovementYaw);
+
+	// 통합 플레이어 디버그 HUD에서 현재 후보를 읽기 위한 접근자입니다.
+	UFUNCTION(BlueprintPure, Category = "PushPull|Debug")
+	UUOUPushPullObjectComponent* GetCurrentCandidateObject() const { return CurrentCandidateObject; }
+
+	// 통합 플레이어 디버그 HUD에서 실제 잡은 대상을 읽기 위한 접근자입니다.
+	UFUNCTION(BlueprintPure, Category = "PushPull|Debug")
+	UUOUPushPullObjectComponent* GetGrabbedObject() const { return GrabbedObject; }
+
+	// 통합 플레이어 디버그 HUD에서 grab 입력 유지 상태를 읽기 위한 접근자입니다.
+	UFUNCTION(BlueprintPure, Category = "PushPull|Debug")
+	bool IsGrabInputHeld() const { return bGrabInputHeld; }
+
+	// 통합 플레이어 디버그 HUD에서 손을 쓸 수 있는지 확인하기 위한 접근자입니다.
+	UFUNCTION(BlueprintPure, Category = "PushPull|Debug")
+	bool CanUseHandsForDebug() const { return CanUseHands(); }
+
+	// 통합 플레이어 디버그 HUD에서 잡은 대상의 거리 이탈 여부를 확인하기 위한 접근자입니다.
+	UFUNCTION(BlueprintPure, Category = "PushPull|Debug")
+	bool IsGrabbedObjectTooFarForDebug() const { return IsGrabbedObjectTooFar(); }
+
+	// 통합 플레이어 디버그 HUD에서 현재 이동 축을 읽기 위한 접근자입니다.
+	UFUNCTION(BlueprintPure, Category = "PushPull|Debug")
+	FVector GetGrabbedMoveAxis() const { return GrabbedMoveAxis; }
+
+	// 통합 플레이어 디버그 HUD에서 현재 축 입력 값을 읽기 위한 접근자입니다.
+	UFUNCTION(BlueprintPure, Category = "PushPull|Debug")
+	float GetCurrentAxisInput() const { return CurrentAxisInput; }
+
+	// 통합 플레이어 디버그 HUD에서 마지막 실패 이유를 읽기 위한 접근자입니다.
+	UFUNCTION(BlueprintPure, Category = "PushPull|Debug")
+	FString GetLastFailureReason() const { return LastFailureReason; }
 
 protected:
 	// 소유 캐릭터를 빠르게 재사용하기 위한 캐시다.
