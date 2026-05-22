@@ -12,6 +12,7 @@ class UArrowComponent;
 class UBoxComponent;
 class UPrimitiveComponent;
 class USceneComponent;
+class USphereComponent;
 class UStaticMeshComponent;
 class AUOUFloorPlatformActor;
 
@@ -54,6 +55,18 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Floor Platform|Rotation")
 	TObjectPtr<UArrowComponent> RotationPivot = nullptr;
 
+	// RotationPivot의 위치를 작은 구체로 보여주는 에디터 확인용 컴포넌트입니다.
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Floor Platform|Rotation")
+	TObjectPtr<USphereComponent> RotationPivotMarker = nullptr;
+
+	// TargetLocalOffset 방향과 거리를 보여주는 에디터 확인용 화살표입니다.
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Floor Platform|Preview")
+	TObjectPtr<UArrowComponent> MovePreviewArrow = nullptr;
+
+	// PreviewAlpha 값에 해당하는 플랫폼 위치와 회전을 보여주는 에디터 확인용 메쉬입니다.
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Floor Platform|Preview")
+	TObjectPtr<UStaticMeshComponent> TransformPreviewMesh = nullptr;
+
 	// 이 플랫폼이 어떤 층에 속하는지 구분하기 위한 값입니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform")
 	int32 FloorIndex = 4;
@@ -77,6 +90,18 @@ public:
 	// RotationPivot의 축을 기준으로 목표 지점까지 회전할 각도입니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Rotation")
 	float TargetRotationAngleDegrees = 0.0f;
+
+	// 에디터에서 이동과 회전 결과를 미리 볼지 정합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Preview")
+	bool bShowTransformPreview = true;
+
+	// 미리보기 위치를 시작과 목표 사이에서 확인하기 위한 값입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Preview", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float PreviewAlpha = 1.0f;
+
+	// 에디터에서 이동 방향과 거리를 화살표로 보여줄지 정합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Preview")
+	bool bShowMovePreviewArrow = true;
 
 	// 목표 위치에 도착한 뒤 플레이어와 다른 오브젝트가 이 플랫폼과 충돌하지 않게 할지 정합니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Rules")
@@ -196,6 +221,15 @@ protected:
 
 	// 현재 알파 값에 맞는 플랫폼 트랜스폼을 계산합니다.
 	FTransform BuildPlatformTransformAtAlpha(float Alpha) const;
+
+	// 현재 알파 값에 맞는 플랫폼 메쉬 미리보기 월드 트랜스폼을 계산합니다.
+	FTransform BuildPreviewMeshWorldTransform(float Alpha) const;
+
+	// 에디터에서 회전축, 이동 방향, 목표 위치 미리보기를 갱신합니다.
+	void UpdateEditorPreviewVisuals();
+
+	// 플랫폼 메쉬와 같은 리소스를 미리보기 메쉬에 복사합니다.
+	void SyncTransformPreviewMesh();
 
 	// 시작 트랜스폼 기준으로 회전 중심의 월드 위치를 계산합니다.
 	FVector GetRotationPivotWorldLocation() const;

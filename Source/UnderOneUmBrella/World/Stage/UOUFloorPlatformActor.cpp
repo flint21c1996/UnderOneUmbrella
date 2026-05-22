@@ -6,6 +6,7 @@
 #include "Components/BoxComponent.h"
 #include "Components/PrimitiveComponent.h"
 #include "Components/SceneComponent.h"
+#include "Components/SphereComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Curves/CurveFloat.h"
 #include "Engine/OverlapResult.h"
@@ -47,6 +48,34 @@ AUOUFloorPlatformActor::AUOUFloorPlatformActor()
 	RotationPivot->SetIsScreenSizeScaled(true);
 	RotationPivot->SetScreenSize(0.0025f);
 	RotationPivot->SetHiddenInGame(true);
+	RotationPivot->SetArrowFColor(FColor::Red);
+
+	RotationPivotMarker = CreateDefaultSubobject<USphereComponent>(TEXT("RotationPivotMarker"));
+	RotationPivotMarker->SetupAttachment(RotationPivot);
+	RotationPivotMarker->SetMobility(EComponentMobility::Movable);
+	RotationPivotMarker->SetUsingAbsoluteScale(true);
+	RotationPivotMarker->SetSphereRadius(28.0f);
+	RotationPivotMarker->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	RotationPivotMarker->SetHiddenInGame(true);
+	RotationPivotMarker->ShapeColor = FColor::Red;
+
+	MovePreviewArrow = CreateDefaultSubobject<UArrowComponent>(TEXT("MovePreviewArrow"));
+	MovePreviewArrow->SetupAttachment(RootScene);
+	MovePreviewArrow->SetMobility(EComponentMobility::Movable);
+	MovePreviewArrow->SetUsingAbsoluteScale(true);
+	MovePreviewArrow->SetArrowSize(0.35f);
+	MovePreviewArrow->SetArrowLength(120.0f);
+	MovePreviewArrow->SetHiddenInGame(true);
+	MovePreviewArrow->SetArrowFColor(FColor::Cyan);
+
+	TransformPreviewMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("TransformPreviewMesh"));
+	TransformPreviewMesh->SetupAttachment(RootScene);
+	TransformPreviewMesh->SetMobility(EComponentMobility::Movable);
+	TransformPreviewMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	TransformPreviewMesh->SetGenerateOverlapEvents(false);
+	TransformPreviewMesh->SetHiddenInGame(true);
+	TransformPreviewMesh->SetCastShadow(false);
+	TransformPreviewMesh->SetRenderCustomDepth(true);
 }
 
 void AUOUFloorPlatformActor::BeginPlay()
@@ -84,6 +113,7 @@ void AUOUFloorPlatformActor::OnConstruction(const FTransform& Transform)
 	}
 
 	RefreshTargetTransforms();
+	UpdateEditorPreviewVisuals();
 }
 
 void AUOUFloorPlatformActor::Tick(float DeltaSeconds)
@@ -115,6 +145,7 @@ void AUOUFloorPlatformActor::CaptureCurrentAsStart()
 	bHasCapturedStartTransform = true;
 
 	RefreshTargetTransforms();
+	UpdateEditorPreviewVisuals();
 }
 
 void AUOUFloorPlatformActor::MoveToTarget()
@@ -162,6 +193,7 @@ void AUOUFloorPlatformActor::ResetPlatform()
 	ApplyTargetCollisionState();
 	CacheLastMovedActors();
 	DetachCarriedActors();
+	UpdateEditorPreviewVisuals();
 }
 
 void AUOUFloorPlatformActor::SnapToTarget()
@@ -183,6 +215,7 @@ void AUOUFloorPlatformActor::SnapToTarget()
 	ApplyTargetCollisionState();
 	CacheLastMovedActors();
 	DetachCarriedActors();
+	UpdateEditorPreviewVisuals();
 }
 
 bool AUOUFloorPlatformActor::IsMoving() const
@@ -538,6 +571,72 @@ FTransform AUOUFloorPlatformActor::BuildPlatformTransformAtAlpha(float Alpha) co
 	const FQuat NewRotation = RotationDelta * StartTransform.GetRotation();
 
 	return FTransform(NewRotation, NewLocation, StartTransform.GetScale3D());
+}
+
+FTransform AUOUFloorPlatformActor::BuildPreviewMeshWorldTransform(float Alpha) const
+{
+	const FTransform PreviewActorTransform = BuildPlatformTransformAtAlpha(Alpha);
+	if (PlatformMesh == nullptr)
+	{
+		return PreviewActorTransform;
+	}
+
+	return PlatformMesh->GetRelativeTransform() * PreviewActorTransform;
+}
+
+void AUOUFloorPlatformActor::UpdateEditorPreviewVisuals()
+{
+	if (RotationPivotMarker != nullptr)
+	{
+		RotationPivotMarker->SetVisibility(bUseTargetRotation, true);
+	}
+
+	if (MovePreviewArrow != nullptr)
+	{
+		const bool bHasMoveOffset = !TargetLocalOffset.IsNearlyZero();
+		MovePreviewArrow->SetVisibility(bShowMovePreviewArrow && bHasMoveOffset, true);
+
+		if (bHasMoveOffset)
+		{
+			MovePreviewArrow->SetRelativeLocation(FVector::ZeroVector);
+			MovePreviewArrow->SetRelativeRotation(TargetLocalOffset.Rotation());
+			MovePreviewArrow->SetArrowLength(FMath::Max(120.0f, TargetLocalOffset.Size()));
+		}
+	}
+
+	if (TransformPreviewMesh == nullptr)
+	{
+		return;
+	}
+
+	const bool bHasPreviewMesh = PlatformMesh != nullptr && PlatformMesh->GetStaticMesh() != nullptr;
+	const bool bShouldShowPreview = bShowTransformPreview && bHasPreviewMesh;
+	TransformPreviewMesh->SetVisibility(bShouldShowPreview, true);
+
+	if (!bShouldShowPreview)
+	{
+		return;
+	}
+
+	SyncTransformPreviewMesh();
+	TransformPreviewMesh->SetWorldTransform(BuildPreviewMeshWorldTransform(PreviewAlpha), false, nullptr, ETeleportType::TeleportPhysics);
+}
+
+void AUOUFloorPlatformActor::SyncTransformPreviewMesh()
+{
+	if (PlatformMesh == nullptr || TransformPreviewMesh == nullptr)
+	{
+		return;
+	}
+
+	TransformPreviewMesh->SetStaticMesh(PlatformMesh->GetStaticMesh());
+	TransformPreviewMesh->SetRelativeScale3D(PlatformMesh->GetRelativeScale3D());
+
+	const int32 MaterialCount = PlatformMesh->GetNumMaterials();
+	for (int32 MaterialIndex = 0; MaterialIndex < MaterialCount; ++MaterialIndex)
+	{
+		TransformPreviewMesh->SetMaterial(MaterialIndex, PlatformMesh->GetMaterial(MaterialIndex));
+	}
 }
 
 FVector AUOUFloorPlatformActor::GetRotationPivotWorldLocation() const
