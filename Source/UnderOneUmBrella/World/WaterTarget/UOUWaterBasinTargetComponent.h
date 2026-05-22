@@ -29,6 +29,16 @@ enum class EUOUWaterBasinVolumeSizeMode : uint8
 	Manual UMETA(DisplayName = "Manual", ToolTip = "Manual Surface Area와 Manual Max Water Height를 Scale 1 기준값으로 사용하고, 최종 용량에는 Actor Scale을 반영합니다.")
 };
 
+// 플레이어가 붓는 물을 이 Basin이 어떤 기준으로 해석할지 정합니다.
+UENUM(BlueprintType)
+enum class EUOUWaterBasinPouredWaterFillMode : uint8
+{
+	Volume UMETA(DisplayName = "Volume", ToolTip = "전달된 물 양을 그대로 Basin 부피로 더합니다. 기존 동작을 유지합니다."),
+	FillRatio UMETA(DisplayName = "Fill Ratio", ToolTip = "플레이어가 물을 붓는 동안 초당 지정한 용량 비율만큼 채웁니다."),
+	WaterDepth UMETA(DisplayName = "Water Depth", ToolTip = "플레이어가 물을 붓는 동안 초당 지정한 타일 깊이만큼 수면을 올립니다."),
+	SurfaceWorldZ UMETA(DisplayName = "Surface World Z", ToolTip = "플레이어가 물을 붓는 동안 초당 지정한 월드 Z 높이만큼 수면을 올립니다.")
+};
+
 // 런타임 디버그 표시 범위입니다.
 // 수치 디버그가 겹치지 않도록 특정 Target 또는 해당 Target이 포함된 그룹만 표시합니다.
 UENUM(BlueprintType)
@@ -109,6 +119,19 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin|Volume", meta = (ClampMin = "0.0", ToolTip = "게임 시작 시 이 Target이 가진 초기 물 부피입니다. 연결 그룹이면 시작 직후 그룹 전체 부피로 다시 분배됩니다."))
 	float InitialWaterVolume = 0.0f;
 
+	// 플레이어의 물 붓기 행위를 이 Basin의 물 상태로 변환하는 기준입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin|Pour", meta = (ToolTip = "플레이어가 붓는 물을 이 Target이 해석하는 방식입니다. Volume은 기존 부피 기반 동작을 유지합니다."))
+	EUOUWaterBasinPouredWaterFillMode PouredWaterFillMode = EUOUWaterBasinPouredWaterFillMode::Volume;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin|Pour", meta = (ClampMin = "0.0", ToolTip = "Poured Water Fill Mode가 Fill Ratio일 때 초당 더할 용량 비율입니다. 0.1이면 Target 또는 그룹이 약 10초에 가득 찹니다."))
+	float PouredWaterFillRatioPerSecond = 0.1f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin|Pour", meta = (ClampMin = "0.0", ToolTip = "Poured Water Fill Mode가 Water Depth일 때 초당 더할 타일 깊이입니다."))
+	float PouredWaterDepthPerSecond = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin|Pour", meta = (ClampMin = "0.0", ToolTip = "Poured Water Fill Mode가 Surface World Z일 때 초당 더할 월드 Z 높이입니다."))
+	float PouredWaterSurfaceWorldZPerSecond = 100.0f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin|Visual", meta = (ToolTip = "지정한 Water Visual 컴포넌트를 현재 수위에 맞춰 자동 갱신합니다."))
 	bool bUpdateWaterVisual = true;
 
@@ -158,6 +181,10 @@ public:
 	// 물 부피를 추가합니다. 그룹 적용 시 현재 연결 그룹의 총 부피에 Volume을 더한 뒤 공통 수면 높이로 재분배합니다.
 	UFUNCTION(BlueprintCallable, Category = "Water Basin")
 	void AddWater(float Volume, bool bApplyToConnectedGroup = true);
+
+	// 플레이어의 물 붓기 행위는 유지하고, Target별 설정에 따라 물 상태로 해석합니다.
+	UFUNCTION(BlueprintCallable, Category = "Water Basin")
+	void ReceivePouredWater(float Volume, float PourDuration, bool bApplyToConnectedGroup = true);
 
 	// 물 부피를 제거합니다. 그룹 적용 시 현재 연결 그룹의 총 부피에서 Volume을 뺀 뒤 공통 수면 높이로 재분배합니다.
 	UFUNCTION(BlueprintCallable, Category = "Water Basin")

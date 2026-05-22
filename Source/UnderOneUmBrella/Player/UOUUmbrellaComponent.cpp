@@ -918,13 +918,17 @@ void UUOUUmbrellaComponent::UpdatePouring(float DeltaTime)
 	}
 
 	const float StoredWaterBefore = GetCurrentStoredWater();
-	const float RequestedPourAmount = FMath::Max(0.0f, PourRate) * FMath::Max(0.0f, DeltaTime);
+	const float SafePourRate = FMath::Max(0.0f, PourRate);
+	const float RequestedPourAmount = SafePourRate * FMath::Max(0.0f, DeltaTime);
 	const float PourAmount = FMath::Min(StoredWaterBefore, RequestedPourAmount);
 	if (PourAmount <= KINDA_SMALL_NUMBER)
 	{
 		EndPour();
 		return;
 	}
+
+	// Basin 채우기 모드는 실제로 붓는 시간만 사용해서 마지막 부분 프레임에서 과하게 채워지지 않게 합니다.
+	const float EffectivePourDuration = SafePourRate > KINDA_SMALL_NUMBER ? PourAmount / SafePourRate : 0.0f;
 
 	// 저장된 양보다 많이 붓지 않도록 제한한 뒤 실제 저장량을 줄입니다.
 	StoredWaterContainer->RemoveAmount(PourAmount);
@@ -979,7 +983,7 @@ void UUOUUmbrellaComponent::UpdatePouring(float DeltaTime)
 					bLastPourTraceHit = true;
 
 					EUOUUmbrellaPourReceiverType ReceiverType = EUOUUmbrellaPourReceiverType::None;
-					bLastPourDeliveredWater = TryReceiveWaterAtHit(HitResult, PourAmount, ReceiverType);
+					bLastPourDeliveredWater = TryReceiveWaterAtHit(HitResult, PourAmount, EffectivePourDuration, ReceiverType);
 					LastPourReceiverType = ReceiverType;
 					break;
 				}
@@ -1091,7 +1095,7 @@ bool UUOUUmbrellaComponent::TryGetPourDirection(FVector& PourOriginLocation, FVe
 }
 
 // 라인트레이스에 맞은 액터가 물을 받을 수 있는 타입이면 물을 전달하고 받은 대상 종류를 기록합니다.
-bool UUOUUmbrellaComponent::TryReceiveWaterAtHit(const FHitResult& HitResult, float WaterAmount, EUOUUmbrellaPourReceiverType& OutReceiverType)
+bool UUOUUmbrellaComponent::TryReceiveWaterAtHit(const FHitResult& HitResult, float WaterAmount, float PourDuration, EUOUUmbrellaPourReceiverType& OutReceiverType)
 {
 	OutReceiverType = EUOUUmbrellaPourReceiverType::None;
 
@@ -1124,7 +1128,7 @@ bool UUOUUmbrellaComponent::TryReceiveWaterAtHit(const FHitResult& HitResult, fl
 		// 물 조절 장치 쪽 타겟 컴포넌트도 우산 물 붓기를 받을 수 있게 처리합니다.
 		LastPourTargetName = HitActor->GetName();
 		OutReceiverType = EUOUUmbrellaPourReceiverType::WaterBasinTarget;
-		WaterBasinTarget->AddWater(WaterAmount, true);
+		WaterBasinTarget->ReceivePouredWater(WaterAmount, PourDuration, true);
 		return true;
 	}
 
@@ -1135,7 +1139,7 @@ bool UUOUUmbrellaComponent::TryReceiveWaterAtHit(const FHitResult& HitResult, fl
 			// 히트된 자식 액터 대신 부모가 물 조절 컴포넌트를 들고 있는 경우를 처리합니다.
 			LastPourTargetName = ParentActor->GetName();
 			OutReceiverType = EUOUUmbrellaPourReceiverType::WaterBasinTarget;
-			ParentWaterBasinTarget->AddWater(WaterAmount, true);
+			ParentWaterBasinTarget->ReceivePouredWater(WaterAmount, PourDuration, true);
 			return true;
 		}
 	}

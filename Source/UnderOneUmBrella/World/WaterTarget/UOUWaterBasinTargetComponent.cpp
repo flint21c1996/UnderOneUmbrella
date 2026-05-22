@@ -144,6 +144,84 @@ void UUOUWaterBasinTargetComponent::AddWater(float Volume, bool bApplyToConnecte
 	ApplyWaterVolumeToSingleTarget(CurrentWaterVolume + Volume);
 }
 
+void UUOUWaterBasinTargetComponent::ReceivePouredWater(float Volume, float PourDuration, bool bApplyToConnectedGroup)
+{
+	if (Volume <= 0.0f)
+	{
+		return;
+	}
+
+	const float Duration = FMath::Max(PourDuration, 0.0f);
+	switch (PouredWaterFillMode)
+	{
+	case EUOUWaterBasinPouredWaterFillMode::Volume:
+		AddWater(Volume, bApplyToConnectedGroup);
+		break;
+
+	case EUOUWaterBasinPouredWaterFillMode::FillRatio:
+	{
+		const float RatioDelta = FMath::Max(PouredWaterFillRatioPerSecond, 0.0f) * Duration;
+		if (RatioDelta <= 0.0f)
+		{
+			return;
+		}
+
+		if (bApplyToConnectedGroup)
+		{
+			TArray<UUOUWaterBasinTargetComponent*> Group;
+			GetConnectedGroup(Group);
+			const FUOUWaterBasinGroupDebugData GroupData = BuildGroupDebugData(Group);
+			const float NewFillRatio = FMath::Clamp(GroupData.FillRatio + RatioDelta, 0.0f, 1.0f);
+			ApplyWaterVolumeToConnectedGroup(GroupData.TotalCapacity * NewFillRatio);
+			return;
+		}
+
+		const float NewFillRatio = FMath::Clamp(CurrentFillRatio + RatioDelta, 0.0f, 1.0f);
+		ApplyWaterVolumeToSingleTarget(GetCapacity() * NewFillRatio);
+		break;
+	}
+
+	case EUOUWaterBasinPouredWaterFillMode::WaterDepth:
+	{
+		const float DepthDelta = FMath::Max(PouredWaterDepthPerSecond, 0.0f) * Duration;
+		if (DepthDelta <= 0.0f)
+		{
+			return;
+		}
+
+		if (bApplyToConnectedGroup)
+		{
+			const FUOUWaterBasinGroupDebugData GroupData = GetConnectedGroupDebugData();
+			const float SurfaceDeltaWorld = DepthDelta * FMath::Max(WorldUnitsPerTile, MinWorldUnitsPerTile);
+			SetWaterSurfaceWorldZ(GroupData.SurfaceWorldZ + SurfaceDeltaWorld, true);
+			return;
+		}
+
+		SetWaterDepth(CurrentWaterDepth + DepthDelta, false);
+		break;
+	}
+
+	case EUOUWaterBasinPouredWaterFillMode::SurfaceWorldZ:
+	{
+		const float SurfaceDeltaWorld = FMath::Max(PouredWaterSurfaceWorldZPerSecond, 0.0f) * Duration;
+		if (SurfaceDeltaWorld <= 0.0f)
+		{
+			return;
+		}
+
+		const float CurrentSurfaceWorldZ = bApplyToConnectedGroup
+			? GetConnectedGroupDebugData().SurfaceWorldZ
+			: WaterSurfaceWorldZ;
+		SetWaterSurfaceWorldZ(CurrentSurfaceWorldZ + SurfaceDeltaWorld, bApplyToConnectedGroup);
+		break;
+	}
+
+	default:
+		AddWater(Volume, bApplyToConnectedGroup);
+		break;
+	}
+}
+
 void UUOUWaterBasinTargetComponent::RemoveWater(float Volume, bool bApplyToConnectedGroup)
 {
 	if (Volume <= 0.0f)
