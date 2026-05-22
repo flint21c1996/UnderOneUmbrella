@@ -193,9 +193,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Rain", meta = (ClampMin = "0.0"))
 	float StoredWaterWeightMultiplier = 1.0f;
 
-	// 우산이 비를 막는 범위를 계산할 때 쓰는 반지름입니다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Rain Block", meta = (ClampMin = "0.0", ToolTip = "우산이 비를 막는 시각적 반지름입니다. RainArea와 Niagara가 이 값을 사용해 비 차단 범위를 표현합니다."))
-	float RainBlockerRadius = 90.0f;
+	// 우산이 비 파티클을 제거할 박스 볼륨의 절반 크기입니다. XY는 우산 면적, Z는 얇은 차단 두께로 사용합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Rain Block", meta = (ClampMin = "0.0", ToolTip = "우산이 만드는 Kill Volume Box의 절반 크기입니다. 파티클이 이 박스 안에 들어오면 제거됩니다."))
+	FVector RainBlockerVolumeHalfExtent = FVector(90.0f, 90.0f, 20.0f);
 
 	// 비 차단 중심을 우산 기준 위치에서 얼마나 옮길지 정하는 로컬 오프셋입니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Rain Block", meta = (ToolTip = "비 차단 중심을 우산 표시 컴포넌트 기준으로 보정하는 로컬 오프셋입니다. 우산 문양 위치가 맞지 않을 때 조정합니다."))
@@ -352,9 +352,9 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Umbrella")
 	bool IsBlockingRain() const;
 
-	// 비 차단 중심과 반지름을 외부 시스템에서 가져갈 수 있게 계산합니다.
+	// 현재 설정된 우산 비 차단 박스의 중심, 회전, 절반 크기를 계산합니다. 실제 차단 활성 여부는 IsBlockingRain()으로 따로 확인합니다.
 	UFUNCTION(BlueprintPure, Category = "Umbrella")
-	bool TryGetRainBlockerData(FVector& OutWorldLocation, float& OutRadius) const;
+	bool TryGetRainBlockerVolumeData(FVector& OutWorldCenter, FRotator& OutWorldRotation, FVector& OutHalfExtent) const;
 
 	// 우산에 현재 저장된 물 양을 반환합니다.
 	UFUNCTION(BlueprintPure, Category = "Umbrella")

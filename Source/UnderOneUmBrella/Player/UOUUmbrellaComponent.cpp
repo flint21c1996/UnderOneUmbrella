@@ -374,18 +374,23 @@ bool UUOUUmbrellaComponent::IsBlockingRain() const
 	return IsOpen();
 }
 
-// RainArea나 디버그 표시가 사용할 비 차단 중심과 반지름을 계산합니다.
-bool UUOUUmbrellaComponent::TryGetRainBlockerData(FVector& OutWorldLocation, float& OutRadius) const
+// 현재 설정된 비 차단 박스의 중심, 회전, 절반 크기를 계산합니다. 실제 차단 활성 여부는 호출자가 IsBlockingRain()으로 판단합니다.
+bool UUOUUmbrellaComponent::TryGetRainBlockerVolumeData(FVector& OutWorldCenter, FRotator& OutWorldRotation, FVector& OutHalfExtent) const
 {
-	OutWorldLocation = FVector::ZeroVector;
-	OutRadius = 0.0f;
+	OutWorldCenter = FVector::ZeroVector;
+	OutWorldRotation = FRotator::ZeroRotator;
+	OutHalfExtent = FVector::ZeroVector;
 
-	if (!IsBlockingRain() || RainBlockerRadius <= 0.0f)
+	const FVector SafeHalfExtent(
+		FMath::Max(0.0f, RainBlockerVolumeHalfExtent.X),
+		FMath::Max(0.0f, RainBlockerVolumeHalfExtent.Y),
+		FMath::Max(0.0f, RainBlockerVolumeHalfExtent.Z));
+
+	if (SafeHalfExtent.IsNearlyZero())
 	{
 		return false;
 	}
 
-	// 상태 전용 펼친 비주얼이 있으면 가장 먼저 기준점으로 사용합니다.
 	const USceneComponent* BlockerComponent = OpenVisual;
 	if (BlockerComponent == nullptr)
 	{
@@ -393,30 +398,30 @@ bool UUOUUmbrellaComponent::TryGetRainBlockerData(FVector& OutWorldLocation, flo
 	}
 	if (BlockerComponent == nullptr)
 	{
-		// 전용 비주얼이 없으면 우산 부착 위치를 차선 기준점으로 사용합니다.
 		BlockerComponent = PickupAttachPoint;
 	}
 
 	if (BlockerComponent != nullptr)
 	{
-		// 컴포넌트 로컬 오프셋을 월드 좌표로 변환해 실제 차단 중심을 만듭니다.
-		OutWorldLocation = BlockerComponent->GetComponentTransform().TransformPosition(RainBlockerLocalOffset);
-		OutRadius = RainBlockerRadius;
+		const FTransform BlockerTransform = BlockerComponent->GetComponentTransform();
+		OutWorldCenter = BlockerTransform.TransformPosition(RainBlockerLocalOffset);
+		OutWorldRotation = BlockerTransform.Rotator();
+		OutHalfExtent = SafeHalfExtent;
 		return true;
 	}
 
 	if (const AActor* Owner = GetOwner())
 	{
-		// 모든 기준 컴포넌트가 없을 때는 소유 액터 위치를 최후의 기준으로 삼습니다.
-		OutWorldLocation = Owner->GetActorTransform().TransformPosition(RainBlockerLocalOffset);
-		OutRadius = RainBlockerRadius;
+		const FTransform OwnerTransform = Owner->GetActorTransform();
+		OutWorldCenter = OwnerTransform.TransformPosition(RainBlockerLocalOffset);
+		OutWorldRotation = OwnerTransform.Rotator();
+		OutHalfExtent = SafeHalfExtent;
 		return true;
 	}
 
 	return false;
 }
 
-// 저장 컨테이너가 없을 때도 호출부가 안전하게 0을 받을 수 있게 감쌉니다.
 float UUOUUmbrellaComponent::GetCurrentStoredWater() const
 {
 	return StoredWaterContainer != nullptr ? StoredWaterContainer->CurrentAmount : 0.0f;
@@ -704,9 +709,10 @@ void UUOUUmbrellaComponent::DrawRainBlockerDebug() const
 		return;
 	}
 
-	FVector BlockerWorldLocation = FVector::ZeroVector;
-	float BlockerRadius = 0.0f;
-	if (!TryGetRainBlockerData(BlockerWorldLocation, BlockerRadius))
+	FVector BlockerWorldCenter = FVector::ZeroVector;
+	FRotator BlockerWorldRotation = FRotator::ZeroRotator;
+	FVector BlockerHalfExtent = FVector::ZeroVector;
+	if (!TryGetRainBlockerVolumeData(BlockerWorldCenter, BlockerWorldRotation, BlockerHalfExtent))
 	{
 		// 비를 막는 상태가 아니면 그릴 기준 데이터가 없으므로 바로 종료합니다.
 		return;
@@ -714,11 +720,14 @@ void UUOUUmbrellaComponent::DrawRainBlockerDebug() const
 
 	const float Thickness = FMath::Max(0.0f, RainBlockerDebugThickness);
 	const float LifeTime = 0.0f;
-	const FColor PlayerDebugColor = UUOUDebugSubsystem::GetDebugCategoryColor(this, EUOUDebugCategory::Player, FColor::Cyan);
+	const bool bIsActiveBlocker = IsBlockingRain();
+	const FColor PlayerDebugColor = bIsActiveBlocker
+		? UUOUDebugSubsystem::GetDebugCategoryColor(this, EUOUDebugCategory::Player, FColor::Cyan)
+		: FColor(90, 90, 90);
 
 	DrawDebugSphere(
 		World,
-		BlockerWorldLocation,
+		BlockerWorldCenter,
 		8.0f,
 		12,
 		PlayerDebugColor,
@@ -727,24 +736,21 @@ void UUOUUmbrellaComponent::DrawRainBlockerDebug() const
 		0,
 		Thickness);
 
-	DrawDebugCircle(
+	DrawDebugBox(
 		World,
-		BlockerWorldLocation,
-		BlockerRadius,
-		64,
+		BlockerWorldCenter,
+		BlockerHalfExtent,
+		BlockerWorldRotation.Quaternion(),
 		PlayerDebugColor,
 		false,
 		LifeTime,
 		0,
-		Thickness,
-		FVector::ForwardVector,
-		FVector::RightVector,
-		false);
+		Thickness);
 
 	DrawDebugLine(
 		World,
-		BlockerWorldLocation + FVector(0.0f, 0.0f, 20.0f),
-		BlockerWorldLocation - FVector(0.0f, 0.0f, 20.0f),
+		BlockerWorldCenter + BlockerWorldRotation.Quaternion().GetAxisZ() * BlockerHalfExtent.Z,
+		BlockerWorldCenter - BlockerWorldRotation.Quaternion().GetAxisZ() * BlockerHalfExtent.Z,
 		PlayerDebugColor,
 		false,
 		LifeTime,
@@ -753,8 +759,16 @@ void UUOUUmbrellaComponent::DrawRainBlockerDebug() const
 
 	DrawDebugString(
 		World,
-		BlockerWorldLocation + FVector(0.0f, 0.0f, 18.0f),
-		FString::Printf(TEXT("RainBlocker R=%.1f"), BlockerRadius),
+		BlockerWorldCenter + BlockerWorldRotation.Quaternion().GetAxisZ() * (BlockerHalfExtent.Z + 18.0f),
+		FString::Printf(
+			TEXT("RainBlocker %s Half %.1f %.1f %.1f Offset %.1f %.1f %.1f"),
+			bIsActiveBlocker ? TEXT("Active") : TEXT("Inactive"),
+			BlockerHalfExtent.X,
+			BlockerHalfExtent.Y,
+			BlockerHalfExtent.Z,
+			RainBlockerLocalOffset.X,
+			RainBlockerLocalOffset.Y,
+			RainBlockerLocalOffset.Z),
 		nullptr,
 		PlayerDebugColor,
 		LifeTime,
