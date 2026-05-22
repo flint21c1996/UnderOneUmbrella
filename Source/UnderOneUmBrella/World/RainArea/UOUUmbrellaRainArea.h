@@ -123,6 +123,10 @@ protected:
 	void ApplyEnvironmentVisualState();
 	// 우산이 비를 막을 때 RainVisual 컴포넌트에도 차단 위치와 강도를 전달합니다.
 	void ApplyEnvironmentVisualRainBlocker(bool bIsBlocking, const FVector& BlockerWorldCenter, const FVector& BlockerHalfExtent, float BlockerIntensity);
+	// RainVolume 안에 있는 WaterBasinTarget에 기존 물 입력 규칙으로 비를 전달합니다.
+	void ApplyRainToWaterBasinTargets(float DeltaSeconds) const;
+	// 대상 Actor의 bounds 중심이 RainVolume 안에 있는지 확인합니다.
+	bool IsActorInsideRainVolume(const AActor* Actor) const;
 	// 비주얼 디버그 박스를 그려서 환경 연동 범위를 확인합니다.
 	void DrawRainVisualDebug() const;
 };

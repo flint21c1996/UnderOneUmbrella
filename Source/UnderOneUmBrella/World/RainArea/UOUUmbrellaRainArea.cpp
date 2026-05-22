@@ -12,7 +12,9 @@
 #include "NiagaraComponent.h"
 #include "Player/UOUUmbrellaComponent.h"
 #include "UObject/ConstructorHelpers.h"
+#include "UObject/UObjectIterator.h"
 #include "World/Environment/UOUEnvironmentVisualComponent.h"
+#include "World/WaterTarget/UOUWaterBasinTargetComponent.h"
 
 AUOUUmbrellaRainArea::AUOUUmbrellaRainArea()
 {
@@ -174,6 +176,8 @@ void AUOUUmbrellaRainArea::Tick(float DeltaSeconds)
 		}
 	}
 
+	ApplyRainToWaterBasinTargets(DeltaSeconds);
+
 	ApplyEnvironmentVisualRainBlocker(
 		bHasRainBlocker,
 		RainBlockerWorldCenter,
@@ -281,6 +285,71 @@ void AUOUUmbrellaRainArea::ApplyEnvironmentVisualRainBlocker(bool bIsBlocking, c
 		BlockerLocalCenter,
 		BlockerHalfExtent,
 		BlockerIntensity);
+}
+
+void AUOUUmbrellaRainArea::ApplyRainToWaterBasinTargets(float DeltaSeconds) const
+{
+	const float RainAmount = FMath::Max(0.0f, RainFillRate) * FMath::Max(0.0f, DeltaSeconds);
+	if (RainAmount <= 0.0f || RainVolume == nullptr)
+	{
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	if (World == nullptr)
+	{
+		return;
+	}
+
+	TSet<UUOUWaterBasinTargetComponent*> ProcessedTargets;
+	for (TObjectIterator<UUOUWaterBasinTargetComponent> It; It; ++It)
+	{
+		UUOUWaterBasinTargetComponent* Target = *It;
+		if (!IsValid(Target) || Target->GetWorld() != World || ProcessedTargets.Contains(Target))
+		{
+			continue;
+		}
+
+		AActor* TargetOwner = Target->GetOwner();
+		if (!IsValid(TargetOwner) || !IsActorInsideRainVolume(TargetOwner))
+		{
+			continue;
+		}
+
+		TArray<UUOUWaterBasinTargetComponent*> Group;
+		Target->GetConnectedGroup(Group);
+		for (UUOUWaterBasinTargetComponent* GroupTarget : Group)
+		{
+			if (IsValid(GroupTarget))
+			{
+				ProcessedTargets.Add(GroupTarget);
+			}
+		}
+
+		Target->ReceivePouredWater(RainAmount, RainAmount, true);
+	}
+}
+
+bool AUOUUmbrellaRainArea::IsActorInsideRainVolume(const AActor* Actor) const
+{
+	if (RainVolume == nullptr || !IsValid(Actor))
+	{
+		return false;
+	}
+
+	FVector ActorOrigin = FVector::ZeroVector;
+	FVector ActorExtent = FVector::ZeroVector;
+	Actor->GetActorBounds(false, ActorOrigin, ActorExtent);
+	if (ActorExtent.IsNearlyZero())
+	{
+		ActorOrigin = Actor->GetActorLocation();
+	}
+
+	const FVector LocalPoint = RainVolume->GetComponentTransform().InverseTransformPosition(ActorOrigin);
+	const FVector BoxExtent = RainVolume->GetUnscaledBoxExtent();
+	return FMath::Abs(LocalPoint.X) <= BoxExtent.X
+		&& FMath::Abs(LocalPoint.Y) <= BoxExtent.Y
+		&& FMath::Abs(LocalPoint.Z) <= BoxExtent.Z;
 }
 
 void AUOUUmbrellaRainArea::DrawRainVisualDebug() const
