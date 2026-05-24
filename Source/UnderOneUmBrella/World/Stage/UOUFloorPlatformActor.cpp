@@ -598,9 +598,13 @@ void AUOUFloorPlatformActor::UpdateEditorPreviewVisuals()
 
 		if (bHasMoveOffset)
 		{
-			MovePreviewArrow->SetRelativeLocation(FVector::ZeroVector);
-			MovePreviewArrow->SetRelativeRotation(TargetLocalOffset.Rotation());
-			MovePreviewArrow->SetArrowLength(FMath::Max(120.0f, TargetLocalOffset.Size()));
+			constexpr float PreviewArrowLength = 160.0f;
+			const FVector MoveDirection = TargetLocalOffset.GetSafeNormal();
+
+			// 긴 막대가 아니라 목표 끝점을 찍는 짧은 화살표로 보여줍니다.
+			MovePreviewArrow->SetRelativeLocation(TargetLocalOffset - MoveDirection * PreviewArrowLength);
+			MovePreviewArrow->SetRelativeRotation(MoveDirection.Rotation());
+			MovePreviewArrow->SetArrowLength(PreviewArrowLength);
 		}
 	}
 
