@@ -15,6 +15,7 @@ class USceneComponent;
 class USphereComponent;
 class UStaticMeshComponent;
 class AUOUFloorPlatformActor;
+class AUOUFloorPlatformTargetActor;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FUOUFloorPlatformMoveFinishedSignature, AUOUFloorPlatformActor*, Platform);
 
@@ -91,6 +92,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Rotation")
 	float TargetRotationAngleDegrees = 0.0f;
 
+	// 목표 마커 액터가 있으면 해당 액터의 위치와 회전을 최종 상태로 사용할지 정합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Target Marker")
+	bool bUseTargetMarkerTransform = true;
+
+	// 플랫폼의 최종 위치와 최종 회전을 월드에서 직접 조정하기 위한 목표 마커 액터입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Target Marker")
+	TObjectPtr<AUOUFloorPlatformTargetActor> TargetMarkerActor = nullptr;
+
 	// 에디터에서 이동과 회전 결과를 미리 볼지 정합니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Preview")
 	bool bShowTransformPreview = true;
@@ -154,6 +163,14 @@ public:
 	// 플랫폼을 이동 없이 바로 목표 위치로 보냅니다.
 	UFUNCTION(BlueprintCallable, CallInEditor, Category = "Floor Platform|Actions")
 	void SnapToTarget();
+
+	// 현재 설정 기준으로 목표 마커 액터를 만들거나 기존 목표 마커를 현재 목표 위치로 갱신합니다.
+	UFUNCTION(BlueprintCallable, CallInEditor, Category = "Floor Platform|Target Marker")
+	void CreateOrUpdateTargetMarker();
+
+	// 목표 마커 액터를 사용하지 않고 기존 오프셋과 회전축 설정을 다시 사용합니다.
+	UFUNCTION(BlueprintCallable, CallInEditor, Category = "Floor Platform|Target Marker")
+	void ClearTargetMarkerReference();
 
 	// 현재 플랫폼이 이동 중인지 반환합니다.
 	UFUNCTION(BlueprintPure, Category = "Floor Platform|Runtime")
@@ -224,6 +241,12 @@ protected:
 
 	// 현재 알파 값에 맞는 플랫폼 메쉬 미리보기 월드 트랜스폼을 계산합니다.
 	FTransform BuildPreviewMeshWorldTransform(float Alpha) const;
+
+	// 목표 마커 액터가 현재 유효하고 사용 가능한지 확인합니다.
+	bool ShouldUseTargetMarkerTransform() const;
+
+	// 목표 마커 액터를 현재 플랫폼 메쉬와 동기화합니다.
+	void SyncTargetMarkerPreview();
 
 	// 에디터에서 회전축, 이동 방향, 목표 위치 미리보기를 갱신합니다.
 	void UpdateEditorPreviewVisuals();

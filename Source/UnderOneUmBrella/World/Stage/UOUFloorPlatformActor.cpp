@@ -2,6 +2,8 @@
 
 #include "World/Stage/UOUFloorPlatformActor.h"
 
+#include "World/Stage/UOUFloorPlatformTargetActor.h"
+
 #include "Components/ArrowComponent.h"
 #include "Components/BoxComponent.h"
 #include "Components/PrimitiveComponent.h"
@@ -120,6 +122,15 @@ void AUOUFloorPlatformActor::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 
+#if WITH_EDITOR
+	if (!bIsMoving && GetWorld() != nullptr && !GetWorld()->IsGameWorld() && ShouldUseTargetMarkerTransform())
+	{
+		RefreshTargetTransforms();
+		UpdateEditorPreviewVisuals();
+		return;
+	}
+#endif
+
 	if (!bIsMoving)
 	{
 		return;
@@ -218,6 +229,62 @@ void AUOUFloorPlatformActor::SnapToTarget()
 	UpdateEditorPreviewVisuals();
 }
 
+void AUOUFloorPlatformActor::CreateOrUpdateTargetMarker()
+{
+#if WITH_EDITOR
+	if (GetWorld() == nullptr)
+	{
+		return;
+	}
+
+	if (!bHasCapturedStartTransform)
+	{
+		CaptureCurrentAsStart();
+	}
+
+	const bool bHadTargetMarker = ShouldUseTargetMarkerTransform();
+	if (!bHadTargetMarker)
+	{
+		TargetTransform = StartTransform;
+		TargetTransform = BuildPlatformTransformAtAlpha(1.0f);
+	}
+
+	if (!IsValid(TargetMarkerActor))
+	{
+		FActorSpawnParameters SpawnParameters;
+		SpawnParameters.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		SpawnParameters.Name = MakeUniqueObjectName(GetWorld()->GetCurrentLevel(), AUOUFloorPlatformTargetActor::StaticClass(), *FString::Printf(TEXT("%s_Target"), *GetName()));
+
+		TargetMarkerActor = GetWorld()->SpawnActor<AUOUFloorPlatformTargetActor>(
+			AUOUFloorPlatformTargetActor::StaticClass(),
+			TargetTransform,
+			SpawnParameters);
+
+		if (TargetMarkerActor != nullptr)
+		{
+			TargetMarkerActor->SetActorLabel(FString::Printf(TEXT("%s_Target"), *GetActorLabel()));
+		}
+	}
+	else if (!bHadTargetMarker)
+	{
+		TargetMarkerActor->SetActorTransform(TargetTransform, false, nullptr, ETeleportType::TeleportPhysics);
+	}
+
+	bUseTargetMarkerTransform = true;
+	SyncTargetMarkerPreview();
+	RefreshTargetTransforms();
+	UpdateEditorPreviewVisuals();
+#endif
+}
+
+void AUOUFloorPlatformActor::ClearTargetMarkerReference()
+{
+	bUseTargetMarkerTransform = false;
+	TargetMarkerActor = nullptr;
+	RefreshTargetTransforms();
+	UpdateEditorPreviewVisuals();
+}
+
 bool AUOUFloorPlatformActor::IsMoving() const
 {
 	return bIsMoving;
@@ -260,7 +327,7 @@ void AUOUFloorPlatformActor::ApplyPuzzleResult_Implementation(EOUUPuzzleResultAc
 #if WITH_EDITOR
 bool AUOUFloorPlatformActor::ShouldTickIfViewportsOnly() const
 {
-	return bIsMoving;
+	return bIsMoving || ShouldUseTargetMarkerTransform();
 }
 #endif
 
@@ -273,7 +340,14 @@ void AUOUFloorPlatformActor::RefreshTargetTransforms()
 	}
 
 	TargetTransform = StartTransform;
-	TargetTransform = BuildPlatformTransformAtAlpha(1.0f);
+	if (ShouldUseTargetMarkerTransform())
+	{
+		TargetTransform = TargetMarkerActor->GetActorTransform();
+	}
+	else
+	{
+		TargetTransform = BuildPlatformTransformAtAlpha(1.0f);
+	}
 }
 
 void AUOUFloorPlatformActor::FinishMoveToTarget()
@@ -547,6 +621,15 @@ void AUOUFloorPlatformActor::CacheLastMovedActors()
 FTransform AUOUFloorPlatformActor::BuildPlatformTransformAtAlpha(float Alpha) const
 {
 	const float SafeAlpha = FMath::Clamp(Alpha, 0.0f, 1.0f);
+
+	if (ShouldUseTargetMarkerTransform())
+	{
+		const FQuat NewRotation = FQuat::Slerp(StartTransform.GetRotation(), TargetMarkerActor->GetActorQuat(), SafeAlpha);
+		const FVector NewLocation = FMath::Lerp(StartTransform.GetLocation(), TargetMarkerActor->GetActorLocation(), SafeAlpha);
+
+		return FTransform(NewRotation, NewLocation, StartTransform.GetScale3D());
+	}
+
 	const FVector MoveOffsetWorld = StartTransform.TransformVectorNoScale(TargetLocalOffset) * SafeAlpha;
 
 	FQuat RotationDelta = FQuat::Identity;
@@ -584,27 +667,54 @@ FTransform AUOUFloorPlatformActor::BuildPreviewMeshWorldTransform(float Alpha) c
 	return PlatformMesh->GetRelativeTransform() * PreviewActorTransform;
 }
 
+bool AUOUFloorPlatformActor::ShouldUseTargetMarkerTransform() const
+{
+	return bUseTargetMarkerTransform && IsValid(TargetMarkerActor);
+}
+
+void AUOUFloorPlatformActor::SyncTargetMarkerPreview()
+{
+	if (!ShouldUseTargetMarkerTransform())
+	{
+		return;
+	}
+
+	TargetMarkerActor->SyncPreviewFromMesh(PlatformMesh);
+}
+
 void AUOUFloorPlatformActor::UpdateEditorPreviewVisuals()
 {
+	const bool bUsesTargetMarker = ShouldUseTargetMarkerTransform();
+	SyncTargetMarkerPreview();
+
+	if (RotationPivot != nullptr)
+	{
+		RotationPivot->SetVisibility(!bUsesTargetMarker, true);
+	}
+
 	if (RotationPivotMarker != nullptr)
 	{
-		RotationPivotMarker->SetVisibility(bUseTargetRotation, true);
+		RotationPivotMarker->SetVisibility(bUseTargetRotation && !bUsesTargetMarker, true);
 	}
 
 	if (MovePreviewArrow != nullptr)
 	{
-		const bool bHasMoveOffset = !TargetLocalOffset.IsNearlyZero();
-		MovePreviewArrow->SetVisibility(bShowMovePreviewArrow && bHasMoveOffset, true);
+		const FVector StartWorldLocation = StartTransform.GetLocation();
+		const FVector TargetWorldLocation = bUsesTargetMarker
+			? TargetMarkerActor->GetActorLocation()
+			: StartTransform.GetLocation() + StartTransform.TransformVectorNoScale(TargetLocalOffset);
+		const FVector MoveOffsetWorld = TargetWorldLocation - StartWorldLocation;
+		const bool bHasMoveOffset = !MoveOffsetWorld.IsNearlyZero();
 
+		MovePreviewArrow->SetVisibility(bShowMovePreviewArrow && bHasMoveOffset, true);
 		if (bHasMoveOffset)
 		{
-			constexpr float PreviewArrowLength = 160.0f;
-			const FVector MoveDirection = TargetLocalOffset.GetSafeNormal();
+			const FVector MoveDirection = MoveOffsetWorld.GetSafeNormal();
 
-			// 긴 막대가 아니라 목표 끝점을 찍는 짧은 화살표로 보여줍니다.
-			MovePreviewArrow->SetRelativeLocation(TargetLocalOffset - MoveDirection * PreviewArrowLength);
-			MovePreviewArrow->SetRelativeRotation(MoveDirection.Rotation());
-			MovePreviewArrow->SetArrowLength(PreviewArrowLength);
+			// 플랫폼의 시작점과 목표 지점을 하나의 화살표로 이어서 이동 경로를 보여줍니다.
+			MovePreviewArrow->SetWorldLocation(StartWorldLocation);
+			MovePreviewArrow->SetWorldRotation(MoveDirection.Rotation());
+			MovePreviewArrow->SetArrowLength(MoveOffsetWorld.Size());
 		}
 	}
 
@@ -614,7 +724,8 @@ void AUOUFloorPlatformActor::UpdateEditorPreviewVisuals()
 	}
 
 	const bool bHasPreviewMesh = PlatformMesh != nullptr && PlatformMesh->GetStaticMesh() != nullptr;
-	const bool bShouldShowPreview = bShowTransformPreview && bHasPreviewMesh;
+	// 목표 마커 액터를 쓰는 동안에는 목표 마커 쪽 미리보기만 남겨서 중복 표시를 피합니다.
+	const bool bShouldShowPreview = bShowTransformPreview && bHasPreviewMesh && !bUsesTargetMarker;
 	TransformPreviewMesh->SetVisibility(bShouldShowPreview, true);
 
 	if (!bShouldShowPreview)
