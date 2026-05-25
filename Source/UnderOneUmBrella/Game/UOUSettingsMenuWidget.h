@@ -9,6 +9,7 @@
 
 class AUOUMenuPlayerController;
 class UUOUAudioSubsystem;
+class USlider;
 
 // 설정창 BP가 호출할 얇은 연결용 위젯 클래스입니다.
 // 실제 메뉴 상태와 레벨 이동은 Owning Player의 PlayerController가 담당합니다.
@@ -45,8 +46,51 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Settings|Audio", meta = (DisplayName = "오디오 설정 저장"))
 	void SaveAudioSettings();
 
+protected:
+	virtual void NativeConstruct() override;
+	virtual void NativeDestruct() override;
+
 private:
 	// 위젯은 상태를 직접 들고 있지 않고 메뉴 컨트롤러로 위임합니다.
 	AUOUMenuPlayerController* GetMenuPlayerController() const;
 	UUOUAudioSubsystem* GetAudioSubsystem() const;
+
+	void BindAudioSliders();
+	void InitializeAudioSliderValues();
+	void ConfigureAudioSlider(USlider* Slider) const;
+	void SetAudioSliderValue(USlider* Slider, EUOUAudioCategory Category);
+	void HandleAudioSliderChanged(EUOUAudioCategory Category, float Value);
+
+	UFUNCTION()
+	void HandleMasterVolumeChanged(float Value);
+
+	UFUNCTION()
+	void HandleBGMVolumeChanged(float Value);
+
+	UFUNCTION()
+	void HandleSFXVolumeChanged(float Value);
+
+	UFUNCTION()
+	void HandleUIVolumeChanged(float Value);
+
+	UFUNCTION()
+	void HandleAmbienceVolumeChanged(float Value);
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<USlider> MasterVolumeSlider = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<USlider> BGMVolumeSlider = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<USlider> SFXVolumeSlider = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<USlider> UIVolumeSlider = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<USlider> AmbienceVolumeSlider = nullptr;
+
+	bool bUpdatingAudioSliderValues = false;
+	bool bAudioVolumeDirty = false;
 };
