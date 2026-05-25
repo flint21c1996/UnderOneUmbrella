@@ -25,14 +25,20 @@ struct FUOUAudioEventDefinition
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Audio", meta = (ToolTip = "재생 방식입니다. BGM은 기존 배경음을 페이드로 교체하고, 2D 재생은 위치와 거리감 없이 들리며, 위치 재생은 월드 좌표에서 거리감 있게 재생합니다."))
 	EUOUAudioPlaybackMode PlaybackMode = EUOUAudioPlaybackMode::AtLocation;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Audio", meta = (EditCondition = "PlaybackMode != EUOUAudioPlaybackMode::BGM", ToolTip = "켜져 있으면 AudioComponent를 보관해 중복 재생을 막고 나중에 정지할 수 있습니다. 실제 반복은 Sound Cue, MetaSound, Sound Wave의 루프 설정이 담당합니다."))
+	bool bManagedLoop = false;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Audio", meta = (ClampMin = "0.0", ToolTip = "이 이벤트 자체의 볼륨 배율입니다. 최종 볼륨은 저장된 카테고리 볼륨과 이 값을 곱해서 계산합니다."))
 	float VolumeMultiplier = 1.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Audio", meta = (ClampMin = "0.0", ToolTip = "재생 속도와 음높이 배율입니다. 1.0은 원본 그대로, 0.8은 낮고 느리게, 1.2는 높고 빠르게 재생합니다."))
 	float PitchMultiplier = 1.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Audio", meta = (ClampMin = "0.0", EditCondition = "PlaybackMode == EUOUAudioPlaybackMode::BGM", EditConditionHides, ToolTip = "BGM 재생 방식에서만 사용하는 페이드 시간입니다. 새 배경음이 이 시간 동안 서서히 들어옵니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Audio", meta = (ClampMin = "0.0", EditCondition = "PlaybackMode == EUOUAudioPlaybackMode::BGM || bManagedLoop", EditConditionHides, ToolTip = "BGM이나 관리형 루프 사운드가 시작될 때 서서히 들어오는 시간입니다."))
 	float FadeTime = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Audio", meta = (ClampMin = "0.0", EditCondition = "bManagedLoop", EditConditionHides, ToolTip = "관리형 루프 사운드를 정지할 때 서서히 줄어드는 시간입니다."))
+	float FadeOutTime = 1.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Audio", meta = (ClampMin = "0.0", ToolTip = "사운드를 처음부터 재생하지 않고 이 초 위치부터 시작합니다. 대부분의 효과음은 0으로 둡니다."))
 	float StartTime = 0.0f;

@@ -8,6 +8,7 @@
 #include "Sound/SoundBase.h"
 #include "Sound/SoundClass.h"
 #include "Sound/SoundMix.h"
+#include "TimerManager.h"
 
 DEFINE_LOG_CATEGORY(LogUOUAudio);
 
@@ -27,6 +28,7 @@ void UUOUAudioSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 
 void UUOUAudioSubsystem::Deinitialize()
 {
+	StopAllManagedAudioEvents(0.0f);
 	StopBGM(0.0f);
 	SaveAudioSettings();
 
@@ -40,15 +42,24 @@ void UUOUAudioSubsystem::Deinitialize()
 
 void UUOUAudioSubsystem::PlayBGM(USoundBase* Sound, float FadeTime, float StartTime, float VolumeMultiplier, float PitchMultiplier)
 {
+	PlayBGMInternal(NAME_None, Sound, FadeTime, StartTime, VolumeMultiplier, PitchMultiplier);
+}
+
+void UUOUAudioSubsystem::PlayBGMInternal(FName EventId, USoundBase* Sound, float FadeTime, float StartTime, float VolumeMultiplier, float PitchMultiplier)
+{
 	if (Sound == nullptr)
 	{
 		UE_LOG(LogUOUAudio, Warning, TEXT("PlayBGM failed because Sound is null."));
 		return;
 	}
 
-	if (IsValid(CurrentBGMComponent) && CurrentBGMSound == Sound && CurrentBGMComponent->IsPlaying())
+	if (IsValid(CurrentBGMComponent)
+		&& CurrentBGMComponent->IsPlaying()
+		&& ((EventId != NAME_None && CurrentBGMEventId == EventId) || CurrentBGMSound == Sound))
 	{
+		CurrentBGMEventId = EventId;
 		CurrentBGMVolumeMultiplier = VolumeMultiplier;
+		CurrentBGMComponent->SetPitchMultiplier(PitchMultiplier);
 		UpdateCurrentBGMVolume();
 		return;
 	}
@@ -67,6 +78,7 @@ void UUOUAudioSubsystem::PlayBGM(USoundBase* Sound, float FadeTime, float StartT
 	}
 
 	CurrentBGMSound = Sound;
+	CurrentBGMEventId = EventId;
 	CurrentBGMVolumeMultiplier = VolumeMultiplier;
 
 	if (ClampedFadeTime > 0.0f)
@@ -81,6 +93,7 @@ void UUOUAudioSubsystem::StopBGM(float FadeTime)
 	{
 		CurrentBGMComponent = nullptr;
 		CurrentBGMSound = nullptr;
+		CurrentBGMEventId = NAME_None;
 		return;
 	}
 
@@ -96,6 +109,7 @@ void UUOUAudioSubsystem::StopBGM(float FadeTime)
 
 	CurrentBGMComponent = nullptr;
 	CurrentBGMSound = nullptr;
+	CurrentBGMEventId = NAME_None;
 }
 
 bool UUOUAudioSubsystem::IsBGMPlaying() const
@@ -143,6 +157,11 @@ void UUOUAudioSubsystem::SetAudioData(UUOUAudioDataAsset* InAudioData)
 
 bool UUOUAudioSubsystem::PlayAudioEvent(FName EventId, FVector Location)
 {
+	return PlayAudioEventInstance(EventId, NAME_None, Location);
+}
+
+bool UUOUAudioSubsystem::PlayAudioEventInstance(FName EventId, FName InstanceId, FVector Location)
+{
 	FUOUAudioEventDefinition AudioEvent;
 	UUOUAudioDataAsset* AudioData = GetAudioData();
 	if (AudioData == nullptr)
@@ -156,7 +175,7 @@ bool UUOUAudioSubsystem::PlayAudioEvent(FName EventId, FVector Location)
 		return false;
 	}
 
-	return PlayAudioEventDefinition(AudioEvent, Location, false);
+	return PlayAudioEventDefinition(AudioEvent, Location, false, InstanceId);
 }
 
 bool UUOUAudioSubsystem::PlayAudioEventAtLocation(FName EventId, FVector Location)
@@ -179,7 +198,121 @@ bool UUOUAudioSubsystem::PlayAudioEvent2D(FName EventId)
 		return false;
 	}
 
-	return PlayAudioEventDefinition(AudioEvent, FVector::ZeroVector, true);
+	return PlayAudioEventDefinition(AudioEvent, FVector::ZeroVector, true, NAME_None);
+}
+
+bool UUOUAudioSubsystem::StopAudioEvent(FName EventId, FName InstanceId, float OverrideFadeOutTime)
+{
+	if (EventId.IsNone())
+	{
+		return false;
+	}
+
+	float ResolvedFadeOutTime = OverrideFadeOutTime;
+	if (ResolvedFadeOutTime < 0.0f)
+	{
+		FUOUAudioEventDefinition AudioEvent;
+		UUOUAudioDataAsset* AudioData = GetAudioData();
+		if (AudioData != nullptr && AudioData->TryGetAudioEvent(EventId, AudioEvent))
+		{
+			ResolvedFadeOutTime = AudioEvent.PlaybackMode == EUOUAudioPlaybackMode::BGM
+				? AudioEvent.FadeTime
+				: AudioEvent.FadeOutTime;
+		}
+	}
+
+	if (CurrentBGMEventId == EventId && IsBGMPlaying())
+	{
+		StopBGM(FMath::Max(0.0f, ResolvedFadeOutTime));
+		return true;
+	}
+
+	const FName ManagedAudioKey = BuildManagedAudioKey(EventId, InstanceId);
+	UAudioComponent* AudioComponent = ManagedAudioComponents.FindRef(ManagedAudioKey);
+	if (!IsValid(AudioComponent))
+	{
+		ManagedAudioComponents.Remove(ManagedAudioKey);
+		ManagedAudioCategories.Remove(ManagedAudioKey);
+		ManagedAudioVolumeMultipliers.Remove(ManagedAudioKey);
+		ManagedAudioFadeOutTimes.Remove(ManagedAudioKey);
+		return false;
+	}
+
+	const float* DefaultFadeOutTime = ManagedAudioFadeOutTimes.Find(ManagedAudioKey);
+	const float FadeOutTime = ResolvedFadeOutTime >= 0.0f
+		? ResolvedFadeOutTime
+		: (DefaultFadeOutTime != nullptr ? *DefaultFadeOutTime : 0.0f);
+
+	if (FadeOutTime > 0.0f)
+	{
+		AudioComponent->FadeOut(FadeOutTime, 0.0f);
+
+		if (UWorld* World = GetWorld())
+		{
+			FTimerDelegate CleanupDelegate = FTimerDelegate::CreateUObject(
+				this,
+				&UUOUAudioSubsystem::FinishManagedAudioStop,
+				ManagedAudioKey,
+				AudioComponent);
+
+			FTimerHandle CleanupTimerHandle;
+			World->GetTimerManager().SetTimer(CleanupTimerHandle, CleanupDelegate, FadeOutTime + 0.05f, false);
+		}
+		else
+		{
+			FinishManagedAudioStop(ManagedAudioKey, AudioComponent);
+		}
+	}
+	else
+	{
+		AudioComponent->Stop();
+		FinishManagedAudioStop(ManagedAudioKey, AudioComponent);
+	}
+
+	return true;
+}
+
+void UUOUAudioSubsystem::StopAllManagedAudioEvents(float FadeOutTime)
+{
+	TArray<FName> ManagedAudioKeys;
+	ManagedAudioComponents.GetKeys(ManagedAudioKeys);
+
+	for (const FName ManagedAudioKey : ManagedAudioKeys)
+	{
+		UAudioComponent* AudioComponent = ManagedAudioComponents.FindRef(ManagedAudioKey);
+		if (!IsValid(AudioComponent))
+		{
+			FinishManagedAudioStop(ManagedAudioKey, AudioComponent);
+			continue;
+		}
+
+		const float ClampedFadeOutTime = FMath::Max(0.0f, FadeOutTime);
+		if (ClampedFadeOutTime > 0.0f)
+		{
+			AudioComponent->FadeOut(ClampedFadeOutTime, 0.0f);
+
+			if (UWorld* World = GetWorld())
+			{
+				FTimerDelegate CleanupDelegate = FTimerDelegate::CreateUObject(
+					this,
+					&UUOUAudioSubsystem::FinishManagedAudioStop,
+					ManagedAudioKey,
+					AudioComponent);
+
+				FTimerHandle CleanupTimerHandle;
+				World->GetTimerManager().SetTimer(CleanupTimerHandle, CleanupDelegate, ClampedFadeOutTime + 0.05f, false);
+			}
+			else
+			{
+				FinishManagedAudioStop(ManagedAudioKey, AudioComponent);
+			}
+		}
+		else
+		{
+			AudioComponent->Stop();
+			FinishManagedAudioStop(ManagedAudioKey, AudioComponent);
+		}
+	}
 }
 
 bool UUOUAudioSubsystem::HasAudioEvent(FName EventId)
@@ -208,6 +341,8 @@ void UUOUAudioSubsystem::SetCategoryVolume(EUOUAudioCategory Category, float Vol
 		ApplyCategoryVolume(Category, DefaultVolumeApplyFadeTime);
 		UpdateCurrentBGMVolume();
 	}
+
+	UpdateManagedAudioVolumes();
 
 	if (bSaveImmediately)
 	{
@@ -334,7 +469,25 @@ void UUOUAudioSubsystem::UpdateCurrentBGMVolume()
 	}
 }
 
-bool UUOUAudioSubsystem::PlayAudioEventDefinition(const FUOUAudioEventDefinition& AudioEvent, FVector Location, bool bForceTwoDimensional)
+void UUOUAudioSubsystem::UpdateManagedAudioVolumes()
+{
+	for (const TPair<FName, TObjectPtr<UAudioComponent>>& ManagedAudioPair : ManagedAudioComponents)
+	{
+		UAudioComponent* AudioComponent = ManagedAudioPair.Value;
+		if (!IsValid(AudioComponent))
+		{
+			continue;
+		}
+
+		const EUOUAudioCategory* Category = ManagedAudioCategories.Find(ManagedAudioPair.Key);
+		const float* VolumeMultiplier = ManagedAudioVolumeMultipliers.Find(ManagedAudioPair.Key);
+		AudioComponent->SetVolumeMultiplier(GetManagedPlaybackVolume(
+			Category != nullptr ? *Category : EUOUAudioCategory::Ambience,
+			VolumeMultiplier != nullptr ? *VolumeMultiplier : 1.0f));
+	}
+}
+
+bool UUOUAudioSubsystem::PlayAudioEventDefinition(const FUOUAudioEventDefinition& AudioEvent, FVector Location, bool bForceTwoDimensional, FName InstanceId)
 {
 	USoundBase* Sound = AudioEvent.Sound.IsNull() ? nullptr : AudioEvent.Sound.LoadSynchronous();
 	if (Sound == nullptr)
@@ -345,13 +498,19 @@ bool UUOUAudioSubsystem::PlayAudioEventDefinition(const FUOUAudioEventDefinition
 
 	if (!bForceTwoDimensional && AudioEvent.PlaybackMode == EUOUAudioPlaybackMode::BGM)
 	{
-		PlayBGM(
+		PlayBGMInternal(
+			AudioEvent.EventId,
 			Sound,
 			AudioEvent.FadeTime,
 			AudioEvent.StartTime,
 			AudioEvent.VolumeMultiplier,
 			AudioEvent.PitchMultiplier);
 		return true;
+	}
+
+	if (AudioEvent.bManagedLoop)
+	{
+		return PlayManagedAudioEventDefinition(AudioEvent, Sound, Location, bForceTwoDimensional, InstanceId);
 	}
 
 	const float Volume = GetManagedPlaybackVolume(AudioEvent.Category, AudioEvent.VolumeMultiplier);
@@ -365,11 +524,124 @@ bool UUOUAudioSubsystem::PlayAudioEventDefinition(const FUOUAudioEventDefinition
 	return true;
 }
 
+bool UUOUAudioSubsystem::PlayManagedAudioEventDefinition(const FUOUAudioEventDefinition& AudioEvent, USoundBase* Sound, FVector Location, bool bForceTwoDimensional, FName InstanceId)
+{
+	const FName ManagedAudioKey = BuildManagedAudioKey(AudioEvent.EventId, InstanceId);
+	if (ManagedAudioKey.IsNone())
+	{
+		return false;
+	}
+
+	const float TargetVolume = GetManagedPlaybackVolume(AudioEvent.Category, AudioEvent.VolumeMultiplier);
+	UAudioComponent* ExistingAudioComponent = ManagedAudioComponents.FindRef(ManagedAudioKey);
+	if (IsValid(ExistingAudioComponent))
+	{
+		if (AudioEvent.PlaybackMode == EUOUAudioPlaybackMode::AtLocation && !bForceTwoDimensional)
+		{
+			ExistingAudioComponent->SetWorldLocation(Location);
+		}
+
+		ExistingAudioComponent->SetVolumeMultiplier(TargetVolume);
+		ExistingAudioComponent->SetPitchMultiplier(AudioEvent.PitchMultiplier);
+
+		if (!ExistingAudioComponent->IsPlaying())
+		{
+			ExistingAudioComponent->Play(AudioEvent.StartTime);
+		}
+
+		ManagedAudioCategories.Add(ManagedAudioKey, AudioEvent.Category);
+		ManagedAudioVolumeMultipliers.Add(ManagedAudioKey, AudioEvent.VolumeMultiplier);
+		ManagedAudioFadeOutTimes.Add(ManagedAudioKey, FMath::Max(0.0f, AudioEvent.FadeOutTime));
+		return true;
+	}
+
+	const float InitialVolume = AudioEvent.FadeTime > 0.0f ? 0.0f : TargetVolume;
+	UAudioComponent* NewAudioComponent = nullptr;
+	if (bForceTwoDimensional || AudioEvent.PlaybackMode == EUOUAudioPlaybackMode::TwoDimensional)
+	{
+		NewAudioComponent = UGameplayStatics::SpawnSound2D(
+			this,
+			Sound,
+			InitialVolume,
+			AudioEvent.PitchMultiplier,
+			AudioEvent.StartTime,
+			nullptr,
+			true,
+			false);
+	}
+	else
+	{
+		NewAudioComponent = UGameplayStatics::SpawnSoundAtLocation(
+			this,
+			Sound,
+			Location,
+			FRotator::ZeroRotator,
+			InitialVolume,
+			AudioEvent.PitchMultiplier,
+			AudioEvent.StartTime,
+			nullptr,
+			nullptr,
+			false);
+	}
+
+	if (!IsValid(NewAudioComponent))
+	{
+		return false;
+	}
+
+	ManagedAudioComponents.Add(ManagedAudioKey, NewAudioComponent);
+	ManagedAudioCategories.Add(ManagedAudioKey, AudioEvent.Category);
+	ManagedAudioVolumeMultipliers.Add(ManagedAudioKey, AudioEvent.VolumeMultiplier);
+	ManagedAudioFadeOutTimes.Add(ManagedAudioKey, FMath::Max(0.0f, AudioEvent.FadeOutTime));
+
+	if (AudioEvent.FadeTime > 0.0f)
+	{
+		NewAudioComponent->FadeIn(AudioEvent.FadeTime, TargetVolume, AudioEvent.StartTime);
+	}
+
+	return true;
+}
+
+void UUOUAudioSubsystem::FinishManagedAudioStop(FName ManagedAudioKey, UAudioComponent* AudioComponent)
+{
+	UAudioComponent* CurrentAudioComponent = ManagedAudioComponents.FindRef(ManagedAudioKey);
+	if (CurrentAudioComponent != AudioComponent)
+	{
+		return;
+	}
+
+	if (IsValid(AudioComponent))
+	{
+		AudioComponent->Stop();
+		AudioComponent->DestroyComponent();
+	}
+
+	ManagedAudioComponents.Remove(ManagedAudioKey);
+	ManagedAudioCategories.Remove(ManagedAudioKey);
+	ManagedAudioVolumeMultipliers.Remove(ManagedAudioKey);
+	ManagedAudioFadeOutTimes.Remove(ManagedAudioKey);
+}
+
 float UUOUAudioSubsystem::GetManagedPlaybackVolume(EUOUAudioCategory Category, float VolumeMultiplier) const
 {
 	return bApplyManagedPlaybackVolume
 		? VolumeMultiplier * GetEffectiveCategoryVolume(Category)
 		: VolumeMultiplier;
+}
+
+FName UUOUAudioSubsystem::BuildManagedAudioKey(FName EventId, FName InstanceId) const
+{
+	if (EventId.IsNone())
+	{
+		return NAME_None;
+	}
+
+	if (InstanceId.IsNone())
+	{
+		return EventId;
+	}
+
+	return FName(FString::Printf(TEXT("%s::%s"), *EventId.ToString(), *InstanceId.ToString()));
 }
 
 UUOUAudioDataAsset* UUOUAudioSubsystem::GetAudioData()

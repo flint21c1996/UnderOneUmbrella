@@ -35,6 +35,9 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Audio|BGM", meta = (DisplayName = "배경음 재생 중"))
 	bool IsBGMPlaying() const;
 
+	UFUNCTION(BlueprintPure, Category = "Audio|BGM", meta = (DisplayName = "현재 배경음 이벤트 ID"))
+	FName GetCurrentBGMEventId() const { return CurrentBGMEventId; }
+
 	UFUNCTION(BlueprintCallable, Category = "Audio|Playback", meta = (DisplayName = "UI 사운드 재생"))
 	void PlayUISound(USoundBase* Sound, float VolumeMultiplier = 1.0f, float PitchMultiplier = 1.0f);
 
@@ -50,11 +53,20 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Audio|Events", meta = (DisplayName = "오디오 이벤트 재생"))
 	bool PlayAudioEvent(FName EventId, FVector Location = FVector::ZeroVector);
 
+	UFUNCTION(BlueprintCallable, Category = "Audio|Events", meta = (DisplayName = "오디오 이벤트 인스턴스 재생"))
+	bool PlayAudioEventInstance(FName EventId, FName InstanceId, FVector Location = FVector::ZeroVector);
+
 	UFUNCTION(BlueprintCallable, Category = "Audio|Events", meta = (DisplayName = "위치 오디오 이벤트 재생"))
 	bool PlayAudioEventAtLocation(FName EventId, FVector Location);
 
 	UFUNCTION(BlueprintCallable, Category = "Audio|Events", meta = (DisplayName = "2D 오디오 이벤트 재생"))
 	bool PlayAudioEvent2D(FName EventId);
+
+	UFUNCTION(BlueprintCallable, Category = "Audio|Events", meta = (DisplayName = "오디오 이벤트 정지"))
+	bool StopAudioEvent(FName EventId, FName InstanceId = NAME_None, float OverrideFadeOutTime = -1.0f);
+
+	UFUNCTION(BlueprintCallable, Category = "Audio|Events", meta = (DisplayName = "관리 중인 오디오 이벤트 모두 정지"))
+	void StopAllManagedAudioEvents(float FadeOutTime = 0.0f);
 
 	UFUNCTION(BlueprintPure, Category = "Audio|Events", meta = (DisplayName = "오디오 이벤트 존재 여부"))
 	bool HasAudioEvent(FName EventId);
@@ -77,11 +89,16 @@ public:
 private:
 	UUOUAudioSettingsSaveGame* CreateDefaultAudioSettings() const;
 	void LoadAudioSettings();
+	void PlayBGMInternal(FName EventId, USoundBase* Sound, float FadeTime, float StartTime, float VolumeMultiplier, float PitchMultiplier);
 	void ApplyAllCategoryVolumes(float FadeTime);
 	void ApplyCategoryVolume(EUOUAudioCategory Category, float FadeTime);
 	void UpdateCurrentBGMVolume();
-	bool PlayAudioEventDefinition(const FUOUAudioEventDefinition& AudioEvent, FVector Location, bool bForceTwoDimensional);
+	void UpdateManagedAudioVolumes();
+	bool PlayAudioEventDefinition(const FUOUAudioEventDefinition& AudioEvent, FVector Location, bool bForceTwoDimensional, FName InstanceId);
+	bool PlayManagedAudioEventDefinition(const FUOUAudioEventDefinition& AudioEvent, USoundBase* Sound, FVector Location, bool bForceTwoDimensional, FName InstanceId);
+	void FinishManagedAudioStop(FName ManagedAudioKey, UAudioComponent* AudioComponent);
 	float GetManagedPlaybackVolume(EUOUAudioCategory Category, float VolumeMultiplier) const;
+	FName BuildManagedAudioKey(FName EventId, FName InstanceId) const;
 	UUOUAudioDataAsset* GetAudioData();
 	USoundMix* GetDefaultSoundMix();
 	USoundClass* GetSoundClassForCategory(EUOUAudioCategory Category);
@@ -129,6 +146,20 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<USoundBase> CurrentBGMSound;
+
+	UPROPERTY(Transient)
+	TMap<FName, TObjectPtr<UAudioComponent>> ManagedAudioComponents;
+
+	UPROPERTY(Transient)
+	TMap<FName, EUOUAudioCategory> ManagedAudioCategories;
+
+	UPROPERTY(Transient)
+	TMap<FName, float> ManagedAudioVolumeMultipliers;
+
+	UPROPERTY(Transient)
+	TMap<FName, float> ManagedAudioFadeOutTimes;
+
+	FName CurrentBGMEventId = NAME_None;
 
 	float CurrentBGMVolumeMultiplier = 1.0f;
 };

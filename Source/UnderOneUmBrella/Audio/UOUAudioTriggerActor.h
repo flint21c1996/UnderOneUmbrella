@@ -26,6 +26,7 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void OnConstruction(const FTransform& Transform) override;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Audio")
@@ -37,11 +38,20 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Audio", meta = (ToolTip = "오디오 DataAsset에 등록된 이벤트 ID입니다. 예: BGM.InGame, Ambience.Campfire"))
 	FName AudioEventId = NAME_None;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Audio", meta = (ToolTip = "관리형 루프 사운드를 구분하는 인스턴스 ID입니다. 비워두면 이 액터 이름을 사용합니다. 같은 환경음을 여러 곳에 배치할 때 중복 정지를 막는 용도입니다."))
+	FName AudioInstanceId = NAME_None;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Audio", meta = (ToolTip = "BeginPlay에서 자동으로 오디오 이벤트를 재생합니다. 맵 시작 BGM이나 항상 켜지는 환경음에 사용합니다."))
 	bool bPlayOnBeginPlay = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Audio", meta = (ToolTip = "액터가 트리거 볼륨에 들어왔을 때 오디오 이벤트를 재생합니다."))
 	bool bPlayOnActorEnter = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Audio", meta = (ToolTip = "액터가 트리거 볼륨에서 나갔을 때 같은 오디오 이벤트를 정지합니다. 관리형 루프 환경음에 사용합니다."))
+	bool bStopOnActorExit = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Audio", meta = (ToolTip = "이 트리거 액터가 제거될 때 관리 중인 오디오 이벤트를 정지합니다. 레벨 전환 시 환경음이 남지 않게 하는 용도입니다."))
+	bool bStopOnEndPlay = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Audio", meta = (ToolTip = "켜져 있으면 플레이어가 조종 중인 Pawn만 트리거를 발동합니다."))
 	bool bPlayerOnly = true;
@@ -61,9 +71,17 @@ protected:
 		bool bFromSweep,
 		const FHitResult& SweepResult);
 
+	UFUNCTION()
+	void HandleTriggerEndOverlap(
+		UPrimitiveComponent* OverlappedComponent,
+		AActor* OtherActor,
+		UPrimitiveComponent* OtherComp,
+		int32 OtherBodyIndex);
+
 private:
 	void ApplyTriggerSettings();
 	bool ShouldAcceptTriggerActor(const AActor* OtherActor) const;
+	FName GetResolvedAudioInstanceId() const;
 
 	bool bHasPlayed = false;
 };
