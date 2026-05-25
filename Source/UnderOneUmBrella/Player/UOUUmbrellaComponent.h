@@ -97,6 +97,18 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Input", meta = (ClampMin = "0.0"))
 	float DebugFillAmount = 1.0f;
 
+	// 우산을 새로 획득했을 때 재생할 오디오 이벤트 ID입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Audio", meta = (ToolTip = "오디오 DataAsset에 등록된 이벤트 ID입니다."))
+	FName AcquireAudioEventId = TEXT("Umbrella.Acquire");
+
+	// 우산을 펼쳤을 때 재생할 오디오 이벤트 ID입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Audio", meta = (ToolTip = "오디오 DataAsset에 등록된 이벤트 ID입니다."))
+	FName OpenAudioEventId = TEXT("Umbrella.Open");
+
+	// 우산을 접었을 때 재생할 오디오 이벤트 ID입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Audio", meta = (ToolTip = "오디오 DataAsset에 등록된 이벤트 ID입니다."))
+	FName CloseAudioEventId = TEXT("Umbrella.Close");
+
 	// 우산을 캐릭터에 붙일 기준 위치입니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|References")
 	TObjectPtr<USceneComponent> PickupAttachPoint = nullptr;
@@ -390,6 +402,9 @@ protected:
 
 	// 현재 상태와 보유 여부에 맞게 우산 비주얼 표시를 맞춥니다.
 	void RefreshVisuals();
+
+	// 우산 관련 오디오 이벤트를 플레이어 위치에서 재생합니다.
+	void PlayUmbrellaAudioEvent(FName AudioEventId) const;
 
 	// 블루프린트에서 비워둔 참조를 이름이나 컴포넌트 타입으로 자동 보완합니다.
 	void ResolveReferences();
