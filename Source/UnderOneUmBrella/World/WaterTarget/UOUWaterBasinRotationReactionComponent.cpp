@@ -190,7 +190,7 @@ const USceneComponent* UUOUWaterBasinRotationReactionComponent::ResolveInputDire
 		return FoundComponent;
 	}
 
-	return bUseRotationTargetAsInputDirectionReferenceWhenMissing && IsValid(TargetComponent) ? TargetComponent : nullptr;
+	return IsValid(TargetComponent) ? TargetComponent : nullptr;
 }
 
 USceneComponent* UUOUWaterBasinRotationReactionComponent::FindSceneComponentByNameOrTag(FName ComponentName) const
@@ -540,15 +540,11 @@ float UUOUWaterBasinRotationReactionComponent::ResolveInputDirectionSign(const F
 	const float SideSignValue = FVector::DotProduct(InputSideDirection, SideDirection);
 	if (FMath::Abs(SideSignValue) > DeadZone)
 	{
-		return ApplyInputDirectionSignInversion(FMath::Sign(SideSignValue));
+		const float SideSign = FMath::Sign(SideSignValue);
+		return bRightSideInputRotatesPositive ? SideSign : -SideSign;
 	}
 
 	return 0.0f;
-}
-
-float UUOUWaterBasinRotationReactionComponent::ApplyInputDirectionSignInversion(float DirectionSign) const
-{
-	return bInvertInputDirectionRotationSign ? -DirectionSign : DirectionSign;
 }
 
 FVector UUOUWaterBasinRotationReactionComponent::ResolveInputDirectionReferenceWorldDirection(const USceneComponent* ReferenceComponent) const
@@ -558,7 +554,7 @@ FVector UUOUWaterBasinRotationReactionComponent::ResolveInputDirectionReferenceW
 		return ReferenceComponent->GetForwardVector().GetSafeNormal();
 	}
 
-	return InputDirectionReferenceVector.GetSafeNormal();
+	return FVector::ZeroVector;
 }
 
 FVector UUOUWaterBasinRotationReactionComponent::ResolveInputDirectionSideWorldDirection(

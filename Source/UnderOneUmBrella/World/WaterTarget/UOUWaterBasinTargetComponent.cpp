@@ -112,7 +112,7 @@ void UUOUWaterBasinTargetComponent::PostEditChangeProperty(FPropertyChangedEvent
 	{
 		CurrentWaterVolume = GetVolumeAtSurfaceWorldZ(WaterSurfaceWorldZ);
 	}
-	else if (ChangedPropertyName == GET_MEMBER_NAME_CHECKED(UUOUWaterBasinTargetComponent, InitialWaterVolume)
+	else if (ChangedPropertyName == GET_MEMBER_NAME_CHECKED(UUOUWaterBasinTargetComponent, InitialWaterVolume) 
 		|| ChangedPropertyName == GET_MEMBER_NAME_CHECKED(UUOUWaterBasinTargetComponent, CurrentWaterDepth)
 		|| ChangedPropertyName == GET_MEMBER_NAME_CHECKED(UUOUWaterBasinTargetComponent, CurrentFillRatio)
 		|| ChangedPropertyName == GET_MEMBER_NAME_CHECKED(UUOUWaterBasinTargetComponent, WaterSurfaceWorldZ))
