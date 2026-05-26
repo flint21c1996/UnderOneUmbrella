@@ -49,6 +49,42 @@ enum class EUOUWaterBasinPassiveDrainMode : uint8
 	SurfaceWorldZ UMETA(DisplayName = "Surface World Z", ToolTip = "초당 지정한 월드 Z 높이만큼 수면을 낮춥니다.")
 };
 
+UENUM(BlueprintType)
+enum class EUOUWaterBasinInputSource : uint8
+{
+	Unknown UMETA(DisplayName = "Unknown"),
+	PlayerPour UMETA(DisplayName = "Player Pour"),
+	Rain UMETA(DisplayName = "Rain"),
+	Script UMETA(DisplayName = "Script")
+};
+
+USTRUCT(BlueprintType)
+struct FUOUWaterBasinInputContext
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Input", meta = (ClampMin = "0.0"))
+	float Volume = 0.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Input", meta = (ClampMin = "0.0"))
+	float Duration = 0.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Input")
+	EUOUWaterBasinInputSource Source = EUOUWaterBasinInputSource::Unknown;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Input")
+	FVector WorldDirection = FVector::ZeroVector;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Input")
+	FVector WorldLocation = FVector::ZeroVector;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Input")
+	TObjectPtr<AActor> InstigatorActor = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Input")
+	bool bApplyToConnectedGroup = true;
+};
+
 // 런타임 디버그 표시 범위입니다.
 // 수치 디버그가 겹치지 않도록 특정 Target 또는 해당 Target이 포함된 그룹만 표시합니다.
 UENUM(BlueprintType)
@@ -90,7 +126,7 @@ struct FUOUWaterBasinGroupDebugData
 //수면의 정보가 바뀔때 발생할 이벤트
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FUOUWaterBasinTargetChangedSignature, UUOUWaterBasinTargetComponent*, Target);
 // 실제 수위 변화 여부와 무관하게 물 입력이 들어왔을 때 발생하는 이벤트입니다.
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FUOUWaterBasinWaterInputSignature, UUOUWaterBasinTargetComponent*, Target, float, InputVolume);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FUOUWaterBasinWaterInputSignature, UUOUWaterBasinTargetComponent*, Target, const FUOUWaterBasinInputContext&, InputContext);
 
 UCLASS(ClassGroup=(Puzzle), meta=(BlueprintSpawnableComponent))
 class UNDERONEUMBRELLA_API UUOUWaterBasinTargetComponent : public UActorComponent
@@ -228,6 +264,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Water Basin")
 	void ReceivePouredWater(float Volume, float PourDuration, bool bApplyToConnectedGroup = true);
 
+	UFUNCTION(BlueprintCallable, Category = "Water Basin")
+	void ReceiveWaterInput(const FUOUWaterBasinInputContext& InputContext);
+
 	UFUNCTION(BlueprintCallable, Category = "Water Basin|Rain")
 	void SetRainFillReceivingEnabled(bool bEnabled);
 
@@ -358,7 +397,7 @@ private:
 	void BroadcastGroupChanged(const TArray<UUOUWaterBasinTargetComponent*>& Group);
 
 	// 실제 수위 변화 여부와 무관하게 물 입력이 들어왔음을 대상 범위에 알립니다.
-	void NotifyWaterInputReceived(float Volume, bool bApplyToConnectedGroup);
+	void NotifyWaterInputReceived(const FUOUWaterBasinInputContext& InputContext);
 
 	// CurrentWaterDepth를 기준으로 WaterVisual의 크기, 위치, 표시 상태를 갱신합니다.
 	void UpdateWaterVisual();
