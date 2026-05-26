@@ -2,6 +2,7 @@
 
 #include "Audio/UOUAudioTriggerActor.h"
 
+#include "Audio/UOUAudioCueComponent.h"
 #include "Audio/UOUAudioSubsystem.h"
 #include "Components/BoxComponent.h"
 #include "Components/SceneComponent.h"
@@ -23,6 +24,9 @@ AUOUAudioTriggerActor::AUOUAudioTriggerActor()
 	TriggerVolume->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
 	TriggerVolume->SetGenerateOverlapEvents(true);
 	TriggerVolume->SetBoxExtent(TriggerExtent);
+
+	AudioCueComponent = CreateDefaultSubobject<UUOUAudioCueComponent>(TEXT("AudioCueComponent"));
+	AudioCueComponent->SetupAttachment(RootScene);
 }
 
 void AUOUAudioTriggerActor::BeginPlay()
@@ -49,13 +53,7 @@ void AUOUAudioTriggerActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	if (bStopOnEndPlay)
 	{
-		UWorld* World = GetWorld();
-		UGameInstance* GameInstance = World != nullptr ? World->GetGameInstance() : nullptr;
-		UUOUAudioSubsystem* AudioSubsystem = GameInstance != nullptr ? GameInstance->GetSubsystem<UUOUAudioSubsystem>() : nullptr;
-		if (AudioSubsystem != nullptr)
-		{
-			AudioSubsystem->StopAudioEvent(AudioEventId, GetResolvedAudioInstanceId());
-		}
+		StopAudioEvent();
 	}
 
 	Super::EndPlay(EndPlayReason);
@@ -70,7 +68,7 @@ void AUOUAudioTriggerActor::OnConstruction(const FTransform& Transform)
 
 bool AUOUAudioTriggerActor::PlayAudioEvent()
 {
-	if (AudioEventId.IsNone())
+	if (AudioCueId.IsNone() && AudioEventId.IsNone())
 	{
 		return false;
 	}
@@ -80,15 +78,23 @@ bool AUOUAudioTriggerActor::PlayAudioEvent()
 		return false;
 	}
 
-	UWorld* World = GetWorld();
-	UGameInstance* GameInstance = World != nullptr ? World->GetGameInstance() : nullptr;
-	UUOUAudioSubsystem* AudioSubsystem = GameInstance != nullptr ? GameInstance->GetSubsystem<UUOUAudioSubsystem>() : nullptr;
-	if (AudioSubsystem == nullptr)
+	bool bPlayed = false;
+	const FName ResolvedAudioInstanceId = GetResolvedAudioInstanceId();
+	if (!AudioCueId.IsNone()
+		&& AudioCueComponent != nullptr
+		&& AudioCueComponent->HasCue(AudioCueId))
 	{
-		return false;
+		bPlayed = AudioCueComponent->PlayCueWithInstance(AudioCueId, ResolvedAudioInstanceId, GetActorLocation());
 	}
 
-	const bool bPlayed = AudioSubsystem->PlayAudioEventInstance(AudioEventId, GetResolvedAudioInstanceId(), GetActorLocation());
+	if (!bPlayed && !AudioEventId.IsNone())
+	{
+		if (UUOUAudioSubsystem* AudioSubsystem = GetAudioSubsystem())
+		{
+			bPlayed = AudioSubsystem->PlayAudioEventInstance(AudioEventId, ResolvedAudioInstanceId, GetActorLocation());
+		}
+	}
+
 	if (bPlayed)
 	{
 		bHasPlayed = true;
@@ -129,13 +135,7 @@ void AUOUAudioTriggerActor::HandleTriggerEndOverlap(
 		return;
 	}
 
-	UWorld* World = GetWorld();
-	UGameInstance* GameInstance = World != nullptr ? World->GetGameInstance() : nullptr;
-	UUOUAudioSubsystem* AudioSubsystem = GameInstance != nullptr ? GameInstance->GetSubsystem<UUOUAudioSubsystem>() : nullptr;
-	if (AudioSubsystem != nullptr)
-	{
-		AudioSubsystem->StopAudioEvent(AudioEventId, GetResolvedAudioInstanceId());
-	}
+	StopAudioEvent();
 }
 
 void AUOUAudioTriggerActor::ApplyTriggerSettings()
@@ -173,7 +173,36 @@ bool AUOUAudioTriggerActor::ShouldAcceptTriggerActor(const AActor* OtherActor) c
 	return Pawn != nullptr && Pawn->IsPlayerControlled();
 }
 
+bool AUOUAudioTriggerActor::StopAudioEvent(float OverrideFadeOutTime)
+{
+	bool bStopped = false;
+	const FName ResolvedAudioInstanceId = GetResolvedAudioInstanceId();
+	if (!AudioCueId.IsNone()
+		&& AudioCueComponent != nullptr
+		&& AudioCueComponent->HasCue(AudioCueId))
+	{
+		bStopped = AudioCueComponent->StopCueWithInstance(AudioCueId, ResolvedAudioInstanceId, OverrideFadeOutTime);
+	}
+
+	if (!bStopped && !AudioEventId.IsNone())
+	{
+		if (UUOUAudioSubsystem* AudioSubsystem = GetAudioSubsystem())
+		{
+			bStopped = AudioSubsystem->StopAudioEvent(AudioEventId, ResolvedAudioInstanceId, OverrideFadeOutTime);
+		}
+	}
+
+	return bStopped;
+}
+
 FName AUOUAudioTriggerActor::GetResolvedAudioInstanceId() const
 {
 	return AudioInstanceId.IsNone() ? GetFName() : AudioInstanceId;
+}
+
+UUOUAudioSubsystem* AUOUAudioTriggerActor::GetAudioSubsystem() const
+{
+	UWorld* World = GetWorld();
+	UGameInstance* GameInstance = World != nullptr ? World->GetGameInstance() : nullptr;
+	return GameInstance != nullptr ? GameInstance->GetSubsystem<UUOUAudioSubsystem>() : nullptr;
 }
