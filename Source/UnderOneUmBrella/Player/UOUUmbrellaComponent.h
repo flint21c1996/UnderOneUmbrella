@@ -14,6 +14,7 @@ class USceneComponent;
 class UStaticMesh;
 class UStaticMeshComponent;
 class UUOURainReceiverComponent;
+class UUOUAudioCueComponent;
 class UUOUWaterContainerComponent;
 
 // 우산이 현재 어떤 형태로 사용되는지 나타내는 상태입니다.
@@ -108,6 +109,18 @@ public:
 	// 우산을 접었을 때 재생할 오디오 이벤트 ID입니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Audio", meta = (ToolTip = "오디오 DataAsset에 등록된 이벤트 ID입니다."))
 	FName CloseAudioEventId = TEXT("Umbrella.Close");
+
+	// AudioCueComponent가 있을 때 우산 획득 상황에 사용할 Cue ID입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Audio", meta = (ToolTip = "Owner에 AudioCueComponent가 있으면 이 Cue를 먼저 재생합니다. 실패하면 AcquireAudioEventId를 fallback으로 사용합니다."))
+	FName AcquireAudioCueId = TEXT("Acquire");
+
+	// AudioCueComponent가 있을 때 우산 펼침 상황에 사용할 Cue ID입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Audio", meta = (ToolTip = "Owner에 AudioCueComponent가 있으면 이 Cue를 먼저 재생합니다. 실패하면 OpenAudioEventId를 fallback으로 사용합니다."))
+	FName OpenAudioCueId = TEXT("Open");
+
+	// AudioCueComponent가 있을 때 우산 접힘 상황에 사용할 Cue ID입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Audio", meta = (ToolTip = "Owner에 AudioCueComponent가 있으면 이 Cue를 먼저 재생합니다. 실패하면 CloseAudioEventId를 fallback으로 사용합니다."))
+	FName CloseAudioCueId = TEXT("Close");
 
 	// 우산을 캐릭터에 붙일 기준 위치입니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|References")
@@ -405,6 +418,15 @@ protected:
 
 	// 우산 관련 오디오 이벤트를 플레이어 위치에서 재생합니다.
 	void PlayUmbrellaAudioEvent(FName AudioEventId) const;
+
+	// AudioCueComponent가 있으면 Cue를 우선 재생하고, 없으면 기존 EventId를 재생합니다.
+	void PlayUmbrellaAudioCue(FName CueId, FName FallbackAudioEventId) const;
+
+	// Owner에 붙은 AudioCueComponent를 반환합니다.
+	UUOUAudioCueComponent* GetAudioCueComponent() const;
+
+	// 우산 오디오를 재생할 월드 위치를 반환합니다.
+	FVector GetUmbrellaAudioLocation() const;
 
 	// 블루프린트에서 비워둔 참조를 이름이나 컴포넌트 타입으로 자동 보완합니다.
 	void ResolveReferences();

@@ -9,6 +9,8 @@
 class UBoxComponent;
 class UPrimitiveComponent;
 class USceneComponent;
+class UUOUAudioCueComponent;
+class UUOUAudioSubsystem;
 
 UCLASS(meta=(DisplayName="UOU Audio Trigger Actor"))
 class UNDERONEUMBRELLA_API AUOUAudioTriggerActor : public AActor
@@ -35,7 +37,13 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Audio")
 	TObjectPtr<UBoxComponent> TriggerVolume = nullptr;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Audio", meta = (ToolTip = "오디오 DataAsset에 등록된 이벤트 ID입니다. 예: BGM.InGame, Ambience.Campfire"))
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Audio")
+	TObjectPtr<UUOUAudioCueComponent> AudioCueComponent = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Audio|Cue", meta = (ToolTip = "AudioCueComponent에 등록된 Cue ID입니다. 값이 있고 Cue를 찾을 수 있으면 이 경로를 먼저 사용합니다."))
+	FName AudioCueId = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Audio", meta = (ToolTip = "오디오 DataAsset에 등록된 이벤트 ID입니다. Cue 재생에 실패하거나 AudioCueId가 비어 있을 때 fallback으로 사용합니다. 예: BGM.InGame, Ambience.Campfire"))
 	FName AudioEventId = NAME_None;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Audio", meta = (ToolTip = "관리형 루프 사운드를 구분하는 인스턴스 ID입니다. 비워두면 이 액터 이름을 사용합니다. 같은 환경음을 여러 곳에 배치할 때 중복 정지를 막는 용도입니다."))
@@ -81,7 +89,9 @@ protected:
 private:
 	void ApplyTriggerSettings();
 	bool ShouldAcceptTriggerActor(const AActor* OtherActor) const;
+	bool StopAudioEvent(float OverrideFadeOutTime = -1.0f);
 	FName GetResolvedAudioInstanceId() const;
+	UUOUAudioSubsystem* GetAudioSubsystem() const;
 
 	bool bHasPlayed = false;
 };
