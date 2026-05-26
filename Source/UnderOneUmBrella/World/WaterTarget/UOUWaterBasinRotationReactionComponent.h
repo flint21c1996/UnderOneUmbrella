@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "World/WaterTarget/UOUWaterBasinReactionComponentBase.h"
+#include "World/WaterTarget/UOUWaterBasinTargetComponent.h"
 #include "UOUWaterBasinRotationReactionComponent.generated.h"
 
 class USceneComponent;
@@ -105,7 +106,7 @@ private:
 	TObjectPtr<UUOUWaterBasinTargetComponent> BoundInputWaterBasinTarget = nullptr;
 
 	UFUNCTION()
-	void HandleWaterInputReceived(UUOUWaterBasinTargetComponent* Target, float InputVolume);
+	void HandleWaterInputReceived(UUOUWaterBasinTargetComponent* Target, const FUOUWaterBasinInputContext& InputContext);
 
 	USceneComponent* ResolveRotationTargetComponent() const;
 	USceneComponent* FindRotationTargetComponent() const;

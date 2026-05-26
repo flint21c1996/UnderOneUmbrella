@@ -351,7 +351,15 @@ void AUOUUmbrellaRainArea::ApplyRainToWaterBasinTargets(float DeltaSeconds, bool
 			}
 		}
 
-		Target->ReceivePouredWater(RainAmount, RainAmount, true);
+		FUOUWaterBasinInputContext InputContext;
+		InputContext.Volume = RainAmount;
+		InputContext.Duration = RainAmount;
+		InputContext.Source = EUOUWaterBasinInputSource::Rain;
+		InputContext.WorldDirection = -RainVolume->GetUpVector();
+		InputContext.WorldLocation = TargetOwner->GetActorLocation();
+		InputContext.InstigatorActor = const_cast<AUOUUmbrellaRainArea*>(this);
+		InputContext.bApplyToConnectedGroup = true;
+		Target->ReceiveWaterInput(InputContext);
 	}
 }
 

@@ -112,11 +112,11 @@ void UUOUWaterBasinRotationReactionComponent::OnWaterBasinReactionStateUpdated_I
 	SetTargetRotationAngle(TargetAngleDegrees + (DeltaValue * DegreesPerValueUnit));
 }
 
-void UUOUWaterBasinRotationReactionComponent::HandleWaterInputReceived(UUOUWaterBasinTargetComponent* Target, float InputVolume)
+void UUOUWaterBasinRotationReactionComponent::HandleWaterInputReceived(UUOUWaterBasinTargetComponent* Target, const FUOUWaterBasinInputContext& InputContext)
 {
 	if (RotationMode != EUOUWaterBasinRotationReactionMode::IncrementalOnWaterInput
 		|| Target == nullptr
-		|| InputVolume <= 0.0f)
+		|| InputContext.Volume <= 0.0f)
 	{
 		return;
 	}
@@ -127,7 +127,7 @@ void UUOUWaterBasinRotationReactionComponent::HandleWaterInputReceived(UUOUWater
 		return;
 	}
 
-	SetTargetRotationAngle(TargetAngleDegrees + (InputVolume * DegreesPerInputVolume));
+	SetTargetRotationAngle(TargetAngleDegrees + (InputContext.Volume * DegreesPerInputVolume));
 }
 
 USceneComponent* UUOUWaterBasinRotationReactionComponent::ResolveRotationTargetComponent() const

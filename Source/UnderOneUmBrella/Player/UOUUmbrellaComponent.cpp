@@ -983,7 +983,7 @@ void UUOUUmbrellaComponent::UpdatePouring(float DeltaTime)
 					bLastPourTraceHit = true;
 
 					EUOUUmbrellaPourReceiverType ReceiverType = EUOUUmbrellaPourReceiverType::None;
-					bLastPourDeliveredWater = TryReceiveWaterAtHit(HitResult, PourAmount, EffectivePourDuration, ReceiverType);
+					bLastPourDeliveredWater = TryReceiveWaterAtHit(HitResult, PourAmount, EffectivePourDuration, TraceDirection, ReceiverType);
 					LastPourReceiverType = ReceiverType;
 					break;
 				}
@@ -1095,7 +1095,7 @@ bool UUOUUmbrellaComponent::TryGetPourDirection(FVector& PourOriginLocation, FVe
 }
 
 // 라인트레이스에 맞은 액터가 물을 받을 수 있는 타입이면 물을 전달하고 받은 대상 종류를 기록합니다.
-bool UUOUUmbrellaComponent::TryReceiveWaterAtHit(const FHitResult& HitResult, float WaterAmount, float PourDuration, EUOUUmbrellaPourReceiverType& OutReceiverType)
+bool UUOUUmbrellaComponent::TryReceiveWaterAtHit(const FHitResult& HitResult, float WaterAmount, float PourDuration, const FVector& PourDirection, EUOUUmbrellaPourReceiverType& OutReceiverType)
 {
 	OutReceiverType = EUOUUmbrellaPourReceiverType::None;
 
@@ -1128,7 +1128,15 @@ bool UUOUUmbrellaComponent::TryReceiveWaterAtHit(const FHitResult& HitResult, fl
 		// 물 조절 장치 쪽 타겟 컴포넌트도 우산 물 붓기를 받을 수 있게 처리합니다.
 		LastPourTargetName = HitActor->GetName();
 		OutReceiverType = EUOUUmbrellaPourReceiverType::WaterBasinTarget;
-		WaterBasinTarget->ReceivePouredWater(WaterAmount, PourDuration, true);
+		FUOUWaterBasinInputContext InputContext;
+		InputContext.Volume = WaterAmount;
+		InputContext.Duration = PourDuration;
+		InputContext.Source = EUOUWaterBasinInputSource::PlayerPour;
+		InputContext.WorldDirection = PourDirection;
+		InputContext.WorldLocation = HitResult.ImpactPoint;
+		InputContext.InstigatorActor = GetOwner();
+		InputContext.bApplyToConnectedGroup = true;
+		WaterBasinTarget->ReceiveWaterInput(InputContext);
 		return true;
 	}
 
@@ -1139,7 +1147,15 @@ bool UUOUUmbrellaComponent::TryReceiveWaterAtHit(const FHitResult& HitResult, fl
 			// 히트된 자식 액터 대신 부모가 물 조절 컴포넌트를 들고 있는 경우를 처리합니다.
 			LastPourTargetName = ParentActor->GetName();
 			OutReceiverType = EUOUUmbrellaPourReceiverType::WaterBasinTarget;
-			ParentWaterBasinTarget->ReceivePouredWater(WaterAmount, PourDuration, true);
+			FUOUWaterBasinInputContext InputContext;
+			InputContext.Volume = WaterAmount;
+			InputContext.Duration = PourDuration;
+			InputContext.Source = EUOUWaterBasinInputSource::PlayerPour;
+			InputContext.WorldDirection = PourDirection;
+			InputContext.WorldLocation = HitResult.ImpactPoint;
+			InputContext.InstigatorActor = GetOwner();
+			InputContext.bApplyToConnectedGroup = true;
+			ParentWaterBasinTarget->ReceiveWaterInput(InputContext);
 			return true;
 		}
 	}

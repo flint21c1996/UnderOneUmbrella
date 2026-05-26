@@ -434,7 +434,7 @@ protected:
 	bool TryGetPourDirection(FVector& PourOriginLocation, FVector& PourDirection) const;
 
 	// 라인트레이스에 맞은 액터가 물을 받을 수 있으면 물을 전달하고 대상 종류를 기록합니다.
-	bool TryReceiveWaterAtHit(const FHitResult& HitResult, float WaterAmount, float PourDuration, EUOUUmbrellaPourReceiverType& OutReceiverType);
+	bool TryReceiveWaterAtHit(const FHitResult& HitResult, float WaterAmount, float PourDuration, const FVector& PourDirection, EUOUUmbrellaPourReceiverType& OutReceiverType);
 
 	// 상태 전환 과정에서 저장된 물을 버려야 하는지 판단합니다.
 	bool ShouldSpillStoredWater(EUOUUmbrellaState PreviousState, EUOUUmbrellaState NextState) const;
