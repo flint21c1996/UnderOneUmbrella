@@ -132,6 +132,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin|Pour", meta = (ClampMin = "0.0", EditCondition = "PouredWaterFillMode == EUOUWaterBasinPouredWaterFillMode::SurfaceWorldZ", EditConditionHides, ToolTip = "Poured Water Fill Mode가 Surface World Z일 때 초당 더할 월드 Z 높이입니다."))
 	float PouredWaterSurfaceWorldZPerSecond = 100.0f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin|Rain", meta = (ToolTip = "RainArea가 비 입력을 전달해도 이 Target이 실제로 비를 받을지 정합니다. 기본값은 꺼짐이며, 런타임에는 SetRainFillReceivingEnabled로 변경할 수 있습니다."))
+	bool bReceiveRainFill = false;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin|Visual", meta = (ToolTip = "지정한 Water Visual 컴포넌트를 현재 수위에 맞춰 자동 갱신합니다."))
 	bool bUpdateWaterVisual = true;
 
@@ -185,6 +188,12 @@ public:
 	// 플레이어의 물 붓기 행위는 유지하고, Target별 설정에 따라 물 상태로 해석합니다.
 	UFUNCTION(BlueprintCallable, Category = "Water Basin")
 	void ReceivePouredWater(float Volume, float PourDuration, bool bApplyToConnectedGroup = true);
+
+	UFUNCTION(BlueprintCallable, Category = "Water Basin|Rain")
+	void SetRainFillReceivingEnabled(bool bEnabled);
+
+	UFUNCTION(BlueprintPure, Category = "Water Basin|Rain")
+	bool CanReceiveRainFill() const;
 
 	// 물 부피를 제거합니다. 그룹 적용 시 현재 연결 그룹의 총 부피에서 Volume을 뺀 뒤 공통 수면 높이로 재분배합니다.
 	UFUNCTION(BlueprintCallable, Category = "Water Basin")

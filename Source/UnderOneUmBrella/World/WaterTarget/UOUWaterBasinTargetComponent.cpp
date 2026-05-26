@@ -222,6 +222,16 @@ void UUOUWaterBasinTargetComponent::ReceivePouredWater(float Volume, float PourD
 	}
 }
 
+void UUOUWaterBasinTargetComponent::SetRainFillReceivingEnabled(bool bEnabled)
+{
+	bReceiveRainFill = bEnabled;
+}
+
+bool UUOUWaterBasinTargetComponent::CanReceiveRainFill() const
+{
+	return bReceiveRainFill;
+}
+
 void UUOUWaterBasinTargetComponent::RemoveWater(float Volume, bool bApplyToConnectedGroup)
 {
 	if (Volume <= 0.0f)

@@ -60,6 +60,16 @@ AUOUUmbrellaRainArea::AUOUUmbrellaRainArea()
 
 }
 
+void AUOUUmbrellaRainArea::SetWaterBasinRainFillEnabled(bool bEnabled)
+{
+	bEnableWaterBasinRainFill = bEnabled;
+}
+
+bool AUOUUmbrellaRainArea::IsWaterBasinRainFillEnabled() const
+{
+	return bEnableWaterBasinRainFill;
+}
+
 void AUOUUmbrellaRainArea::BeginPlay()
 {
 	Super::BeginPlay();
@@ -289,6 +299,11 @@ void AUOUUmbrellaRainArea::ApplyEnvironmentVisualRainBlocker(bool bIsBlocking, c
 
 void AUOUUmbrellaRainArea::ApplyRainToWaterBasinTargets(float DeltaSeconds) const
 {
+	if (!bEnableWaterBasinRainFill)
+	{
+		return;
+	}
+
 	const float RainAmount = FMath::Max(0.0f, RainFillRate) * FMath::Max(0.0f, DeltaSeconds);
 	if (RainAmount <= 0.0f || RainVolume == nullptr)
 	{
@@ -305,7 +320,8 @@ void AUOUUmbrellaRainArea::ApplyRainToWaterBasinTargets(float DeltaSeconds) cons
 	for (TObjectIterator<UUOUWaterBasinTargetComponent> It; It; ++It)
 	{
 		UUOUWaterBasinTargetComponent* Target = *It;
-		if (!IsValid(Target) || Target->GetWorld() != World || ProcessedTargets.Contains(Target))
+		if (!IsValid(Target) || Target->GetWorld() != World || ProcessedTargets.Contains(Target)
+			|| !Target->CanReceiveRainFill())
 		{
 			continue;
 		}

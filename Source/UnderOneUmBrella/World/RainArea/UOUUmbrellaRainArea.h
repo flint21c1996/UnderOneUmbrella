@@ -23,6 +23,12 @@ class AUOUUmbrellaRainArea : public AActor
 public:
 	AUOUUmbrellaRainArea();
 
+	UFUNCTION(BlueprintCallable, Category = "Rain|Water Basin")
+	void SetWaterBasinRainFillEnabled(bool bEnabled);
+
+	UFUNCTION(BlueprintPure, Category = "Rain|Water Basin")
+	bool IsWaterBasinRainFillEnabled() const;
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaSeconds) override;
@@ -73,6 +79,9 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Gameplay", meta = (ClampMin = "0.0", ToolTip = "플레이어가 RainArea 안에 있을 때 물이 차오르는 게임플레이 속도입니다. 비주얼 양과는 별도로 사용됩니다."))
 	// 비 영역 안에서 물이 차는 속도를 정한 값입니다.
 	float RainFillRate = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Water Basin", meta = (ToolTip = "RainVolume 안의 WaterBasinTarget에 비 입력을 전달할지 여부입니다. 런타임에는 SetWaterBasinRainFillEnabled로 변경할 수 있습니다."))
+	bool bEnableWaterBasinRainFill = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Falling", meta = (DisplayName = "Rain System", DisplayPriority = "1", ToolTip = "비 내림 표현에 사용할 Niagara System입니다."))
 	TObjectPtr<UNiagaraSystem> RainEffectSystem = nullptr;
