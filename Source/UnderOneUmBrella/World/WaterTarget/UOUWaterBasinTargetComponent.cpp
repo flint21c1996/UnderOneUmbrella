@@ -147,14 +147,31 @@ void UUOUWaterBasinTargetComponent::AddWater(float Volume, bool bApplyToConnecte
 
 void UUOUWaterBasinTargetComponent::ReceivePouredWater(float Volume, float PourDuration, bool bApplyToConnectedGroup)
 {
-	if (Volume <= 0.0f)
+	FUOUWaterBasinInputContext InputContext;
+	InputContext.Volume = Volume;
+	InputContext.Duration = PourDuration;
+	InputContext.Source = EUOUWaterBasinInputSource::Script;
+	InputContext.bApplyToConnectedGroup = bApplyToConnectedGroup;
+	ReceiveWaterInput(InputContext);
+}
+
+void UUOUWaterBasinTargetComponent::ReceiveWaterInput(const FUOUWaterBasinInputContext& InputContext)
+{
+	if (InputContext.Volume <= 0.0f)
 	{
 		return;
 	}
 
-	NotifyWaterInputReceived(Volume, bApplyToConnectedGroup);
+	FUOUWaterBasinInputContext SanitizedInputContext = InputContext;
+	SanitizedInputContext.Volume = FMath::Max(0.0f, SanitizedInputContext.Volume);
+	SanitizedInputContext.Duration = FMath::Max(0.0f, SanitizedInputContext.Duration);
+	SanitizedInputContext.WorldDirection = SanitizedInputContext.WorldDirection.GetSafeNormal();
 
-	const float Duration = FMath::Max(PourDuration, 0.0f);
+	NotifyWaterInputReceived(SanitizedInputContext);
+
+	const float Volume = SanitizedInputContext.Volume;
+	const float Duration = SanitizedInputContext.Duration;
+	const bool bApplyToConnectedGroup = SanitizedInputContext.bApplyToConnectedGroup;
 	switch (PouredWaterFillMode)
 	{
 	case EUOUWaterBasinPouredWaterFillMode::Volume:
@@ -782,16 +799,16 @@ void UUOUWaterBasinTargetComponent::BroadcastGroupChanged(const TArray<UUOUWater
 	}
 }
 
-void UUOUWaterBasinTargetComponent::NotifyWaterInputReceived(float Volume, bool bApplyToConnectedGroup)
+void UUOUWaterBasinTargetComponent::NotifyWaterInputReceived(const FUOUWaterBasinInputContext& InputContext)
 {
-	if (Volume <= 0.0f)
+	if (InputContext.Volume <= 0.0f)
 	{
 		return;
 	}
 
-	if (!bApplyToConnectedGroup)
+	if (!InputContext.bApplyToConnectedGroup)
 	{
-		OnWaterInputReceived.Broadcast(this, Volume);
+		OnWaterInputReceived.Broadcast(this, InputContext);
 		return;
 	}
 
@@ -799,7 +816,7 @@ void UUOUWaterBasinTargetComponent::NotifyWaterInputReceived(float Volume, bool 
 	GetConnectedGroup(Group);
 	if (Group.Num() == 0)
 	{
-		OnWaterInputReceived.Broadcast(this, Volume);
+		OnWaterInputReceived.Broadcast(this, InputContext);
 		return;
 	}
 
@@ -807,7 +824,7 @@ void UUOUWaterBasinTargetComponent::NotifyWaterInputReceived(float Volume, bool 
 	{
 		if (IsValid(Target))
 		{
-			Target->OnWaterInputReceived.Broadcast(Target, Volume);
+			Target->OnWaterInputReceived.Broadcast(Target, InputContext);
 		}
 	}
 }
