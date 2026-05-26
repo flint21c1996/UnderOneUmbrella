@@ -66,25 +66,25 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Rotation", meta = (ToolTip = "회전 축입니다. Relative 모드에서는 대상 컴포넌트의 로컬 축, World 모드에서는 월드 축으로 해석합니다. 음수 축이나 Degrees Per Value Unit 음수 값으로 반대 방향을 만들 수 있습니다."))
 	FVector RotationAxis = FVector(0.0f, 0.0f, 1.0f);
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Rotation", meta = (ToolTip = "Water value 1 단위 변화당 회전할 각도입니다. 기본 ValueSource인 FillRatio에서는 1.0이 가득 참을 의미하므로 90이면 0~100% 변화에 90도 회전합니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Rotation", meta = (EditCondition = "RotationMode != EUOUWaterBasinRotationReactionMode::IncrementalOnWaterInput", EditConditionHides, ToolTip = "Water value 1 단위 변화당 회전할 각도입니다. 기본 ValueSource인 FillRatio에서는 1.0이 가득 참을 의미하므로 90이면 0~100% 변화에 90도 회전합니다."))
 	float DegreesPerValueUnit = 90.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Rotation", meta = (ToolTip = "Rotation Mode가 Incremental On Water Input일 때 물 입력 부피 1 단위당 회전할 각도입니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Rotation", meta = (EditCondition = "RotationMode == EUOUWaterBasinRotationReactionMode::IncrementalOnWaterInput", EditConditionHides, ToolTip = "Rotation Mode가 Incremental On Water Input일 때 물 입력 부피 1 단위당 회전할 각도입니다."))
 	float DegreesPerInputVolume = 90.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Input Direction", meta = (ToolTip = "Player Pour 입력이 들어왔을 때 회전 방향을 정하는 방식입니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Input Direction", meta = (EditCondition = "RotationMode == EUOUWaterBasinRotationReactionMode::IncrementalOnWaterInput", EditConditionHides, ToolTip = "Player Pour 입력이 들어왔을 때 회전 방향을 정하는 방식입니다."))
 	EUOUWaterBasinRotationInputDirectionPolicy PlayerPourDirectionPolicy = EUOUWaterBasinRotationInputDirectionPolicy::ByInputDirection;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Input Direction", meta = (ToolTip = "Rain 입력이 들어왔을 때 회전 방향을 정하는 방식입니다. 기본값은 기존 입력량 기반 회전과 같은 정방향입니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Input Direction", meta = (EditCondition = "RotationMode == EUOUWaterBasinRotationReactionMode::IncrementalOnWaterInput", EditConditionHides, ToolTip = "Rain 입력이 들어왔을 때 회전 방향을 정하는 방식입니다. 기본값은 기존 입력량 기반 회전과 같은 정방향입니다."))
 	EUOUWaterBasinRotationInputDirectionPolicy RainDirectionPolicy = EUOUWaterBasinRotationInputDirectionPolicy::FixedPositive;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Input Direction", meta = (ToolTip = "Script 또는 Unknown 입력이 들어왔을 때 회전 방향을 정하는 방식입니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Input Direction", meta = (EditCondition = "RotationMode == EUOUWaterBasinRotationReactionMode::IncrementalOnWaterInput", EditConditionHides, ToolTip = "Script 또는 Unknown 입력이 들어왔을 때 회전 방향을 정하는 방식입니다."))
 	EUOUWaterBasinRotationInputDirectionPolicy ScriptDirectionPolicy = EUOUWaterBasinRotationInputDirectionPolicy::FixedPositive;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Input Direction", meta = (ToolTip = "By Input Direction에서 토크 방향을 계산하기 어려울 때 비교할 월드 기준 방향입니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Input Direction", meta = (EditCondition = "RotationMode == EUOUWaterBasinRotationReactionMode::IncrementalOnWaterInput && (PlayerPourDirectionPolicy == EUOUWaterBasinRotationInputDirectionPolicy::ByInputDirection || RainDirectionPolicy == EUOUWaterBasinRotationInputDirectionPolicy::ByInputDirection || ScriptDirectionPolicy == EUOUWaterBasinRotationInputDirectionPolicy::ByInputDirection)", EditConditionHides, ToolTip = "By Input Direction에서 토크 방향을 계산하기 어려울 때 비교할 월드 기준 방향입니다."))
 	FVector InputDirectionReferenceVector = FVector(1.0f, 0.0f, 0.0f);
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Input Direction", meta = (ClampMin = "0.0", ToolTip = "입력 방향 판정값이 이 값보다 작으면 방향이 모호한 것으로 보고 fallback 기준을 사용합니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Input Direction", meta = (ClampMin = "0.0", EditCondition = "RotationMode == EUOUWaterBasinRotationReactionMode::IncrementalOnWaterInput && (PlayerPourDirectionPolicy == EUOUWaterBasinRotationInputDirectionPolicy::ByInputDirection || RainDirectionPolicy == EUOUWaterBasinRotationInputDirectionPolicy::ByInputDirection || ScriptDirectionPolicy == EUOUWaterBasinRotationInputDirectionPolicy::ByInputDirection)", EditConditionHides, ToolTip = "입력 방향 판정값이 이 값보다 작으면 방향이 모호한 것으로 보고 fallback 기준을 사용합니다."))
 	float InputDirectionDeadZone = 0.001f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Rotation", meta = (ToolTip = "켜져 있으면 목표 각도까지 지정한 초당 각도 속도로 회전합니다. 꺼져 있으면 물 상태 변화 시 즉시 목표 각도로 이동합니다."))
