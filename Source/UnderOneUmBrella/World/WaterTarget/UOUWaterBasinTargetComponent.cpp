@@ -603,6 +603,10 @@ void UUOUWaterBasinTargetComponent::ApplyPassiveDrain(float DeltaTime)
 	if (bPassiveDrainApplyToConnectedGroup)
 	{
 		GetConnectedGroup(DrainTargets);
+		if (!ShouldApplyPassiveDrainForConnectedGroup(DrainTargets))
+		{
+			return;
+		}
 	}
 	else
 	{
@@ -671,6 +675,25 @@ void UUOUWaterBasinTargetComponent::ApplyPassiveDrain(float DeltaTime)
 	{
 		RemoveWater(DrainVolume, bPassiveDrainApplyToConnectedGroup);
 	}
+}
+
+bool UUOUWaterBasinTargetComponent::ShouldApplyPassiveDrainForConnectedGroup(const TArray<UUOUWaterBasinTargetComponent*>& Group) const
+{
+	const UUOUWaterBasinTargetComponent* Representative = nullptr;
+	for (const UUOUWaterBasinTargetComponent* Target : Group)
+	{
+		if (!IsValid(Target) || !Target->bEnablePassiveDrain || !Target->bPassiveDrainApplyToConnectedGroup)
+		{
+			continue;
+		}
+
+		if (Representative == nullptr || Target->GetUniqueID() < Representative->GetUniqueID())
+		{
+			Representative = Target;
+		}
+	}
+
+	return Representative == this;
 }
 
 float UUOUWaterBasinTargetComponent::GetPassiveDrainTargetSurfaceWorldZ() const

@@ -331,6 +331,9 @@ private:
 	// 매 Tick 이 Target의 기본 배출 규칙을 적용합니다.
 	void ApplyPassiveDrain(float DeltaTime);
 
+	// 연결 그룹 전체 배수는 그룹 안의 대표 Target 하나만 실행하게 합니다.
+	bool ShouldApplyPassiveDrainForConnectedGroup(const TArray<UUOUWaterBasinTargetComponent*>& Group) const;
+
 	// Passive Drain이 물을 남겨둘 목표 수면 높이를 월드 Z로 반환합니다.
 	float GetPassiveDrainTargetSurfaceWorldZ() const;
 
