@@ -127,7 +127,13 @@ void UUOUWaterBasinRotationReactionComponent::HandleWaterInputReceived(UUOUWater
 		return;
 	}
 
-	SetTargetRotationAngle(TargetAngleDegrees + (InputContext.Volume * DegreesPerInputVolume));
+	const float DirectionSign = ResolveInputRotationSign(InputContext);
+	if (FMath::IsNearlyZero(DirectionSign))
+	{
+		return;
+	}
+
+	SetTargetRotationAngle(TargetAngleDegrees + (InputContext.Volume * DegreesPerInputVolume * DirectionSign));
 }
 
 USceneComponent* UUOUWaterBasinRotationReactionComponent::ResolveRotationTargetComponent() const
@@ -297,6 +303,103 @@ void UUOUWaterBasinRotationReactionComponent::ApplyRotationAngle(float AngleDegr
 	}
 
 	TargetComponent->SetRelativeRotation((BaseRelativeRotation * RotationDelta).Rotator());
+}
+
+float UUOUWaterBasinRotationReactionComponent::ResolveInputRotationSign(const FUOUWaterBasinInputContext& InputContext) const
+{
+	switch (GetInputDirectionPolicy(InputContext.Source))
+	{
+	case EUOUWaterBasinRotationInputDirectionPolicy::Ignore:
+		return 0.0f;
+	case EUOUWaterBasinRotationInputDirectionPolicy::FixedNegative:
+		return -1.0f;
+	case EUOUWaterBasinRotationInputDirectionPolicy::ByInputDirection:
+		return ResolveInputDirectionSign(InputContext);
+	case EUOUWaterBasinRotationInputDirectionPolicy::FixedPositive:
+	default:
+		return 1.0f;
+	}
+}
+
+float UUOUWaterBasinRotationReactionComponent::ResolveInputDirectionSign(const FUOUWaterBasinInputContext& InputContext) const
+{
+	const FVector InputDirection = InputContext.WorldDirection.GetSafeNormal();
+	if (InputDirection.IsNearlyZero())
+	{
+		return 1.0f;
+	}
+
+	const float DeadZone = FMath::Max(InputDirectionDeadZone, 0.0f);
+	const USceneComponent* TargetComponent = ResolveRotationTargetComponent();
+	const FVector AxisWorld = ResolveWorldRotationAxis(TargetComponent);
+	const FVector PlanarInputDirection = AxisWorld.IsNearlyZero()
+		? InputDirection
+		: (InputDirection - AxisWorld * FVector::DotProduct(InputDirection, AxisWorld)).GetSafeNormal();
+
+	if (TargetComponent != nullptr && !AxisWorld.IsNearlyZero() && !PlanarInputDirection.IsNearlyZero())
+	{
+		const FVector Radial = InputContext.WorldLocation - TargetComponent->GetComponentLocation();
+		const FVector PlanarRadial = (Radial - AxisWorld * FVector::DotProduct(Radial, AxisWorld)).GetSafeNormal();
+		if (!PlanarRadial.IsNearlyZero())
+		{
+			const float TorqueSignValue = FVector::DotProduct(FVector::CrossProduct(PlanarRadial, PlanarInputDirection), AxisWorld);
+			if (FMath::Abs(TorqueSignValue) > DeadZone)
+			{
+				return FMath::Sign(TorqueSignValue);
+			}
+		}
+	}
+
+	FVector ReferenceDirection = InputDirectionReferenceVector.GetSafeNormal();
+	if (!AxisWorld.IsNearlyZero())
+	{
+		ReferenceDirection = (ReferenceDirection - AxisWorld * FVector::DotProduct(ReferenceDirection, AxisWorld)).GetSafeNormal();
+	}
+
+	if (ReferenceDirection.IsNearlyZero())
+	{
+		return 1.0f;
+	}
+
+	const FVector ComparisonDirection = PlanarInputDirection.IsNearlyZero() ? InputDirection : PlanarInputDirection;
+	const float ReferenceSignValue = FVector::DotProduct(ComparisonDirection, ReferenceDirection);
+	if (FMath::Abs(ReferenceSignValue) > DeadZone)
+	{
+		return FMath::Sign(ReferenceSignValue);
+	}
+
+	return 1.0f;
+}
+
+EUOUWaterBasinRotationInputDirectionPolicy UUOUWaterBasinRotationReactionComponent::GetInputDirectionPolicy(EUOUWaterBasinInputSource Source) const
+{
+	switch (Source)
+	{
+	case EUOUWaterBasinInputSource::PlayerPour:
+		return PlayerPourDirectionPolicy;
+	case EUOUWaterBasinInputSource::Rain:
+		return RainDirectionPolicy;
+	case EUOUWaterBasinInputSource::Script:
+	case EUOUWaterBasinInputSource::Unknown:
+	default:
+		return ScriptDirectionPolicy;
+	}
+}
+
+FVector UUOUWaterBasinRotationReactionComponent::ResolveWorldRotationAxis(const USceneComponent* TargetComponent) const
+{
+	const FVector SafeAxis = RotationAxis.GetSafeNormal();
+	if (SafeAxis.IsNearlyZero())
+	{
+		return FVector::ZeroVector;
+	}
+
+	if (RotationSpace == EUOUWaterBasinRotationReactionSpace::World || TargetComponent == nullptr)
+	{
+		return SafeAxis;
+	}
+
+	return TargetComponent->GetComponentTransform().TransformVectorNoScale(SafeAxis).GetSafeNormal();
 }
 
 float UUOUWaterBasinRotationReactionComponent::ClampRotationAngle(float AngleDegrees) const

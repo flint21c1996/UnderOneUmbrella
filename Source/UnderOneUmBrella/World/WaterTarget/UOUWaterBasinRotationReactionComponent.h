@@ -25,6 +25,15 @@ enum class EUOUWaterBasinRotationReactionSpace : uint8
 	World UMETA(DisplayName = "World", ToolTip = "월드 회전을 기준으로 회전합니다.")
 };
 
+UENUM(BlueprintType)
+enum class EUOUWaterBasinRotationInputDirectionPolicy : uint8
+{
+	Ignore UMETA(DisplayName = "Ignore"),
+	FixedPositive UMETA(DisplayName = "Fixed Positive"),
+	FixedNegative UMETA(DisplayName = "Fixed Negative"),
+	ByInputDirection UMETA(DisplayName = "By Input Direction")
+};
+
 // WaterBasinReactionComponentBase의 물 상태 감지를 이용해 플랫폼을 지정 축으로 회전시키는 ReactionComponent입니다.
 UCLASS(ClassGroup=(Puzzle), meta=(BlueprintSpawnableComponent, DisplayName="UOU Water Basin Rotation Reaction"))
 class UNDERONEUMBRELLA_API UUOUWaterBasinRotationReactionComponent : public UUOUWaterBasinReactionComponentBase
@@ -62,6 +71,21 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Rotation", meta = (ToolTip = "Rotation Mode가 Incremental On Water Input일 때 물 입력 부피 1 단위당 회전할 각도입니다."))
 	float DegreesPerInputVolume = 90.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Input Direction", meta = (ToolTip = "Player Pour 입력이 들어왔을 때 회전 방향을 정하는 방식입니다."))
+	EUOUWaterBasinRotationInputDirectionPolicy PlayerPourDirectionPolicy = EUOUWaterBasinRotationInputDirectionPolicy::ByInputDirection;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Input Direction", meta = (ToolTip = "Rain 입력이 들어왔을 때 회전 방향을 정하는 방식입니다. 기본값은 기존 입력량 기반 회전과 같은 정방향입니다."))
+	EUOUWaterBasinRotationInputDirectionPolicy RainDirectionPolicy = EUOUWaterBasinRotationInputDirectionPolicy::FixedPositive;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Input Direction", meta = (ToolTip = "Script 또는 Unknown 입력이 들어왔을 때 회전 방향을 정하는 방식입니다."))
+	EUOUWaterBasinRotationInputDirectionPolicy ScriptDirectionPolicy = EUOUWaterBasinRotationInputDirectionPolicy::FixedPositive;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Input Direction", meta = (ToolTip = "By Input Direction에서 토크 방향을 계산하기 어려울 때 비교할 월드 기준 방향입니다."))
+	FVector InputDirectionReferenceVector = FVector(1.0f, 0.0f, 0.0f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Input Direction", meta = (ClampMin = "0.0", ToolTip = "입력 방향 판정값이 이 값보다 작으면 방향이 모호한 것으로 보고 fallback 기준을 사용합니다."))
+	float InputDirectionDeadZone = 0.001f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Rotation", meta = (ToolTip = "켜져 있으면 목표 각도까지 지정한 초당 각도 속도로 회전합니다. 꺼져 있으면 물 상태 변화 시 즉시 목표 각도로 이동합니다."))
 	bool bUseRotationInterpolation = false;
@@ -116,5 +140,9 @@ private:
 	void SetTargetRotationAngle(float NewTargetAngleDegrees);
 	void UpdateInterpolatedRotation(float DeltaTime);
 	void ApplyRotationAngle(float AngleDegrees);
+	float ResolveInputRotationSign(const FUOUWaterBasinInputContext& InputContext) const;
+	float ResolveInputDirectionSign(const FUOUWaterBasinInputContext& InputContext) const;
+	EUOUWaterBasinRotationInputDirectionPolicy GetInputDirectionPolicy(EUOUWaterBasinInputSource Source) const;
+	FVector ResolveWorldRotationAxis(const USceneComponent* TargetComponent) const;
 	float ClampRotationAngle(float AngleDegrees) const;
 };
