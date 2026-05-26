@@ -57,6 +57,15 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Target", meta = (ToolTip = "RotationTargetComponent를 찾지 못했을 때 Owner RootComponent를 회전 대상으로 사용할지 정합니다."))
 	bool bUseOwnerRootWhenTargetMissing = true;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Input Direction", meta = (EditCondition = "RotationMode == EUOUWaterBasinRotationReactionMode::IncrementalOnWaterInput && (PlayerPourDirectionPolicy == EUOUWaterBasinRotationInputDirectionPolicy::ByInputDirection || RainDirectionPolicy == EUOUWaterBasinRotationInputDirectionPolicy::ByInputDirection || ScriptDirectionPolicy == EUOUWaterBasinRotationInputDirectionPolicy::ByInputDirection)", EditConditionHides, ToolTip = "By Input Direction uses this component's forward vector as the front basis, then checks whether the water input location is on the left or right side."))
+	TObjectPtr<USceneComponent> InputDirectionReferenceComponent = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Input Direction", meta = (EditCondition = "RotationMode == EUOUWaterBasinRotationReactionMode::IncrementalOnWaterInput && (PlayerPourDirectionPolicy == EUOUWaterBasinRotationInputDirectionPolicy::ByInputDirection || RainDirectionPolicy == EUOUWaterBasinRotationInputDirectionPolicy::ByInputDirection || ScriptDirectionPolicy == EUOUWaterBasinRotationInputDirectionPolicy::ByInputDirection)", EditConditionHides, ToolTip = "Component name or tag to use as the By Input Direction forward reference when InputDirectionReferenceComponent is empty."))
+	FName InputDirectionReferenceComponentName = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Input Direction", meta = (EditCondition = "RotationMode == EUOUWaterBasinRotationReactionMode::IncrementalOnWaterInput && (PlayerPourDirectionPolicy == EUOUWaterBasinRotationInputDirectionPolicy::ByInputDirection || RainDirectionPolicy == EUOUWaterBasinRotationInputDirectionPolicy::ByInputDirection || ScriptDirectionPolicy == EUOUWaterBasinRotationInputDirectionPolicy::ByInputDirection)", EditConditionHides, ToolTip = "If no input direction reference is found, use RotationTargetComponent's forward vector."))
+	bool bUseRotationTargetAsInputDirectionReferenceWhenMissing = true;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Rotation", meta = (ToolTip = "물 값 변화를 회전으로 해석하는 방식입니다."))
 	EUOUWaterBasinRotationReactionMode RotationMode = EUOUWaterBasinRotationReactionMode::IncrementalOnWaterInput;
 
@@ -81,11 +90,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Input Direction", meta = (EditCondition = "RotationMode == EUOUWaterBasinRotationReactionMode::IncrementalOnWaterInput", EditConditionHides, ToolTip = "Script 또는 Unknown 입력이 들어왔을 때 회전 방향을 정하는 방식입니다."))
 	EUOUWaterBasinRotationInputDirectionPolicy ScriptDirectionPolicy = EUOUWaterBasinRotationInputDirectionPolicy::FixedPositive;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Input Direction", meta = (EditCondition = "RotationMode == EUOUWaterBasinRotationReactionMode::IncrementalOnWaterInput && (PlayerPourDirectionPolicy == EUOUWaterBasinRotationInputDirectionPolicy::ByInputDirection || RainDirectionPolicy == EUOUWaterBasinRotationInputDirectionPolicy::ByInputDirection || ScriptDirectionPolicy == EUOUWaterBasinRotationInputDirectionPolicy::ByInputDirection)", EditConditionHides, ToolTip = "By Input Direction에서 토크 방향을 계산하기 어려울 때 비교할 월드 기준 방향입니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Input Direction", meta = (EditCondition = "RotationMode == EUOUWaterBasinRotationReactionMode::IncrementalOnWaterInput && (PlayerPourDirectionPolicy == EUOUWaterBasinRotationInputDirectionPolicy::ByInputDirection || RainDirectionPolicy == EUOUWaterBasinRotationInputDirectionPolicy::ByInputDirection || ScriptDirectionPolicy == EUOUWaterBasinRotationInputDirectionPolicy::ByInputDirection)", EditConditionHides, ToolTip = "Fallback world forward direction used when By Input Direction has no reference component."))
 	FVector InputDirectionReferenceVector = FVector(1.0f, 0.0f, 0.0f);
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Input Direction", meta = (ClampMin = "0.0", EditCondition = "RotationMode == EUOUWaterBasinRotationReactionMode::IncrementalOnWaterInput && (PlayerPourDirectionPolicy == EUOUWaterBasinRotationInputDirectionPolicy::ByInputDirection || RainDirectionPolicy == EUOUWaterBasinRotationInputDirectionPolicy::ByInputDirection || ScriptDirectionPolicy == EUOUWaterBasinRotationInputDirectionPolicy::ByInputDirection)", EditConditionHides, ToolTip = "입력 방향 판정값이 이 값보다 작으면 방향이 모호한 것으로 보고 fallback 기준을 사용합니다."))
-	float InputDirectionDeadZone = 0.001f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Input Direction", meta = (ClampMin = "0.0", EditCondition = "RotationMode == EUOUWaterBasinRotationReactionMode::IncrementalOnWaterInput && (PlayerPourDirectionPolicy == EUOUWaterBasinRotationInputDirectionPolicy::ByInputDirection || RainDirectionPolicy == EUOUWaterBasinRotationInputDirectionPolicy::ByInputDirection || ScriptDirectionPolicy == EUOUWaterBasinRotationInputDirectionPolicy::ByInputDirection)", EditConditionHides, ToolTip = "If the left/right side result is smaller than this value, the input location is treated as center-line ambiguous and does not rotate."))
+	float InputDirectionDeadZone = 0.05f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Input Direction", meta = (EditCondition = "RotationMode == EUOUWaterBasinRotationReactionMode::IncrementalOnWaterInput && (PlayerPourDirectionPolicy == EUOUWaterBasinRotationInputDirectionPolicy::ByInputDirection || RainDirectionPolicy == EUOUWaterBasinRotationInputDirectionPolicy::ByInputDirection || ScriptDirectionPolicy == EUOUWaterBasinRotationInputDirectionPolicy::ByInputDirection)", EditConditionHides, ToolTip = "By Input Direction으로 계산한 회전 부호를 반전합니다. 피벗이나 메시 방향 때문에 의도와 반대로 보일 때 켭니다."))
+	bool bInvertInputDirectionRotationSign = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Rotation", meta = (ToolTip = "켜져 있으면 목표 각도까지 지정한 초당 각도 속도로 회전합니다. 꺼져 있으면 물 상태 변화 시 즉시 목표 각도로 이동합니다."))
 	bool bUseRotationInterpolation = false;
@@ -114,6 +126,21 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Water Basin Rotation Reaction|Runtime")
 	float CurrentAppliedAngleDegrees = 0.0f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Debug", meta = (ToolTip = "회전 중심, 회전축, 마지막 물 입력 방향, 최종 회전 반응 방향을 월드 디버그로 표시합니다."))
+	bool bDrawInputDirectionDebug = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Debug", meta = (ClampMin = "0.0", EditCondition = "bDrawInputDirectionDebug", EditConditionHides, ToolTip = "디버그 화살표 길이입니다."))
+	float InputDirectionDebugDrawScale = 120.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Debug", meta = (ClampMin = "0.0", EditCondition = "bDrawInputDirectionDebug", EditConditionHides, ToolTip = "디버그 중심/입력 위치 구체 반지름입니다."))
+	float InputDirectionDebugSphereRadius = 12.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Debug", meta = (ClampMin = "0.0", EditCondition = "bDrawInputDirectionDebug", EditConditionHides, ToolTip = "디버그 선과 화살표 두께입니다."))
+	float InputDirectionDebugThickness = 3.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Debug", meta = (EditCondition = "bDrawInputDirectionDebug", EditConditionHides, ToolTip = "디버그 라벨을 함께 표시할지 정합니다."))
+	bool bDrawInputDirectionDebugLabel = true;
+
 	UFUNCTION(BlueprintCallable, Category = "Water Basin Rotation Reaction")
 	void ResetRotationReaction(bool bResetObservedValue = true, bool bApplyBaseRotation = true);
 
@@ -129,19 +156,33 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UUOUWaterBasinTargetComponent> BoundInputWaterBasinTarget = nullptr;
 
+	bool bHasLastInputDirectionDebug = false;
+	FVector LastInputDebugWorldLocation = FVector::ZeroVector;
+	FVector LastInputDebugWorldDirection = FVector::ZeroVector;
+	float LastInputDebugRotationSign = 0.0f;
+	float LastInputDebugVolume = 0.0f;
+	EUOUWaterBasinInputSource LastInputDebugSource = EUOUWaterBasinInputSource::Unknown;
+
 	UFUNCTION()
 	void HandleWaterInputReceived(UUOUWaterBasinTargetComponent* Target, const FUOUWaterBasinInputContext& InputContext);
 
 	USceneComponent* ResolveRotationTargetComponent() const;
 	USceneComponent* FindRotationTargetComponent() const;
+	const USceneComponent* ResolveInputDirectionReferenceComponent(const USceneComponent* TargetComponent) const;
+	USceneComponent* FindSceneComponentByNameOrTag(FName ComponentName) const;
 	void BindToWaterInputTarget();
 	void UnbindFromWaterInputTarget();
 	void CacheBaseRotationIfNeeded();
 	void SetTargetRotationAngle(float NewTargetAngleDegrees);
 	void UpdateInterpolatedRotation(float DeltaTime);
 	void ApplyRotationAngle(float AngleDegrees);
+	void CacheInputDirectionDebug(const FUOUWaterBasinInputContext& InputContext, float DirectionSign);
+	void DrawInputDirectionDebug() const;
 	float ResolveInputRotationSign(const FUOUWaterBasinInputContext& InputContext) const;
 	float ResolveInputDirectionSign(const FUOUWaterBasinInputContext& InputContext) const;
+	float ApplyInputDirectionSignInversion(float DirectionSign) const;
+	FVector ResolveInputDirectionReferenceWorldDirection(const USceneComponent* ReferenceComponent) const;
+	FVector ResolveInputDirectionSideWorldDirection(const USceneComponent* ReferenceComponent, const USceneComponent* TargetComponent) const;
 	EUOUWaterBasinRotationInputDirectionPolicy GetInputDirectionPolicy(EUOUWaterBasinInputSource Source) const;
 	FVector ResolveWorldRotationAxis(const USceneComponent* TargetComponent) const;
 	float ClampRotationAngle(float AngleDegrees) const;

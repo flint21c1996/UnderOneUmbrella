@@ -3,8 +3,28 @@
 #include "World/WaterTarget/UOUWaterBasinRotationReactionComponent.h"
 
 #include "Components/SceneComponent.h"
+#include "DrawDebugHelpers.h"
 #include "GameFramework/Actor.h"
 #include "World/WaterTarget/UOUWaterBasinTargetComponent.h"
+
+namespace
+{
+	const TCHAR* GetInputSourceDebugName(EUOUWaterBasinInputSource Source)
+	{
+		switch (Source)
+		{
+		case EUOUWaterBasinInputSource::PlayerPour:
+			return TEXT("PlayerPour");
+		case EUOUWaterBasinInputSource::Rain:
+			return TEXT("Rain");
+		case EUOUWaterBasinInputSource::Script:
+			return TEXT("Script");
+		case EUOUWaterBasinInputSource::Unknown:
+		default:
+			return TEXT("Unknown");
+		}
+	}
+}
 
 UUOUWaterBasinRotationReactionComponent::UUOUWaterBasinRotationReactionComponent()
 {
@@ -42,6 +62,7 @@ void UUOUWaterBasinRotationReactionComponent::TickComponent(float DeltaTime, ELe
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
 	UpdateInterpolatedRotation(DeltaTime);
+	DrawInputDirectionDebug();
 }
 
 void UUOUWaterBasinRotationReactionComponent::ResetRotationReaction(bool bResetObservedValue, bool bApplyBaseRotation)
@@ -128,6 +149,7 @@ void UUOUWaterBasinRotationReactionComponent::HandleWaterInputReceived(UUOUWater
 	}
 
 	const float DirectionSign = ResolveInputRotationSign(InputContext);
+	CacheInputDirectionDebug(InputContext, DirectionSign);
 	if (FMath::IsNearlyZero(DirectionSign))
 	{
 		return;
@@ -153,13 +175,33 @@ USceneComponent* UUOUWaterBasinRotationReactionComponent::ResolveRotationTargetC
 
 USceneComponent* UUOUWaterBasinRotationReactionComponent::FindRotationTargetComponent() const
 {
+	return FindSceneComponentByNameOrTag(RotationTargetComponentName);
+}
+
+const USceneComponent* UUOUWaterBasinRotationReactionComponent::ResolveInputDirectionReferenceComponent(const USceneComponent* TargetComponent) const
+{
+	if (IsValid(InputDirectionReferenceComponent))
+	{
+		return InputDirectionReferenceComponent.Get();
+	}
+
+	if (USceneComponent* FoundComponent = FindSceneComponentByNameOrTag(InputDirectionReferenceComponentName))
+	{
+		return FoundComponent;
+	}
+
+	return bUseRotationTargetAsInputDirectionReferenceWhenMissing && IsValid(TargetComponent) ? TargetComponent : nullptr;
+}
+
+USceneComponent* UUOUWaterBasinRotationReactionComponent::FindSceneComponentByNameOrTag(FName ComponentName) const
+{
 	const AActor* Owner = GetOwner();
-	if (!Owner || RotationTargetComponentName.IsNone())
+	if (!Owner || ComponentName.IsNone())
 	{
 		return nullptr;
 	}
 
-	const FString TargetName = RotationTargetComponentName.ToString();
+	const FString TargetName = ComponentName.ToString();
 	TArray<USceneComponent*> SceneComponents;
 	Owner->GetComponents<USceneComponent>(SceneComponents);
 
@@ -170,8 +212,8 @@ USceneComponent* UUOUWaterBasinRotationReactionComponent::FindRotationTargetComp
 			continue;
 		}
 
-		if (SceneComponent->GetFName() == RotationTargetComponentName
-			|| SceneComponent->ComponentTags.Contains(RotationTargetComponentName)
+		if (SceneComponent->GetFName() == ComponentName
+			|| SceneComponent->ComponentTags.Contains(ComponentName)
 			|| SceneComponent->GetName().Contains(TargetName, ESearchCase::IgnoreCase))
 		{
 			return SceneComponent;
@@ -305,6 +347,155 @@ void UUOUWaterBasinRotationReactionComponent::ApplyRotationAngle(float AngleDegr
 	TargetComponent->SetRelativeRotation((BaseRelativeRotation * RotationDelta).Rotator());
 }
 
+void UUOUWaterBasinRotationReactionComponent::CacheInputDirectionDebug(const FUOUWaterBasinInputContext& InputContext, float DirectionSign)
+{
+	bHasLastInputDirectionDebug = true;
+	LastInputDebugWorldLocation = InputContext.WorldLocation;
+	LastInputDebugWorldDirection = InputContext.WorldDirection.GetSafeNormal();
+	LastInputDebugRotationSign = DirectionSign;
+	LastInputDebugVolume = InputContext.Volume;
+	LastInputDebugSource = InputContext.Source;
+}
+
+void UUOUWaterBasinRotationReactionComponent::DrawInputDirectionDebug() const
+{
+	if (!bDrawInputDirectionDebug)
+	{
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	const USceneComponent* TargetComponent = ResolveRotationTargetComponent();
+	if (World == nullptr || TargetComponent == nullptr)
+	{
+		return;
+	}
+
+	const float DrawScale = FMath::Max(InputDirectionDebugDrawScale, 0.0f);
+	const float SphereRadius = FMath::Max(InputDirectionDebugSphereRadius, 0.0f);
+	const float Thickness = FMath::Max(InputDirectionDebugThickness, 0.0f);
+	const float ArrowSize = FMath::Max(DrawScale * 0.2f, 8.0f);
+	const USceneComponent* ReferenceComponent = ResolveInputDirectionReferenceComponent(TargetComponent);
+	const FVector Center = ReferenceComponent != nullptr ? ReferenceComponent->GetComponentLocation() : TargetComponent->GetComponentLocation();
+	const FVector AxisWorld = ResolveWorldRotationAxis(ReferenceComponent != nullptr ? ReferenceComponent : TargetComponent);
+	const FVector ReferenceDirection = ResolveInputDirectionReferenceWorldDirection(ReferenceComponent);
+	const FVector SideDirection = ResolveInputDirectionSideWorldDirection(ReferenceComponent, TargetComponent);
+
+	DrawDebugSphere(World, Center, SphereRadius, 16, FColor::Yellow, false, 0.0f, 0, Thickness);
+
+	if (!AxisWorld.IsNearlyZero())
+	{
+		DrawDebugDirectionalArrow(
+			World,
+			Center,
+			Center + AxisWorld * DrawScale,
+			ArrowSize,
+			FColor::Cyan,
+			false,
+			0.0f,
+			0,
+			Thickness);
+	}
+
+	if (!ReferenceDirection.IsNearlyZero())
+	{
+		DrawDebugDirectionalArrow(
+			World,
+			Center,
+			Center + ReferenceDirection * DrawScale,
+			ArrowSize,
+			FColor::Magenta,
+			false,
+			0.0f,
+			0,
+			Thickness);
+	}
+
+	if (!SideDirection.IsNearlyZero())
+	{
+		DrawDebugDirectionalArrow(
+			World,
+			Center,
+			Center + SideDirection * DrawScale,
+			ArrowSize,
+			FColor::Purple,
+			false,
+			0.0f,
+			0,
+			Thickness);
+	}
+
+	if (bDrawInputDirectionDebugLabel)
+	{
+		DrawDebugString(
+			World,
+			Center + FVector(0.0f, 0.0f, SphereRadius * 2.0f),
+			TEXT("Input Direction Reference / Axis / Right"),
+			nullptr,
+			FColor::Yellow,
+			0.0f,
+			true);
+	}
+
+	if (!bHasLastInputDirectionDebug)
+	{
+		return;
+	}
+
+	const FVector InputLocation = LastInputDebugWorldLocation.IsNearlyZero() ? Center : LastInputDebugWorldLocation;
+	const FVector InputDirection = LastInputDebugWorldDirection.IsNearlyZero()
+		? FVector::ForwardVector
+		: LastInputDebugWorldDirection;
+	const FColor ResponseColor = LastInputDebugRotationSign > 0.0f
+		? FColor::Green
+		: (LastInputDebugRotationSign < 0.0f ? FColor::Red : FColor::White);
+
+	DrawDebugSphere(World, InputLocation, SphereRadius, 16, FColor::Orange, false, 0.0f, 0, Thickness);
+	DrawDebugLine(World, Center, InputLocation, FColor::Yellow, false, 0.0f, 0, Thickness);
+	DrawDebugDirectionalArrow(
+		World,
+		InputLocation,
+		InputLocation + InputDirection * DrawScale,
+		ArrowSize,
+		FColor::Blue,
+		false,
+		0.0f,
+		0,
+		Thickness);
+
+	if (!SideDirection.IsNearlyZero() && !FMath::IsNearlyZero(LastInputDebugRotationSign))
+	{
+		const FVector ResponseDirection = SideDirection * LastInputDebugRotationSign;
+		DrawDebugDirectionalArrow(
+			World,
+			InputLocation,
+			InputLocation + ResponseDirection * DrawScale,
+			ArrowSize,
+			ResponseColor,
+			false,
+			0.0f,
+			0,
+			Thickness);
+	}
+
+	if (bDrawInputDirectionDebugLabel)
+	{
+		const FString DebugText = FString::Printf(
+			TEXT("Water Input\nSource: %s\nVolume: %.2f\nSign: %.0f"),
+			GetInputSourceDebugName(LastInputDebugSource),
+			LastInputDebugVolume,
+			LastInputDebugRotationSign);
+		DrawDebugString(
+			World,
+			InputLocation + FVector(0.0f, 0.0f, SphereRadius * 2.0f),
+			DebugText,
+			nullptr,
+			ResponseColor,
+			0.0f,
+			true);
+	}
+}
+
 float UUOUWaterBasinRotationReactionComponent::ResolveInputRotationSign(const FUOUWaterBasinInputContext& InputContext) const
 {
 	switch (GetInputDirectionPolicy(InputContext.Source))
@@ -323,52 +514,76 @@ float UUOUWaterBasinRotationReactionComponent::ResolveInputRotationSign(const FU
 
 float UUOUWaterBasinRotationReactionComponent::ResolveInputDirectionSign(const FUOUWaterBasinInputContext& InputContext) const
 {
-	const FVector InputDirection = InputContext.WorldDirection.GetSafeNormal();
-	if (InputDirection.IsNearlyZero())
-	{
-		return 1.0f;
-	}
-
 	const float DeadZone = FMath::Max(InputDirectionDeadZone, 0.0f);
 	const USceneComponent* TargetComponent = ResolveRotationTargetComponent();
-	const FVector AxisWorld = ResolveWorldRotationAxis(TargetComponent);
-	const FVector PlanarInputDirection = AxisWorld.IsNearlyZero()
-		? InputDirection
-		: (InputDirection - AxisWorld * FVector::DotProduct(InputDirection, AxisWorld)).GetSafeNormal();
-
-	if (TargetComponent != nullptr && !AxisWorld.IsNearlyZero() && !PlanarInputDirection.IsNearlyZero())
+	const USceneComponent* ReferenceComponent = ResolveInputDirectionReferenceComponent(TargetComponent);
+	const FVector Center = ReferenceComponent != nullptr
+		? ReferenceComponent->GetComponentLocation()
+		: (TargetComponent != nullptr ? TargetComponent->GetComponentLocation() : FVector::ZeroVector);
+	const FVector SideDirection = ResolveInputDirectionSideWorldDirection(ReferenceComponent, TargetComponent);
+	if (SideDirection.IsNearlyZero())
 	{
-		const FVector Radial = InputContext.WorldLocation - TargetComponent->GetComponentLocation();
-		const FVector PlanarRadial = (Radial - AxisWorld * FVector::DotProduct(Radial, AxisWorld)).GetSafeNormal();
-		if (!PlanarRadial.IsNearlyZero())
-		{
-			const float TorqueSignValue = FVector::DotProduct(FVector::CrossProduct(PlanarRadial, PlanarInputDirection), AxisWorld);
-			if (FMath::Abs(TorqueSignValue) > DeadZone)
-			{
-				return FMath::Sign(TorqueSignValue);
-			}
-		}
+		return 0.0f;
 	}
 
-	FVector ReferenceDirection = InputDirectionReferenceVector.GetSafeNormal();
-	if (!AxisWorld.IsNearlyZero())
+	const FVector InputOffset = InputContext.WorldLocation - Center;
+	const FVector AxisWorld = ResolveWorldRotationAxis(ReferenceComponent != nullptr ? ReferenceComponent : TargetComponent);
+	const FVector PlanarInputOffset = AxisWorld.IsNearlyZero()
+		? InputOffset
+		: InputOffset - AxisWorld * FVector::DotProduct(InputOffset, AxisWorld);
+	const FVector InputSideDirection = PlanarInputOffset.GetSafeNormal();
+	if (InputSideDirection.IsNearlyZero())
 	{
-		ReferenceDirection = (ReferenceDirection - AxisWorld * FVector::DotProduct(ReferenceDirection, AxisWorld)).GetSafeNormal();
+		return 0.0f;
 	}
 
-	if (ReferenceDirection.IsNearlyZero())
+	const float SideSignValue = FVector::DotProduct(InputSideDirection, SideDirection);
+	if (FMath::Abs(SideSignValue) > DeadZone)
 	{
-		return 1.0f;
+		return ApplyInputDirectionSignInversion(FMath::Sign(SideSignValue));
 	}
 
-	const FVector ComparisonDirection = PlanarInputDirection.IsNearlyZero() ? InputDirection : PlanarInputDirection;
-	const float ReferenceSignValue = FVector::DotProduct(ComparisonDirection, ReferenceDirection);
-	if (FMath::Abs(ReferenceSignValue) > DeadZone)
+	return 0.0f;
+}
+
+float UUOUWaterBasinRotationReactionComponent::ApplyInputDirectionSignInversion(float DirectionSign) const
+{
+	return bInvertInputDirectionRotationSign ? -DirectionSign : DirectionSign;
+}
+
+FVector UUOUWaterBasinRotationReactionComponent::ResolveInputDirectionReferenceWorldDirection(const USceneComponent* ReferenceComponent) const
+{
+	if (ReferenceComponent != nullptr)
 	{
-		return FMath::Sign(ReferenceSignValue);
+		return ReferenceComponent->GetForwardVector().GetSafeNormal();
 	}
 
-	return 1.0f;
+	return InputDirectionReferenceVector.GetSafeNormal();
+}
+
+FVector UUOUWaterBasinRotationReactionComponent::ResolveInputDirectionSideWorldDirection(
+	const USceneComponent* ReferenceComponent,
+	const USceneComponent* TargetComponent) const
+{
+	const FVector ForwardDirection = ResolveInputDirectionReferenceWorldDirection(ReferenceComponent);
+	if (ForwardDirection.IsNearlyZero())
+	{
+		return FVector::ZeroVector;
+	}
+
+	const FVector AxisWorld = ResolveWorldRotationAxis(ReferenceComponent != nullptr ? ReferenceComponent : TargetComponent);
+	if (AxisWorld.IsNearlyZero())
+	{
+		return ReferenceComponent != nullptr ? ReferenceComponent->GetRightVector().GetSafeNormal() : FVector::ZeroVector;
+	}
+
+	const FVector PlanarForwardDirection = (ForwardDirection - AxisWorld * FVector::DotProduct(ForwardDirection, AxisWorld)).GetSafeNormal();
+	if (PlanarForwardDirection.IsNearlyZero())
+	{
+		return ReferenceComponent != nullptr ? ReferenceComponent->GetRightVector().GetSafeNormal() : FVector::ZeroVector;
+	}
+
+	return FVector::CrossProduct(AxisWorld, PlanarForwardDirection).GetSafeNormal();
 }
 
 EUOUWaterBasinRotationInputDirectionPolicy UUOUWaterBasinRotationReactionComponent::GetInputDirectionPolicy(EUOUWaterBasinInputSource Source) const
