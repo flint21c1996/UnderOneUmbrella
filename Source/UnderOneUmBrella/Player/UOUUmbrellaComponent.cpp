@@ -2,6 +2,7 @@
 
 #include "Player/UOUUmbrellaComponent.h"
 
+#include "Audio/UOUAudioCueComponent.h"
 #include "Audio/UOUAudioSubsystem.h"
 #include "Components/ArrowComponent.h"
 #include "Components/PrimitiveComponent.h"
@@ -112,7 +113,7 @@ void UUOUUmbrellaComponent::AcquireUmbrella()
 		StoredWaterContainer->SetAmount(0.0f);
 	}
 
-	PlayUmbrellaAudioEvent(AcquireAudioEventId);
+	PlayUmbrellaAudioCue(AcquireAudioCueId, AcquireAudioEventId);
 	OnUmbrellaStateChanged.Broadcast(CurrentState, bHasUmbrella);
 }
 
@@ -460,11 +461,11 @@ void UUOUUmbrellaComponent::SetState(EUOUUmbrellaState NewState)
 	{
 		if (CurrentState == EUOUUmbrellaState::Open)
 		{
-			PlayUmbrellaAudioEvent(OpenAudioEventId);
+			PlayUmbrellaAudioCue(OpenAudioCueId, OpenAudioEventId);
 		}
 		else if (CurrentState == EUOUUmbrellaState::Closed)
 		{
-			PlayUmbrellaAudioEvent(CloseAudioEventId);
+			PlayUmbrellaAudioCue(CloseAudioCueId, CloseAudioEventId);
 		}
 	}
 
@@ -560,9 +561,36 @@ void UUOUUmbrellaComponent::PlayUmbrellaAudioEvent(FName AudioEventId) const
 		return;
 	}
 
+	AudioSubsystem->PlayAudioEventAtLocation(AudioEventId, GetUmbrellaAudioLocation());
+}
+
+void UUOUUmbrellaComponent::PlayUmbrellaAudioCue(FName CueId, FName FallbackAudioEventId) const
+{
+	if (!CueId.IsNone())
+	{
+		if (UUOUAudioCueComponent* AudioCueComponent = GetAudioCueComponent())
+		{
+			if (AudioCueComponent->HasCue(CueId)
+				&& AudioCueComponent->PlayCueAtLocation(CueId, GetUmbrellaAudioLocation()))
+			{
+				return;
+			}
+		}
+	}
+
+	PlayUmbrellaAudioEvent(FallbackAudioEventId);
+}
+
+UUOUAudioCueComponent* UUOUUmbrellaComponent::GetAudioCueComponent() const
+{
+	AActor* Owner = GetOwner();
+	return Owner != nullptr ? Owner->FindComponentByClass<UUOUAudioCueComponent>() : nullptr;
+}
+
+FVector UUOUUmbrellaComponent::GetUmbrellaAudioLocation() const
+{
 	const AActor* Owner = GetOwner();
-	const FVector EventLocation = Owner != nullptr ? Owner->GetActorLocation() : FVector::ZeroVector;
-	AudioSubsystem->PlayAudioEventAtLocation(AudioEventId, EventLocation);
+	return Owner != nullptr ? Owner->GetActorLocation() : FVector::ZeroVector;
 }
 
 // 블루프린트 세팅이 비어 있어도 약속된 이름과 컴포넌트 타입으로 필요한 참조를 찾아 채웁니다.
