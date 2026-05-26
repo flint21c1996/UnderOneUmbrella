@@ -7,12 +7,14 @@
 #include "UOUWaterBasinRotationReactionComponent.generated.h"
 
 class USceneComponent;
+class UUOUWaterBasinTargetComponent;
 
 UENUM(BlueprintType)
 enum class EUOUWaterBasinRotationReactionMode : uint8
 {
 	IncrementalOnIncrease UMETA(DisplayName = "Incremental On Increase", ToolTip = "Water value가 증가한 양만큼 누적 회전합니다. 물이 빠져도 회전은 되돌아가지 않습니다."),
-	AbsoluteByValue UMETA(DisplayName = "Absolute By Value", ToolTip = "현재 Water value에 대응하는 각도로 회전합니다. 물이 빠지면 회전도 되돌아갑니다.")
+	AbsoluteByValue UMETA(DisplayName = "Absolute By Value", ToolTip = "현재 Water value에 대응하는 각도로 회전합니다. 물이 빠지면 회전도 되돌아갑니다."),
+	IncrementalOnWaterInput UMETA(DisplayName = "Incremental On Water Input", ToolTip = "실제 수위가 변하지 않아도 WaterBasinTarget에 들어온 물 입력량만큼 누적 회전합니다.")
 };
 
 UENUM(BlueprintType)
@@ -33,6 +35,8 @@ public:
 
 	virtual void OnRegister() override;
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Target", meta = (ToolTip = "회전시킬 SceneComponent입니다. 비워두면 RotationTargetComponentName으로 찾고, 그래도 없으면 옵션에 따라 Owner RootComponent를 사용합니다."))
 	TObjectPtr<USceneComponent> RotationTargetComponent = nullptr;
@@ -44,7 +48,7 @@ public:
 	bool bUseOwnerRootWhenTargetMissing = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Rotation", meta = (ToolTip = "물 값 변화를 회전으로 해석하는 방식입니다."))
-	EUOUWaterBasinRotationReactionMode RotationMode = EUOUWaterBasinRotationReactionMode::IncrementalOnIncrease;
+	EUOUWaterBasinRotationReactionMode RotationMode = EUOUWaterBasinRotationReactionMode::IncrementalOnWaterInput;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Rotation", meta = (ToolTip = "회전을 적용할 공간입니다. Relative는 상대 회전, World는 월드 회전을 기준으로 합니다."))
 	EUOUWaterBasinRotationReactionSpace RotationSpace = EUOUWaterBasinRotationReactionSpace::Relative;
@@ -54,6 +58,15 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Rotation", meta = (ToolTip = "Water value 1 단위 변화당 회전할 각도입니다. 기본 ValueSource인 FillRatio에서는 1.0이 가득 참을 의미하므로 90이면 0~100% 변화에 90도 회전합니다."))
 	float DegreesPerValueUnit = 90.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Rotation", meta = (ToolTip = "Rotation Mode가 Incremental On Water Input일 때 물 입력 부피 1 단위당 회전할 각도입니다."))
+	float DegreesPerInputVolume = 90.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Rotation", meta = (ToolTip = "켜져 있으면 목표 각도까지 지정한 초당 각도 속도로 회전합니다. 꺼져 있으면 물 상태 변화 시 즉시 목표 각도로 이동합니다."))
+	bool bUseRotationInterpolation = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Rotation", meta = (ClampMin = "0.0", EditCondition = "bUseRotationInterpolation", EditConditionHides, ToolTip = "회전 보간을 사용할 때 초당 회전할 각도입니다. 90이면 1초에 90도 이동합니다."))
+	float RotationSpeedDegreesPerSecond = 90.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Condition", meta = (ToolTip = "켜져 있으면 ReactionBase의 조건이 만족될 때만 회전을 적용합니다. 꺼져 있으면 조건은 디버그/이벤트용으로만 평가됩니다."))
 	bool bRequireConditionSatisfied = false;
@@ -71,6 +84,9 @@ public:
 	float LastObservedValue = 0.0f;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Water Basin Rotation Reaction|Runtime")
+	float TargetAngleDegrees = 0.0f;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Water Basin Rotation Reaction|Runtime")
 	float CurrentAppliedAngleDegrees = 0.0f;
 
 	UFUNCTION(BlueprintCallable, Category = "Water Basin Rotation Reaction")
@@ -85,9 +101,19 @@ private:
 	FQuat BaseRelativeRotation = FQuat::Identity;
 	FQuat BaseWorldRotation = FQuat::Identity;
 
+	UPROPERTY(Transient)
+	TObjectPtr<UUOUWaterBasinTargetComponent> BoundInputWaterBasinTarget = nullptr;
+
+	UFUNCTION()
+	void HandleWaterInputReceived(UUOUWaterBasinTargetComponent* Target, float InputVolume);
+
 	USceneComponent* ResolveRotationTargetComponent() const;
 	USceneComponent* FindRotationTargetComponent() const;
+	void BindToWaterInputTarget();
+	void UnbindFromWaterInputTarget();
 	void CacheBaseRotationIfNeeded();
+	void SetTargetRotationAngle(float NewTargetAngleDegrees);
+	void UpdateInterpolatedRotation(float DeltaTime);
 	void ApplyRotationAngle(float AngleDegrees);
 	float ClampRotationAngle(float AngleDegrees) const;
 };

@@ -152,6 +152,8 @@ void UUOUWaterBasinTargetComponent::ReceivePouredWater(float Volume, float PourD
 		return;
 	}
 
+	NotifyWaterInputReceived(Volume, bApplyToConnectedGroup);
+
 	const float Duration = FMath::Max(PourDuration, 0.0f);
 	switch (PouredWaterFillMode)
 	{
@@ -776,6 +778,36 @@ void UUOUWaterBasinTargetComponent::BroadcastGroupChanged(const TArray<UUOUWater
 		if (IsValid(Target))
 		{
 			Target->OnWaterStateChanged.Broadcast(Target);
+		}
+	}
+}
+
+void UUOUWaterBasinTargetComponent::NotifyWaterInputReceived(float Volume, bool bApplyToConnectedGroup)
+{
+	if (Volume <= 0.0f)
+	{
+		return;
+	}
+
+	if (!bApplyToConnectedGroup)
+	{
+		OnWaterInputReceived.Broadcast(this, Volume);
+		return;
+	}
+
+	TArray<UUOUWaterBasinTargetComponent*> Group;
+	GetConnectedGroup(Group);
+	if (Group.Num() == 0)
+	{
+		OnWaterInputReceived.Broadcast(this, Volume);
+		return;
+	}
+
+	for (UUOUWaterBasinTargetComponent* Target : Group)
+	{
+		if (IsValid(Target))
+		{
+			Target->OnWaterInputReceived.Broadcast(Target, Volume);
 		}
 	}
 }

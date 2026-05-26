@@ -89,6 +89,8 @@ struct FUOUWaterBasinGroupDebugData
 
 //수면의 정보가 바뀔때 발생할 이벤트
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FUOUWaterBasinTargetChangedSignature, UUOUWaterBasinTargetComponent*, Target);
+// 실제 수위 변화 여부와 무관하게 물 입력이 들어왔을 때 발생하는 이벤트입니다.
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FUOUWaterBasinWaterInputSignature, UUOUWaterBasinTargetComponent*, Target, float, InputVolume);
 
 UCLASS(ClassGroup=(Puzzle), meta=(BlueprintSpawnableComponent))
 class UNDERONEUMBRELLA_API UUOUWaterBasinTargetComponent : public UActorComponent
@@ -214,6 +216,9 @@ public:
 	// 현재 Target의 물 상태가 바뀔 때 호출됩니다. 그룹 작업에서는 그룹에 포함된 각 Target에서 각각 Broadcast됩니다.
 	UPROPERTY(BlueprintAssignable, Category = "Water Basin")
 	FUOUWaterBasinTargetChangedSignature OnWaterStateChanged;
+
+	UPROPERTY(BlueprintAssignable, Category = "Water Basin")
+	FUOUWaterBasinWaterInputSignature OnWaterInputReceived;
 
 	// 물 부피를 추가합니다. 그룹 적용 시 현재 연결 그룹의 총 부피에 Volume을 더한 뒤 공통 수면 높이로 재분배합니다.
 	UFUNCTION(BlueprintCallable, Category = "Water Basin")
@@ -351,6 +356,9 @@ private:
 
 	// 그룹에 속한 모든 Target의 OnWaterStateChanged를 호출합니다.
 	void BroadcastGroupChanged(const TArray<UUOUWaterBasinTargetComponent*>& Group);
+
+	// 실제 수위 변화 여부와 무관하게 물 입력이 들어왔음을 대상 범위에 알립니다.
+	void NotifyWaterInputReceived(float Volume, bool bApplyToConnectedGroup);
 
 	// CurrentWaterDepth를 기준으로 WaterVisual의 크기, 위치, 표시 상태를 갱신합니다.
 	void UpdateWaterVisual();

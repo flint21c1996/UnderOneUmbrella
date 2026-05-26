@@ -4,6 +4,7 @@
 
 #include "Components/SceneComponent.h"
 #include "GameFramework/Actor.h"
+#include "World/WaterTarget/UOUWaterBasinTargetComponent.h"
 
 UUOUWaterBasinRotationReactionComponent::UUOUWaterBasinRotationReactionComponent()
 {
@@ -26,6 +27,21 @@ void UUOUWaterBasinRotationReactionComponent::BeginPlay()
 	Super::BeginPlay();
 
 	CacheBaseRotationIfNeeded();
+	BindToWaterInputTarget();
+}
+
+void UUOUWaterBasinRotationReactionComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	UnbindFromWaterInputTarget();
+
+	Super::EndPlay(EndPlayReason);
+}
+
+void UUOUWaterBasinRotationReactionComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
+{
+	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+
+	UpdateInterpolatedRotation(DeltaTime);
 }
 
 void UUOUWaterBasinRotationReactionComponent::ResetRotationReaction(bool bResetObservedValue, bool bApplyBaseRotation)
@@ -39,6 +55,7 @@ void UUOUWaterBasinRotationReactionComponent::ResetRotationReaction(bool bResetO
 		LastObservedValue = 0.0f;
 	}
 
+	TargetAngleDegrees = 0.0f;
 	CurrentAppliedAngleDegrees = 0.0f;
 	if (bApplyBaseRotation)
 	{
@@ -49,8 +66,16 @@ void UUOUWaterBasinRotationReactionComponent::ResetRotationReaction(bool bResetO
 void UUOUWaterBasinRotationReactionComponent::OnWaterBasinReactionStateUpdated_Implementation(const FUOUWaterBasinReactionContext& Context)
 {
 	CacheBaseRotationIfNeeded();
+	BindToWaterInputTarget();
 
 	const float CurrentValue = Context.CurrentValue;
+	if (RotationMode == EUOUWaterBasinRotationReactionMode::IncrementalOnWaterInput)
+	{
+		LastObservedValue = CurrentValue;
+		bHasObservedValue = true;
+		return;
+	}
+
 	if (!bHasObservedValue)
 	{
 		bHasObservedValue = true;
@@ -58,8 +83,7 @@ void UUOUWaterBasinRotationReactionComponent::OnWaterBasinReactionStateUpdated_I
 
 		if (RotationMode == EUOUWaterBasinRotationReactionMode::AbsoluteByValue)
 		{
-			CurrentAppliedAngleDegrees = ClampRotationAngle(CurrentValue * DegreesPerValueUnit);
-			ApplyRotationAngle(CurrentAppliedAngleDegrees);
+			SetTargetRotationAngle(CurrentValue * DegreesPerValueUnit);
 		}
 		return;
 	}
@@ -73,8 +97,7 @@ void UUOUWaterBasinRotationReactionComponent::OnWaterBasinReactionStateUpdated_I
 
 	if (RotationMode == EUOUWaterBasinRotationReactionMode::AbsoluteByValue)
 	{
-		CurrentAppliedAngleDegrees = ClampRotationAngle(CurrentValue * DegreesPerValueUnit);
-		ApplyRotationAngle(CurrentAppliedAngleDegrees);
+		SetTargetRotationAngle(CurrentValue * DegreesPerValueUnit);
 		LastObservedValue = CurrentValue;
 		return;
 	}
@@ -86,8 +109,25 @@ void UUOUWaterBasinRotationReactionComponent::OnWaterBasinReactionStateUpdated_I
 		return;
 	}
 
-	CurrentAppliedAngleDegrees = ClampRotationAngle(CurrentAppliedAngleDegrees + (DeltaValue * DegreesPerValueUnit));
-	ApplyRotationAngle(CurrentAppliedAngleDegrees);
+	SetTargetRotationAngle(TargetAngleDegrees + (DeltaValue * DegreesPerValueUnit));
+}
+
+void UUOUWaterBasinRotationReactionComponent::HandleWaterInputReceived(UUOUWaterBasinTargetComponent* Target, float InputVolume)
+{
+	if (RotationMode != EUOUWaterBasinRotationReactionMode::IncrementalOnWaterInput
+		|| Target == nullptr
+		|| InputVolume <= 0.0f)
+	{
+		return;
+	}
+
+	const FUOUWaterBasinReactionContext Context = GetLastReactionContext();
+	if (bRequireConditionSatisfied && !Context.bIsSatisfied)
+	{
+		return;
+	}
+
+	SetTargetRotationAngle(TargetAngleDegrees + (InputVolume * DegreesPerInputVolume));
 }
 
 USceneComponent* UUOUWaterBasinRotationReactionComponent::ResolveRotationTargetComponent() const
@@ -135,6 +175,46 @@ USceneComponent* UUOUWaterBasinRotationReactionComponent::FindRotationTargetComp
 	return nullptr;
 }
 
+void UUOUWaterBasinRotationReactionComponent::BindToWaterInputTarget()
+{
+	UUOUWaterBasinTargetComponent* TargetComponent = nullptr;
+	const FUOUWaterBasinReactionContext Context = GetLastReactionContext();
+	if (IsValid(Context.WaterBasinTarget))
+	{
+		TargetComponent = Context.WaterBasinTarget;
+	}
+	else if (IsValid(Context.WaterTileActor))
+	{
+		TargetComponent = Context.WaterTileActor->FindComponentByClass<UUOUWaterBasinTargetComponent>();
+	}
+	else if (IsValid(TargetWaterTileActor))
+	{
+		TargetComponent = TargetWaterTileActor->FindComponentByClass<UUOUWaterBasinTargetComponent>();
+	}
+
+	if (BoundInputWaterBasinTarget == TargetComponent)
+	{
+		return;
+	}
+
+	UnbindFromWaterInputTarget();
+
+	BoundInputWaterBasinTarget = TargetComponent;
+	if (BoundInputWaterBasinTarget)
+	{
+		BoundInputWaterBasinTarget->OnWaterInputReceived.AddUniqueDynamic(this, &UUOUWaterBasinRotationReactionComponent::HandleWaterInputReceived);
+	}
+}
+
+void UUOUWaterBasinRotationReactionComponent::UnbindFromWaterInputTarget()
+{
+	if (BoundInputWaterBasinTarget)
+	{
+		BoundInputWaterBasinTarget->OnWaterInputReceived.RemoveDynamic(this, &UUOUWaterBasinRotationReactionComponent::HandleWaterInputReceived);
+		BoundInputWaterBasinTarget = nullptr;
+	}
+}
+
 void UUOUWaterBasinRotationReactionComponent::CacheBaseRotationIfNeeded()
 {
 	if (bHasCachedBaseRotation)
@@ -151,6 +231,46 @@ void UUOUWaterBasinRotationReactionComponent::CacheBaseRotationIfNeeded()
 	BaseRelativeRotation = TargetComponent->GetRelativeRotation().Quaternion();
 	BaseWorldRotation = TargetComponent->GetComponentQuat();
 	bHasCachedBaseRotation = true;
+}
+
+void UUOUWaterBasinRotationReactionComponent::SetTargetRotationAngle(float NewTargetAngleDegrees)
+{
+	TargetAngleDegrees = ClampRotationAngle(NewTargetAngleDegrees);
+	if (bUseRotationInterpolation)
+	{
+		return;
+	}
+
+	CurrentAppliedAngleDegrees = TargetAngleDegrees;
+	ApplyRotationAngle(CurrentAppliedAngleDegrees);
+}
+
+void UUOUWaterBasinRotationReactionComponent::UpdateInterpolatedRotation(float DeltaTime)
+{
+	if (!bUseRotationInterpolation)
+	{
+		return;
+	}
+
+	const float Duration = FMath::Max(DeltaTime, 0.0f);
+	const float RotationSpeed = FMath::Max(RotationSpeedDegreesPerSecond, 0.0f);
+	if (Duration <= 0.0f || RotationSpeed <= KINDA_SMALL_NUMBER)
+	{
+		return;
+	}
+
+	const float NextAngle = FMath::FInterpConstantTo(
+		CurrentAppliedAngleDegrees,
+		TargetAngleDegrees,
+		Duration,
+		RotationSpeed);
+	if (FMath::IsNearlyEqual(NextAngle, CurrentAppliedAngleDegrees, KINDA_SMALL_NUMBER))
+	{
+		return;
+	}
+
+	CurrentAppliedAngleDegrees = NextAngle;
+	ApplyRotationAngle(CurrentAppliedAngleDegrees);
 }
 
 void UUOUWaterBasinRotationReactionComponent::ApplyRotationAngle(float AngleDegrees)
