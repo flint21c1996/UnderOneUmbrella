@@ -9,6 +9,8 @@
 
 namespace
 {
+	constexpr float MinRotationReactionWorldUnitsPerTile = 1.0f;
+
 	const TCHAR* GetInputSourceDebugName(EUOUWaterBasinInputSource Source)
 	{
 		switch (Source)
@@ -51,6 +53,156 @@ namespace
 		}
 
 		return FVector::DotProduct(SafeAxis, FVector::CrossProduct(PlanarForwardDirection, PlanarInputDirection));
+	}
+
+	void GetWaterInputTargets(
+		const UUOUWaterBasinTargetComponent* Target,
+		bool bApplyToConnectedGroup,
+		TArray<UUOUWaterBasinTargetComponent*>& OutTargets)
+	{
+		OutTargets.Reset();
+		if (!IsValid(Target))
+		{
+			return;
+		}
+
+		if (bApplyToConnectedGroup)
+		{
+			Target->GetConnectedGroup(OutTargets);
+			return;
+		}
+
+		OutTargets.Add(const_cast<UUOUWaterBasinTargetComponent*>(Target));
+	}
+
+	float GetWaterInputTotalCapacity(const UUOUWaterBasinTargetComponent* Target, bool bApplyToConnectedGroup)
+	{
+		if (!IsValid(Target))
+		{
+			return 0.0f;
+		}
+
+		if (bApplyToConnectedGroup)
+		{
+			return Target->GetConnectedGroupDebugData().TotalCapacity;
+		}
+
+		return Target->GetCapacity();
+	}
+
+	float GetWaterInputTotalSurfaceArea(const UUOUWaterBasinTargetComponent* Target, bool bApplyToConnectedGroup)
+	{
+		TArray<UUOUWaterBasinTargetComponent*> Targets;
+		GetWaterInputTargets(Target, bApplyToConnectedGroup, Targets);
+
+		float TotalSurfaceArea = 0.0f;
+		for (const UUOUWaterBasinTargetComponent* WaterTarget : Targets)
+		{
+			if (IsValid(WaterTarget))
+			{
+				TotalSurfaceArea += WaterTarget->GetSurfaceArea();
+			}
+		}
+
+		return TotalSurfaceArea;
+	}
+
+	bool IsWaterInputTargetAlreadyFull(
+		const UUOUWaterBasinTargetComponent* Target,
+		const FUOUWaterBasinInputContext& InputContext,
+		float FillRatioTolerance)
+	{
+		if (!IsValid(Target))
+		{
+			return false;
+		}
+
+		const float SafeTolerance = FMath::Max(FillRatioTolerance, KINDA_SMALL_NUMBER);
+		const float FillRatio = InputContext.bApplyToConnectedGroup
+			? Target->GetConnectedGroupDebugData().FillRatio
+			: Target->CurrentFillRatio;
+		return FillRatio >= 1.0f - SafeTolerance;
+	}
+
+	float ResolveAttemptedWaterInputVolumeDelta(
+		const UUOUWaterBasinTargetComponent* Target,
+		const FUOUWaterBasinInputContext& InputContext)
+	{
+		if (!IsValid(Target))
+		{
+			return 0.0f;
+		}
+
+		const float Duration = FMath::Max(InputContext.Duration, 0.0f);
+		const bool bApplyToConnectedGroup = InputContext.bApplyToConnectedGroup;
+		switch (Target->PouredWaterFillMode)
+		{
+		case EUOUWaterBasinPouredWaterFillMode::FillRatio:
+		{
+			const float RatioDelta = FMath::Max(Target->PouredWaterFillRatioPerSecond, 0.0f) * Duration;
+			return GetWaterInputTotalCapacity(Target, bApplyToConnectedGroup) * RatioDelta;
+		}
+
+		case EUOUWaterBasinPouredWaterFillMode::WaterDepth:
+		{
+			const float DepthDelta = FMath::Max(Target->PouredWaterDepthPerSecond, 0.0f) * Duration;
+			return GetWaterInputTotalSurfaceArea(Target, bApplyToConnectedGroup) * DepthDelta;
+		}
+
+		case EUOUWaterBasinPouredWaterFillMode::SurfaceWorldZ:
+		{
+			const float SurfaceDeltaWorld = FMath::Max(Target->PouredWaterSurfaceWorldZPerSecond, 0.0f) * Duration;
+			const float DepthDelta = SurfaceDeltaWorld / FMath::Max(Target->WorldUnitsPerTile, MinRotationReactionWorldUnitsPerTile);
+			return GetWaterInputTotalSurfaceArea(Target, bApplyToConnectedGroup) * DepthDelta;
+		}
+
+		case EUOUWaterBasinPouredWaterFillMode::Volume:
+		default:
+			return FMath::Max(InputContext.Volume, 0.0f);
+		}
+	}
+
+	float ResolveAttemptedReactionValueDelta(
+		const UUOUWaterBasinTargetComponent* Target,
+		const FUOUWaterBasinInputContext& InputContext,
+		EUOUWaterBasinReactionValueSource ValueSource)
+	{
+		const float VolumeDelta = ResolveAttemptedWaterInputVolumeDelta(Target, InputContext);
+		if (VolumeDelta <= 0.0f)
+		{
+			return 0.0f;
+		}
+
+		const bool bApplyToConnectedGroup = InputContext.bApplyToConnectedGroup;
+		switch (ValueSource)
+		{
+		case EUOUWaterBasinReactionValueSource::WaterVolume:
+			return VolumeDelta;
+
+		case EUOUWaterBasinReactionValueSource::WaterFillRatio:
+		{
+			const float Capacity = GetWaterInputTotalCapacity(Target, bApplyToConnectedGroup);
+			return Capacity > KINDA_SMALL_NUMBER ? VolumeDelta / Capacity : 0.0f;
+		}
+
+		case EUOUWaterBasinReactionValueSource::WaterDepth:
+		{
+			const float SurfaceArea = GetWaterInputTotalSurfaceArea(Target, bApplyToConnectedGroup);
+			return SurfaceArea > KINDA_SMALL_NUMBER ? VolumeDelta / SurfaceArea : 0.0f;
+		}
+
+		case EUOUWaterBasinReactionValueSource::WaterDepthWorld:
+		case EUOUWaterBasinReactionValueSource::WaterSurfaceWorldZ:
+		{
+			const float SurfaceArea = GetWaterInputTotalSurfaceArea(Target, bApplyToConnectedGroup);
+			const float DepthDelta = SurfaceArea > KINDA_SMALL_NUMBER ? VolumeDelta / SurfaceArea : 0.0f;
+			return DepthDelta * FMath::Max(Target->WorldUnitsPerTile, MinRotationReactionWorldUnitsPerTile);
+		}
+
+		case EUOUWaterBasinReactionValueSource::PlatformWorldZ:
+		default:
+			return 0.0f;
+		}
 	}
 }
 
@@ -163,7 +315,9 @@ void UUOUWaterBasinRotationReactionComponent::OnWaterBasinReactionStateUpdated_I
 
 void UUOUWaterBasinRotationReactionComponent::HandleWaterInputReceived(UUOUWaterBasinTargetComponent* Target, const FUOUWaterBasinInputContext& InputContext)
 {
-	if (RotationMode != EUOUWaterBasinRotationReactionMode::IncrementalOnWaterInput
+	const bool bRotateByEveryWaterInput = RotationMode == EUOUWaterBasinRotationReactionMode::IncrementalOnWaterInput;
+	const bool bRotateByFullWaterInput = RotationMode == EUOUWaterBasinRotationReactionMode::IncrementalOnIncrease && bRotateOnFullWaterInput;
+	if ((!bRotateByEveryWaterInput && !bRotateByFullWaterInput)
 		|| Target == nullptr
 		|| InputContext.Volume <= 0.0f)
 	{
@@ -173,6 +327,23 @@ void UUOUWaterBasinRotationReactionComponent::HandleWaterInputReceived(UUOUWater
 	const FUOUWaterBasinReactionContext Context = GetLastReactionContext();
 	if (bRequireConditionSatisfied && !Context.bIsSatisfied)
 	{
+		return;
+	}
+
+	if (bRotateByFullWaterInput)
+	{
+		if (!IsWaterInputTargetAlreadyFull(Target, InputContext, Tolerance))
+		{
+			return;
+		}
+
+		const float AttemptedValueDelta = ResolveAttemptedReactionValueDelta(Target, InputContext, ValueSource);
+		if (AttemptedValueDelta <= KINDA_SMALL_NUMBER)
+		{
+			return;
+		}
+
+		SetTargetRotationAngle(TargetAngleDegrees + (AttemptedValueDelta * DegreesPerValueUnit));
 		return;
 	}
 
