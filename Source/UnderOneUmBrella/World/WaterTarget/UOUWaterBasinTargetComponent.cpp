@@ -46,7 +46,7 @@ void UUOUWaterBasinTargetComponent::BeginPlay()
 	Super::BeginPlay();
 
 	NormalizeConnections();
-	CurrentWaterVolume = FMath::Clamp(InitialWaterVolume, 0.0f, GetCapacity());
+	CurrentWaterVolume = ResolveInitialWaterVolume();
 	UpdateCachedWaterState();
 
 	// 모든 Actor의 BeginPlay가 끝난 뒤 첫 Tick에서 그룹 초기 물량을 한 번 맞춥니다.
@@ -96,9 +96,37 @@ void UUOUWaterBasinTargetComponent::PostEditChangeProperty(FPropertyChangedEvent
 		bCapturedWaterVisualTransform = false;
 	}
 
-	if (ChangedPropertyName == GET_MEMBER_NAME_CHECKED(UUOUWaterBasinTargetComponent, InitialWaterVolume))
+	const bool bChangedInitialWaterSetting =
+		ChangedPropertyName == GET_MEMBER_NAME_CHECKED(UUOUWaterBasinTargetComponent, InitialWaterFillMode)
+		|| ChangedPropertyName == GET_MEMBER_NAME_CHECKED(UUOUWaterBasinTargetComponent, InitialWaterVolume)
+		|| ChangedPropertyName == GET_MEMBER_NAME_CHECKED(UUOUWaterBasinTargetComponent, InitialWaterFillRatio);
+	const bool bChangedWaterStatePreview =
+		bChangedInitialWaterSetting
+		|| ChangedPropertyName == GET_MEMBER_NAME_CHECKED(UUOUWaterBasinTargetComponent, CurrentWaterDepth)
+		|| ChangedPropertyName == GET_MEMBER_NAME_CHECKED(UUOUWaterBasinTargetComponent, CurrentFillRatio)
+		|| ChangedPropertyName == GET_MEMBER_NAME_CHECKED(UUOUWaterBasinTargetComponent, WaterSurfaceWorldZ);
+
+	if (ChangedPropertyName == GET_MEMBER_NAME_CHECKED(UUOUWaterBasinTargetComponent, InitialWaterFillMode))
 	{
-		CurrentWaterVolume = FMath::Clamp(InitialWaterVolume, 0.0f, GetCapacity());
+		const float Capacity = GetCapacity();
+		switch (InitialWaterFillMode)
+		{
+		case EUOUWaterBasinInitialWaterFillMode::FillRatio:
+			InitialWaterFillRatio = Capacity > KINDA_SMALL_NUMBER
+				? FMath::Clamp(InitialWaterVolume / Capacity, 0.0f, 1.0f)
+				: 0.0f;
+			break;
+
+		case EUOUWaterBasinInitialWaterFillMode::Volume:
+		default:
+			InitialWaterVolume = FMath::Clamp(InitialWaterFillRatio, 0.0f, 1.0f) * Capacity;
+			break;
+		}
+	}
+
+	if (bChangedInitialWaterSetting)
+	{
+		CurrentWaterVolume = ResolveInitialWaterVolume();
 	}
 	else if (ChangedPropertyName == GET_MEMBER_NAME_CHECKED(UUOUWaterBasinTargetComponent, CurrentWaterDepth))
 	{
@@ -112,15 +140,13 @@ void UUOUWaterBasinTargetComponent::PostEditChangeProperty(FPropertyChangedEvent
 	{
 		CurrentWaterVolume = GetVolumeAtSurfaceWorldZ(WaterSurfaceWorldZ);
 	}
-	else if (ChangedPropertyName == GET_MEMBER_NAME_CHECKED(UUOUWaterBasinTargetComponent, InitialWaterVolume) 
-		|| ChangedPropertyName == GET_MEMBER_NAME_CHECKED(UUOUWaterBasinTargetComponent, CurrentWaterDepth)
-		|| ChangedPropertyName == GET_MEMBER_NAME_CHECKED(UUOUWaterBasinTargetComponent, CurrentFillRatio)
-		|| ChangedPropertyName == GET_MEMBER_NAME_CHECKED(UUOUWaterBasinTargetComponent, WaterSurfaceWorldZ))
+
+	Super::PostEditChangeProperty(PropertyChangedEvent);
+
+	if (bChangedWaterStatePreview)
 	{
 		UpdateCachedWaterState();
 	}
-
-	Super::PostEditChangeProperty(PropertyChangedEvent);
 }
 #endif
 
@@ -586,6 +612,19 @@ void UUOUWaterBasinTargetComponent::ApplyWaterVolumeToSingleTarget(float NewVolu
 	LastGroupSurfaceWorldZ = SingleData.SurfaceWorldZ;
 
 	OnWaterStateChanged.Broadcast(this);
+}
+
+float UUOUWaterBasinTargetComponent::ResolveInitialWaterVolume() const
+{
+	switch (InitialWaterFillMode)
+	{
+	case EUOUWaterBasinInitialWaterFillMode::FillRatio:
+		return FMath::Clamp(InitialWaterFillRatio, 0.0f, 1.0f) * GetCapacity();
+
+	case EUOUWaterBasinInitialWaterFillMode::Volume:
+	default:
+		return FMath::Clamp(InitialWaterVolume, 0.0f, GetCapacity());
+	}
 }
 
 void UUOUWaterBasinTargetComponent::ApplyWaterVolumeToConnectedGroup(float NewTotalVolume)
