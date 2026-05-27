@@ -495,6 +495,10 @@ void UUOUUmbrellaComponent::RefreshVisuals()
 	if (bHasDedicatedVisuals)
 	{
 		// 상태별 전용 비주얼이 하나라도 있으면 그 방식이 우선입니다.
+		const bool bUseRuntimeUpsideDownFallback = RuntimeHeldVisual != nullptr
+			&& UpsideDownVisual == nullptr
+			&& ShouldFlipRuntimeHeldVisual();
+
 		if (ClosedVisual != nullptr)
 		{
 			ClosedVisual->SetVisibility(CurrentState == EUOUUmbrellaState::Closed, true);
@@ -502,7 +506,10 @@ void UUOUUmbrellaComponent::RefreshVisuals()
 
 		if (OpenVisual != nullptr)
 		{
-			OpenVisual->SetVisibility(CurrentState == EUOUUmbrellaState::Open || CurrentState == EUOUUmbrellaState::Pouring, true);
+			OpenVisual->SetVisibility(
+				CurrentState == EUOUUmbrellaState::Open
+				|| (CurrentState == EUOUUmbrellaState::Pouring && !bUseRuntimeUpsideDownFallback),
+				true);
 		}
 
 		if (UpsideDownVisual != nullptr)
@@ -512,7 +519,12 @@ void UUOUUmbrellaComponent::RefreshVisuals()
 
 		if (RuntimeHeldVisual != nullptr)
 		{
-			RuntimeHeldVisual->SetVisibility(false, true);
+			if (bUseRuntimeUpsideDownFallback)
+			{
+				ApplyRuntimeHeldVisualStateTransform();
+			}
+
+			RuntimeHeldVisual->SetVisibility(bUseRuntimeUpsideDownFallback, true);
 		}
 
 		return;
@@ -521,6 +533,7 @@ void UUOUUmbrellaComponent::RefreshVisuals()
 	if (RuntimeHeldVisual != nullptr)
 	{
 		// 상태별 비주얼이 없다면 픽업에서 복사한 런타임 메쉬 하나를 계속 보여줍니다.
+		ApplyRuntimeHeldVisualStateTransform();
 		RuntimeHeldVisual->SetVisibility(true, true);
 	}
 }
@@ -594,6 +607,7 @@ void UUOUUmbrellaComponent::EnsureRuntimeHeldVisual()
 {
 	if (RuntimeHeldVisual != nullptr)
 	{
+		RuntimeHeldVisualBaseRelativeTransform = RuntimeHeldVisual->GetRelativeTransform();
 		return;
 	}
 
@@ -620,7 +634,8 @@ void UUOUUmbrellaComponent::EnsureRuntimeHeldVisual()
 	// 우산 부착 지점이 있으면 그 아래에 붙이고, 없으면 루트에 붙여 최소 동작을 보장합니다.
 	RuntimeHeldVisual->SetupAttachment(AttachParent);
 	RuntimeHeldVisual->RegisterComponent();
-	RuntimeHeldVisual->SetRelativeTransform(GetHeldVisualRelativeTransform(FVector::OneVector));
+	RuntimeHeldVisualBaseRelativeTransform = GetHeldVisualRelativeTransform(FVector::OneVector);
+	RuntimeHeldVisual->SetRelativeTransform(RuntimeHeldVisualBaseRelativeTransform);
 }
 
 // 월드 픽업 메쉬에서 스태틱 메쉬와 머티리얼을 읽어 손에 든 비주얼로 복사합니다.
@@ -653,7 +668,8 @@ void UUOUUmbrellaComponent::ApplyHeldVisualFromAssets(UStaticMesh* Mesh, const T
 	}
 
 	RuntimeHeldVisual->SetStaticMesh(Mesh != nullptr ? Mesh : DefaultHeldMesh.Get());
-	RuntimeHeldVisual->SetRelativeTransform(GetHeldVisualRelativeTransform(SourceRelativeScale));
+	RuntimeHeldVisualBaseRelativeTransform = GetHeldVisualRelativeTransform(SourceRelativeScale);
+	ApplyRuntimeHeldVisualStateTransform();
 
 	for (int32 MaterialIndex = 0; MaterialIndex < Materials.Num(); ++MaterialIndex)
 	{
@@ -682,6 +698,30 @@ FTransform UUOUUmbrellaComponent::GetHeldVisualRelativeTransform(const FVector& 
 		HeldVisualRelativeScale.Z * EffectiveSourceScale.Z);
 
 	return FTransform(RelativeRotation, RelativeLocation, RelativeScale);
+}
+
+void UUOUUmbrellaComponent::ApplyRuntimeHeldVisualStateTransform()
+{
+	if (RuntimeHeldVisual == nullptr)
+	{
+		return;
+	}
+
+	FTransform VisualTransform = RuntimeHeldVisualBaseRelativeTransform;
+	if (ShouldFlipRuntimeHeldVisual())
+	{
+		const FQuat FlippedRotation = VisualTransform.GetRotation() * UpsideDownHeldVisualRotationOffset.Quaternion();
+		VisualTransform.SetRotation(FlippedRotation.GetNormalized());
+		VisualTransform.AddToTranslation(UpsideDownHeldVisualLocationOffset);
+	}
+
+	RuntimeHeldVisual->SetRelativeTransform(VisualTransform);
+}
+
+bool UUOUUmbrellaComponent::ShouldFlipRuntimeHeldVisual() const
+{
+	return bFlipRuntimeHeldVisualWhenUpsideDown
+		&& (CurrentState == EUOUUmbrellaState::UpsideDown || CurrentState == EUOUUmbrellaState::Pouring);
 }
 
 // 플레이 중 우산 보유 상태, 저장된 물, 마지막 붓기 대상을 화면에 표시합니다.

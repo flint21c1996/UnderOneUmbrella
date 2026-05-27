@@ -133,6 +133,18 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Visual")
 	FVector HeldVisualRelativeScale = FVector::OneVector;
 
+	// 상태별 전용 비주얼이 없을 때, 뒤집힘/붓기 상태에서 런타임 우산 메쉬를 임시로 뒤집어 보여줍니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Visual", meta = (ToolTip = "UpsideDownVisual을 따로 만들기 전까지 RuntimeHeldVisual을 회전시켜 우산이 뒤집힌 상태임을 보여줍니다."))
+	bool bFlipRuntimeHeldVisualWhenUpsideDown = true;
+
+	// 런타임 우산 메쉬를 뒤집힌 상태로 보여줄 때 추가할 로컬 회전 오프셋입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Visual", meta = (EditCondition = "bFlipRuntimeHeldVisualWhenUpsideDown", ToolTip = "뒤집힘/붓기 상태에서 RuntimeHeldVisual에 추가로 적용할 로컬 회전입니다. 메쉬 축이 맞지 않으면 BP에서 조정합니다."))
+	FRotator UpsideDownHeldVisualRotationOffset = FRotator(180.0f, 0.0f, 0.0f);
+
+	// 런타임 우산 메쉬를 뒤집힌 상태로 보여줄 때 추가할 상대 위치 오프셋입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Visual", meta = (EditCondition = "bFlipRuntimeHeldVisualWhenUpsideDown", ToolTip = "뒤집힌 메쉬의 중심점이 맞지 않을 때 손 위치 기준으로 보정할 상대 위치입니다."))
+	FVector UpsideDownHeldVisualLocationOffset = FVector(0.0f, 0.0f, 150.0f);
+
 	// 월드에 놓인 픽업 메쉬의 상대 스케일을 손에 든 비주얼에도 반영할지 정합니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Visual")
 	bool bUsePickupMeshRelativeScale = true;
@@ -406,6 +418,12 @@ protected:
 	// 손에 든 우산 비주얼의 로컬 위치, 회전, 스케일을 계산합니다.
 	FTransform GetHeldVisualRelativeTransform(const FVector& SourceRelativeScale) const;
 
+	// 현재 우산 상태에 맞게 런타임 우산 메쉬의 임시 회전 보정을 적용합니다.
+	void ApplyRuntimeHeldVisualStateTransform();
+
+	// 런타임 우산 메쉬를 뒤집힌 상태로 보여줘야 하는지 확인합니다.
+	bool ShouldFlipRuntimeHeldVisual() const;
+
 	// 우산 상태와 물 정보를 화면 디버그 텍스트로 표시합니다.
 	void DrawScreenDebug() const;
 
@@ -441,4 +459,6 @@ protected:
 
 	// 우산에 저장된 물을 모두 비웁니다.
 	void SpillStoredWater();
+
+	FTransform RuntimeHeldVisualBaseRelativeTransform = FTransform::Identity;
 };
