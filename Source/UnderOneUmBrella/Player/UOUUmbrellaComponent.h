@@ -14,6 +14,7 @@ class USceneComponent;
 class UStaticMesh;
 class UStaticMeshComponent;
 class UUOURainReceiverComponent;
+class UUOUAudioCueComponent;
 class UUOUWaterContainerComponent;
 
 // 우산이 현재 어떤 형태로 사용되는지 나타내는 상태입니다.
@@ -97,6 +98,30 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Input", meta = (ClampMin = "0.0"))
 	float DebugFillAmount = 1.0f;
 
+	// 우산을 새로 획득했을 때 재생할 오디오 이벤트 ID입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Audio", meta = (ToolTip = "오디오 DataAsset에 등록된 이벤트 ID입니다."))
+	FName AcquireAudioEventId = TEXT("Umbrella.Acquire");
+
+	// 우산을 펼쳤을 때 재생할 오디오 이벤트 ID입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Audio", meta = (ToolTip = "오디오 DataAsset에 등록된 이벤트 ID입니다."))
+	FName OpenAudioEventId = TEXT("Umbrella.Open");
+
+	// 우산을 접었을 때 재생할 오디오 이벤트 ID입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Audio", meta = (ToolTip = "오디오 DataAsset에 등록된 이벤트 ID입니다."))
+	FName CloseAudioEventId = TEXT("Umbrella.Close");
+
+	// AudioCueComponent가 있을 때 우산 획득 상황에 사용할 Cue ID입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Audio", meta = (ToolTip = "Owner에 AudioCueComponent가 있으면 이 Cue를 먼저 재생합니다. 실패하면 AcquireAudioEventId를 fallback으로 사용합니다."))
+	FName AcquireAudioCueId = TEXT("Acquire");
+
+	// AudioCueComponent가 있을 때 우산 펼침 상황에 사용할 Cue ID입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Audio", meta = (ToolTip = "Owner에 AudioCueComponent가 있으면 이 Cue를 먼저 재생합니다. 실패하면 OpenAudioEventId를 fallback으로 사용합니다."))
+	FName OpenAudioCueId = TEXT("Open");
+
+	// AudioCueComponent가 있을 때 우산 접힘 상황에 사용할 Cue ID입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Audio", meta = (ToolTip = "Owner에 AudioCueComponent가 있으면 이 Cue를 먼저 재생합니다. 실패하면 CloseAudioEventId를 fallback으로 사용합니다."))
+	FName CloseAudioCueId = TEXT("Close");
+
 	// 우산을 캐릭터에 붙일 기준 위치입니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|References")
 	TObjectPtr<USceneComponent> PickupAttachPoint = nullptr;
@@ -132,6 +157,18 @@ public:
 	// 손에 붙은 우산 비주얼의 최종 크기를 보정하는 배율입니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Visual")
 	FVector HeldVisualRelativeScale = FVector::OneVector;
+
+	// 상태별 전용 비주얼이 없을 때, 뒤집힘/붓기 상태에서 런타임 우산 메쉬를 임시로 뒤집어 보여줍니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Visual", meta = (ToolTip = "UpsideDownVisual을 따로 만들기 전까지 RuntimeHeldVisual을 회전시켜 우산이 뒤집힌 상태임을 보여줍니다."))
+	bool bFlipRuntimeHeldVisualWhenUpsideDown = true;
+
+	// 런타임 우산 메쉬를 뒤집힌 상태로 보여줄 때 추가할 로컬 회전 오프셋입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Visual", meta = (EditCondition = "bFlipRuntimeHeldVisualWhenUpsideDown", ToolTip = "뒤집힘/붓기 상태에서 RuntimeHeldVisual에 추가로 적용할 로컬 회전입니다. 메쉬 축이 맞지 않으면 BP에서 조정합니다."))
+	FRotator UpsideDownHeldVisualRotationOffset = FRotator(180.0f, 0.0f, 0.0f);
+
+	// 런타임 우산 메쉬를 뒤집힌 상태로 보여줄 때 추가할 상대 위치 오프셋입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Visual", meta = (EditCondition = "bFlipRuntimeHeldVisualWhenUpsideDown", ToolTip = "뒤집힌 메쉬의 중심점이 맞지 않을 때 손 위치 기준으로 보정할 상대 위치입니다."))
+	FVector UpsideDownHeldVisualLocationOffset = FVector(0.0f, 0.0f, 150.0f);
 
 	// 월드에 놓인 픽업 메쉬의 상대 스케일을 손에 든 비주얼에도 반영할지 정합니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Visual")
@@ -391,6 +428,18 @@ protected:
 	// 현재 상태와 보유 여부에 맞게 우산 비주얼 표시를 맞춥니다.
 	void RefreshVisuals();
 
+	// 우산 관련 오디오 이벤트를 플레이어 위치에서 재생합니다.
+	void PlayUmbrellaAudioEvent(FName AudioEventId) const;
+
+	// AudioCueComponent가 있으면 Cue를 우선 재생하고, 없으면 기존 EventId를 재생합니다.
+	void PlayUmbrellaAudioCue(FName CueId, FName FallbackAudioEventId) const;
+
+	// Owner에 붙은 AudioCueComponent를 반환합니다.
+	UUOUAudioCueComponent* GetAudioCueComponent() const;
+
+	// 우산 오디오를 재생할 월드 위치를 반환합니다.
+	FVector GetUmbrellaAudioLocation() const;
+
 	// 블루프린트에서 비워둔 참조를 이름이나 컴포넌트 타입으로 자동 보완합니다.
 	void ResolveReferences();
 
@@ -405,6 +454,12 @@ protected:
 
 	// 손에 든 우산 비주얼의 로컬 위치, 회전, 스케일을 계산합니다.
 	FTransform GetHeldVisualRelativeTransform(const FVector& SourceRelativeScale) const;
+
+	// 현재 우산 상태에 맞게 런타임 우산 메쉬의 임시 회전 보정을 적용합니다.
+	void ApplyRuntimeHeldVisualStateTransform();
+
+	// 런타임 우산 메쉬를 뒤집힌 상태로 보여줘야 하는지 확인합니다.
+	bool ShouldFlipRuntimeHeldVisual() const;
 
 	// 우산 상태와 물 정보를 화면 디버그 텍스트로 표시합니다.
 	void DrawScreenDebug() const;
@@ -434,11 +489,13 @@ protected:
 	bool TryGetPourDirection(FVector& PourOriginLocation, FVector& PourDirection) const;
 
 	// 라인트레이스에 맞은 액터가 물을 받을 수 있으면 물을 전달하고 대상 종류를 기록합니다.
-	bool TryReceiveWaterAtHit(const FHitResult& HitResult, float WaterAmount, EUOUUmbrellaPourReceiverType& OutReceiverType);
+	bool TryReceiveWaterAtHit(const FHitResult& HitResult, float WaterAmount, float PourDuration, const FVector& PourDirection, EUOUUmbrellaPourReceiverType& OutReceiverType);
 
 	// 상태 전환 과정에서 저장된 물을 버려야 하는지 판단합니다.
 	bool ShouldSpillStoredWater(EUOUUmbrellaState PreviousState, EUOUUmbrellaState NextState) const;
 
 	// 우산에 저장된 물을 모두 비웁니다.
 	void SpillStoredWater();
+
+	FTransform RuntimeHeldVisualBaseRelativeTransform = FTransform::Identity;
 };

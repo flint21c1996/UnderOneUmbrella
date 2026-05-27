@@ -29,6 +29,62 @@ enum class EUOUWaterBasinVolumeSizeMode : uint8
 	Manual UMETA(DisplayName = "Manual", ToolTip = "Manual Surface Area와 Manual Max Water Height를 Scale 1 기준값으로 사용하고, 최종 용량에는 Actor Scale을 반영합니다.")
 };
 
+// 플레이어가 붓는 물을 이 Basin이 어떤 기준으로 해석할지 정합니다.
+UENUM(BlueprintType)
+enum class EUOUWaterBasinPouredWaterFillMode : uint8
+{
+	Volume UMETA(DisplayName = "Volume", ToolTip = "전달된 물 양을 그대로 Basin 부피로 더합니다. 기존 동작을 유지합니다."),
+	FillRatio UMETA(DisplayName = "Fill Ratio", ToolTip = "플레이어가 물을 붓는 동안 초당 지정한 용량 비율만큼 채웁니다."),
+	WaterDepth UMETA(DisplayName = "Water Depth", ToolTip = "플레이어가 물을 붓는 동안 초당 지정한 타일 깊이만큼 수면을 올립니다."),
+	SurfaceWorldZ UMETA(DisplayName = "Surface World Z", ToolTip = "플레이어가 물을 붓는 동안 초당 지정한 월드 Z 높이만큼 수면을 올립니다.")
+};
+
+// Basin이 매 Tick 자체적으로 물을 배출할 때 배출 속도를 어떤 기준으로 해석할지 정합니다.
+UENUM(BlueprintType)
+enum class EUOUWaterBasinPassiveDrainMode : uint8
+{
+	Volume UMETA(DisplayName = "Volume", ToolTip = "초당 지정한 부피만큼 물을 배출합니다."),
+	FillRatio UMETA(DisplayName = "Fill Ratio", ToolTip = "초당 지정한 용량 비율만큼 물을 배출합니다."),
+	WaterDepth UMETA(DisplayName = "Water Depth", ToolTip = "초당 지정한 타일 깊이만큼 수면을 낮춥니다."),
+	SurfaceWorldZ UMETA(DisplayName = "Surface World Z", ToolTip = "초당 지정한 월드 Z 높이만큼 수면을 낮춥니다.")
+};
+
+UENUM(BlueprintType)
+enum class EUOUWaterBasinInputSource : uint8
+{
+	Unknown UMETA(DisplayName = "Unknown"),
+	PlayerPour UMETA(DisplayName = "Player Pour"),
+	Rain UMETA(DisplayName = "Rain"),
+	Script UMETA(DisplayName = "Script")
+};
+
+USTRUCT(BlueprintType)
+struct FUOUWaterBasinInputContext
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Input", meta = (ClampMin = "0.0"))
+	float Volume = 0.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Input", meta = (ClampMin = "0.0"))
+	float Duration = 0.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Input")
+	EUOUWaterBasinInputSource Source = EUOUWaterBasinInputSource::Unknown;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Input")
+	FVector WorldDirection = FVector::ZeroVector;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Input")
+	FVector WorldLocation = FVector::ZeroVector;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Input")
+	TObjectPtr<AActor> InstigatorActor = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Input")
+	bool bApplyToConnectedGroup = true;
+};
+
 // 런타임 디버그 표시 범위입니다.
 // 수치 디버그가 겹치지 않도록 특정 Target 또는 해당 Target이 포함된 그룹만 표시합니다.
 UENUM(BlueprintType)
@@ -69,6 +125,8 @@ struct FUOUWaterBasinGroupDebugData
 
 //수면의 정보가 바뀔때 발생할 이벤트
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FUOUWaterBasinTargetChangedSignature, UUOUWaterBasinTargetComponent*, Target);
+// 실제 수위 변화 여부와 무관하게 물 입력이 들어왔을 때 발생하는 이벤트입니다.
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FUOUWaterBasinWaterInputSignature, UUOUWaterBasinTargetComponent*, Target, const FUOUWaterBasinInputContext&, InputContext);
 
 UCLASS(ClassGroup=(Puzzle), meta=(BlueprintSpawnableComponent))
 class UNDERONEUMBRELLA_API UUOUWaterBasinTargetComponent : public UActorComponent
@@ -108,6 +166,46 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin|Volume", meta = (ClampMin = "0.0", ToolTip = "게임 시작 시 이 Target이 가진 초기 물 부피입니다. 연결 그룹이면 시작 직후 그룹 전체 부피로 다시 분배됩니다."))
 	float InitialWaterVolume = 0.0f;
+
+	// 플레이어의 물 붓기 행위를 이 Basin의 물 상태로 변환하는 기준입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin|Pour", meta = (ToolTip = "플레이어가 붓는 물을 이 Target이 해석하는 방식입니다. Volume은 기존 부피 기반 동작을 유지합니다."))
+	EUOUWaterBasinPouredWaterFillMode PouredWaterFillMode = EUOUWaterBasinPouredWaterFillMode::Volume;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin|Pour", meta = (ClampMin = "0.0", EditCondition = "PouredWaterFillMode == EUOUWaterBasinPouredWaterFillMode::FillRatio", EditConditionHides, ToolTip = "Poured Water Fill Mode가 Fill Ratio일 때 초당 더할 용량 비율입니다. 0.1이면 Target 또는 그룹이 약 10초에 가득 찹니다."))
+	float PouredWaterFillRatioPerSecond = 0.1f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin|Pour", meta = (ClampMin = "0.0", EditCondition = "PouredWaterFillMode == EUOUWaterBasinPouredWaterFillMode::WaterDepth", EditConditionHides, ToolTip = "Poured Water Fill Mode가 Water Depth일 때 초당 더할 타일 깊이입니다."))
+	float PouredWaterDepthPerSecond = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin|Pour", meta = (ClampMin = "0.0", EditCondition = "PouredWaterFillMode == EUOUWaterBasinPouredWaterFillMode::SurfaceWorldZ", EditConditionHides, ToolTip = "Poured Water Fill Mode가 Surface World Z일 때 초당 더할 월드 Z 높이입니다."))
+	float PouredWaterSurfaceWorldZPerSecond = 100.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin|Rain", meta = (ToolTip = "RainArea가 비 입력을 전달해도 이 Target이 실제로 비를 받을지 정합니다. 기본값은 꺼짐이며, 런타임에는 SetRainFillReceivingEnabled로 변경할 수 있습니다."))
+	bool bReceiveRainFill = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin|Passive Drain", meta = (ToolTip = "이 Target이 매 Tick 자체적으로 물을 배출할지 정합니다. 하수구나 누수처럼 입력과 동시에 빠지는 물을 표현할 때 사용합니다."))
+	bool bEnablePassiveDrain = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin|Passive Drain", meta = (EditCondition = "bEnablePassiveDrain", EditConditionHides, ToolTip = "Passive Drain의 배출 속도를 어떤 기준으로 해석할지 정합니다."))
+	EUOUWaterBasinPassiveDrainMode PassiveDrainMode = EUOUWaterBasinPassiveDrainMode::WaterDepth;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin|Passive Drain", meta = (ClampMin = "0.0", EditCondition = "bEnablePassiveDrain && PassiveDrainMode == EUOUWaterBasinPassiveDrainMode::Volume", EditConditionHides, ToolTip = "Passive Drain Mode가 Volume일 때 초당 배출할 부피입니다."))
+	float PassiveDrainVolumePerSecond = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin|Passive Drain", meta = (ClampMin = "0.0", EditCondition = "bEnablePassiveDrain && PassiveDrainMode == EUOUWaterBasinPassiveDrainMode::FillRatio", EditConditionHides, ToolTip = "Passive Drain Mode가 Fill Ratio일 때 초당 배출할 용량 비율입니다."))
+	float PassiveDrainFillRatioPerSecond = 0.1f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin|Passive Drain", meta = (ClampMin = "0.0", EditCondition = "bEnablePassiveDrain && PassiveDrainMode == EUOUWaterBasinPassiveDrainMode::WaterDepth", EditConditionHides, ToolTip = "Passive Drain Mode가 Water Depth일 때 초당 낮출 타일 깊이입니다."))
+	float PassiveDrainWaterDepthPerSecond = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin|Passive Drain", meta = (ClampMin = "0.0", EditCondition = "bEnablePassiveDrain && PassiveDrainMode == EUOUWaterBasinPassiveDrainMode::SurfaceWorldZ", EditConditionHides, ToolTip = "Passive Drain Mode가 Surface World Z일 때 초당 낮출 월드 Z 높이입니다."))
+	float PassiveDrainSurfaceWorldZPerSecond = 100.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin|Passive Drain", meta = (ClampMin = "0.0", EditCondition = "bEnablePassiveDrain", EditConditionHides, ToolTip = "이 Target 기준으로 유지할 최소 물 깊이입니다. Passive Drain은 이 수위 아래로 물을 배출하지 않습니다."))
+	float PassiveDrainTargetWaterDepth = 0.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin|Passive Drain", meta = (EditCondition = "bEnablePassiveDrain", EditConditionHides, ToolTip = "켜져 있으면 이 Target이 속한 연결 그룹 전체에서 물을 배출합니다. 꺼져 있으면 이 Target 하나에서만 배출합니다."))
+	bool bPassiveDrainApplyToConnectedGroup = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin|Visual", meta = (ToolTip = "지정한 Water Visual 컴포넌트를 현재 수위에 맞춰 자동 갱신합니다."))
 	bool bUpdateWaterVisual = true;
@@ -155,9 +253,31 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Water Basin")
 	FUOUWaterBasinTargetChangedSignature OnWaterStateChanged;
 
+	UPROPERTY(BlueprintAssignable, Category = "Water Basin")
+	FUOUWaterBasinWaterInputSignature OnWaterInputReceived;
+
 	// 물 부피를 추가합니다. 그룹 적용 시 현재 연결 그룹의 총 부피에 Volume을 더한 뒤 공통 수면 높이로 재분배합니다.
 	UFUNCTION(BlueprintCallable, Category = "Water Basin")
 	void AddWater(float Volume, bool bApplyToConnectedGroup = true);
+
+	// 플레이어의 물 붓기 행위는 유지하고, Target별 설정에 따라 물 상태로 해석합니다.
+	UFUNCTION(BlueprintCallable, Category = "Water Basin")
+	void ReceivePouredWater(float Volume, float PourDuration, bool bApplyToConnectedGroup = true);
+
+	UFUNCTION(BlueprintCallable, Category = "Water Basin")
+	void ReceiveWaterInput(const FUOUWaterBasinInputContext& InputContext);
+
+	UFUNCTION(BlueprintCallable, Category = "Water Basin|Rain")
+	void SetRainFillReceivingEnabled(bool bEnabled);
+
+	UFUNCTION(BlueprintPure, Category = "Water Basin|Rain")
+	bool CanReceiveRainFill() const;
+
+	UFUNCTION(BlueprintCallable, Category = "Water Basin|Passive Drain")
+	void SetPassiveDrainEnabled(bool bEnabled);
+
+	UFUNCTION(BlueprintPure, Category = "Water Basin|Passive Drain")
+	bool IsPassiveDrainEnabled() const;
 
 	// 물 부피를 제거합니다. 그룹 적용 시 현재 연결 그룹의 총 부피에서 Volume을 뺀 뒤 공통 수면 높이로 재분배합니다.
 	UFUNCTION(BlueprintCallable, Category = "Water Basin")
@@ -252,6 +372,18 @@ private:
 	// 연결 그룹의 총 부피를 지정하고, 같은 수면 높이가 되도록 각 Target에 부피를 분배합니다.
 	void ApplyWaterVolumeToConnectedGroup(float NewTotalVolume);
 
+	// 매 Tick 이 Target의 기본 배출 규칙을 적용합니다.
+	void ApplyPassiveDrain(float DeltaTime);
+
+	// 연결 그룹 전체 배수는 그룹 안의 대표 Target 하나만 실행하게 합니다.
+	bool ShouldApplyPassiveDrainForConnectedGroup(const TArray<UUOUWaterBasinTargetComponent*>& Group) const;
+
+	// Passive Drain이 물을 남겨둘 목표 수면 높이를 월드 Z로 반환합니다.
+	float GetPassiveDrainTargetSurfaceWorldZ() const;
+
+	// 주어진 수면 높이에서 대상 목록이 가져야 하는 총 부피를 계산합니다.
+	float GetTotalVolumeAtSurfaceWorldZ(const TArray<UUOUWaterBasinTargetComponent*>& Targets, float SurfaceWorldZ) const;
+
 	// 공통 SurfaceWorldZ를 기준으로 각 Target의 CurrentWaterVolume을 다시 계산합니다.
 	void ApplyGroupSurfaceToTargets(const TArray<UUOUWaterBasinTargetComponent*>& Group, float SurfaceWorldZ);
 
@@ -263,6 +395,9 @@ private:
 
 	// 그룹에 속한 모든 Target의 OnWaterStateChanged를 호출합니다.
 	void BroadcastGroupChanged(const TArray<UUOUWaterBasinTargetComponent*>& Group);
+
+	// 실제 수위 변화 여부와 무관하게 물 입력이 들어왔음을 대상 범위에 알립니다.
+	void NotifyWaterInputReceived(const FUOUWaterBasinInputContext& InputContext);
 
 	// CurrentWaterDepth를 기준으로 WaterVisual의 크기, 위치, 표시 상태를 갱신합니다.
 	void UpdateWaterVisual();

@@ -23,6 +23,12 @@ class AUOUUmbrellaRainArea : public AActor
 public:
 	AUOUUmbrellaRainArea();
 
+	UFUNCTION(BlueprintCallable, Category = "Rain|Water Basin")
+	void SetWaterBasinRainFillEnabled(bool bEnabled);
+
+	UFUNCTION(BlueprintPure, Category = "Rain|Water Basin")
+	bool IsWaterBasinRainFillEnabled() const;
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaSeconds) override;
@@ -74,6 +80,9 @@ protected:
 	// 비 영역 안에서 물이 차는 속도를 정한 값입니다.
 	float RainFillRate = 1.0f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Water Basin", meta = (ToolTip = "RainVolume 안의 WaterBasinTarget에 비 입력을 전달할지 여부입니다. 런타임에는 SetWaterBasinRainFillEnabled로 변경할 수 있습니다."))
+	bool bEnableWaterBasinRainFill = false;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Falling", meta = (DisplayName = "Rain System", DisplayPriority = "1", ToolTip = "비 내림 표현에 사용할 Niagara System입니다."))
 	TObjectPtr<UNiagaraSystem> RainEffectSystem = nullptr;
 
@@ -123,6 +132,12 @@ protected:
 	void ApplyEnvironmentVisualState();
 	// 우산이 비를 막을 때 RainVisual 컴포넌트에도 차단 위치와 강도를 전달합니다.
 	void ApplyEnvironmentVisualRainBlocker(bool bIsBlocking, const FVector& BlockerWorldCenter, const FVector& BlockerHalfExtent, float BlockerIntensity);
+	// RainVolume 안에 있는 WaterBasinTarget에 기존 물 입력 규칙으로 비를 전달합니다.
+	void ApplyRainToWaterBasinTargets(float DeltaSeconds, bool bHasRainBlocker, const FVector& RainBlockerWorldCenter, const FRotator& RainBlockerWorldRotation, const FVector& RainBlockerHalfExtent) const;
+	// 대상 Actor의 bounds 중심이 RainVolume 안에 있는지 확인합니다.
+	bool IsActorInsideRainVolume(const AActor* Actor) const;
+	// 대상 Actor의 bounds 중심이 우산 차단 영역 아래에 있는지 확인합니다.
+	bool IsActorBlockedByRainBlocker(const AActor* Actor, const FVector& BlockerWorldCenter, const FRotator& BlockerWorldRotation, const FVector& BlockerHalfExtent) const;
 	// 비주얼 디버그 박스를 그려서 환경 연동 범위를 확인합니다.
 	void DrawRainVisualDebug() const;
 };

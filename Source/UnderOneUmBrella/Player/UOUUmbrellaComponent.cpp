@@ -2,11 +2,14 @@
 
 #include "Player/UOUUmbrellaComponent.h"
 
+#include "Audio/UOUAudioCueComponent.h"
+#include "Audio/UOUAudioSubsystem.h"
 #include "Components/ArrowComponent.h"
 #include "Components/PrimitiveComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Debug/UOUDebugSubsystem.h"
+#include "Engine/GameInstance.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/Engine.h"
 #include "Engine/World.h"
@@ -110,6 +113,7 @@ void UUOUUmbrellaComponent::AcquireUmbrella()
 		StoredWaterContainer->SetAmount(0.0f);
 	}
 
+	PlayUmbrellaAudioCue(AcquireAudioCueId, AcquireAudioEventId);
 	OnUmbrellaStateChanged.Broadcast(CurrentState, bHasUmbrella);
 }
 
@@ -453,6 +457,18 @@ void UUOUUmbrellaComponent::SetState(EUOUUmbrellaState NewState)
 
 	CurrentState = ResolvedState;
 
+	if (bHasUmbrella)
+	{
+		if (CurrentState == EUOUUmbrellaState::Open)
+		{
+			PlayUmbrellaAudioCue(OpenAudioCueId, OpenAudioEventId);
+		}
+		else if (CurrentState == EUOUUmbrellaState::Closed)
+		{
+			PlayUmbrellaAudioCue(CloseAudioCueId, CloseAudioEventId);
+		}
+	}
+
 	if (CurrentState != EUOUUmbrellaState::Pouring)
 	{
 		// 붓기 상태가 아니면 마지막 라인트레이스 결과를 초기화해 디버그 오해를 줄입니다.
@@ -500,6 +516,10 @@ void UUOUUmbrellaComponent::RefreshVisuals()
 	if (bHasDedicatedVisuals)
 	{
 		// 상태별 전용 비주얼이 하나라도 있으면 그 방식이 우선입니다.
+		const bool bUseRuntimeUpsideDownFallback = RuntimeHeldVisual != nullptr
+			&& UpsideDownVisual == nullptr
+			&& ShouldFlipRuntimeHeldVisual();
+
 		if (ClosedVisual != nullptr)
 		{
 			ClosedVisual->SetVisibility(CurrentState == EUOUUmbrellaState::Closed, true);
@@ -507,7 +527,10 @@ void UUOUUmbrellaComponent::RefreshVisuals()
 
 		if (OpenVisual != nullptr)
 		{
-			OpenVisual->SetVisibility(CurrentState == EUOUUmbrellaState::Open || CurrentState == EUOUUmbrellaState::Pouring, true);
+			OpenVisual->SetVisibility(
+				CurrentState == EUOUUmbrellaState::Open
+				|| (CurrentState == EUOUUmbrellaState::Pouring && !bUseRuntimeUpsideDownFallback),
+				true);
 		}
 
 		if (UpsideDownVisual != nullptr)
@@ -517,7 +540,12 @@ void UUOUUmbrellaComponent::RefreshVisuals()
 
 		if (RuntimeHeldVisual != nullptr)
 		{
-			RuntimeHeldVisual->SetVisibility(false, true);
+			if (bUseRuntimeUpsideDownFallback)
+			{
+				ApplyRuntimeHeldVisualStateTransform();
+			}
+
+			RuntimeHeldVisual->SetVisibility(bUseRuntimeUpsideDownFallback, true);
 		}
 
 		return;
@@ -526,8 +554,56 @@ void UUOUUmbrellaComponent::RefreshVisuals()
 	if (RuntimeHeldVisual != nullptr)
 	{
 		// 상태별 비주얼이 없다면 픽업에서 복사한 런타임 메쉬 하나를 계속 보여줍니다.
+		ApplyRuntimeHeldVisualStateTransform();
 		RuntimeHeldVisual->SetVisibility(true, true);
 	}
+}
+
+void UUOUUmbrellaComponent::PlayUmbrellaAudioEvent(FName AudioEventId) const
+{
+	if (AudioEventId.IsNone())
+	{
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	UGameInstance* GameInstance = World != nullptr ? World->GetGameInstance() : nullptr;
+	UUOUAudioSubsystem* AudioSubsystem = GameInstance != nullptr ? GameInstance->GetSubsystem<UUOUAudioSubsystem>() : nullptr;
+	if (AudioSubsystem == nullptr)
+	{
+		return;
+	}
+
+	AudioSubsystem->PlayAudioEventAtLocation(AudioEventId, GetUmbrellaAudioLocation());
+}
+
+void UUOUUmbrellaComponent::PlayUmbrellaAudioCue(FName CueId, FName FallbackAudioEventId) const
+{
+	if (!CueId.IsNone())
+	{
+		if (UUOUAudioCueComponent* AudioCueComponent = GetAudioCueComponent())
+		{
+			if (AudioCueComponent->HasCue(CueId)
+				&& AudioCueComponent->PlayCueAtLocation(CueId, GetUmbrellaAudioLocation()))
+			{
+				return;
+			}
+		}
+	}
+
+	PlayUmbrellaAudioEvent(FallbackAudioEventId);
+}
+
+UUOUAudioCueComponent* UUOUUmbrellaComponent::GetAudioCueComponent() const
+{
+	AActor* Owner = GetOwner();
+	return Owner != nullptr ? Owner->FindComponentByClass<UUOUAudioCueComponent>() : nullptr;
+}
+
+FVector UUOUUmbrellaComponent::GetUmbrellaAudioLocation() const
+{
+	const AActor* Owner = GetOwner();
+	return Owner != nullptr ? Owner->GetActorLocation() : FVector::ZeroVector;
 }
 
 // 블루프린트 세팅이 비어 있어도 약속된 이름과 컴포넌트 타입으로 필요한 참조를 찾아 채웁니다.
@@ -599,6 +675,7 @@ void UUOUUmbrellaComponent::EnsureRuntimeHeldVisual()
 {
 	if (RuntimeHeldVisual != nullptr)
 	{
+		RuntimeHeldVisualBaseRelativeTransform = RuntimeHeldVisual->GetRelativeTransform();
 		return;
 	}
 
@@ -625,7 +702,8 @@ void UUOUUmbrellaComponent::EnsureRuntimeHeldVisual()
 	// 우산 부착 지점이 있으면 그 아래에 붙이고, 없으면 루트에 붙여 최소 동작을 보장합니다.
 	RuntimeHeldVisual->SetupAttachment(AttachParent);
 	RuntimeHeldVisual->RegisterComponent();
-	RuntimeHeldVisual->SetRelativeTransform(GetHeldVisualRelativeTransform(FVector::OneVector));
+	RuntimeHeldVisualBaseRelativeTransform = GetHeldVisualRelativeTransform(FVector::OneVector);
+	RuntimeHeldVisual->SetRelativeTransform(RuntimeHeldVisualBaseRelativeTransform);
 }
 
 // 월드 픽업 메쉬에서 스태틱 메쉬와 머티리얼을 읽어 손에 든 비주얼로 복사합니다.
@@ -658,7 +736,8 @@ void UUOUUmbrellaComponent::ApplyHeldVisualFromAssets(UStaticMesh* Mesh, const T
 	}
 
 	RuntimeHeldVisual->SetStaticMesh(Mesh != nullptr ? Mesh : DefaultHeldMesh.Get());
-	RuntimeHeldVisual->SetRelativeTransform(GetHeldVisualRelativeTransform(SourceRelativeScale));
+	RuntimeHeldVisualBaseRelativeTransform = GetHeldVisualRelativeTransform(SourceRelativeScale);
+	ApplyRuntimeHeldVisualStateTransform();
 
 	for (int32 MaterialIndex = 0; MaterialIndex < Materials.Num(); ++MaterialIndex)
 	{
@@ -687,6 +766,30 @@ FTransform UUOUUmbrellaComponent::GetHeldVisualRelativeTransform(const FVector& 
 		HeldVisualRelativeScale.Z * EffectiveSourceScale.Z);
 
 	return FTransform(RelativeRotation, RelativeLocation, RelativeScale);
+}
+
+void UUOUUmbrellaComponent::ApplyRuntimeHeldVisualStateTransform()
+{
+	if (RuntimeHeldVisual == nullptr)
+	{
+		return;
+	}
+
+	FTransform VisualTransform = RuntimeHeldVisualBaseRelativeTransform;
+	if (ShouldFlipRuntimeHeldVisual())
+	{
+		const FQuat FlippedRotation = VisualTransform.GetRotation() * UpsideDownHeldVisualRotationOffset.Quaternion();
+		VisualTransform.SetRotation(FlippedRotation.GetNormalized());
+		VisualTransform.AddToTranslation(UpsideDownHeldVisualLocationOffset);
+	}
+
+	RuntimeHeldVisual->SetRelativeTransform(VisualTransform);
+}
+
+bool UUOUUmbrellaComponent::ShouldFlipRuntimeHeldVisual() const
+{
+	return bFlipRuntimeHeldVisualWhenUpsideDown
+		&& (CurrentState == EUOUUmbrellaState::UpsideDown || CurrentState == EUOUUmbrellaState::Pouring);
 }
 
 // 플레이 중 우산 보유 상태, 저장된 물, 마지막 붓기 대상을 화면에 표시합니다.
@@ -918,13 +1021,17 @@ void UUOUUmbrellaComponent::UpdatePouring(float DeltaTime)
 	}
 
 	const float StoredWaterBefore = GetCurrentStoredWater();
-	const float RequestedPourAmount = FMath::Max(0.0f, PourRate) * FMath::Max(0.0f, DeltaTime);
+	const float SafePourRate = FMath::Max(0.0f, PourRate);
+	const float RequestedPourAmount = SafePourRate * FMath::Max(0.0f, DeltaTime);
 	const float PourAmount = FMath::Min(StoredWaterBefore, RequestedPourAmount);
 	if (PourAmount <= KINDA_SMALL_NUMBER)
 	{
 		EndPour();
 		return;
 	}
+
+	// Basin 채우기 모드는 실제로 붓는 시간만 사용해서 마지막 부분 프레임에서 과하게 채워지지 않게 합니다.
+	const float EffectivePourDuration = SafePourRate > KINDA_SMALL_NUMBER ? PourAmount / SafePourRate : 0.0f;
 
 	// 저장된 양보다 많이 붓지 않도록 제한한 뒤 실제 저장량을 줄입니다.
 	StoredWaterContainer->RemoveAmount(PourAmount);
@@ -979,7 +1086,7 @@ void UUOUUmbrellaComponent::UpdatePouring(float DeltaTime)
 					bLastPourTraceHit = true;
 
 					EUOUUmbrellaPourReceiverType ReceiverType = EUOUUmbrellaPourReceiverType::None;
-					bLastPourDeliveredWater = TryReceiveWaterAtHit(HitResult, PourAmount, ReceiverType);
+					bLastPourDeliveredWater = TryReceiveWaterAtHit(HitResult, PourAmount, EffectivePourDuration, TraceDirection, ReceiverType);
 					LastPourReceiverType = ReceiverType;
 					break;
 				}
@@ -1091,7 +1198,7 @@ bool UUOUUmbrellaComponent::TryGetPourDirection(FVector& PourOriginLocation, FVe
 }
 
 // 라인트레이스에 맞은 액터가 물을 받을 수 있는 타입이면 물을 전달하고 받은 대상 종류를 기록합니다.
-bool UUOUUmbrellaComponent::TryReceiveWaterAtHit(const FHitResult& HitResult, float WaterAmount, EUOUUmbrellaPourReceiverType& OutReceiverType)
+bool UUOUUmbrellaComponent::TryReceiveWaterAtHit(const FHitResult& HitResult, float WaterAmount, float PourDuration, const FVector& PourDirection, EUOUUmbrellaPourReceiverType& OutReceiverType)
 {
 	OutReceiverType = EUOUUmbrellaPourReceiverType::None;
 
@@ -1124,7 +1231,15 @@ bool UUOUUmbrellaComponent::TryReceiveWaterAtHit(const FHitResult& HitResult, fl
 		// 물 조절 장치 쪽 타겟 컴포넌트도 우산 물 붓기를 받을 수 있게 처리합니다.
 		LastPourTargetName = HitActor->GetName();
 		OutReceiverType = EUOUUmbrellaPourReceiverType::WaterBasinTarget;
-		WaterBasinTarget->AddWater(WaterAmount, true);
+		FUOUWaterBasinInputContext InputContext;
+		InputContext.Volume = WaterAmount;
+		InputContext.Duration = PourDuration;
+		InputContext.Source = EUOUWaterBasinInputSource::PlayerPour;
+		InputContext.WorldDirection = PourDirection;
+		InputContext.WorldLocation = HitResult.ImpactPoint;
+		InputContext.InstigatorActor = GetOwner();
+		InputContext.bApplyToConnectedGroup = true;
+		WaterBasinTarget->ReceiveWaterInput(InputContext);
 		return true;
 	}
 
@@ -1135,7 +1250,15 @@ bool UUOUUmbrellaComponent::TryReceiveWaterAtHit(const FHitResult& HitResult, fl
 			// 히트된 자식 액터 대신 부모가 물 조절 컴포넌트를 들고 있는 경우를 처리합니다.
 			LastPourTargetName = ParentActor->GetName();
 			OutReceiverType = EUOUUmbrellaPourReceiverType::WaterBasinTarget;
-			ParentWaterBasinTarget->AddWater(WaterAmount, true);
+			FUOUWaterBasinInputContext InputContext;
+			InputContext.Volume = WaterAmount;
+			InputContext.Duration = PourDuration;
+			InputContext.Source = EUOUWaterBasinInputSource::PlayerPour;
+			InputContext.WorldDirection = PourDirection;
+			InputContext.WorldLocation = HitResult.ImpactPoint;
+			InputContext.InstigatorActor = GetOwner();
+			InputContext.bApplyToConnectedGroup = true;
+			ParentWaterBasinTarget->ReceiveWaterInput(InputContext);
 			return true;
 		}
 	}
