@@ -2,11 +2,14 @@
 
 #include "Player/UOUUmbrellaComponent.h"
 
+#include "Audio/UOUAudioCueComponent.h"
+#include "Audio/UOUAudioSubsystem.h"
 #include "Components/ArrowComponent.h"
 #include "Components/PrimitiveComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Debug/UOUDebugSubsystem.h"
+#include "Engine/GameInstance.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/Engine.h"
 #include "Engine/World.h"
@@ -110,6 +113,7 @@ void UUOUUmbrellaComponent::AcquireUmbrella()
 		StoredWaterContainer->SetAmount(0.0f);
 	}
 
+	PlayUmbrellaAudioCue(AcquireAudioCueId, AcquireAudioEventId);
 	OnUmbrellaStateChanged.Broadcast(CurrentState, bHasUmbrella);
 }
 
@@ -374,18 +378,23 @@ bool UUOUUmbrellaComponent::IsBlockingRain() const
 	return IsOpen();
 }
 
-// RainArea나 디버그 표시가 사용할 비 차단 중심과 반지름을 계산합니다.
-bool UUOUUmbrellaComponent::TryGetRainBlockerData(FVector& OutWorldLocation, float& OutRadius) const
+// 현재 설정된 비 차단 박스의 중심, 회전, 절반 크기를 계산합니다. 실제 차단 활성 여부는 호출자가 IsBlockingRain()으로 판단합니다.
+bool UUOUUmbrellaComponent::TryGetRainBlockerVolumeData(FVector& OutWorldCenter, FRotator& OutWorldRotation, FVector& OutHalfExtent) const
 {
-	OutWorldLocation = FVector::ZeroVector;
-	OutRadius = 0.0f;
+	OutWorldCenter = FVector::ZeroVector;
+	OutWorldRotation = FRotator::ZeroRotator;
+	OutHalfExtent = FVector::ZeroVector;
 
-	if (!IsBlockingRain() || RainBlockerRadius <= 0.0f)
+	const FVector SafeHalfExtent(
+		FMath::Max(0.0f, RainBlockerVolumeHalfExtent.X),
+		FMath::Max(0.0f, RainBlockerVolumeHalfExtent.Y),
+		FMath::Max(0.0f, RainBlockerVolumeHalfExtent.Z));
+
+	if (SafeHalfExtent.IsNearlyZero())
 	{
 		return false;
 	}
 
-	// 상태 전용 펼친 비주얼이 있으면 가장 먼저 기준점으로 사용합니다.
 	const USceneComponent* BlockerComponent = OpenVisual;
 	if (BlockerComponent == nullptr)
 	{
@@ -393,30 +402,30 @@ bool UUOUUmbrellaComponent::TryGetRainBlockerData(FVector& OutWorldLocation, flo
 	}
 	if (BlockerComponent == nullptr)
 	{
-		// 전용 비주얼이 없으면 우산 부착 위치를 차선 기준점으로 사용합니다.
 		BlockerComponent = PickupAttachPoint;
 	}
 
 	if (BlockerComponent != nullptr)
 	{
-		// 컴포넌트 로컬 오프셋을 월드 좌표로 변환해 실제 차단 중심을 만듭니다.
-		OutWorldLocation = BlockerComponent->GetComponentTransform().TransformPosition(RainBlockerLocalOffset);
-		OutRadius = RainBlockerRadius;
+		const FTransform BlockerTransform = BlockerComponent->GetComponentTransform();
+		OutWorldCenter = BlockerTransform.TransformPosition(RainBlockerLocalOffset);
+		OutWorldRotation = BlockerTransform.Rotator();
+		OutHalfExtent = SafeHalfExtent;
 		return true;
 	}
 
 	if (const AActor* Owner = GetOwner())
 	{
-		// 모든 기준 컴포넌트가 없을 때는 소유 액터 위치를 최후의 기준으로 삼습니다.
-		OutWorldLocation = Owner->GetActorTransform().TransformPosition(RainBlockerLocalOffset);
-		OutRadius = RainBlockerRadius;
+		const FTransform OwnerTransform = Owner->GetActorTransform();
+		OutWorldCenter = OwnerTransform.TransformPosition(RainBlockerLocalOffset);
+		OutWorldRotation = OwnerTransform.Rotator();
+		OutHalfExtent = SafeHalfExtent;
 		return true;
 	}
 
 	return false;
 }
 
-// 저장 컨테이너가 없을 때도 호출부가 안전하게 0을 받을 수 있게 감쌉니다.
 float UUOUUmbrellaComponent::GetCurrentStoredWater() const
 {
 	return StoredWaterContainer != nullptr ? StoredWaterContainer->CurrentAmount : 0.0f;
@@ -447,6 +456,18 @@ void UUOUUmbrellaComponent::SetState(EUOUUmbrellaState NewState)
 	}
 
 	CurrentState = ResolvedState;
+
+	if (bHasUmbrella)
+	{
+		if (CurrentState == EUOUUmbrellaState::Open)
+		{
+			PlayUmbrellaAudioCue(OpenAudioCueId, OpenAudioEventId);
+		}
+		else if (CurrentState == EUOUUmbrellaState::Closed)
+		{
+			PlayUmbrellaAudioCue(CloseAudioCueId, CloseAudioEventId);
+		}
+	}
 
 	if (CurrentState != EUOUUmbrellaState::Pouring)
 	{
@@ -536,6 +557,53 @@ void UUOUUmbrellaComponent::RefreshVisuals()
 		ApplyRuntimeHeldVisualStateTransform();
 		RuntimeHeldVisual->SetVisibility(true, true);
 	}
+}
+
+void UUOUUmbrellaComponent::PlayUmbrellaAudioEvent(FName AudioEventId) const
+{
+	if (AudioEventId.IsNone())
+	{
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	UGameInstance* GameInstance = World != nullptr ? World->GetGameInstance() : nullptr;
+	UUOUAudioSubsystem* AudioSubsystem = GameInstance != nullptr ? GameInstance->GetSubsystem<UUOUAudioSubsystem>() : nullptr;
+	if (AudioSubsystem == nullptr)
+	{
+		return;
+	}
+
+	AudioSubsystem->PlayAudioEventAtLocation(AudioEventId, GetUmbrellaAudioLocation());
+}
+
+void UUOUUmbrellaComponent::PlayUmbrellaAudioCue(FName CueId, FName FallbackAudioEventId) const
+{
+	if (!CueId.IsNone())
+	{
+		if (UUOUAudioCueComponent* AudioCueComponent = GetAudioCueComponent())
+		{
+			if (AudioCueComponent->HasCue(CueId)
+				&& AudioCueComponent->PlayCueAtLocation(CueId, GetUmbrellaAudioLocation()))
+			{
+				return;
+			}
+		}
+	}
+
+	PlayUmbrellaAudioEvent(FallbackAudioEventId);
+}
+
+UUOUAudioCueComponent* UUOUUmbrellaComponent::GetAudioCueComponent() const
+{
+	AActor* Owner = GetOwner();
+	return Owner != nullptr ? Owner->FindComponentByClass<UUOUAudioCueComponent>() : nullptr;
+}
+
+FVector UUOUUmbrellaComponent::GetUmbrellaAudioLocation() const
+{
+	const AActor* Owner = GetOwner();
+	return Owner != nullptr ? Owner->GetActorLocation() : FVector::ZeroVector;
 }
 
 // 블루프린트 세팅이 비어 있어도 약속된 이름과 컴포넌트 타입으로 필요한 참조를 찾아 채웁니다.
@@ -744,9 +812,10 @@ void UUOUUmbrellaComponent::DrawRainBlockerDebug() const
 		return;
 	}
 
-	FVector BlockerWorldLocation = FVector::ZeroVector;
-	float BlockerRadius = 0.0f;
-	if (!TryGetRainBlockerData(BlockerWorldLocation, BlockerRadius))
+	FVector BlockerWorldCenter = FVector::ZeroVector;
+	FRotator BlockerWorldRotation = FRotator::ZeroRotator;
+	FVector BlockerHalfExtent = FVector::ZeroVector;
+	if (!TryGetRainBlockerVolumeData(BlockerWorldCenter, BlockerWorldRotation, BlockerHalfExtent))
 	{
 		// 비를 막는 상태가 아니면 그릴 기준 데이터가 없으므로 바로 종료합니다.
 		return;
@@ -754,11 +823,14 @@ void UUOUUmbrellaComponent::DrawRainBlockerDebug() const
 
 	const float Thickness = FMath::Max(0.0f, RainBlockerDebugThickness);
 	const float LifeTime = 0.0f;
-	const FColor PlayerDebugColor = UUOUDebugSubsystem::GetDebugCategoryColor(this, EUOUDebugCategory::Player, FColor::Cyan);
+	const bool bIsActiveBlocker = IsBlockingRain();
+	const FColor PlayerDebugColor = bIsActiveBlocker
+		? UUOUDebugSubsystem::GetDebugCategoryColor(this, EUOUDebugCategory::Player, FColor::Cyan)
+		: FColor(90, 90, 90);
 
 	DrawDebugSphere(
 		World,
-		BlockerWorldLocation,
+		BlockerWorldCenter,
 		8.0f,
 		12,
 		PlayerDebugColor,
@@ -767,24 +839,21 @@ void UUOUUmbrellaComponent::DrawRainBlockerDebug() const
 		0,
 		Thickness);
 
-	DrawDebugCircle(
+	DrawDebugBox(
 		World,
-		BlockerWorldLocation,
-		BlockerRadius,
-		64,
+		BlockerWorldCenter,
+		BlockerHalfExtent,
+		BlockerWorldRotation.Quaternion(),
 		PlayerDebugColor,
 		false,
 		LifeTime,
 		0,
-		Thickness,
-		FVector::ForwardVector,
-		FVector::RightVector,
-		false);
+		Thickness);
 
 	DrawDebugLine(
 		World,
-		BlockerWorldLocation + FVector(0.0f, 0.0f, 20.0f),
-		BlockerWorldLocation - FVector(0.0f, 0.0f, 20.0f),
+		BlockerWorldCenter + BlockerWorldRotation.Quaternion().GetAxisZ() * BlockerHalfExtent.Z,
+		BlockerWorldCenter - BlockerWorldRotation.Quaternion().GetAxisZ() * BlockerHalfExtent.Z,
 		PlayerDebugColor,
 		false,
 		LifeTime,
@@ -793,8 +862,16 @@ void UUOUUmbrellaComponent::DrawRainBlockerDebug() const
 
 	DrawDebugString(
 		World,
-		BlockerWorldLocation + FVector(0.0f, 0.0f, 18.0f),
-		FString::Printf(TEXT("RainBlocker R=%.1f"), BlockerRadius),
+		BlockerWorldCenter + BlockerWorldRotation.Quaternion().GetAxisZ() * (BlockerHalfExtent.Z + 18.0f),
+		FString::Printf(
+			TEXT("RainBlocker %s Half %.1f %.1f %.1f Offset %.1f %.1f %.1f"),
+			bIsActiveBlocker ? TEXT("Active") : TEXT("Inactive"),
+			BlockerHalfExtent.X,
+			BlockerHalfExtent.Y,
+			BlockerHalfExtent.Z,
+			RainBlockerLocalOffset.X,
+			RainBlockerLocalOffset.Y,
+			RainBlockerLocalOffset.Z),
 		nullptr,
 		PlayerDebugColor,
 		LifeTime,
@@ -944,13 +1021,17 @@ void UUOUUmbrellaComponent::UpdatePouring(float DeltaTime)
 	}
 
 	const float StoredWaterBefore = GetCurrentStoredWater();
-	const float RequestedPourAmount = FMath::Max(0.0f, PourRate) * FMath::Max(0.0f, DeltaTime);
+	const float SafePourRate = FMath::Max(0.0f, PourRate);
+	const float RequestedPourAmount = SafePourRate * FMath::Max(0.0f, DeltaTime);
 	const float PourAmount = FMath::Min(StoredWaterBefore, RequestedPourAmount);
 	if (PourAmount <= KINDA_SMALL_NUMBER)
 	{
 		EndPour();
 		return;
 	}
+
+	// Basin 채우기 모드는 실제로 붓는 시간만 사용해서 마지막 부분 프레임에서 과하게 채워지지 않게 합니다.
+	const float EffectivePourDuration = SafePourRate > KINDA_SMALL_NUMBER ? PourAmount / SafePourRate : 0.0f;
 
 	// 저장된 양보다 많이 붓지 않도록 제한한 뒤 실제 저장량을 줄입니다.
 	StoredWaterContainer->RemoveAmount(PourAmount);
@@ -1005,7 +1086,7 @@ void UUOUUmbrellaComponent::UpdatePouring(float DeltaTime)
 					bLastPourTraceHit = true;
 
 					EUOUUmbrellaPourReceiverType ReceiverType = EUOUUmbrellaPourReceiverType::None;
-					bLastPourDeliveredWater = TryReceiveWaterAtHit(HitResult, PourAmount, ReceiverType);
+					bLastPourDeliveredWater = TryReceiveWaterAtHit(HitResult, PourAmount, EffectivePourDuration, TraceDirection, ReceiverType);
 					LastPourReceiverType = ReceiverType;
 					break;
 				}
@@ -1117,7 +1198,7 @@ bool UUOUUmbrellaComponent::TryGetPourDirection(FVector& PourOriginLocation, FVe
 }
 
 // 라인트레이스에 맞은 액터가 물을 받을 수 있는 타입이면 물을 전달하고 받은 대상 종류를 기록합니다.
-bool UUOUUmbrellaComponent::TryReceiveWaterAtHit(const FHitResult& HitResult, float WaterAmount, EUOUUmbrellaPourReceiverType& OutReceiverType)
+bool UUOUUmbrellaComponent::TryReceiveWaterAtHit(const FHitResult& HitResult, float WaterAmount, float PourDuration, const FVector& PourDirection, EUOUUmbrellaPourReceiverType& OutReceiverType)
 {
 	OutReceiverType = EUOUUmbrellaPourReceiverType::None;
 
@@ -1150,7 +1231,15 @@ bool UUOUUmbrellaComponent::TryReceiveWaterAtHit(const FHitResult& HitResult, fl
 		// 물 조절 장치 쪽 타겟 컴포넌트도 우산 물 붓기를 받을 수 있게 처리합니다.
 		LastPourTargetName = HitActor->GetName();
 		OutReceiverType = EUOUUmbrellaPourReceiverType::WaterBasinTarget;
-		WaterBasinTarget->AddWater(WaterAmount, true);
+		FUOUWaterBasinInputContext InputContext;
+		InputContext.Volume = WaterAmount;
+		InputContext.Duration = PourDuration;
+		InputContext.Source = EUOUWaterBasinInputSource::PlayerPour;
+		InputContext.WorldDirection = PourDirection;
+		InputContext.WorldLocation = HitResult.ImpactPoint;
+		InputContext.InstigatorActor = GetOwner();
+		InputContext.bApplyToConnectedGroup = true;
+		WaterBasinTarget->ReceiveWaterInput(InputContext);
 		return true;
 	}
 
@@ -1161,7 +1250,15 @@ bool UUOUUmbrellaComponent::TryReceiveWaterAtHit(const FHitResult& HitResult, fl
 			// 히트된 자식 액터 대신 부모가 물 조절 컴포넌트를 들고 있는 경우를 처리합니다.
 			LastPourTargetName = ParentActor->GetName();
 			OutReceiverType = EUOUUmbrellaPourReceiverType::WaterBasinTarget;
-			ParentWaterBasinTarget->AddWater(WaterAmount, true);
+			FUOUWaterBasinInputContext InputContext;
+			InputContext.Volume = WaterAmount;
+			InputContext.Duration = PourDuration;
+			InputContext.Source = EUOUWaterBasinInputSource::PlayerPour;
+			InputContext.WorldDirection = PourDirection;
+			InputContext.WorldLocation = HitResult.ImpactPoint;
+			InputContext.InstigatorActor = GetOwner();
+			InputContext.bApplyToConnectedGroup = true;
+			ParentWaterBasinTarget->ReceiveWaterInput(InputContext);
 			return true;
 		}
 	}

@@ -63,6 +63,7 @@ void UUOUWaterBasinTargetComponent::TickComponent(float DeltaTime, ELevelTick Ti
 		RedistributeConnectedWater();
 	}
 
+	ApplyPassiveDrain(DeltaTime);
 	DrawRuntimeDebug();
 }
 
@@ -111,7 +112,7 @@ void UUOUWaterBasinTargetComponent::PostEditChangeProperty(FPropertyChangedEvent
 	{
 		CurrentWaterVolume = GetVolumeAtSurfaceWorldZ(WaterSurfaceWorldZ);
 	}
-	else if (ChangedPropertyName == GET_MEMBER_NAME_CHECKED(UUOUWaterBasinTargetComponent, InitialWaterVolume)
+	else if (ChangedPropertyName == GET_MEMBER_NAME_CHECKED(UUOUWaterBasinTargetComponent, InitialWaterVolume) 
 		|| ChangedPropertyName == GET_MEMBER_NAME_CHECKED(UUOUWaterBasinTargetComponent, CurrentWaterDepth)
 		|| ChangedPropertyName == GET_MEMBER_NAME_CHECKED(UUOUWaterBasinTargetComponent, CurrentFillRatio)
 		|| ChangedPropertyName == GET_MEMBER_NAME_CHECKED(UUOUWaterBasinTargetComponent, WaterSurfaceWorldZ))
@@ -142,6 +143,123 @@ void UUOUWaterBasinTargetComponent::AddWater(float Volume, bool bApplyToConnecte
 	}
 
 	ApplyWaterVolumeToSingleTarget(CurrentWaterVolume + Volume);
+}
+
+void UUOUWaterBasinTargetComponent::ReceivePouredWater(float Volume, float PourDuration, bool bApplyToConnectedGroup)
+{
+	FUOUWaterBasinInputContext InputContext;
+	InputContext.Volume = Volume;
+	InputContext.Duration = PourDuration;
+	InputContext.Source = EUOUWaterBasinInputSource::Script;
+	InputContext.bApplyToConnectedGroup = bApplyToConnectedGroup;
+	ReceiveWaterInput(InputContext);
+}
+
+void UUOUWaterBasinTargetComponent::ReceiveWaterInput(const FUOUWaterBasinInputContext& InputContext)
+{
+	if (InputContext.Volume <= 0.0f)
+	{
+		return;
+	}
+
+	FUOUWaterBasinInputContext SanitizedInputContext = InputContext;
+	SanitizedInputContext.Volume = FMath::Max(0.0f, SanitizedInputContext.Volume);
+	SanitizedInputContext.Duration = FMath::Max(0.0f, SanitizedInputContext.Duration);
+	SanitizedInputContext.WorldDirection = SanitizedInputContext.WorldDirection.GetSafeNormal();
+
+	NotifyWaterInputReceived(SanitizedInputContext);
+
+	const float Volume = SanitizedInputContext.Volume;
+	const float Duration = SanitizedInputContext.Duration;
+	const bool bApplyToConnectedGroup = SanitizedInputContext.bApplyToConnectedGroup;
+	switch (PouredWaterFillMode)
+	{
+	case EUOUWaterBasinPouredWaterFillMode::Volume:
+		AddWater(Volume, bApplyToConnectedGroup);
+		break;
+
+	case EUOUWaterBasinPouredWaterFillMode::FillRatio:
+	{
+		const float RatioDelta = FMath::Max(PouredWaterFillRatioPerSecond, 0.0f) * Duration;
+		if (RatioDelta <= 0.0f)
+		{
+			return;
+		}
+
+		if (bApplyToConnectedGroup)
+		{
+			TArray<UUOUWaterBasinTargetComponent*> Group;
+			GetConnectedGroup(Group);
+			const FUOUWaterBasinGroupDebugData GroupData = BuildGroupDebugData(Group);
+			const float NewFillRatio = FMath::Clamp(GroupData.FillRatio + RatioDelta, 0.0f, 1.0f);
+			ApplyWaterVolumeToConnectedGroup(GroupData.TotalCapacity * NewFillRatio);
+			return;
+		}
+
+		const float NewFillRatio = FMath::Clamp(CurrentFillRatio + RatioDelta, 0.0f, 1.0f);
+		ApplyWaterVolumeToSingleTarget(GetCapacity() * NewFillRatio);
+		break;
+	}
+
+	case EUOUWaterBasinPouredWaterFillMode::WaterDepth:
+	{
+		const float DepthDelta = FMath::Max(PouredWaterDepthPerSecond, 0.0f) * Duration;
+		if (DepthDelta <= 0.0f)
+		{
+			return;
+		}
+
+		if (bApplyToConnectedGroup)
+		{
+			const FUOUWaterBasinGroupDebugData GroupData = GetConnectedGroupDebugData();
+			const float SurfaceDeltaWorld = DepthDelta * FMath::Max(WorldUnitsPerTile, MinWorldUnitsPerTile);
+			SetWaterSurfaceWorldZ(GroupData.SurfaceWorldZ + SurfaceDeltaWorld, true);
+			return;
+		}
+
+		SetWaterDepth(CurrentWaterDepth + DepthDelta, false);
+		break;
+	}
+
+	case EUOUWaterBasinPouredWaterFillMode::SurfaceWorldZ:
+	{
+		const float SurfaceDeltaWorld = FMath::Max(PouredWaterSurfaceWorldZPerSecond, 0.0f) * Duration;
+		if (SurfaceDeltaWorld <= 0.0f)
+		{
+			return;
+		}
+
+		const float CurrentSurfaceWorldZ = bApplyToConnectedGroup
+			? GetConnectedGroupDebugData().SurfaceWorldZ
+			: WaterSurfaceWorldZ;
+		SetWaterSurfaceWorldZ(CurrentSurfaceWorldZ + SurfaceDeltaWorld, bApplyToConnectedGroup);
+		break;
+	}
+
+	default:
+		AddWater(Volume, bApplyToConnectedGroup);
+		break;
+	}
+}
+
+void UUOUWaterBasinTargetComponent::SetRainFillReceivingEnabled(bool bEnabled)
+{
+	bReceiveRainFill = bEnabled;
+}
+
+bool UUOUWaterBasinTargetComponent::CanReceiveRainFill() const
+{
+	return bReceiveRainFill;
+}
+
+void UUOUWaterBasinTargetComponent::SetPassiveDrainEnabled(bool bEnabled)
+{
+	bEnablePassiveDrain = bEnabled;
+}
+
+bool UUOUWaterBasinTargetComponent::IsPassiveDrainEnabled() const
+{
+	return bEnablePassiveDrain;
 }
 
 void UUOUWaterBasinTargetComponent::RemoveWater(float Volume, bool bApplyToConnectedGroup)
@@ -492,6 +610,131 @@ void UUOUWaterBasinTargetComponent::ApplyWaterVolumeToConnectedGroup(float NewTo
 	BroadcastGroupChanged(Group);
 }
 
+void UUOUWaterBasinTargetComponent::ApplyPassiveDrain(float DeltaTime)
+{
+	const float Duration = FMath::Max(DeltaTime, 0.0f);
+	if (!bEnablePassiveDrain || Duration <= 0.0f)
+	{
+		return;
+	}
+
+	TArray<UUOUWaterBasinTargetComponent*> DrainTargets;
+	if (bPassiveDrainApplyToConnectedGroup)
+	{
+		GetConnectedGroup(DrainTargets);
+		if (!ShouldApplyPassiveDrainForConnectedGroup(DrainTargets))
+		{
+			return;
+		}
+	}
+	else
+	{
+		DrainTargets.Add(this);
+	}
+
+	if (DrainTargets.Num() == 0)
+	{
+		return;
+	}
+
+	const FUOUWaterBasinGroupDebugData DrainData = BuildGroupDebugData(DrainTargets);
+	if (DrainData.TotalVolume <= KINDA_SMALL_NUMBER || DrainData.TotalCapacity <= KINDA_SMALL_NUMBER)
+	{
+		return;
+	}
+
+	const float TargetSurfaceWorldZ = GetPassiveDrainTargetSurfaceWorldZ();
+	if (DrainData.SurfaceWorldZ <= TargetSurfaceWorldZ + KINDA_SMALL_NUMBER)
+	{
+		return;
+	}
+
+	const float TargetVolume = GetTotalVolumeAtSurfaceWorldZ(DrainTargets, TargetSurfaceWorldZ);
+	const float MaxDrainVolume = FMath::Max(DrainData.TotalVolume - TargetVolume, 0.0f);
+	if (MaxDrainVolume <= KINDA_SMALL_NUMBER)
+	{
+		return;
+	}
+
+	float RequestedDrainVolume = 0.0f;
+	switch (PassiveDrainMode)
+	{
+	case EUOUWaterBasinPassiveDrainMode::Volume:
+		RequestedDrainVolume = FMath::Max(PassiveDrainVolumePerSecond, 0.0f) * Duration;
+		break;
+
+	case EUOUWaterBasinPassiveDrainMode::FillRatio:
+		RequestedDrainVolume = DrainData.TotalCapacity * FMath::Max(PassiveDrainFillRatioPerSecond, 0.0f) * Duration;
+		break;
+
+	case EUOUWaterBasinPassiveDrainMode::WaterDepth:
+	{
+		const float SurfaceDeltaWorld = FMath::Max(PassiveDrainWaterDepthPerSecond, 0.0f)
+			* Duration
+			* FMath::Max(WorldUnitsPerTile, MinWorldUnitsPerTile);
+		const float NewSurfaceWorldZ = FMath::Max(DrainData.SurfaceWorldZ - SurfaceDeltaWorld, TargetSurfaceWorldZ);
+		RequestedDrainVolume = DrainData.TotalVolume - GetTotalVolumeAtSurfaceWorldZ(DrainTargets, NewSurfaceWorldZ);
+		break;
+	}
+
+	case EUOUWaterBasinPassiveDrainMode::SurfaceWorldZ:
+	{
+		const float SurfaceDeltaWorld = FMath::Max(PassiveDrainSurfaceWorldZPerSecond, 0.0f) * Duration;
+		const float NewSurfaceWorldZ = FMath::Max(DrainData.SurfaceWorldZ - SurfaceDeltaWorld, TargetSurfaceWorldZ);
+		RequestedDrainVolume = DrainData.TotalVolume - GetTotalVolumeAtSurfaceWorldZ(DrainTargets, NewSurfaceWorldZ);
+		break;
+	}
+
+	default:
+		break;
+	}
+
+	const float DrainVolume = FMath::Min(FMath::Max(RequestedDrainVolume, 0.0f), MaxDrainVolume);
+	if (DrainVolume > KINDA_SMALL_NUMBER)
+	{
+		RemoveWater(DrainVolume, bPassiveDrainApplyToConnectedGroup);
+	}
+}
+
+bool UUOUWaterBasinTargetComponent::ShouldApplyPassiveDrainForConnectedGroup(const TArray<UUOUWaterBasinTargetComponent*>& Group) const
+{
+	const UUOUWaterBasinTargetComponent* Representative = nullptr;
+	for (const UUOUWaterBasinTargetComponent* Target : Group)
+	{
+		if (!IsValid(Target) || !Target->bEnablePassiveDrain || !Target->bPassiveDrainApplyToConnectedGroup)
+		{
+			continue;
+		}
+
+		if (Representative == nullptr || Target->GetUniqueID() < Representative->GetUniqueID())
+		{
+			Representative = Target;
+		}
+	}
+
+	return Representative == this;
+}
+
+float UUOUWaterBasinTargetComponent::GetPassiveDrainTargetSurfaceWorldZ() const
+{
+	const float TargetDepth = FMath::Clamp(PassiveDrainTargetWaterDepth, 0.0f, GetMaxWaterHeight());
+	return GetBottomWorldZ() + (TargetDepth * FMath::Max(WorldUnitsPerTile, MinWorldUnitsPerTile));
+}
+
+float UUOUWaterBasinTargetComponent::GetTotalVolumeAtSurfaceWorldZ(const TArray<UUOUWaterBasinTargetComponent*>& Targets, float SurfaceWorldZ) const
+{
+	float TotalVolume = 0.0f;
+	for (const UUOUWaterBasinTargetComponent* Target : Targets)
+	{
+		if (IsValid(Target))
+		{
+			TotalVolume += Target->GetVolumeAtSurfaceWorldZ(SurfaceWorldZ);
+		}
+	}
+
+	return TotalVolume;
+}
+
 void UUOUWaterBasinTargetComponent::ApplyGroupSurfaceToTargets(const TArray<UUOUWaterBasinTargetComponent*>& Group, float SurfaceWorldZ)
 {
 	for (UUOUWaterBasinTargetComponent* Target : Group)
@@ -552,6 +795,36 @@ void UUOUWaterBasinTargetComponent::BroadcastGroupChanged(const TArray<UUOUWater
 		if (IsValid(Target))
 		{
 			Target->OnWaterStateChanged.Broadcast(Target);
+		}
+	}
+}
+
+void UUOUWaterBasinTargetComponent::NotifyWaterInputReceived(const FUOUWaterBasinInputContext& InputContext)
+{
+	if (InputContext.Volume <= 0.0f)
+	{
+		return;
+	}
+
+	if (!InputContext.bApplyToConnectedGroup)
+	{
+		OnWaterInputReceived.Broadcast(this, InputContext);
+		return;
+	}
+
+	TArray<UUOUWaterBasinTargetComponent*> Group;
+	GetConnectedGroup(Group);
+	if (Group.Num() == 0)
+	{
+		OnWaterInputReceived.Broadcast(this, InputContext);
+		return;
+	}
+
+	for (UUOUWaterBasinTargetComponent* Target : Group)
+	{
+		if (IsValid(Target))
+		{
+			Target->OnWaterInputReceived.Broadcast(Target, InputContext);
 		}
 	}
 }

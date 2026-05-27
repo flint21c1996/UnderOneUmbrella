@@ -14,6 +14,7 @@ class USceneComponent;
 class UStaticMesh;
 class UStaticMeshComponent;
 class UUOURainReceiverComponent;
+class UUOUAudioCueComponent;
 class UUOUWaterContainerComponent;
 
 // 우산이 현재 어떤 형태로 사용되는지 나타내는 상태입니다.
@@ -96,6 +97,30 @@ public:
 	// 디버그 키를 한 번 누를 때 채워지는 물의 양입니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Input", meta = (ClampMin = "0.0"))
 	float DebugFillAmount = 1.0f;
+
+	// 우산을 새로 획득했을 때 재생할 오디오 이벤트 ID입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Audio", meta = (ToolTip = "오디오 DataAsset에 등록된 이벤트 ID입니다."))
+	FName AcquireAudioEventId = TEXT("Umbrella.Acquire");
+
+	// 우산을 펼쳤을 때 재생할 오디오 이벤트 ID입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Audio", meta = (ToolTip = "오디오 DataAsset에 등록된 이벤트 ID입니다."))
+	FName OpenAudioEventId = TEXT("Umbrella.Open");
+
+	// 우산을 접었을 때 재생할 오디오 이벤트 ID입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Audio", meta = (ToolTip = "오디오 DataAsset에 등록된 이벤트 ID입니다."))
+	FName CloseAudioEventId = TEXT("Umbrella.Close");
+
+	// AudioCueComponent가 있을 때 우산 획득 상황에 사용할 Cue ID입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Audio", meta = (ToolTip = "Owner에 AudioCueComponent가 있으면 이 Cue를 먼저 재생합니다. 실패하면 AcquireAudioEventId를 fallback으로 사용합니다."))
+	FName AcquireAudioCueId = TEXT("Acquire");
+
+	// AudioCueComponent가 있을 때 우산 펼침 상황에 사용할 Cue ID입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Audio", meta = (ToolTip = "Owner에 AudioCueComponent가 있으면 이 Cue를 먼저 재생합니다. 실패하면 OpenAudioEventId를 fallback으로 사용합니다."))
+	FName OpenAudioCueId = TEXT("Open");
+
+	// AudioCueComponent가 있을 때 우산 접힘 상황에 사용할 Cue ID입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Audio", meta = (ToolTip = "Owner에 AudioCueComponent가 있으면 이 Cue를 먼저 재생합니다. 실패하면 CloseAudioEventId를 fallback으로 사용합니다."))
+	FName CloseAudioCueId = TEXT("Close");
 
 	// 우산을 캐릭터에 붙일 기준 위치입니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|References")
@@ -205,9 +230,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Rain", meta = (ClampMin = "0.0"))
 	float StoredWaterWeightMultiplier = 1.0f;
 
-	// 우산이 비를 막는 범위를 계산할 때 쓰는 반지름입니다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Rain Block", meta = (ClampMin = "0.0", ToolTip = "우산이 비를 막는 시각적 반지름입니다. RainArea와 Niagara가 이 값을 사용해 비 차단 범위를 표현합니다."))
-	float RainBlockerRadius = 90.0f;
+	// 우산이 비 파티클을 제거할 박스 볼륨의 절반 크기입니다. XY는 우산 면적, Z는 얇은 차단 두께로 사용합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Rain Block", meta = (ClampMin = "0.0", ToolTip = "우산이 만드는 Kill Volume Box의 절반 크기입니다. 파티클이 이 박스 안에 들어오면 제거됩니다."))
+	FVector RainBlockerVolumeHalfExtent = FVector(90.0f, 90.0f, 20.0f);
 
 	// 비 차단 중심을 우산 기준 위치에서 얼마나 옮길지 정하는 로컬 오프셋입니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Rain Block", meta = (ToolTip = "비 차단 중심을 우산 표시 컴포넌트 기준으로 보정하는 로컬 오프셋입니다. 우산 문양 위치가 맞지 않을 때 조정합니다."))
@@ -364,9 +389,9 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Umbrella")
 	bool IsBlockingRain() const;
 
-	// 비 차단 중심과 반지름을 외부 시스템에서 가져갈 수 있게 계산합니다.
+	// 현재 설정된 우산 비 차단 박스의 중심, 회전, 절반 크기를 계산합니다. 실제 차단 활성 여부는 IsBlockingRain()으로 따로 확인합니다.
 	UFUNCTION(BlueprintPure, Category = "Umbrella")
-	bool TryGetRainBlockerData(FVector& OutWorldLocation, float& OutRadius) const;
+	bool TryGetRainBlockerVolumeData(FVector& OutWorldCenter, FRotator& OutWorldRotation, FVector& OutHalfExtent) const;
 
 	// 우산에 현재 저장된 물 양을 반환합니다.
 	UFUNCTION(BlueprintPure, Category = "Umbrella")
@@ -402,6 +427,18 @@ protected:
 
 	// 현재 상태와 보유 여부에 맞게 우산 비주얼 표시를 맞춥니다.
 	void RefreshVisuals();
+
+	// 우산 관련 오디오 이벤트를 플레이어 위치에서 재생합니다.
+	void PlayUmbrellaAudioEvent(FName AudioEventId) const;
+
+	// AudioCueComponent가 있으면 Cue를 우선 재생하고, 없으면 기존 EventId를 재생합니다.
+	void PlayUmbrellaAudioCue(FName CueId, FName FallbackAudioEventId) const;
+
+	// Owner에 붙은 AudioCueComponent를 반환합니다.
+	UUOUAudioCueComponent* GetAudioCueComponent() const;
+
+	// 우산 오디오를 재생할 월드 위치를 반환합니다.
+	FVector GetUmbrellaAudioLocation() const;
 
 	// 블루프린트에서 비워둔 참조를 이름이나 컴포넌트 타입으로 자동 보완합니다.
 	void ResolveReferences();
@@ -452,7 +489,7 @@ protected:
 	bool TryGetPourDirection(FVector& PourOriginLocation, FVector& PourDirection) const;
 
 	// 라인트레이스에 맞은 액터가 물을 받을 수 있으면 물을 전달하고 대상 종류를 기록합니다.
-	bool TryReceiveWaterAtHit(const FHitResult& HitResult, float WaterAmount, EUOUUmbrellaPourReceiverType& OutReceiverType);
+	bool TryReceiveWaterAtHit(const FHitResult& HitResult, float WaterAmount, float PourDuration, const FVector& PourDirection, EUOUUmbrellaPourReceiverType& OutReceiverType);
 
 	// 상태 전환 과정에서 저장된 물을 버려야 하는지 판단합니다.
 	bool ShouldSpillStoredWater(EUOUUmbrellaState PreviousState, EUOUUmbrellaState NextState) const;
