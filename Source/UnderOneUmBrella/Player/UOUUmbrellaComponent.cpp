@@ -2,11 +2,14 @@
 
 #include "Player/UOUUmbrellaComponent.h"
 
+#include "Audio/UOUAudioCueComponent.h"
+#include "Audio/UOUAudioSubsystem.h"
 #include "Components/ArrowComponent.h"
 #include "Components/PrimitiveComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Debug/UOUDebugSubsystem.h"
+#include "Engine/GameInstance.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/Engine.h"
 #include "Engine/World.h"
@@ -110,6 +113,7 @@ void UUOUUmbrellaComponent::AcquireUmbrella()
 		StoredWaterContainer->SetAmount(0.0f);
 	}
 
+	PlayUmbrellaAudioCue(AcquireAudioCueId, AcquireAudioEventId);
 	OnUmbrellaStateChanged.Broadcast(CurrentState, bHasUmbrella);
 }
 
@@ -453,6 +457,18 @@ void UUOUUmbrellaComponent::SetState(EUOUUmbrellaState NewState)
 
 	CurrentState = ResolvedState;
 
+	if (bHasUmbrella)
+	{
+		if (CurrentState == EUOUUmbrellaState::Open)
+		{
+			PlayUmbrellaAudioCue(OpenAudioCueId, OpenAudioEventId);
+		}
+		else if (CurrentState == EUOUUmbrellaState::Closed)
+		{
+			PlayUmbrellaAudioCue(CloseAudioCueId, CloseAudioEventId);
+		}
+	}
+
 	if (CurrentState != EUOUUmbrellaState::Pouring)
 	{
 		// 붓기 상태가 아니면 마지막 라인트레이스 결과를 초기화해 디버그 오해를 줄입니다.
@@ -528,6 +544,53 @@ void UUOUUmbrellaComponent::RefreshVisuals()
 		// 상태별 비주얼이 없다면 픽업에서 복사한 런타임 메쉬 하나를 계속 보여줍니다.
 		RuntimeHeldVisual->SetVisibility(true, true);
 	}
+}
+
+void UUOUUmbrellaComponent::PlayUmbrellaAudioEvent(FName AudioEventId) const
+{
+	if (AudioEventId.IsNone())
+	{
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	UGameInstance* GameInstance = World != nullptr ? World->GetGameInstance() : nullptr;
+	UUOUAudioSubsystem* AudioSubsystem = GameInstance != nullptr ? GameInstance->GetSubsystem<UUOUAudioSubsystem>() : nullptr;
+	if (AudioSubsystem == nullptr)
+	{
+		return;
+	}
+
+	AudioSubsystem->PlayAudioEventAtLocation(AudioEventId, GetUmbrellaAudioLocation());
+}
+
+void UUOUUmbrellaComponent::PlayUmbrellaAudioCue(FName CueId, FName FallbackAudioEventId) const
+{
+	if (!CueId.IsNone())
+	{
+		if (UUOUAudioCueComponent* AudioCueComponent = GetAudioCueComponent())
+		{
+			if (AudioCueComponent->HasCue(CueId)
+				&& AudioCueComponent->PlayCueAtLocation(CueId, GetUmbrellaAudioLocation()))
+			{
+				return;
+			}
+		}
+	}
+
+	PlayUmbrellaAudioEvent(FallbackAudioEventId);
+}
+
+UUOUAudioCueComponent* UUOUUmbrellaComponent::GetAudioCueComponent() const
+{
+	AActor* Owner = GetOwner();
+	return Owner != nullptr ? Owner->FindComponentByClass<UUOUAudioCueComponent>() : nullptr;
+}
+
+FVector UUOUUmbrellaComponent::GetUmbrellaAudioLocation() const
+{
+	const AActor* Owner = GetOwner();
+	return Owner != nullptr ? Owner->GetActorLocation() : FVector::ZeroVector;
 }
 
 // 블루프린트 세팅이 비어 있어도 약속된 이름과 컴포넌트 타입으로 필요한 참조를 찾아 채웁니다.
