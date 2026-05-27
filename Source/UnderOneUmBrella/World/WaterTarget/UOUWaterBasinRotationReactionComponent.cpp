@@ -24,6 +24,34 @@ namespace
 			return TEXT("Unknown");
 		}
 	}
+
+	FVector ProjectDirectionOnRotationPlane(const FVector& Direction, const FVector& AxisWorld)
+	{
+		const FVector SafeAxis = AxisWorld.GetSafeNormal();
+		if (Direction.IsNearlyZero() || SafeAxis.IsNearlyZero())
+		{
+			return FVector::ZeroVector;
+		}
+
+		return (Direction - SafeAxis * FVector::DotProduct(Direction, SafeAxis)).GetSafeNormal();
+	}
+
+	float CalculateInputSideValueByCross(
+		const FVector& Center,
+		const FVector& InputLocation,
+		const FVector& ForwardDirection,
+		const FVector& AxisWorld)
+	{
+		const FVector SafeAxis = AxisWorld.GetSafeNormal();
+		const FVector PlanarForwardDirection = ProjectDirectionOnRotationPlane(ForwardDirection, SafeAxis);
+		const FVector PlanarInputDirection = ProjectDirectionOnRotationPlane(InputLocation - Center, SafeAxis);
+		if (PlanarForwardDirection.IsNearlyZero() || PlanarInputDirection.IsNearlyZero() || SafeAxis.IsNearlyZero())
+		{
+			return 0.0f;
+		}
+
+		return FVector::DotProduct(SafeAxis, FVector::CrossProduct(PlanarForwardDirection, PlanarInputDirection));
+	}
 }
 
 UUOUWaterBasinRotationReactionComponent::UUOUWaterBasinRotationReactionComponent()
@@ -62,7 +90,7 @@ void UUOUWaterBasinRotationReactionComponent::TickComponent(float DeltaTime, ELe
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
 	UpdateInterpolatedRotation(DeltaTime);
-	DrawInputDirectionDebug();
+	DrawInputSideDebug();
 }
 
 void UUOUWaterBasinRotationReactionComponent::ResetRotationReaction(bool bResetObservedValue, bool bApplyBaseRotation)
@@ -148,14 +176,14 @@ void UUOUWaterBasinRotationReactionComponent::HandleWaterInputReceived(UUOUWater
 		return;
 	}
 
-	const float DirectionSign = ResolveInputRotationSign(InputContext);
-	CacheInputDirectionDebug(InputContext, DirectionSign);
-	if (FMath::IsNearlyZero(DirectionSign))
+	const float RotationSign = ResolveInputRotationSign(InputContext);
+	CacheInputSideDebug(InputContext, RotationSign);
+	if (FMath::IsNearlyZero(RotationSign))
 	{
 		return;
 	}
 
-	SetTargetRotationAngle(TargetAngleDegrees + (InputContext.Volume * DegreesPerInputVolume * DirectionSign));
+	SetTargetRotationAngle(TargetAngleDegrees + (InputContext.Volume * DegreesPerInputVolume * RotationSign));
 }
 
 USceneComponent* UUOUWaterBasinRotationReactionComponent::ResolveRotationTargetComponent() const
@@ -178,19 +206,34 @@ USceneComponent* UUOUWaterBasinRotationReactionComponent::FindRotationTargetComp
 	return FindSceneComponentByNameOrTag(RotationTargetComponentName);
 }
 
-const USceneComponent* UUOUWaterBasinRotationReactionComponent::ResolveInputDirectionReferenceComponent(const USceneComponent* TargetComponent) const
+const USceneComponent* UUOUWaterBasinRotationReactionComponent::ResolveInputSideCenterComponent(const USceneComponent* TargetComponent) const
 {
-	if (IsValid(InputDirectionReferenceComponent))
+	if (IsValid(InputSideCenterComponent))
 	{
-		return InputDirectionReferenceComponent.Get();
+		return InputSideCenterComponent.Get();
 	}
 
-	if (USceneComponent* FoundComponent = FindSceneComponentByNameOrTag(InputDirectionReferenceComponentName))
+	if (USceneComponent* FoundComponent = FindSceneComponentByNameOrTag(InputSideCenterComponentName))
 	{
 		return FoundComponent;
 	}
 
 	return IsValid(TargetComponent) ? TargetComponent : nullptr;
+}
+
+const USceneComponent* UUOUWaterBasinRotationReactionComponent::ResolveInputSideForwardReferenceComponent(const USceneComponent* CenterComponent) const
+{
+	if (IsValid(InputSideForwardReferenceComponent))
+	{
+		return InputSideForwardReferenceComponent.Get();
+	}
+
+	if (USceneComponent* FoundComponent = FindSceneComponentByNameOrTag(InputSideForwardReferenceComponentName))
+	{
+		return FoundComponent;
+	}
+
+	return IsValid(CenterComponent) ? CenterComponent : nullptr;
 }
 
 USceneComponent* UUOUWaterBasinRotationReactionComponent::FindSceneComponentByNameOrTag(FName ComponentName) const
@@ -347,19 +390,18 @@ void UUOUWaterBasinRotationReactionComponent::ApplyRotationAngle(float AngleDegr
 	TargetComponent->SetRelativeRotation((BaseRelativeRotation * RotationDelta).Rotator());
 }
 
-void UUOUWaterBasinRotationReactionComponent::CacheInputDirectionDebug(const FUOUWaterBasinInputContext& InputContext, float DirectionSign)
+void UUOUWaterBasinRotationReactionComponent::CacheInputSideDebug(const FUOUWaterBasinInputContext& InputContext, float RotationSign)
 {
-	bHasLastInputDirectionDebug = true;
-	LastInputDebugWorldLocation = InputContext.WorldLocation;
-	LastInputDebugWorldDirection = InputContext.WorldDirection.GetSafeNormal();
-	LastInputDebugRotationSign = DirectionSign;
-	LastInputDebugVolume = InputContext.Volume;
-	LastInputDebugSource = InputContext.Source;
+	bHasLastInputSideDebug = true;
+	LastInputSideDebugWorldLocation = InputContext.WorldLocation;
+	LastInputSideDebugRotationSign = RotationSign;
+	LastInputSideDebugVolume = InputContext.Volume;
+	LastInputSideDebugSource = InputContext.Source;
 }
 
-void UUOUWaterBasinRotationReactionComponent::DrawInputDirectionDebug() const
+void UUOUWaterBasinRotationReactionComponent::DrawInputSideDebug() const
 {
-	if (!bDrawInputDirectionDebug)
+	if (!bDrawInputSideDebug)
 	{
 		return;
 	}
@@ -371,17 +413,19 @@ void UUOUWaterBasinRotationReactionComponent::DrawInputDirectionDebug() const
 		return;
 	}
 
-	const float DrawScale = FMath::Max(InputDirectionDebugDrawScale, 0.0f);
-	const float SphereRadius = FMath::Max(InputDirectionDebugSphereRadius, 0.0f);
-	const float Thickness = FMath::Max(InputDirectionDebugThickness, 0.0f);
+	const float DrawScale = FMath::Max(InputSideDebugDrawScale, 0.0f);
+	const float SphereRadius = FMath::Max(InputSideDebugSphereRadius, 0.0f);
+	const float Thickness = FMath::Max(InputSideDebugThickness, 0.0f);
 	const float ArrowSize = FMath::Max(DrawScale * 0.2f, 8.0f);
-	const USceneComponent* ReferenceComponent = ResolveInputDirectionReferenceComponent(TargetComponent);
-	const FVector Center = ReferenceComponent != nullptr ? ReferenceComponent->GetComponentLocation() : TargetComponent->GetComponentLocation();
-	const FVector AxisWorld = ResolveWorldRotationAxis(ReferenceComponent != nullptr ? ReferenceComponent : TargetComponent);
-	const FVector ReferenceDirection = ResolveInputDirectionReferenceWorldDirection(ReferenceComponent);
-	const FVector SideDirection = ResolveInputDirectionSideWorldDirection(ReferenceComponent, TargetComponent);
+	const float DrawDuration = 0.05f;
+	const USceneComponent* CenterComponent = ResolveInputSideCenterComponent(TargetComponent);
+	const USceneComponent* ForwardReferenceComponent = ResolveInputSideForwardReferenceComponent(CenterComponent);
+	const FVector Center = CenterComponent != nullptr ? CenterComponent->GetComponentLocation() : TargetComponent->GetComponentLocation();
+	const FVector AxisWorld = ResolveWorldRotationAxis(CenterComponent != nullptr ? CenterComponent : TargetComponent);
+	const FVector ForwardDirection = ResolveInputSideForwardWorldDirection(ForwardReferenceComponent);
+	const FVector SideDirection = ResolveInputSideRightWorldDirection(ForwardReferenceComponent, CenterComponent != nullptr ? CenterComponent : TargetComponent);
 
-	DrawDebugSphere(World, Center, SphereRadius, 16, FColor::Yellow, false, 0.0f, 0, Thickness);
+	DrawDebugSphere(World, Center, SphereRadius, 16, FColor::Yellow, false, DrawDuration, 0, Thickness);
 
 	if (!AxisWorld.IsNearlyZero())
 	{
@@ -392,21 +436,21 @@ void UUOUWaterBasinRotationReactionComponent::DrawInputDirectionDebug() const
 			ArrowSize,
 			FColor::Cyan,
 			false,
-			0.0f,
+			DrawDuration,
 			0,
 			Thickness);
 	}
 
-	if (!ReferenceDirection.IsNearlyZero())
+	if (!ForwardDirection.IsNearlyZero())
 	{
 		DrawDebugDirectionalArrow(
 			World,
 			Center,
-			Center + ReferenceDirection * DrawScale,
+			Center + ForwardDirection * DrawScale,
 			ArrowSize,
 			FColor::Magenta,
 			false,
-			0.0f,
+			DrawDuration,
 			0,
 			Thickness);
 	}
@@ -420,134 +464,154 @@ void UUOUWaterBasinRotationReactionComponent::DrawInputDirectionDebug() const
 			ArrowSize,
 			FColor::Purple,
 			false,
-			0.0f,
+			DrawDuration,
 			0,
 			Thickness);
 	}
 
-	if (bDrawInputDirectionDebugLabel)
+	if (bDrawInputSideDebugLabel)
 	{
 		DrawDebugString(
 			World,
 			Center + FVector(0.0f, 0.0f, SphereRadius * 2.0f),
-			TEXT("Input Direction Reference / Axis / Right"),
+			TEXT("Input Side Center / Axis / Forward / Right"),
 			nullptr,
 			FColor::Yellow,
-			0.0f,
+			DrawDuration,
 			true);
 	}
 
-	if (!bHasLastInputDirectionDebug)
+	if (!bHasLastInputSideDebug)
 	{
 		return;
 	}
 
-	const FVector InputLocation = LastInputDebugWorldLocation.IsNearlyZero() ? Center : LastInputDebugWorldLocation;
-	const FVector InputDirection = LastInputDebugWorldDirection.IsNearlyZero()
-		? FVector::ForwardVector
-		: LastInputDebugWorldDirection;
-	const FColor ResponseColor = LastInputDebugRotationSign > 0.0f
-		? FColor::Green
-		: (LastInputDebugRotationSign < 0.0f ? FColor::Red : FColor::White);
-
-	DrawDebugSphere(World, InputLocation, SphereRadius, 16, FColor::Orange, false, 0.0f, 0, Thickness);
-	DrawDebugLine(World, Center, InputLocation, FColor::Yellow, false, 0.0f, 0, Thickness);
-	DrawDebugDirectionalArrow(
-		World,
-		InputLocation,
-		InputLocation + InputDirection * DrawScale,
-		ArrowSize,
-		FColor::Blue,
-		false,
-		0.0f,
-		0,
-		Thickness);
-
-	if (!SideDirection.IsNearlyZero() && !FMath::IsNearlyZero(LastInputDebugRotationSign))
+	const FVector InputLocation = LastInputSideDebugWorldLocation.IsNearlyZero() ? Center : LastInputSideDebugWorldLocation;
+	const FVector InputOffset = InputLocation - Center;
+	const FVector PlanarInputOffset = AxisWorld.IsNearlyZero()
+		? InputOffset
+		: InputOffset - AxisWorld * FVector::DotProduct(InputOffset, AxisWorld);
+	const FVector InputPositionDirection = PlanarInputOffset.GetSafeNormal();
+	const float SideValue = CalculateInputSideValueByCross(Center, InputLocation, ForwardDirection, AxisWorld);
+	const float DeadZone = FMath::Max(InputSideDeadZone, 0.0f);
+	const TCHAR* SideName = TEXT("Center");
+	if (SideValue > DeadZone)
 	{
-		const FVector ResponseDirection = SideDirection * LastInputDebugRotationSign;
+		SideName = TEXT("Right");
+	}
+	else if (SideValue < -DeadZone)
+	{
+		SideName = TEXT("Left");
+	}
+	const FColor ResponseColor = LastInputSideDebugRotationSign > 0.0f
+		? FColor::Green
+		: (LastInputSideDebugRotationSign < 0.0f ? FColor::Red : FColor::White);
+
+	DrawDebugSphere(World, InputLocation, SphereRadius, 16, FColor::Orange, false, DrawDuration, 0, Thickness);
+	DrawDebugLine(World, Center, InputLocation, FColor::Yellow, false, DrawDuration, 0, Thickness);
+
+	if (!InputPositionDirection.IsNearlyZero())
+	{
 		DrawDebugDirectionalArrow(
 			World,
-			InputLocation,
-			InputLocation + ResponseDirection * DrawScale,
+			Center,
+			Center + InputPositionDirection * DrawScale,
 			ArrowSize,
-			ResponseColor,
+			FColor::Orange,
 			false,
-			0.0f,
+			DrawDuration,
 			0,
 			Thickness);
 	}
 
-	if (bDrawInputDirectionDebugLabel)
+	if (!SideDirection.IsNearlyZero() && !FMath::IsNearlyZero(SideValue))
+	{
+		DrawDebugDirectionalArrow(
+			World,
+			Center,
+			Center + SideDirection * SideValue * DrawScale,
+			ArrowSize,
+			ResponseColor,
+			false,
+			DrawDuration,
+			0,
+			Thickness);
+	}
+
+	if (!SideDirection.IsNearlyZero() && !FMath::IsNearlyZero(LastInputSideDebugRotationSign))
+	{
+		const FVector ResponseDirection = SideDirection * LastInputSideDebugRotationSign;
+		DrawDebugDirectionalArrow(
+			World,
+			InputLocation,
+			InputLocation + ResponseDirection * (DrawScale * 0.5f),
+			ArrowSize,
+			ResponseColor,
+			false,
+			DrawDuration,
+			0,
+			Thickness);
+	}
+
+	if (bDrawInputSideDebugLabel)
 	{
 		const FString DebugText = FString::Printf(
-			TEXT("Water Input\nSource: %s\nVolume: %.2f\nSign: %.0f"),
-			GetInputSourceDebugName(LastInputDebugSource),
-			LastInputDebugVolume,
-			LastInputDebugRotationSign);
+			TEXT("Water Input\nSource: %s\nVolume: %.2f\nSide: %s %.2f\nSign: %.0f"),
+			GetInputSourceDebugName(LastInputSideDebugSource),
+			LastInputSideDebugVolume,
+			SideName,
+			SideValue,
+			LastInputSideDebugRotationSign);
 		DrawDebugString(
 			World,
 			InputLocation + FVector(0.0f, 0.0f, SphereRadius * 2.0f),
 			DebugText,
 			nullptr,
 			ResponseColor,
-			0.0f,
+			DrawDuration,
 			true);
 	}
 }
 
 float UUOUWaterBasinRotationReactionComponent::ResolveInputRotationSign(const FUOUWaterBasinInputContext& InputContext) const
 {
-	switch (GetInputDirectionPolicy(InputContext.Source))
+	switch (GetInputSidePolicy(InputContext.Source))
 	{
-	case EUOUWaterBasinRotationInputDirectionPolicy::Ignore:
+	case EUOUWaterBasinRotationInputSidePolicy::Ignore:
 		return 0.0f;
-	case EUOUWaterBasinRotationInputDirectionPolicy::FixedNegative:
+	case EUOUWaterBasinRotationInputSidePolicy::FixedNegative:
 		return -1.0f;
-	case EUOUWaterBasinRotationInputDirectionPolicy::ByInputDirection:
-		return ResolveInputDirectionSign(InputContext);
-	case EUOUWaterBasinRotationInputDirectionPolicy::FixedPositive:
+	case EUOUWaterBasinRotationInputSidePolicy::ByInputSide:
+		return ResolveInputSideSign(InputContext);
+	case EUOUWaterBasinRotationInputSidePolicy::FixedPositive:
 	default:
 		return 1.0f;
 	}
 }
 
-float UUOUWaterBasinRotationReactionComponent::ResolveInputDirectionSign(const FUOUWaterBasinInputContext& InputContext) const
+float UUOUWaterBasinRotationReactionComponent::ResolveInputSideSign(const FUOUWaterBasinInputContext& InputContext) const
 {
-	const float DeadZone = FMath::Max(InputDirectionDeadZone, 0.0f);
+	const float DeadZone = FMath::Max(InputSideDeadZone, 0.0f);
 	const USceneComponent* TargetComponent = ResolveRotationTargetComponent();
-	const USceneComponent* ReferenceComponent = ResolveInputDirectionReferenceComponent(TargetComponent);
-	const FVector Center = ReferenceComponent != nullptr
-		? ReferenceComponent->GetComponentLocation()
+	const USceneComponent* CenterComponent = ResolveInputSideCenterComponent(TargetComponent);
+	const USceneComponent* ForwardReferenceComponent = ResolveInputSideForwardReferenceComponent(CenterComponent);
+	const USceneComponent* AxisComponent = CenterComponent != nullptr ? CenterComponent : TargetComponent;
+	const FVector Center = CenterComponent != nullptr
+		? CenterComponent->GetComponentLocation()
 		: (TargetComponent != nullptr ? TargetComponent->GetComponentLocation() : FVector::ZeroVector);
-	const FVector SideDirection = ResolveInputDirectionSideWorldDirection(ReferenceComponent, TargetComponent);
-	if (SideDirection.IsNearlyZero())
+	const FVector ForwardDirection = ResolveInputSideForwardWorldDirection(ForwardReferenceComponent);
+	const FVector AxisWorld = ResolveWorldRotationAxis(AxisComponent);
+	const float SideSignValue = CalculateInputSideValueByCross(Center, InputContext.WorldLocation, ForwardDirection, AxisWorld);
+	if (FMath::Abs(SideSignValue) <= DeadZone)
 	{
 		return 0.0f;
 	}
 
-	const FVector InputOffset = InputContext.WorldLocation - Center;
-	const FVector AxisWorld = ResolveWorldRotationAxis(ReferenceComponent != nullptr ? ReferenceComponent : TargetComponent);
-	const FVector PlanarInputOffset = AxisWorld.IsNearlyZero()
-		? InputOffset
-		: InputOffset - AxisWorld * FVector::DotProduct(InputOffset, AxisWorld);
-	const FVector InputSideDirection = PlanarInputOffset.GetSafeNormal();
-	if (InputSideDirection.IsNearlyZero())
-	{
-		return 0.0f;
-	}
-
-	const float SideSignValue = FVector::DotProduct(InputSideDirection, SideDirection);
-	if (FMath::Abs(SideSignValue) > DeadZone)
-	{
-		const float SideSign = FMath::Sign(SideSignValue);
-		return bRightSideInputRotatesPositive ? SideSign : -SideSign;
-	}
-
-	return 0.0f;
+	const float SideSign = FMath::Sign(SideSignValue);
+	return bRightSideInputRotatesPositive ? SideSign : -SideSign;
 }
 
-FVector UUOUWaterBasinRotationReactionComponent::ResolveInputDirectionReferenceWorldDirection(const USceneComponent* ReferenceComponent) const
+FVector UUOUWaterBasinRotationReactionComponent::ResolveInputSideForwardWorldDirection(const USceneComponent* ReferenceComponent) const
 {
 	if (ReferenceComponent != nullptr)
 	{
@@ -557,43 +621,43 @@ FVector UUOUWaterBasinRotationReactionComponent::ResolveInputDirectionReferenceW
 	return FVector::ZeroVector;
 }
 
-FVector UUOUWaterBasinRotationReactionComponent::ResolveInputDirectionSideWorldDirection(
+FVector UUOUWaterBasinRotationReactionComponent::ResolveInputSideRightWorldDirection(
 	const USceneComponent* ReferenceComponent,
 	const USceneComponent* TargetComponent) const
 {
-	const FVector ForwardDirection = ResolveInputDirectionReferenceWorldDirection(ReferenceComponent);
+	const FVector ForwardDirection = ResolveInputSideForwardWorldDirection(ReferenceComponent);
 	if (ForwardDirection.IsNearlyZero())
 	{
 		return FVector::ZeroVector;
 	}
 
-	const FVector AxisWorld = ResolveWorldRotationAxis(ReferenceComponent != nullptr ? ReferenceComponent : TargetComponent);
+	const FVector AxisWorld = ResolveWorldRotationAxis(TargetComponent);
 	if (AxisWorld.IsNearlyZero())
 	{
-		return ReferenceComponent != nullptr ? ReferenceComponent->GetRightVector().GetSafeNormal() : FVector::ZeroVector;
+		return FVector::ZeroVector;
 	}
 
-	const FVector PlanarForwardDirection = (ForwardDirection - AxisWorld * FVector::DotProduct(ForwardDirection, AxisWorld)).GetSafeNormal();
+	const FVector PlanarForwardDirection = ProjectDirectionOnRotationPlane(ForwardDirection, AxisWorld);
 	if (PlanarForwardDirection.IsNearlyZero())
 	{
-		return ReferenceComponent != nullptr ? ReferenceComponent->GetRightVector().GetSafeNormal() : FVector::ZeroVector;
+		return FVector::ZeroVector;
 	}
 
 	return FVector::CrossProduct(AxisWorld, PlanarForwardDirection).GetSafeNormal();
 }
 
-EUOUWaterBasinRotationInputDirectionPolicy UUOUWaterBasinRotationReactionComponent::GetInputDirectionPolicy(EUOUWaterBasinInputSource Source) const
+EUOUWaterBasinRotationInputSidePolicy UUOUWaterBasinRotationReactionComponent::GetInputSidePolicy(EUOUWaterBasinInputSource Source) const
 {
 	switch (Source)
 	{
 	case EUOUWaterBasinInputSource::PlayerPour:
-		return PlayerPourDirectionPolicy;
+		return PlayerPourInputSidePolicy;
 	case EUOUWaterBasinInputSource::Rain:
-		return RainDirectionPolicy;
+		return RainInputSidePolicy;
 	case EUOUWaterBasinInputSource::Script:
 	case EUOUWaterBasinInputSource::Unknown:
 	default:
-		return ScriptDirectionPolicy;
+		return ScriptInputSidePolicy;
 	}
 }
 
