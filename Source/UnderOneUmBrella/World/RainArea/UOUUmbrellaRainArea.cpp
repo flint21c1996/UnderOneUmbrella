@@ -12,7 +12,9 @@
 #include "NiagaraComponent.h"
 #include "Player/UOUUmbrellaComponent.h"
 #include "UObject/ConstructorHelpers.h"
+#include "UObject/UObjectIterator.h"
 #include "World/Environment/UOUEnvironmentVisualComponent.h"
+#include "World/WaterTarget/UOUWaterBasinTargetComponent.h"
 
 AUOUUmbrellaRainArea::AUOUUmbrellaRainArea()
 {
@@ -56,6 +58,16 @@ AUOUUmbrellaRainArea::AUOUUmbrellaRainArea()
 		PreviewVolumeMesh->SetStaticMesh(CubeMeshFinder.Object);
 	}
 
+}
+
+void AUOUUmbrellaRainArea::SetWaterBasinRainFillEnabled(bool bEnabled)
+{
+	bEnableWaterBasinRainFill = bEnabled;
+}
+
+bool AUOUUmbrellaRainArea::IsWaterBasinRainFillEnabled() const
+{
+	return bEnableWaterBasinRainFill;
 }
 
 void AUOUUmbrellaRainArea::BeginPlay()
@@ -144,6 +156,7 @@ void AUOUUmbrellaRainArea::Tick(float DeltaSeconds)
 
 	bool bHasRainBlocker = false;
 	FVector RainBlockerWorldCenter = FVector::ZeroVector;
+	FRotator RainBlockerWorldRotation = FRotator::ZeroRotator;
 	FVector RainBlockerHalfExtent = FVector::ZeroVector;
 
 	for (AActor* OverlappingActor : OverlappingActors)
@@ -169,10 +182,18 @@ void AUOUUmbrellaRainArea::Tick(float DeltaSeconds)
 			{
 				bHasRainBlocker = true;
 				RainBlockerWorldCenter = CandidateBlockerWorldCenter;
+				RainBlockerWorldRotation = CandidateBlockerWorldRotation;
 				RainBlockerHalfExtent = CandidateBlockerHalfExtent;
 			}
 		}
 	}
+
+	ApplyRainToWaterBasinTargets(
+		DeltaSeconds,
+		bHasRainBlocker,
+		RainBlockerWorldCenter,
+		RainBlockerWorldRotation,
+		RainBlockerHalfExtent);
 
 	ApplyEnvironmentVisualRainBlocker(
 		bHasRainBlocker,
@@ -281,6 +302,118 @@ void AUOUUmbrellaRainArea::ApplyEnvironmentVisualRainBlocker(bool bIsBlocking, c
 		BlockerLocalCenter,
 		BlockerHalfExtent,
 		BlockerIntensity);
+}
+
+void AUOUUmbrellaRainArea::ApplyRainToWaterBasinTargets(float DeltaSeconds, bool bHasRainBlocker, const FVector& RainBlockerWorldCenter, const FRotator& RainBlockerWorldRotation, const FVector& RainBlockerHalfExtent) const
+{
+	if (!bEnableWaterBasinRainFill)
+	{
+		return;
+	}
+
+	const float RainAmount = FMath::Max(0.0f, RainFillRate) * FMath::Max(0.0f, DeltaSeconds);
+	if (RainAmount <= 0.0f || RainVolume == nullptr)
+	{
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	if (World == nullptr)
+	{
+		return;
+	}
+
+	TSet<UUOUWaterBasinTargetComponent*> ProcessedTargets;
+	for (TObjectIterator<UUOUWaterBasinTargetComponent> It; It; ++It)
+	{
+		UUOUWaterBasinTargetComponent* Target = *It;
+		if (!IsValid(Target) || Target->GetWorld() != World || ProcessedTargets.Contains(Target)
+			|| !Target->CanReceiveRainFill())
+		{
+			continue;
+		}
+
+		AActor* TargetOwner = Target->GetOwner();
+		if (!IsValid(TargetOwner)
+			|| !IsActorInsideRainVolume(TargetOwner)
+			|| (bHasRainBlocker && IsActorBlockedByRainBlocker(TargetOwner, RainBlockerWorldCenter, RainBlockerWorldRotation, RainBlockerHalfExtent)))
+		{
+			continue;
+		}
+
+		TArray<UUOUWaterBasinTargetComponent*> Group;
+		Target->GetConnectedGroup(Group);
+		for (UUOUWaterBasinTargetComponent* GroupTarget : Group)
+		{
+			if (IsValid(GroupTarget))
+			{
+				ProcessedTargets.Add(GroupTarget);
+			}
+		}
+
+		FUOUWaterBasinInputContext InputContext;
+		InputContext.Volume = RainAmount;
+		InputContext.Duration = RainAmount;
+		InputContext.Source = EUOUWaterBasinInputSource::Rain;
+		InputContext.WorldDirection = -RainVolume->GetUpVector();
+		InputContext.WorldLocation = TargetOwner->GetActorLocation();
+		InputContext.InstigatorActor = const_cast<AUOUUmbrellaRainArea*>(this);
+		InputContext.bApplyToConnectedGroup = true;
+		Target->ReceiveWaterInput(InputContext);
+	}
+}
+
+bool AUOUUmbrellaRainArea::IsActorInsideRainVolume(const AActor* Actor) const
+{
+	if (RainVolume == nullptr || !IsValid(Actor))
+	{
+		return false;
+	}
+
+	FVector ActorOrigin = FVector::ZeroVector;
+	FVector ActorExtent = FVector::ZeroVector;
+	Actor->GetActorBounds(false, ActorOrigin, ActorExtent);
+	if (ActorExtent.IsNearlyZero())
+	{
+		ActorOrigin = Actor->GetActorLocation();
+	}
+
+	const FVector LocalPoint = RainVolume->GetComponentTransform().InverseTransformPosition(ActorOrigin);
+	const FVector BoxExtent = RainVolume->GetUnscaledBoxExtent();
+	return FMath::Abs(LocalPoint.X) <= BoxExtent.X
+		&& FMath::Abs(LocalPoint.Y) <= BoxExtent.Y
+		&& FMath::Abs(LocalPoint.Z) <= BoxExtent.Z;
+}
+
+bool AUOUUmbrellaRainArea::IsActorBlockedByRainBlocker(const AActor* Actor, const FVector& BlockerWorldCenter, const FRotator& BlockerWorldRotation, const FVector& BlockerHalfExtent) const
+{
+	if (!IsValid(Actor))
+	{
+		return false;
+	}
+
+	FVector ActorOrigin = FVector::ZeroVector;
+	FVector ActorExtent = FVector::ZeroVector;
+	Actor->GetActorBounds(false, ActorOrigin, ActorExtent);
+	if (ActorExtent.IsNearlyZero())
+	{
+		ActorOrigin = Actor->GetActorLocation();
+	}
+
+	const FVector SafeHalfExtent(
+		FMath::Max(0.0f, BlockerHalfExtent.X),
+		FMath::Max(0.0f, BlockerHalfExtent.Y),
+		FMath::Max(0.0f, BlockerHalfExtent.Z));
+	if (SafeHalfExtent.X <= KINDA_SMALL_NUMBER || SafeHalfExtent.Y <= KINDA_SMALL_NUMBER)
+	{
+		return false;
+	}
+
+	const FTransform BlockerTransform(BlockerWorldRotation, BlockerWorldCenter);
+	const FVector LocalPoint = BlockerTransform.InverseTransformPosition(ActorOrigin);
+	return FMath::Abs(LocalPoint.X) <= SafeHalfExtent.X
+		&& FMath::Abs(LocalPoint.Y) <= SafeHalfExtent.Y
+		&& LocalPoint.Z <= SafeHalfExtent.Z;
 }
 
 void AUOUUmbrellaRainArea::DrawRainVisualDebug() const
