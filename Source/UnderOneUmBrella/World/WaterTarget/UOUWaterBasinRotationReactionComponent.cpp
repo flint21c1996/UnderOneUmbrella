@@ -305,18 +305,30 @@ void UUOUWaterBasinRotationReactionComponent::OnWaterBasinReactionStateUpdated_I
 
 	const float DeltaValue = CurrentValue - LastObservedValue;
 	LastObservedValue = CurrentValue;
-	if (DeltaValue <= KINDA_SMALL_NUMBER)
+	if (DeltaValue > KINDA_SMALL_NUMBER)
+	{
+		SetTargetRotationAngle(TargetAngleDegrees + (DeltaValue * DegreesPerValueUnit));
+		return;
+	}
+
+	if (RotationMode != EUOUWaterBasinRotationReactionMode::IncrementalOnWaterChange
+		|| DeltaValue >= -KINDA_SMALL_NUMBER)
 	{
 		return;
 	}
 
-	SetTargetRotationAngle(TargetAngleDegrees + (DeltaValue * DegreesPerValueUnit));
+	const float DrainRotationSign = DrainRotationDirection == EUOUWaterBasinDrainRotationDirection::SameAsIncrease
+		? 1.0f
+		: -1.0f;
+	SetTargetRotationAngle(TargetAngleDegrees + (FMath::Abs(DeltaValue) * DegreesPerValueUnit * DrainRotationSign));
 }
 
 void UUOUWaterBasinRotationReactionComponent::HandleWaterInputReceived(UUOUWaterBasinTargetComponent* Target, const FUOUWaterBasinInputContext& InputContext)
 {
 	const bool bRotateByEveryWaterInput = RotationMode == EUOUWaterBasinRotationReactionMode::IncrementalOnWaterInput;
-	const bool bRotateByFullWaterInput = RotationMode == EUOUWaterBasinRotationReactionMode::IncrementalOnIncrease && bRotateOnFullWaterInput;
+	const bool bCanRotateByFullWaterInput = RotationMode == EUOUWaterBasinRotationReactionMode::IncrementalOnIncrease
+		|| RotationMode == EUOUWaterBasinRotationReactionMode::IncrementalOnWaterChange;
+	const bool bRotateByFullWaterInput = bCanRotateByFullWaterInput && bRotateOnFullWaterInput;
 	if ((!bRotateByEveryWaterInput && !bRotateByFullWaterInput)
 		|| Target == nullptr
 		|| InputContext.Volume <= 0.0f)

@@ -15,7 +15,8 @@ enum class EUOUWaterBasinRotationReactionMode : uint8
 {
 	IncrementalOnIncrease UMETA(DisplayName = "Incremental On Increase", ToolTip = "Accumulates rotation by increased water value. Full water input can optionally be treated as an attempted increase."),
 	AbsoluteByValue UMETA(DisplayName = "Absolute By Value", ToolTip = "Maps the current water value directly to a rotation angle. Draining water rewinds rotation."),
-	IncrementalOnWaterInput UMETA(DisplayName = "Incremental On Water Input", ToolTip = "Accumulates rotation by water input volume even if the actual water level does not change.")
+	IncrementalOnWaterInput UMETA(DisplayName = "Incremental On Water Input", ToolTip = "Accumulates rotation by water input volume even if the actual water level does not change."),
+	IncrementalOnWaterChange UMETA(DisplayName = "Incremental On Water Change", ToolTip = "Accumulates rotation when the water value increases or decreases. Drain direction can be configured separately.")
 };
 
 UENUM(BlueprintType)
@@ -32,6 +33,13 @@ enum class EUOUWaterBasinRotationInputSidePolicy : uint8
 	FixedPositive UMETA(DisplayName = "Fixed Positive"),
 	FixedNegative UMETA(DisplayName = "Fixed Negative"),
 	ByInputSide UMETA(DisplayName = "By Input Side")
+};
+
+UENUM(BlueprintType)
+enum class EUOUWaterBasinDrainRotationDirection : uint8
+{
+	SameAsIncrease UMETA(DisplayName = "Same As Increase", ToolTip = "Draining water rotates in the same direction as filling water."),
+	OppositeToIncrease UMETA(DisplayName = "Opposite To Increase", ToolTip = "Draining water rotates opposite to filling water.")
 };
 
 // Rotates a target component from WaterBasin reaction values or water input events.
@@ -69,8 +77,11 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Rotation", meta = (EditCondition = "RotationMode != EUOUWaterBasinRotationReactionMode::IncrementalOnWaterInput", EditConditionHides, ToolTip = "Degrees to rotate per 1 water value unit. With FillRatio, 1.0 means full."))
 	float DegreesPerValueUnit = 90.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Rotation", meta = (EditCondition = "RotationMode == EUOUWaterBasinRotationReactionMode::IncrementalOnIncrease", EditConditionHides, ToolTip = "If true, water input received while the target or connected group is already full still rotates as an attempted value increase. Leave off to rotate only when the water value actually increases."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Rotation", meta = (EditCondition = "RotationMode == EUOUWaterBasinRotationReactionMode::IncrementalOnIncrease || RotationMode == EUOUWaterBasinRotationReactionMode::IncrementalOnWaterChange", EditConditionHides, ToolTip = "If true, water input received while the target or connected group is already full still rotates as an attempted value increase. Leave off to rotate only when the water value actually changes."))
 	bool bRotateOnFullWaterInput = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Rotation", meta = (EditCondition = "RotationMode == EUOUWaterBasinRotationReactionMode::IncrementalOnWaterChange", EditConditionHides, ToolTip = "Direction to rotate when the water value decreases."))
+	EUOUWaterBasinDrainRotationDirection DrainRotationDirection = EUOUWaterBasinDrainRotationDirection::SameAsIncrease;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Rotation", meta = (EditCondition = "RotationMode == EUOUWaterBasinRotationReactionMode::IncrementalOnWaterInput", EditConditionHides, ToolTip = "Degrees to rotate per 1 water input volume unit."))
 	float DegreesPerInputVolume = 90.0f;
