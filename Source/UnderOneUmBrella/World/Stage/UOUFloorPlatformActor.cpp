@@ -9,6 +9,7 @@
 #include "Components/PrimitiveComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/SphereComponent.h"
+#include "Components/SplineComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Curves/CurveFloat.h"
 #include "Engine/OverlapResult.h"
@@ -61,14 +62,24 @@ AUOUFloorPlatformActor::AUOUFloorPlatformActor()
 	RotationPivotMarker->SetHiddenInGame(true);
 	RotationPivotMarker->ShapeColor = FColor::Red;
 
-	MovePreviewArrow = CreateDefaultSubobject<UArrowComponent>(TEXT("MovePreviewArrow"));
-	MovePreviewArrow->SetupAttachment(RootScene);
-	MovePreviewArrow->SetMobility(EComponentMobility::Movable);
-	MovePreviewArrow->SetUsingAbsoluteScale(true);
-	MovePreviewArrow->SetArrowSize(0.35f);
-	MovePreviewArrow->SetArrowLength(120.0f);
-	MovePreviewArrow->SetHiddenInGame(true);
-	MovePreviewArrow->SetArrowFColor(FColor::Cyan);
+	MovePreviewPath = CreateDefaultSubobject<USplineComponent>(TEXT("MovePreviewPath"));
+	MovePreviewPath->SetupAttachment(RootScene);
+	MovePreviewPath->SetMobility(EComponentMobility::Movable);
+	MovePreviewPath->SetHiddenInGame(true);
+	MovePreviewPath->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	MovePreviewPath->ClearSplinePoints(false);
+	MovePreviewPath->AddSplinePoint(FVector::ZeroVector, ESplineCoordinateSpace::Local, false);
+	MovePreviewPath->AddSplinePoint(FVector::ForwardVector * 100.0f, ESplineCoordinateSpace::Local, false);
+	MovePreviewPath->SetSplinePointType(0, ESplinePointType::Linear, false);
+	MovePreviewPath->SetSplinePointType(1, ESplinePointType::Linear, false);
+#if WITH_EDITORONLY_DATA
+	MovePreviewPath->EditorUnselectedSplineSegmentColor = FLinearColor::FromSRGBColor(FColor::Cyan);
+	MovePreviewPath->EditorSelectedSplineSegmentColor = FLinearColor::FromSRGBColor(FColor::Cyan);
+	MovePreviewPath->EditorTangentColor = FLinearColor::FromSRGBColor(FColor::Cyan);
+	MovePreviewPath->bShouldVisualizeScale = true;
+	MovePreviewPath->ScaleVisualizationWidth = 8.0f;
+#endif
+	MovePreviewPath->UpdateSpline();
 
 	TransformPreviewMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("TransformPreviewMesh"));
 	TransformPreviewMesh->SetupAttachment(RootScene);
@@ -697,24 +708,24 @@ void AUOUFloorPlatformActor::UpdateEditorPreviewVisuals()
 		RotationPivotMarker->SetVisibility(bUseTargetRotation && !bUsesTargetMarker, true);
 	}
 
-	if (MovePreviewArrow != nullptr)
-	{
-		const FVector StartWorldLocation = StartTransform.GetLocation();
-		const FVector TargetWorldLocation = bUsesTargetMarker
-			? TargetMarkerActor->GetActorLocation()
-			: StartTransform.GetLocation() + StartTransform.TransformVectorNoScale(TargetLocalOffset);
-		const FVector MoveOffsetWorld = TargetWorldLocation - StartWorldLocation;
-		const bool bHasMoveOffset = !MoveOffsetWorld.IsNearlyZero();
+	const FVector StartWorldLocation = StartTransform.GetLocation();
+	const FVector TargetWorldLocation = bUsesTargetMarker
+		? TargetMarkerActor->GetActorLocation()
+		: StartTransform.GetLocation() + StartTransform.TransformVectorNoScale(TargetLocalOffset);
+	const FVector MoveOffsetWorld = TargetWorldLocation - StartWorldLocation;
+	const bool bHasMoveOffset = !MoveOffsetWorld.IsNearlyZero();
 
-		MovePreviewArrow->SetVisibility(bShowMovePreviewArrow && bHasMoveOffset, true);
+	if (MovePreviewPath != nullptr)
+	{
+		MovePreviewPath->SetVisibility(bShowMovePreviewArrow && bHasMoveOffset, true);
 		if (bHasMoveOffset)
 		{
-			const FVector MoveDirection = MoveOffsetWorld.GetSafeNormal();
-
-			// 플랫폼의 시작점과 목표 지점을 하나의 화살표로 이어서 이동 경로를 보여줍니다.
-			MovePreviewArrow->SetWorldLocation(StartWorldLocation);
-			MovePreviewArrow->SetWorldRotation(MoveDirection.Rotation());
-			MovePreviewArrow->SetArrowLength(MoveOffsetWorld.Size());
+			// 시작점과 목표 지점을 실제 스플라인 선으로 이어서 경로를 명확하게 보여줍니다.
+			MovePreviewPath->SetLocationAtSplinePoint(0, StartWorldLocation, ESplineCoordinateSpace::World, false);
+			MovePreviewPath->SetLocationAtSplinePoint(1, TargetWorldLocation, ESplineCoordinateSpace::World, false);
+			MovePreviewPath->SetSplinePointType(0, ESplinePointType::Linear, false);
+			MovePreviewPath->SetSplinePointType(1, ESplinePointType::Linear, false);
+			MovePreviewPath->UpdateSpline();
 		}
 	}
 

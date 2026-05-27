@@ -13,6 +13,7 @@ class UBoxComponent;
 class UPrimitiveComponent;
 class USceneComponent;
 class USphereComponent;
+class USplineComponent;
 class UStaticMeshComponent;
 class AUOUFloorPlatformActor;
 class AUOUFloorPlatformTargetActor;
@@ -60,9 +61,9 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Floor Platform|Rotation")
 	TObjectPtr<USphereComponent> RotationPivotMarker = nullptr;
 
-	// TargetLocalOffset 방향과 거리를 보여주는 에디터 확인용 화살표입니다.
+	// 플랫폼 시작점과 목표 지점을 실제 선으로 이어서 보여주는 에디터 확인용 경로입니다.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Floor Platform|Preview")
-	TObjectPtr<UArrowComponent> MovePreviewArrow = nullptr;
+	TObjectPtr<USplineComponent> MovePreviewPath = nullptr;
 
 	// PreviewAlpha 값에 해당하는 플랫폼 위치와 회전을 보여주는 에디터 확인용 메쉬입니다.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Floor Platform|Preview")
@@ -108,7 +109,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Preview", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float PreviewAlpha = 1.0f;
 
-	// 에디터에서 이동 방향과 거리를 화살표로 보여줄지 정합니다.
+	// 에디터에서 플랫폼 시작점과 목표 지점을 잇는 이동 경로 선을 보여줄지 정합니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Preview")
 	bool bShowMovePreviewArrow = true;
 
