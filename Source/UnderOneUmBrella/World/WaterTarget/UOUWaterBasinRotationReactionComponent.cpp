@@ -16,14 +16,14 @@ namespace
 		switch (Source)
 		{
 		case EUOUWaterBasinInputSource::PlayerPour:
-			return TEXT("PlayerPour");
+			return TEXT("플레이어 물 붓기");
 		case EUOUWaterBasinInputSource::Rain:
-			return TEXT("Rain");
+			return TEXT("비");
 		case EUOUWaterBasinInputSource::Script:
-			return TEXT("Script");
+			return TEXT("스크립트");
 		case EUOUWaterBasinInputSource::Unknown:
 		default:
-			return TEXT("Unknown");
+			return TEXT("알 수 없음");
 		}
 	}
 
@@ -657,7 +657,7 @@ void UUOUWaterBasinRotationReactionComponent::DrawInputSideDebug() const
 		DrawDebugString(
 			World,
 			Center + FVector(0.0f, 0.0f, SphereRadius * 2.0f),
-			TEXT("Input Side Center / Axis / Forward / Right"),
+			TEXT("입력 좌우 중심 / 회전축 / 전방 / 오른쪽"),
 			nullptr,
 			FColor::Yellow,
 			DrawDuration,
@@ -677,14 +677,14 @@ void UUOUWaterBasinRotationReactionComponent::DrawInputSideDebug() const
 	const FVector InputPositionDirection = PlanarInputOffset.GetSafeNormal();
 	const float SideValue = CalculateInputSideValueByCross(Center, InputLocation, ForwardDirection, AxisWorld);
 	const float DeadZone = FMath::Max(InputSideDeadZone, 0.0f);
-	const TCHAR* SideName = TEXT("Center");
+	const TCHAR* SideName = TEXT("중앙");
 	if (SideValue > DeadZone)
 	{
-		SideName = TEXT("Right");
+		SideName = TEXT("오른쪽");
 	}
 	else if (SideValue < -DeadZone)
 	{
-		SideName = TEXT("Left");
+		SideName = TEXT("왼쪽");
 	}
 	const FColor ResponseColor = LastInputSideDebugRotationSign > 0.0f
 		? FColor::Green
@@ -739,7 +739,7 @@ void UUOUWaterBasinRotationReactionComponent::DrawInputSideDebug() const
 	if (bDrawInputSideDebugLabel)
 	{
 		const FString DebugText = FString::Printf(
-			TEXT("Water Input\nSource: %s\nVolume: %.2f\nSide: %s %.2f\nSign: %.0f"),
+			TEXT("물 입력\n출처: %s\n부피: %.2f\n좌우: %s %.2f\n부호: %.0f"),
 			GetInputSourceDebugName(LastInputSideDebugSource),
 			LastInputSideDebugVolume,
 			SideName,
