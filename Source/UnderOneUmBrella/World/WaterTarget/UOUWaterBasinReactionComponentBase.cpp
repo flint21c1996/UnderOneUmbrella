@@ -83,7 +83,9 @@ void UUOUWaterBasinReactionComponentBase::EvaluateReaction(bool bForceNotify)
 	BindToWaterBasinTarget();
 
 	UUOUWaterBasinTargetComponent* WaterBasinTarget = ResolveWaterBasinTarget();
-	if (!WaterBasinTarget && ValueSource != EUOUWaterBasinReactionValueSource::PlatformWorldZ)
+	if (!WaterBasinTarget
+		&& ValueSource != EUOUWaterBasinReactionValueSource::PlatformWorldZ
+		&& ValueSource != EUOUWaterBasinReactionValueSource::RotationAngleDegrees)
 	{
 		return;
 	}
@@ -108,6 +110,16 @@ bool UUOUWaterBasinReactionComponentBase::IsReactionConditionSatisfied() const
 FUOUWaterBasinReactionContext UUOUWaterBasinReactionComponentBase::GetLastReactionContext() const
 {
 	return LastContext;
+}
+
+TArray<FString> UUOUWaterBasinReactionComponentBase::GetPuzzleDebugInfo_Implementation() const
+{
+	TArray<FString> DebugInfo = Super::GetPuzzleDebugInfo_Implementation();
+	DebugInfo.Add(FString::Printf(TEXT("Reaction Value: %.3f / %.3f"), LastContext.CurrentValue, LastContext.ThresholdValue));
+	DebugInfo.Add(FString::Printf(TEXT("Water Fill: %.3f"), LastContext.WaterFillRatio));
+	DebugInfo.Add(FString::Printf(TEXT("Rotation Angle: %.2f"), LastContext.RotationAngleDegrees));
+	DebugInfo.Add(FString::Printf(TEXT("Reaction Events: +%d / -%d"), SatisfiedEventCount, UnsatisfiedEventCount));
+	return DebugInfo;
 }
 
 void UUOUWaterBasinReactionComponentBase::OnWaterBasinReactionStateUpdated_Implementation(const FUOUWaterBasinReactionContext& /*Context*/)
@@ -239,6 +251,8 @@ float UUOUWaterBasinReactionComponentBase::ResolveCurrentValue(const FUOUWaterBa
 		return Context.WaterVolume;
 	case EUOUWaterBasinReactionValueSource::PlatformWorldZ:
 		return Context.PlatformWorldZ;
+	case EUOUWaterBasinReactionValueSource::RotationAngleDegrees:
+		return Context.RotationAngleDegrees;
 	default:
 		return InvalidReactionValue;
 	}
@@ -311,6 +325,11 @@ void UUOUWaterBasinReactionComponentBase::UnbindFromWaterBasinTarget()
 
 void UUOUWaterBasinReactionComponentBase::NotifyReactionResult(const FUOUWaterBasinReactionContext& Context, bool bWasSatisfied, bool bForceNotify)
 {
+	if (bExposeAsPuzzleCondition)
+	{
+		// Reaction 조건 결과를 퍼즐 조건 소스 상태에도 동기화합니다.
+		SetSatisfiedState(Context.bIsSatisfied, true);
+	}
 	const bool bBecameSatisfied = !bWasSatisfied && Context.bIsSatisfied;
 	const bool bBecameUnsatisfied = bWasSatisfied && !Context.bIsSatisfied;
 	const bool bCanTriggerSatisfied = !bTriggerOnce || !bHasTriggeredOnce;

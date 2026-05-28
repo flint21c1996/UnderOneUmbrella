@@ -138,6 +138,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Condition", meta = (ToolTip = "켜져 있으면 기본 반응 조건이 만족될 때만 회전을 적용합니다."))
 	bool bRequireConditionSatisfied = false;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Condition", meta = (ToolTip = "켜져 있으면 Reaction 조건이 만족되는 순간 회전 반응을 비활성화합니다. 특정 각도에 도달한 뒤 플랫폼을 멈출 때 사용합니다."))
+	bool bDisableReactionWhenConditionSatisfied = false;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Clamp", meta = (ToolTip = "켜져 있으면 누적 회전 각도를 최소/최대 각도 사이로 제한합니다."))
 	bool bClampRotationAngle = false;
 
@@ -182,10 +185,13 @@ public:
 
 protected:
 	virtual void OnWaterBasinReactionStateUpdated_Implementation(const FUOUWaterBasinReactionContext& Context) override;
+	virtual void OnWaterBasinReactionSatisfied_Implementation(const FUOUWaterBasinReactionContext& Context) override;
+	virtual bool EvaluateReactionCondition(FUOUWaterBasinReactionContext& Context) override;
 
 private:
 	bool bHasObservedValue = false;
 	bool bHasCachedBaseRotation = false;
+	bool bEvaluatingRotationAngleCondition = false;
 	FQuat BaseRelativeRotation = FQuat::Identity;
 	FQuat BaseWorldRotation = FQuat::Identity;
 
@@ -222,6 +228,7 @@ private:
 	void PrepareInputSideReferenceForInput(const FUOUWaterBasinInputContext& InputContext);
 	void UpdateInputSideSessionLifetime();
 	void ClearInputSideSessionReference();
+	void EvaluateRotationAngleConditionIfNeeded();
 	bool CaptureCurrentInputSideReference(FVector& OutCenter, FVector& OutForwardDirection, FVector& OutAxisWorld) const;
 	bool ResolveInputSideReference(FVector& OutCenter, FVector& OutForwardDirection, FVector& OutAxisWorld) const;
 	void DrawInputSideDebug() const;

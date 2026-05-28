@@ -3,7 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Components/ActorComponent.h"
+#include "Puzzle/Core/UOUPuzzleConditionSourceComponent.h"
 #include "UOUWaterBasinReactionComponentBase.generated.h"
 
 class AActor;
@@ -19,7 +19,8 @@ enum class EUOUWaterBasinReactionValueSource : uint8
 	WaterDepthWorld UMETA(DisplayName = "Water Depth World", ToolTip = "WaterTile의 현재 물 깊이를 월드 단위(cm)로 비교합니다."),
 	WaterFillRatio UMETA(DisplayName = "Water Fill Ratio", ToolTip = "WaterTile의 현재 채움 비율을 비교합니다. 가득 참 조건은 Threshold를 1로 두면 됩니다."),
 	WaterVolume UMETA(DisplayName = "Water Volume", ToolTip = "WaterTile의 현재 물 부피를 비교합니다."),
-	PlatformWorldZ UMETA(DisplayName = "Platform World Z", ToolTip = "플랫폼의 현재 월드 Z를 비교합니다.")
+	PlatformWorldZ UMETA(DisplayName = "Platform World Z", ToolTip = "플랫폼의 현재 월드 Z를 비교합니다."),
+	RotationAngleDegrees UMETA(DisplayName = "Rotation Angle Degrees", ToolTip = "RotationReactionComponent가 실제로 적용한 현재 회전 각도를 비교합니다.")
 };
 
 // 현재 값을 기준값과 어떤 방식으로 비교할지 정합니다.
@@ -74,6 +75,9 @@ struct UNDERONEUMBRELLA_API FUOUWaterBasinReactionContext
 	UPROPERTY(BlueprintReadOnly, Category = "Water Basin Reaction|Platform")
 	float PlatformWorldZ = 0.0f;
 
+	UPROPERTY(BlueprintReadOnly, Category = "Water Basin Reaction|Rotation")
+	float RotationAngleDegrees = 0.0f;
+
 	UPROPERTY(BlueprintReadOnly, Category = "Water Basin Reaction|Condition")
 	bool bIsSatisfied = false;
 
@@ -90,7 +94,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FUOUWaterBasinReactionEvent, const F
 // WaterTile 자동 탐색, 이벤트 바인딩, Context 생성, 기본 조건 판정을 제공하고
 // 파생 ReactionComponent는 조건 만족/해제 시 실제 행동만 구현하면 됩니다.
 UCLASS(Abstract, ClassGroup=(Puzzle), meta=(BlueprintSpawnableComponent, DisplayName="UOU Water Basin Reaction Base"))
-class UNDERONEUMBRELLA_API UUOUWaterBasinReactionComponentBase : public UActorComponent
+class UNDERONEUMBRELLA_API UUOUWaterBasinReactionComponentBase : public UUOUPuzzleConditionSourceComponent
 {
 	GENERATED_BODY()
 
@@ -125,6 +129,10 @@ public:
 	// true면 조건이 처음 만족되는 순간에만 OnWaterBasinReactionSatisfied를 호출합니다.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Reaction|Trigger", meta = (ToolTip = "켜져 있으면 조건이 처음 만족되는 순간에만 만족 반응을 호출합니다."))
 	bool bTriggerOnce = false;
+
+	// Reaction 조건 결과를 PuzzleConditionGroup에 노출할지 정합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Reaction|Trigger", meta = (ToolTip = "켜져 있으면 Reaction 조건 평가 결과를 PuzzleConditionSource 상태로 동기화합니다. PuzzleConditionGroup에서 이 컴포넌트를 조건으로 사용할 때 켭니다."))
+	bool bExposeAsPuzzleCondition = true;
 
 	// 조건 판정에 사용할 값을 정합니다.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Reaction|Condition", meta = (ToolTip = "이 ReactionComponent가 조건 판정에 사용할 값을 정합니다."))
@@ -200,6 +208,8 @@ public:
 
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Water Basin Reaction")
 	FUOUWaterBasinReactionContext GetLastReactionContext() const;
+
+	virtual TArray<FString> GetPuzzleDebugInfo_Implementation() const override;
 
 protected:
 	// 물 상태가 갱신될 때마다 호출됩니다. 조건 만족 여부와 상관없이 디버깅/캐싱에 사용할 수 있습니다.

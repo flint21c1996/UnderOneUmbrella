@@ -276,6 +276,7 @@ void UUOUWaterBasinRotationReactionComponent::ResetRotationReaction(bool bResetO
 	if (bApplyBaseRotation)
 	{
 		ApplyRotationAngle(CurrentAppliedAngleDegrees);
+		EvaluateRotationAngleConditionIfNeeded();
 	}
 }
 
@@ -300,6 +301,21 @@ void UUOUWaterBasinRotationReactionComponent::SetRotationReactionEnabled(bool bE
 bool UUOUWaterBasinRotationReactionComponent::IsRotationReactionEnabled() const
 {
 	return bRotationReactionEnabled;
+}
+
+bool UUOUWaterBasinRotationReactionComponent::EvaluateReactionCondition(FUOUWaterBasinReactionContext& Context)
+{
+	Context.RotationAngleDegrees = CurrentAppliedAngleDegrees;
+	return Super::EvaluateReactionCondition(Context);
+}
+
+void UUOUWaterBasinRotationReactionComponent::OnWaterBasinReactionSatisfied_Implementation(const FUOUWaterBasinReactionContext& Context)
+{
+	Super::OnWaterBasinReactionSatisfied_Implementation(Context);
+	if (bDisableReactionWhenConditionSatisfied)
+	{
+		SetRotationReactionEnabled(false);
+	}
 }
 
 void UUOUWaterBasinRotationReactionComponent::OnWaterBasinReactionStateUpdated_Implementation(const FUOUWaterBasinReactionContext& Context)
@@ -567,6 +583,7 @@ void UUOUWaterBasinRotationReactionComponent::SetTargetRotationAngle(float NewTa
 
 	CurrentAppliedAngleDegrees = TargetAngleDegrees;
 	ApplyRotationAngle(CurrentAppliedAngleDegrees);
+	EvaluateRotationAngleConditionIfNeeded();
 }
 
 void UUOUWaterBasinRotationReactionComponent::UpdateInterpolatedRotation(float DeltaTime)
@@ -595,6 +612,7 @@ void UUOUWaterBasinRotationReactionComponent::UpdateInterpolatedRotation(float D
 
 	CurrentAppliedAngleDegrees = NextAngle;
 	ApplyRotationAngle(CurrentAppliedAngleDegrees);
+	EvaluateRotationAngleConditionIfNeeded();
 }
 
 void UUOUWaterBasinRotationReactionComponent::ApplyRotationAngle(float AngleDegrees)
@@ -688,6 +706,18 @@ void UUOUWaterBasinRotationReactionComponent::ClearInputSideSessionReference()
 	InputSideSessionCenter = FVector::ZeroVector;
 	InputSideSessionForwardDirection = FVector::ZeroVector;
 	InputSideSessionAxisWorld = FVector::ZeroVector;
+}
+
+void UUOUWaterBasinRotationReactionComponent::EvaluateRotationAngleConditionIfNeeded()
+{
+	if (ValueSource != EUOUWaterBasinReactionValueSource::RotationAngleDegrees || bEvaluatingRotationAngleCondition)
+	{
+		return;
+	}
+
+	bEvaluatingRotationAngleCondition = true;
+	EvaluateReaction(false);
+	bEvaluatingRotationAngleCondition = false;
 }
 
 bool UUOUWaterBasinRotationReactionComponent::CaptureCurrentInputSideReference(
