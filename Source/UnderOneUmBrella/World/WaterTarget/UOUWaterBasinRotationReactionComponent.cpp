@@ -712,7 +712,10 @@ void UUOUWaterBasinRotationReactionComponent::ClearInputSideSessionReference()
 
 void UUOUWaterBasinRotationReactionComponent::EvaluateRotationAngleConditionIfNeeded()
 {
-	if (ValueSource != EUOUWaterBasinReactionValueSource::RotationAngleDegrees || bEvaluatingRotationAngleCondition)
+	const bool bUsesRotationAngleValue =
+		ValueSource == EUOUWaterBasinReactionValueSource::RotationAngleDegrees
+		|| ValueSource == EUOUWaterBasinReactionValueSource::SignedRotationAngleDegrees;
+	if (!bUsesRotationAngleValue || bEvaluatingRotationAngleCondition)
 	{
 		return;
 	}
