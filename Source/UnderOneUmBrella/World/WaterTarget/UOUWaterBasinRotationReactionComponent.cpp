@@ -249,6 +249,11 @@ void UUOUWaterBasinRotationReactionComponent::TickComponent(float DeltaTime, ELe
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
+	if (!bRotationReactionEnabled)
+	{
+		return;
+	}
+
 	UpdateInputSideSessionLifetime();
 	UpdateInterpolatedRotation(DeltaTime);
 	DrawInputSideDebug();
@@ -274,10 +279,37 @@ void UUOUWaterBasinRotationReactionComponent::ResetRotationReaction(bool bResetO
 	}
 }
 
+void UUOUWaterBasinRotationReactionComponent::SetRotationReactionEnabled(bool bEnabled)
+{
+	if (bRotationReactionEnabled == bEnabled)
+	{
+		return;
+	}
+
+	bRotationReactionEnabled = bEnabled;
+	ClearInputSideSessionReference();
+
+	if (bRotationReactionEnabled)
+	{
+		// 꺼져 있는 동안 바뀐 물 상태를 누적 회전으로 따라잡지 않도록 현재 상태를 새 기준으로 잡습니다.
+		bHasObservedValue = false;
+		EvaluateReaction(false);
+	}
+}
+
+bool UUOUWaterBasinRotationReactionComponent::IsRotationReactionEnabled() const
+{
+	return bRotationReactionEnabled;
+}
+
 void UUOUWaterBasinRotationReactionComponent::OnWaterBasinReactionStateUpdated_Implementation(const FUOUWaterBasinReactionContext& Context)
 {
 	CacheBaseRotationIfNeeded();
 	BindToWaterInputTarget();
+	if (!bRotationReactionEnabled)
+	{
+		return;
+	}
 
 	const float CurrentValue = Context.CurrentValue;
 	if (RotationMode == EUOUWaterBasinRotationReactionMode::IncrementalOnWaterInput)
@@ -339,6 +371,11 @@ void UUOUWaterBasinRotationReactionComponent::HandleWaterInputReceived(UUOUWater
 	const bool bCanRotateByFullWaterInput = RotationMode == EUOUWaterBasinRotationReactionMode::IncrementalOnIncrease
 		|| RotationMode == EUOUWaterBasinRotationReactionMode::IncrementalOnWaterChange;
 	const bool bRotateByFullWaterInput = bCanRotateByFullWaterInput && bRotateOnFullWaterInput;
+	if (!bRotationReactionEnabled)
+	{
+		return;
+	}
+
 	if ((!bRotateByEveryWaterInput && !bRotateByFullWaterInput)
 		|| Target == nullptr
 		|| InputContext.Volume <= 0.0f)

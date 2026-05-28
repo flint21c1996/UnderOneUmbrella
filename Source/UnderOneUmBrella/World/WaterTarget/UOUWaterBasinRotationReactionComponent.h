@@ -63,6 +63,9 @@ public:
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Activation", meta = (ToolTip = "꺼져 있으면 물 상태 변화와 물 입력 이벤트가 회전을 변경하지 않습니다. 퍼즐 결과로 회전 기믹을 켜고 끌 때 사용합니다."))
+	bool bRotationReactionEnabled = true;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Target", meta = (ToolTip = "회전시킬 씬 컴포넌트입니다. 비어 있으면 회전 대상 이름으로 찾고, 허용된 경우 소유자의 루트 컴포넌트를 사용합니다."))
 	TObjectPtr<USceneComponent> RotationTargetComponent = nullptr;
 
@@ -170,6 +173,12 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Water Basin Rotation Reaction")
 	void ResetRotationReaction(bool bResetObservedValue = true, bool bApplyBaseRotation = true);
+
+	UFUNCTION(BlueprintCallable, Category = "Water Basin Rotation Reaction")
+	void SetRotationReactionEnabled(bool bEnabled);
+
+	UFUNCTION(BlueprintPure, Category = "Water Basin Rotation Reaction")
+	bool IsRotationReactionEnabled() const;
 
 protected:
 	virtual void OnWaterBasinReactionStateUpdated_Implementation(const FUOUWaterBasinReactionContext& Context) override;
