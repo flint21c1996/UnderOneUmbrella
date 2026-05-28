@@ -29,6 +29,13 @@ enum class EUOUWaterBasinVolumeSizeMode : uint8
 	Manual UMETA(DisplayName = "Manual", ToolTip = "Manual Surface Area와 Manual Max Water Height를 Scale 1 기준값으로 사용하고, 최종 용량에는 Actor Scale을 반영합니다.")
 };
 
+UENUM(BlueprintType)
+enum class EUOUWaterBasinInitialWaterFillMode : uint8
+{
+	Volume UMETA(DisplayName = "Volume", ToolTip = "초기 물량을 직접 부피 값으로 설정합니다. 기존 배치와 같은 방식입니다."),
+	FillRatio UMETA(DisplayName = "Fill Ratio", ToolTip = "초기 물량을 전체 용량에 대한 비율로 설정합니다.")
+};
+
 // 플레이어가 붓는 물을 이 Basin이 어떤 기준으로 해석할지 정합니다.
 UENUM(BlueprintType)
 enum class EUOUWaterBasinPouredWaterFillMode : uint8
@@ -77,6 +84,9 @@ struct FUOUWaterBasinInputContext
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Input")
 	FVector WorldLocation = FVector::ZeroVector;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Input", meta = (ToolTip = "World Location이 해당 WaterBasinTarget 소유 Actor의 영역 안에 있는 실제 물 입력 지점인지 나타냅니다. 좌우 판정 같은 위치 기반 반응은 이 값이 켜져 있을 때만 World Location을 사용합니다."))
+	bool bHasValidWorldLocation = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Input")
 	TObjectPtr<AActor> InstigatorActor = nullptr;
@@ -164,8 +174,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, AdvancedDisplay, Category = "Water Basin|Volume", meta = (ClampMin = "0.0001", EditCondition = "VolumeSizeMode == EUOUWaterBasinVolumeSizeMode::Manual", EditConditionHides, ToolTip = "Volume Size Mode가 Manual일 때 사용하는 Scale 1 기준 최대 물 높이입니다. 최종 높이는 이 값에 Actor Scale Z를 곱합니다."))
 	float ManualMaxWaterHeight = 1.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin|Volume", meta = (ClampMin = "0.0", ToolTip = "게임 시작 시 이 Target이 가진 초기 물 부피입니다. 연결 그룹이면 시작 직후 그룹 전체 부피로 다시 분배됩니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin|Volume", meta = (ToolTip = "게임 시작 시 초기 물량을 어떤 기준으로 해석할지 정합니다. Volume은 기존 부피 기반 동작을 유지합니다."))
+	EUOUWaterBasinInitialWaterFillMode InitialWaterFillMode = EUOUWaterBasinInitialWaterFillMode::Volume;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin|Volume", meta = (ClampMin = "0.0", EditCondition = "InitialWaterFillMode == EUOUWaterBasinInitialWaterFillMode::Volume", EditConditionHides, ToolTip = "게임 시작 시 이 Target이 가진 초기 물 부피입니다. 연결 그룹이면 시작 직후 그룹 전체 부피로 다시 분배됩니다."))
 	float InitialWaterVolume = 0.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin|Volume", meta = (ClampMin = "0.0", ClampMax = "1.0", EditCondition = "InitialWaterFillMode == EUOUWaterBasinInitialWaterFillMode::FillRatio", EditConditionHides, ToolTip = "게임 시작 시 이 Target을 채울 초기 비율입니다. 0은 비어 있음, 1은 가득 참입니다."))
+	float InitialWaterFillRatio = 0.0f;
 
 	// 플레이어의 물 붓기 행위를 이 Basin의 물 상태로 변환하는 기준입니다.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin|Pour", meta = (ToolTip = "플레이어가 붓는 물을 이 Target이 해석하는 방식입니다. Volume은 기존 부피 기반 동작을 유지합니다."))
@@ -327,6 +343,10 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Water Basin")
 	float GetCapacity() const;
 
+	// 지정한 월드 위치가 이 Target 소유 Actor의 X/Y 영역 안에 있는지 확인합니다.
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Water Basin")
+	bool IsWorldLocationInsideBasin(const FVector& WorldLocation) const;
+
 	// 현재 물 깊이를 언리얼 월드 단위(cm)로 변환한 값입니다.
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Water Basin")
 	float GetWaterDepthWorld() const;
@@ -372,6 +392,9 @@ private:
 	// 연결 그룹의 총 부피를 지정하고, 같은 수면 높이가 되도록 각 Target에 부피를 분배합니다.
 	void ApplyWaterVolumeToConnectedGroup(float NewTotalVolume);
 
+	// 에디터에서 선택한 초기 물량 기준을 실제 부피로 변환합니다.
+	float ResolveInitialWaterVolume() const;
+
 	// 매 Tick 이 Target의 기본 배출 규칙을 적용합니다.
 	void ApplyPassiveDrain(float DeltaTime);
 
@@ -387,8 +410,8 @@ private:
 	// 공통 SurfaceWorldZ를 기준으로 각 Target의 CurrentWaterVolume을 다시 계산합니다.
 	void ApplyGroupSurfaceToTargets(const TArray<UUOUWaterBasinTargetComponent*>& Group, float SurfaceWorldZ);
 
-	// CurrentWaterVolume에서 Depth, FillRatio, SurfaceWorldZ를 다시 계산하고 WaterVisual을 갱신합니다.
-	void UpdateCachedWaterState();
+	// CurrentWaterVolume에서 Depth, FillRatio, SurfaceWorldZ를 다시 계산합니다. 필요할 때만 WaterVisual도 갱신합니다.
+	void UpdateCachedWaterState(bool bUpdateVisual = true);
 
 	// 그룹 합산 정보를 그룹에 속한 각 Target의 LastGroup... 런타임 값에 복사합니다.
 	void UpdateGroupRuntimeCache(const FUOUWaterBasinGroupDebugData& GroupData);

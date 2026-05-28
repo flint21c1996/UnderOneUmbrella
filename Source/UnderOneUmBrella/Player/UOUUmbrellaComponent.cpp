@@ -897,6 +897,9 @@ void UUOUUmbrellaComponent::DrawPourTraceDebug() const
 	const float LifeTime = FMath::Max(0.0f, PourTraceDebugLifeTime);
 	const float Thickness = FMath::Max(0.0f, PourTraceDebugThickness);
 	const FVector DrawEnd = bLastPourTraceHit ? LastPourTraceImpactPoint : LastPourTraceEnd;
+	const FColor ImpactPointColor = bLastPourCheckedWaterBasinImpactPoint
+		? (bLastPourImpactPointInsideWaterBasin ? FColor::Green : FColor::Red)
+		: FColor::Orange;
 	const FColor TraceColor = UUOUDebugSubsystem::GetDebugCategoryColor(
 		this,
 		EUOUDebugCategory::Player,
@@ -930,7 +933,36 @@ void UUOUUmbrellaComponent::DrawPourTraceDebug() const
 			LastPourTraceImpactPoint,
 			8.0f,
 			12,
-			TraceColor,
+			ImpactPointColor,
+			false,
+			LifeTime,
+			0,
+			Thickness);
+
+		const float ImpactCrossSize = 18.0f;
+		DrawDebugLine(
+			World,
+			LastPourTraceImpactPoint - FVector(ImpactCrossSize, 0.0f, 0.0f),
+			LastPourTraceImpactPoint + FVector(ImpactCrossSize, 0.0f, 0.0f),
+			ImpactPointColor,
+			false,
+			LifeTime,
+			0,
+			Thickness);
+		DrawDebugLine(
+			World,
+			LastPourTraceImpactPoint - FVector(0.0f, ImpactCrossSize, 0.0f),
+			LastPourTraceImpactPoint + FVector(0.0f, ImpactCrossSize, 0.0f),
+			ImpactPointColor,
+			false,
+			LifeTime,
+			0,
+			Thickness);
+		DrawDebugLine(
+			World,
+			LastPourTraceImpactPoint - FVector(0.0f, 0.0f, ImpactCrossSize),
+			LastPourTraceImpactPoint + FVector(0.0f, 0.0f, ImpactCrossSize),
+			ImpactPointColor,
 			false,
 			LifeTime,
 			0,
@@ -940,14 +972,28 @@ void UUOUUmbrellaComponent::DrawPourTraceDebug() const
 	if (UUOUDebugSubsystem::IsDebugWorldLabelEnabled(this, EUOUDebugCategory::Player))
 	{
 		const FVector LabelLocation = DrawEnd + FVector(0.0f, 0.0f, 24.0f);
+		const FString ImpactPointText = bLastPourTraceHit
+			? FString::Printf(
+				TEXT("\nImpactPoint: X %.1f / Y %.1f / Z %.1f"),
+				LastPourTraceImpactPoint.X,
+				LastPourTraceImpactPoint.Y,
+				LastPourTraceImpactPoint.Z)
+			: FString();
+		const FString WaterBasinImpactText = bLastPourCheckedWaterBasinImpactPoint
+			? FString::Printf(
+				TEXT("\nBasin 판정: %s"),
+				bLastPourImpactPointInsideWaterBasin ? TEXT("내부") : TEXT("외부"))
+			: FString();
 		const FString LabelText = FString::Printf(
-			TEXT("Pour Trace\nHit: %s\nTarget: %s\nReceiver: %s\nAmount: %.2f\nStored: %.2f -> %.2f"),
+			TEXT("Pour Trace\nHit: %s\nTarget: %s\nReceiver: %s\nAmount: %.2f\nStored: %.2f -> %.2f%s%s"),
 			*LastPourHitName,
 			*LastPourTargetName,
 			GetPourReceiverTypeText(LastPourReceiverType),
 			LastPourAmount,
 			LastPourStoredWaterBefore,
-			LastPourStoredWaterAfter);
+			LastPourStoredWaterAfter,
+			*ImpactPointText,
+			*WaterBasinImpactText);
 
 		DrawDebugString(
 			World,
@@ -970,6 +1016,8 @@ void UUOUUmbrellaComponent::ClearPourTraceDebug()
 	LastPourTraceStart = FVector::ZeroVector;
 	LastPourTraceEnd = FVector::ZeroVector;
 	LastPourTraceImpactPoint = FVector::ZeroVector;
+	bLastPourCheckedWaterBasinImpactPoint = false;
+	bLastPourImpactPointInsideWaterBasin = false;
 	LastPourAmount = 0.0f;
 	LastPourStoredWaterBefore = GetCurrentStoredWater();
 	LastPourStoredWaterAfter = GetCurrentStoredWater();
@@ -1045,6 +1093,8 @@ void UUOUUmbrellaComponent::UpdatePouring(float DeltaTime)
 	bHasLastPourTrace = false;
 	bLastPourTraceHit = false;
 	bLastPourDeliveredWater = false;
+	bLastPourCheckedWaterBasinImpactPoint = false;
+	bLastPourImpactPointInsideWaterBasin = false;
 	LastPourAmount = PourAmount;
 	LastPourStoredWaterBefore = StoredWaterBefore;
 	LastPourStoredWaterAfter = StoredWaterAfter;
@@ -1231,12 +1281,17 @@ bool UUOUUmbrellaComponent::TryReceiveWaterAtHit(const FHitResult& HitResult, fl
 		// 물 조절 장치 쪽 타겟 컴포넌트도 우산 물 붓기를 받을 수 있게 처리합니다.
 		LastPourTargetName = HitActor->GetName();
 		OutReceiverType = EUOUUmbrellaPourReceiverType::WaterBasinTarget;
+		const bool bHasValidImpactPoint = HitResult.bBlockingHit
+			&& WaterBasinTarget->IsWorldLocationInsideBasin(HitResult.ImpactPoint);
+		bLastPourCheckedWaterBasinImpactPoint = true;
+		bLastPourImpactPointInsideWaterBasin = bHasValidImpactPoint;
 		FUOUWaterBasinInputContext InputContext;
 		InputContext.Volume = WaterAmount;
 		InputContext.Duration = PourDuration;
 		InputContext.Source = EUOUWaterBasinInputSource::PlayerPour;
 		InputContext.WorldDirection = PourDirection;
 		InputContext.WorldLocation = HitResult.ImpactPoint;
+		InputContext.bHasValidWorldLocation = bHasValidImpactPoint;
 		InputContext.InstigatorActor = GetOwner();
 		InputContext.bApplyToConnectedGroup = true;
 		WaterBasinTarget->ReceiveWaterInput(InputContext);
@@ -1250,12 +1305,17 @@ bool UUOUUmbrellaComponent::TryReceiveWaterAtHit(const FHitResult& HitResult, fl
 			// 히트된 자식 액터 대신 부모가 물 조절 컴포넌트를 들고 있는 경우를 처리합니다.
 			LastPourTargetName = ParentActor->GetName();
 			OutReceiverType = EUOUUmbrellaPourReceiverType::WaterBasinTarget;
+			const bool bHasValidImpactPoint = HitResult.bBlockingHit
+				&& ParentWaterBasinTarget->IsWorldLocationInsideBasin(HitResult.ImpactPoint);
+			bLastPourCheckedWaterBasinImpactPoint = true;
+			bLastPourImpactPointInsideWaterBasin = bHasValidImpactPoint;
 			FUOUWaterBasinInputContext InputContext;
 			InputContext.Volume = WaterAmount;
 			InputContext.Duration = PourDuration;
 			InputContext.Source = EUOUWaterBasinInputSource::PlayerPour;
 			InputContext.WorldDirection = PourDirection;
 			InputContext.WorldLocation = HitResult.ImpactPoint;
+			InputContext.bHasValidWorldLocation = bHasValidImpactPoint;
 			InputContext.InstigatorActor = GetOwner();
 			InputContext.bApplyToConnectedGroup = true;
 			ParentWaterBasinTarget->ReceiveWaterInput(InputContext);

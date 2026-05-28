@@ -290,6 +290,14 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Umbrella|Runtime")
 	FVector LastPourTraceImpactPoint = FVector::ZeroVector;
 
+	// 마지막 ImpactPoint가 WaterBasinTarget 영역 판정에 사용되었는지 나타냅니다.
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Umbrella|Runtime")
+	bool bLastPourCheckedWaterBasinImpactPoint = false;
+
+	// 마지막 ImpactPoint가 맞은 WaterBasinTarget의 Basin 영역 안에 있었는지 나타냅니다.
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Umbrella|Runtime")
+	bool bLastPourImpactPointInsideWaterBasin = false;
+
 	// 마지막 프레임에 붓기로 사용한 물의 양입니다.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Umbrella|Runtime")
 	float LastPourAmount = 0.0f;

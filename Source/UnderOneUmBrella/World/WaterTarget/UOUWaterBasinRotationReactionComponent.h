@@ -36,6 +36,13 @@ enum class EUOUWaterBasinRotationInputSidePolicy : uint8
 };
 
 UENUM(BlueprintType)
+enum class EUOUWaterBasinRotationInputSideReferenceMode : uint8
+{
+	Current UMETA(DisplayName = "현재 기준", ToolTip = "물 입력마다 현재 중심/전방/회전축으로 좌우를 판단합니다. 회전 대상과 기준이 함께 회전할 수 있습니다."),
+	InputSession UMETA(DisplayName = "물 입력 세션 기준", ToolTip = "물이 처음 들어온 순간의 중심/전방/회전축을 유지하고, 입력이 끊긴 뒤 다음 입력에서 기준을 새로 잡습니다.")
+};
+
+UENUM(BlueprintType)
 enum class EUOUWaterBasinDrainRotationDirection : uint8
 {
 	SameAsIncrease UMETA(DisplayName = "증가와 같은 방향", ToolTip = "물이 배수될 때 물이 찰 때와 같은 방향으로 회전합니다."),
@@ -55,6 +62,9 @@ public:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Activation", meta = (ToolTip = "꺼져 있으면 물 상태 변화와 물 입력 이벤트가 회전을 변경하지 않습니다. 퍼즐 결과로 회전 기믹을 켜고 끌 때 사용합니다."))
+	bool bRotationReactionEnabled = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Target", meta = (ToolTip = "회전시킬 씬 컴포넌트입니다. 비어 있으면 회전 대상 이름으로 찾고, 허용된 경우 소유자의 루트 컴포넌트를 사용합니다."))
 	TObjectPtr<USceneComponent> RotationTargetComponent = nullptr;
@@ -95,6 +105,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Input Side", meta = (EditCondition = "RotationMode == EUOUWaterBasinRotationReactionMode::IncrementalOnWaterInput", EditConditionHides, ToolTip = "스크립트 또는 알 수 없는 입력의 회전 부호 결정 방식입니다."))
 	EUOUWaterBasinRotationInputSidePolicy ScriptInputSidePolicy = EUOUWaterBasinRotationInputSidePolicy::FixedPositive;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Input Side", meta = (EditCondition = "RotationMode == EUOUWaterBasinRotationReactionMode::IncrementalOnWaterInput && (PlayerPourInputSidePolicy == EUOUWaterBasinRotationInputSidePolicy::ByInputSide || RainInputSidePolicy == EUOUWaterBasinRotationInputSidePolicy::ByInputSide || ScriptInputSidePolicy == EUOUWaterBasinRotationInputSidePolicy::ByInputSide)", EditConditionHides, ToolTip = "입력 위치의 왼쪽/오른쪽을 판단할 기준을 언제 갱신할지 정합니다. 물 입력 세션 기준은 계속 붓는 동안 같은 기준을 유지합니다."))
+	EUOUWaterBasinRotationInputSideReferenceMode InputSideReferenceMode = EUOUWaterBasinRotationInputSideReferenceMode::InputSession;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Input Side", meta = (ClampMin = "0.0", EditCondition = "RotationMode == EUOUWaterBasinRotationReactionMode::IncrementalOnWaterInput && InputSideReferenceMode == EUOUWaterBasinRotationInputSideReferenceMode::InputSession && (PlayerPourInputSidePolicy == EUOUWaterBasinRotationInputSidePolicy::ByInputSide || RainInputSidePolicy == EUOUWaterBasinRotationInputSidePolicy::ByInputSide || ScriptInputSidePolicy == EUOUWaterBasinRotationInputSidePolicy::ByInputSide)", EditConditionHides, ToolTip = "이 시간 동안 새 물 입력이 없으면 입력 세션 기준을 버립니다. 다음 물 입력은 그 시점의 플랫폼 방향을 새 기준으로 사용합니다."))
+	float InputSideSessionResetDelay = 0.15f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Input Side", meta = (EditCondition = "RotationMode == EUOUWaterBasinRotationReactionMode::IncrementalOnWaterInput && (PlayerPourInputSidePolicy == EUOUWaterBasinRotationInputSidePolicy::ByInputSide || RainInputSidePolicy == EUOUWaterBasinRotationInputSidePolicy::ByInputSide || ScriptInputSidePolicy == EUOUWaterBasinRotationInputSidePolicy::ByInputSide)", EditConditionHides, ToolTip = "물 입력 위치가 왼쪽인지 오른쪽인지 판단할 중심입니다. 비어 있으면 이름으로 찾고, 그래도 없으면 회전 대상을 사용합니다."))
 	TObjectPtr<USceneComponent> InputSideCenterComponent = nullptr;
 
@@ -122,6 +138,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Condition", meta = (ToolTip = "켜져 있으면 기본 반응 조건이 만족될 때만 회전을 적용합니다."))
 	bool bRequireConditionSatisfied = false;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Condition", meta = (ToolTip = "켜져 있으면 Reaction 조건이 만족되는 순간 회전 반응을 비활성화합니다. 특정 각도에 도달한 뒤 플랫폼을 멈출 때 사용합니다."))
+	bool bDisableReactionWhenConditionSatisfied = false;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Clamp", meta = (ToolTip = "켜져 있으면 누적 회전 각도를 최소/최대 각도 사이로 제한합니다."))
 	bool bClampRotationAngle = false;
 
@@ -144,13 +163,13 @@ public:
 	bool bDrawInputSideDebug = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Debug", meta = (ClampMin = "0.0", EditCondition = "bDrawInputSideDebug", EditConditionHides, ToolTip = "디버그 화살표 길이입니다."))
-	float InputSideDebugDrawScale = 120.0f;
+	float InputSideDebugDrawScale = 500.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Debug", meta = (ClampMin = "0.0", EditCondition = "bDrawInputSideDebug", EditConditionHides, ToolTip = "중심과 입력 위치를 표시하는 디버그 구체 반지름입니다."))
-	float InputSideDebugSphereRadius = 12.0f;
+	float InputSideDebugSphereRadius = 30.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Debug", meta = (ClampMin = "0.0", EditCondition = "bDrawInputSideDebug", EditConditionHides, ToolTip = "디버그 선과 화살표의 두께입니다."))
-	float InputSideDebugThickness = 3.0f;
+	float InputSideDebugThickness = 8.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Debug", meta = (EditCondition = "bDrawInputSideDebug", EditConditionHides, ToolTip = "켜져 있으면 디버그 라벨을 함께 그립니다."))
 	bool bDrawInputSideDebugLabel = true;
@@ -158,12 +177,21 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Water Basin Rotation Reaction")
 	void ResetRotationReaction(bool bResetObservedValue = true, bool bApplyBaseRotation = true);
 
+	UFUNCTION(BlueprintCallable, Category = "Water Basin Rotation Reaction")
+	void SetRotationReactionEnabled(bool bEnabled);
+
+	UFUNCTION(BlueprintPure, Category = "Water Basin Rotation Reaction")
+	bool IsRotationReactionEnabled() const;
+
 protected:
 	virtual void OnWaterBasinReactionStateUpdated_Implementation(const FUOUWaterBasinReactionContext& Context) override;
+	virtual void OnWaterBasinReactionSatisfied_Implementation(const FUOUWaterBasinReactionContext& Context) override;
+	virtual bool EvaluateReactionCondition(FUOUWaterBasinReactionContext& Context) override;
 
 private:
 	bool bHasObservedValue = false;
 	bool bHasCachedBaseRotation = false;
+	bool bEvaluatingRotationAngleCondition = false;
 	FQuat BaseRelativeRotation = FQuat::Identity;
 	FQuat BaseWorldRotation = FQuat::Identity;
 
@@ -172,9 +200,15 @@ private:
 
 	bool bHasLastInputSideDebug = false;
 	FVector LastInputSideDebugWorldLocation = FVector::ZeroVector;
+	bool bLastInputSideDebugHasValidWorldLocation = false;
 	float LastInputSideDebugRotationSign = 0.0f;
 	float LastInputSideDebugVolume = 0.0f;
 	EUOUWaterBasinInputSource LastInputSideDebugSource = EUOUWaterBasinInputSource::Unknown;
+	bool bHasInputSideSessionReference = false;
+	float LastInputSideSessionInputTime = 0.0f;
+	FVector InputSideSessionCenter = FVector::ZeroVector;
+	FVector InputSideSessionForwardDirection = FVector::ZeroVector;
+	FVector InputSideSessionAxisWorld = FVector::ZeroVector;
 
 	UFUNCTION()
 	void HandleWaterInputReceived(UUOUWaterBasinTargetComponent* Target, const FUOUWaterBasinInputContext& InputContext);
@@ -191,6 +225,12 @@ private:
 	void UpdateInterpolatedRotation(float DeltaTime);
 	void ApplyRotationAngle(float AngleDegrees);
 	void CacheInputSideDebug(const FUOUWaterBasinInputContext& InputContext, float RotationSign);
+	void PrepareInputSideReferenceForInput(const FUOUWaterBasinInputContext& InputContext);
+	void UpdateInputSideSessionLifetime();
+	void ClearInputSideSessionReference();
+	void EvaluateRotationAngleConditionIfNeeded();
+	bool CaptureCurrentInputSideReference(FVector& OutCenter, FVector& OutForwardDirection, FVector& OutAxisWorld) const;
+	bool ResolveInputSideReference(FVector& OutCenter, FVector& OutForwardDirection, FVector& OutAxisWorld) const;
 	void DrawInputSideDebug() const;
 	float ResolveInputRotationSign(const FUOUWaterBasinInputContext& InputContext) const;
 	float ResolveInputSideSign(const FUOUWaterBasinInputContext& InputContext) const;
