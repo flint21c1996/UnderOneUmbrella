@@ -75,7 +75,9 @@ void AUOUFloorPlatformActor::BeginPlay()
 		CarryComponent->SetDetectionBox(CarryDetectionBox);
 	}
 
-	CaptureCurrentAsStart();
+	EnsureStartTransform();
+	ResetRuntimeStepIndex();
+	SetActorTransform(StartTransform, false, nullptr, ETeleportType::TeleportPhysics);
 
 	if (bStartAtTarget)
 	{
@@ -107,11 +109,17 @@ void AUOUFloorPlatformActor::OnConstruction(const FTransform& Transform)
 		CarryComponent->SetDetectionBox(CarryDetectionBox);
 	}
 
-	if (!bHasCapturedStartTransform)
+	EnsureStartTransform();
+
+#if WITH_EDITOR
+	if (bKeepActorAtSavedStartInEditor && bUseSavedStartTransform && !bIsMoving && !bIsApplyingEditorTransform && GetWorld() != nullptr && !GetWorld()->IsGameWorld())
 	{
-		StartTransform = GetActorTransform();
-		bHasCapturedStartTransform = true;
+		if (!GetActorTransform().Equals(StartTransform))
+		{
+			SetActorTransform(StartTransform, false, nullptr, ETeleportType::TeleportPhysics);
+		}
 	}
+#endif
 
 	RefreshTargetTransforms();
 	UpdateEditorPreviewVisuals();
@@ -152,7 +160,10 @@ void AUOUFloorPlatformActor::Tick(float DeltaSeconds)
 void AUOUFloorPlatformActor::CaptureCurrentAsStart()
 {
 	StartTransform = GetActorTransform();
+	SavedStartTransform = StartTransform;
+	bUseSavedStartTransform = true;
 	bHasCapturedStartTransform = true;
+	ResetRuntimeStepIndex();
 
 	RefreshTargetTransforms();
 	UpdateEditorPreviewVisuals();
@@ -187,10 +198,7 @@ void AUOUFloorPlatformActor::MoveToNextSequentialTarget()
 
 void AUOUFloorPlatformActor::ResetPlatform()
 {
-	if (!bHasCapturedStartTransform)
-	{
-		CaptureCurrentAsStart();
-	}
+	EnsureStartTransform();
 
 	RefreshTargetTransforms();
 	if (CarryComponent != nullptr)
@@ -205,7 +213,7 @@ void AUOUFloorPlatformActor::ResetPlatform()
 	bIsMoving = false;
 	bIsAtTarget = false;
 	MoveElapsedTime = 0.0f;
-	CurrentSequentialTargetIndex = 0;
+	ResetRuntimeStepIndex();
 	if (StepComponent != nullptr)
 	{
 		StepComponent->ResetRuntimeState();
@@ -213,7 +221,13 @@ void AUOUFloorPlatformActor::ResetPlatform()
 	MoveStartTransform = StartTransform;
 	MoveTargetTransform = TargetTransform;
 
+#if WITH_EDITOR
+	bIsApplyingEditorTransform = true;
+#endif
 	SetActorTransform(StartTransform, false, nullptr, ETeleportType::TeleportPhysics);
+#if WITH_EDITOR
+	bIsApplyingEditorTransform = false;
+#endif
 	ApplyTargetCollisionState();
 	if (CarryComponent != nullptr)
 	{
@@ -225,10 +239,7 @@ void AUOUFloorPlatformActor::ResetPlatform()
 
 void AUOUFloorPlatformActor::SnapToTarget()
 {
-	if (!bHasCapturedStartTransform)
-	{
-		CaptureCurrentAsStart();
-	}
+	EnsureStartTransform();
 
 	RefreshTargetTransforms();
 
@@ -248,6 +259,8 @@ void AUOUFloorPlatformActor::SnapToTarget()
 		return;
 	}
 
+	const FTransform ResolvedSnapTargetTransform = BuildTransformBetween(GetActorTransform(), SnapTargetTransform, 1.0f);
+
 	bIsMoving = false;
 	bIsAtTarget = true;
 	MoveElapsedTime = MoveDuration;
@@ -257,9 +270,15 @@ void AUOUFloorPlatformActor::SnapToTarget()
 		StepComponent->SetActiveTargetIndex(SnapTargetIndex);
 	}
 	MoveStartTransform = GetActorTransform();
-	MoveTargetTransform = SnapTargetTransform;
+	MoveTargetTransform = ResolvedSnapTargetTransform;
 
-	SetActorTransform(SnapTargetTransform, false, nullptr, ETeleportType::TeleportPhysics);
+#if WITH_EDITOR
+	bIsApplyingEditorTransform = true;
+#endif
+	SetActorTransform(ResolvedSnapTargetTransform, false, nullptr, ETeleportType::TeleportPhysics);
+#if WITH_EDITOR
+	bIsApplyingEditorTransform = false;
+#endif
 	ApplyTargetCollisionState();
 	if (CarryComponent != nullptr)
 	{
@@ -272,10 +291,7 @@ void AUOUFloorPlatformActor::SnapToTarget()
 
 void AUOUFloorPlatformActor::SetTargetToStart()
 {
-	if (!bHasCapturedStartTransform)
-	{
-		CaptureCurrentAsStart();
-	}
+	EnsureStartTransform();
 
 	if (AUOUFloorPlatformTargetActor* SequentialTargetMarker = GetCurrentSequentialTargetMarker())
 	{
@@ -283,6 +299,33 @@ void AUOUFloorPlatformActor::SetTargetToStart()
 		SequentialTargetMarker->SyncPreviewFromMesh(PlatformMesh);
 		SequentialTargetMarker->SetTargetPreviewMeshVisible(bShowTransformPreview);
 	}
+
+	RefreshTargetTransforms();
+	UpdateEditorPreviewVisuals();
+}
+
+void AUOUFloorPlatformActor::SnapCurrentStepToHingeResult()
+{
+	if (RotationMode != EUOUFloorPlatformRotationMode::Hinge)
+	{
+		return;
+	}
+
+	EnsureStartTransform();
+
+	RefreshTargetTransforms();
+
+	AUOUFloorPlatformTargetActor* SequentialTargetMarker = GetCurrentSequentialTargetMarker();
+	if (SequentialTargetMarker == nullptr)
+	{
+		return;
+	}
+
+	// 목표 마커의 회전은 유지하고 위치만 힌지 접힘 결과에 맞춰서 보정합니다.
+	const FTransform HingeTargetTransform = BuildHingeTransformBetween(GetActorTransform(), SequentialTargetMarker->GetActorTransform(), 1.0f);
+	SequentialTargetMarker->SetActorTransform(HingeTargetTransform, false, nullptr, ETeleportType::TeleportPhysics);
+	SequentialTargetMarker->SyncPreviewFromMesh(PlatformMesh);
+	SequentialTargetMarker->SetTargetPreviewMeshVisible(bShowTransformPreview);
 
 	RefreshTargetTransforms();
 	UpdateEditorPreviewVisuals();
@@ -296,10 +339,7 @@ void AUOUFloorPlatformActor::AddSequentialTargetMarker()
 		return;
 	}
 
-	if (!bHasCapturedStartTransform)
-	{
-		CaptureCurrentAsStart();
-	}
+	EnsureStartTransform();
 
 	RefreshTargetTransforms();
 
@@ -333,7 +373,8 @@ void AUOUFloorPlatformActor::AddSequentialTargetMarker()
 
 	SequentialTargetMarkers.Add(NewTargetMarker);
 	bUseSequentialTargetMarkers = true;
-	CurrentSequentialTargetIndex = FMath::Clamp(CurrentSequentialTargetIndex, 0, FMath::Max(0, SequentialTargetMarkers.Num() - 1));
+	InitialSequentialTargetIndex = FMath::Clamp(InitialSequentialTargetIndex, 0, FMath::Max(0, SequentialTargetMarkers.Num() - 1));
+	ResetRuntimeStepIndex();
 
 	RefreshTargetTransforms();
 	UpdateEditorPreviewVisuals();
@@ -392,11 +433,7 @@ bool AUOUFloorPlatformActor::ShouldTickIfViewportsOnly() const
 
 void AUOUFloorPlatformActor::RefreshTargetTransforms()
 {
-	if (!bHasCapturedStartTransform)
-	{
-		StartTransform = GetActorTransform();
-		bHasCapturedStartTransform = true;
-	}
+	EnsureStartTransform();
 
 	TargetTransform = StartTransform;
 	if (AUOUFloorPlatformTargetActor* SequentialTargetMarker = GetCurrentSequentialTargetMarker())
@@ -405,13 +442,40 @@ void AUOUFloorPlatformActor::RefreshTargetTransforms()
 	}
 }
 
+void AUOUFloorPlatformActor::EnsureStartTransform()
+{
+	if (bUseSavedStartTransform)
+	{
+		StartTransform = SavedStartTransform;
+		bHasCapturedStartTransform = true;
+		return;
+	}
+
+	StartTransform = GetActorTransform();
+	SavedStartTransform = StartTransform;
+	bUseSavedStartTransform = true;
+	bHasCapturedStartTransform = true;
+}
+
+void AUOUFloorPlatformActor::ResetRuntimeStepIndex()
+{
+	const int32 MaxTargetIndex = FMath::Max(0, SequentialTargetMarkers.Num() - 1);
+	RuntimeSequentialTargetIndex = FMath::Clamp(InitialSequentialTargetIndex, 0, MaxTargetIndex);
+}
+
 void AUOUFloorPlatformActor::FinishMoveToTarget()
 {
 	bIsMoving = false;
 	bIsAtTarget = true;
 	MoveElapsedTime = MoveDuration;
 
+#if WITH_EDITOR
+	bIsApplyingEditorTransform = true;
+#endif
 	SetActorTransform(MoveTargetTransform, false, nullptr, ETeleportType::TeleportPhysics);
+#if WITH_EDITOR
+	bIsApplyingEditorTransform = false;
+#endif
 	ApplyTargetCollisionState();
 	if (CarryComponent != nullptr)
 	{
@@ -437,7 +501,7 @@ void AUOUFloorPlatformActor::ApplyTargetCollisionState()
 bool AUOUFloorPlatformActor::ShouldUseSequentialTargetMarkers() const
 {
 	return StepComponent != nullptr
-		&& StepComponent->ShouldUseMoveSteps(bUseSequentialTargetMarkers, SequentialTargetMarkers, CurrentSequentialTargetIndex);
+		&& StepComponent->ShouldUseMoveSteps(bUseSequentialTargetMarkers, SequentialTargetMarkers, RuntimeSequentialTargetIndex);
 }
 
 AUOUFloorPlatformTargetActor* AUOUFloorPlatformActor::GetSequentialTargetMarkerAt(int32 TargetIndex) const
@@ -460,7 +524,7 @@ AUOUFloorPlatformTargetActor* AUOUFloorPlatformActor::GetCurrentSequentialTarget
 	return StepComponent->GetCurrentTargetMarker(
 		bUseSequentialTargetMarkers,
 		SequentialTargetMarkers,
-		CurrentSequentialTargetIndex);
+		RuntimeSequentialTargetIndex);
 }
 
 bool AUOUFloorPlatformActor::ResolveNextSequentialTargetTransform(FTransform& OutTargetTransform, int32& OutTargetIndex) const
@@ -476,7 +540,7 @@ bool AUOUFloorPlatformActor::ResolveNextSequentialTargetTransform(FTransform& Ou
 		StartTransform,
 		bUseSequentialTargetMarkers,
 		SequentialTargetMarkers,
-		CurrentSequentialTargetIndex,
+		RuntimeSequentialTargetIndex,
 		OutTargetTransform,
 		OutTargetIndex);
 }
@@ -493,7 +557,7 @@ void AUOUFloorPlatformActor::AdvanceSequentialTargetIndex()
 		SequentialTargetMarkers,
 		bLoopSequentialTargetMarkers,
 		bLoopMoveStepsThroughStart,
-		CurrentSequentialTargetIndex);
+		RuntimeSequentialTargetIndex);
 }
 
 bool AUOUFloorPlatformActor::BeginMoveToTransform(const FTransform& InTargetTransform)
@@ -504,7 +568,7 @@ bool AUOUFloorPlatformActor::BeginMoveToTransform(const FTransform& InTargetTran
 	}
 
 	MoveStartTransform = GetActorTransform();
-	MoveTargetTransform = InTargetTransform;
+	MoveTargetTransform = BuildTransformBetween(MoveStartTransform, InTargetTransform, 1.0f);
 
 	bIsMoving = true;
 	bIsAtTarget = false;
@@ -526,11 +590,83 @@ FTransform AUOUFloorPlatformActor::BuildActivePlatformTransformAtAlpha(float Alp
 FTransform AUOUFloorPlatformActor::BuildTransformBetween(const FTransform& FromTransform, const FTransform& ToTransform, float Alpha) const
 {
 	const float SafeAlpha = FMath::Clamp(Alpha, 0.0f, 1.0f);
+	if (RotationMode == EUOUFloorPlatformRotationMode::Hinge)
+	{
+		return BuildHingeTransformBetween(FromTransform, ToTransform, SafeAlpha);
+	}
+
 	const FVector NewLocation = EvaluatePathLocation(FromTransform, ToTransform, SafeAlpha);
 	const FQuat NewRotation = FQuat::Slerp(FromTransform.GetRotation(), ToTransform.GetRotation(), SafeAlpha);
 	const FVector NewScale = FMath::Lerp(FromTransform.GetScale3D(), ToTransform.GetScale3D(), SafeAlpha);
 
 	return FTransform(NewRotation, NewLocation, NewScale);
+}
+
+FTransform AUOUFloorPlatformActor::BuildHingeTransformBetween(const FTransform& FromTransform, const FTransform& ToTransform, float Alpha) const
+{
+	const float SafeAlpha = FMath::Clamp(Alpha, 0.0f, 1.0f);
+
+	FVector HingeLocalOffset = FVector::ZeroVector;
+	if (!ResolveHingeLocalOffset(HingeLocalOffset))
+	{
+		const FVector NewLocation = EvaluatePathLocation(FromTransform, ToTransform, SafeAlpha);
+		const FQuat NewRotation = FQuat::Slerp(FromTransform.GetRotation(), ToTransform.GetRotation(), SafeAlpha);
+		const FVector NewScale = FMath::Lerp(FromTransform.GetScale3D(), ToTransform.GetScale3D(), SafeAlpha);
+		return FTransform(NewRotation, NewLocation, NewScale);
+	}
+
+	const FQuat FromRotation = FromTransform.GetRotation();
+	const FQuat NewRotation = FQuat::Slerp(FromRotation, ToTransform.GetRotation(), SafeAlpha).GetNormalized();
+	const FQuat RotationDelta = NewRotation * FromRotation.Inverse();
+	const FVector HingeWorldLocation = FromTransform.TransformPosition(HingeLocalOffset);
+	const FVector FromLocationFromHinge = FromTransform.GetLocation() - HingeWorldLocation;
+	const FVector NewLocation = HingeWorldLocation + RotationDelta.RotateVector(FromLocationFromHinge);
+	const FVector NewScale = FMath::Lerp(FromTransform.GetScale3D(), ToTransform.GetScale3D(), SafeAlpha);
+
+	return FTransform(NewRotation, NewLocation, NewScale);
+}
+
+bool AUOUFloorPlatformActor::ResolveHingeLocalOffset(FVector& OutHingeLocalOffset) const
+{
+	if (HingeEdge == EUOUFloorPlatformHingeEdge::Custom)
+	{
+		OutHingeLocalOffset = CustomHingeLocalOffset;
+		return true;
+	}
+
+	if (PlatformMesh == nullptr || PlatformMesh->GetStaticMesh() == nullptr)
+	{
+		OutHingeLocalOffset = CustomHingeLocalOffset;
+		return !CustomHingeLocalOffset.IsNearlyZero();
+	}
+
+	FVector MeshBoundsMin = FVector::ZeroVector;
+	FVector MeshBoundsMax = FVector::ZeroVector;
+	PlatformMesh->GetLocalBounds(MeshBoundsMin, MeshBoundsMax);
+
+	FVector MeshLocalHingeOffset = (MeshBoundsMin + MeshBoundsMax) * 0.5f;
+	switch (HingeEdge)
+	{
+	case EUOUFloorPlatformHingeEdge::PositiveX:
+		MeshLocalHingeOffset.X = MeshBoundsMax.X;
+		break;
+	case EUOUFloorPlatformHingeEdge::NegativeX:
+		MeshLocalHingeOffset.X = MeshBoundsMin.X;
+		break;
+	case EUOUFloorPlatformHingeEdge::PositiveY:
+		MeshLocalHingeOffset.Y = MeshBoundsMax.Y;
+		break;
+	case EUOUFloorPlatformHingeEdge::NegativeY:
+		MeshLocalHingeOffset.Y = MeshBoundsMin.Y;
+		break;
+	case EUOUFloorPlatformHingeEdge::Custom:
+	default:
+		break;
+	}
+
+	// 메쉬가 루트에서 떨어져 있거나 스케일된 경우를 고려해 메쉬 로컬 위치를 액터 로컬 위치로 변환합니다.
+	OutHingeLocalOffset = PlatformMesh->GetRelativeTransform().TransformPosition(MeshLocalHingeOffset);
+	return true;
 }
 
 FVector AUOUFloorPlatformActor::EvaluatePathLocation(const FTransform& FromTransform, const FTransform& ToTransform, float Alpha) const
@@ -576,25 +712,56 @@ void AUOUFloorPlatformActor::UpdateEditorPreviewVisuals()
 	TArray<FVector> PreviewPathPoints;
 	PreviewPathPoints.Add(StartWorldLocation);
 
+	auto AppendPreviewSegment = [this, &PreviewPathPoints](const FTransform& SegmentFromTransform, const FTransform& SegmentToTransform)
+	{
+		constexpr int32 PreviewSampleCount = 8;
+		const int32 SampleCount = (RotationMode == EUOUFloorPlatformRotationMode::Hinge || PathMode == EUOUFloorPlatformPathMode::CubicBezier)
+			? PreviewSampleCount
+			: 1;
+
+		for (int32 SampleIndex = 1; SampleIndex <= SampleCount; ++SampleIndex)
+		{
+			const float SampleAlpha = static_cast<float>(SampleIndex) / static_cast<float>(SampleCount);
+			PreviewPathPoints.Add(BuildTransformBetween(SegmentFromTransform, SegmentToTransform, SampleAlpha).GetLocation());
+		}
+	};
+
+	FTransform PreviewSegmentStartTransform = StartTransform;
 	if (bUseSequentialTargetMarkers && SequentialTargetMarkers.Num() > 0)
 	{
 		for (const TObjectPtr<AUOUFloorPlatformTargetActor>& SequentialTargetMarker : SequentialTargetMarkers)
 		{
 			if (IsValid(SequentialTargetMarker))
 			{
-				PreviewPathPoints.Add(SequentialTargetMarker->GetActorLocation());
+				const FTransform RawTargetTransform = SequentialTargetMarker->GetActorTransform();
+				AppendPreviewSegment(PreviewSegmentStartTransform, RawTargetTransform);
+				PreviewSegmentStartTransform = BuildTransformBetween(PreviewSegmentStartTransform, RawTargetTransform, 1.0f);
 			}
 		}
 
 		if (bLoopSequentialTargetMarkers && PreviewPathPoints.Num() > 1)
 		{
-			PreviewPathPoints.Add(bLoopMoveStepsThroughStart ? StartWorldLocation : PreviewPathPoints[1]);
+			if (bLoopMoveStepsThroughStart)
+			{
+				AppendPreviewSegment(PreviewSegmentStartTransform, StartTransform);
+			}
+			else
+			{
+				for (const TObjectPtr<AUOUFloorPlatformTargetActor>& SequentialTargetMarker : SequentialTargetMarkers)
+				{
+					if (IsValid(SequentialTargetMarker))
+					{
+						AppendPreviewSegment(PreviewSegmentStartTransform, SequentialTargetMarker->GetActorTransform());
+						break;
+					}
+				}
+			}
 		}
 	}
 
 	if (PreviewPathPoints.Num() == 1)
 	{
-		PreviewPathPoints.Add(TargetTransform.GetLocation());
+		AppendPreviewSegment(StartTransform, TargetTransform);
 	}
 
 	bool bHasMoveOffset = false;

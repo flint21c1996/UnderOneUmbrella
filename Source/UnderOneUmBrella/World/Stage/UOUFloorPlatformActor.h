@@ -37,6 +37,27 @@ enum class EUOUFloorPlatformPathMode : uint8
 	CubicBezier
 };
 
+// 플랫폼 이동 중 회전을 어떤 기준으로 처리할지 정합니다.
+// TransformLerp는 기존처럼 목표 마커의 위치와 회전을 직접 보간하고, Hinge는 한 변을 고정한 접힘 회전을 사용합니다.
+UENUM(BlueprintType)
+enum class EUOUFloorPlatformRotationMode : uint8
+{
+	TransformLerp,
+	Hinge
+};
+
+// 힌지 회전에서 고정할 플랫폼의 변을 정합니다.
+// 방향은 PlatformMesh의 로컬 바운드를 기준으로 계산합니다.
+UENUM(BlueprintType)
+enum class EUOUFloorPlatformHingeEdge : uint8
+{
+	PositiveX,
+	NegativeX,
+	PositiveY,
+	NegativeY,
+	Custom
+};
+
 // 층 기반 스테이지에서 한 층의 플랫폼 이동을 담당하는 액터입니다.
 // 퍼즐 결과를 받으면 시작 위치와 목표 위치 사이를 이동하고 완료 상태를 외부에 알립니다.
 UCLASS(meta=(DisplayName="UOU Floor Platform Actor"))
@@ -78,6 +99,21 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform")
 	int32 FloorIndex = 4;
 
+	// 플랫폼이 처음 출발해야 하는 위치입니다.
+	// 에디터에서 이동 테스트를 하더라도 이 값이 있으면 시작점이 덮어써지지 않습니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Start", meta = (DisplayName = "Saved Start Transform"))
+	FTransform SavedStartTransform = FTransform::Identity;
+
+	// 저장된 시작 위치를 사용할지 정합니다.
+	// 꺼져 있으면 처음 배치된 현재 위치를 시작점으로 한 번 저장합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Start", meta = (DisplayName = "Use Saved Start Transform"))
+	bool bUseSavedStartTransform = false;
+
+	// 에디터에서 다시 열었을 때 액터를 저장된 시작 위치로 되돌릴지 정합니다.
+	// 이동 테스트 후 저장해도 다음 작업을 시작 위치에서 이어가게 하기 위한 옵션입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Start", meta = (DisplayName = "Keep Actor At Saved Start In Editor"))
+	bool bKeepActorAtSavedStartInEditor = true;
+
 	// 시작 위치에서 목표 위치까지 이동하는 데 걸리는 시간입니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Movement", meta = (ClampMin = "0.0"))
 	float MoveDuration = 2.0f;
@@ -98,6 +134,18 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Movement")
 	EUOUFloorPlatformPathMode PathMode = EUOUFloorPlatformPathMode::Linear;
 
+	// 플랫폼 회전을 일반 보간으로 할지, 선택한 변을 중심으로 접히게 할지 정합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Movement")
+	EUOUFloorPlatformRotationMode RotationMode = EUOUFloorPlatformRotationMode::TransformLerp;
+
+	// Hinge 모드에서 움직이지 않는 고정 변입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Hinge", meta = (EditCondition = "RotationMode == EUOUFloorPlatformRotationMode::Hinge", EditConditionHides))
+	EUOUFloorPlatformHingeEdge HingeEdge = EUOUFloorPlatformHingeEdge::NegativeY;
+
+	// HingeEdge가 Custom일 때 사용하는 액터 로컬 기준 힌지 위치입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Hinge", meta = (EditCondition = "RotationMode == EUOUFloorPlatformRotationMode::Hinge && HingeEdge == EUOUFloorPlatformHingeEdge::Custom", EditConditionHides))
+	FVector CustomHingeLocalOffset = FVector::ZeroVector;
+
 	// CubicBezier 경로에서 시작점 쪽 조절점을 시작점 기준 로컬 오프셋으로 정합니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Movement")
 	FVector BezierStartControlOffset = FVector(400.0f, 0.0f, 0.0f);
@@ -115,8 +163,8 @@ public:
 	TArray<TObjectPtr<AUOUFloorPlatformTargetActor>> SequentialTargetMarkers;
 
 	// 다음 Activate가 사용할 순차 목표 인덱스입니다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Move Steps", meta = (ClampMin = "0", DisplayName = "Current Step Index"))
-	int32 CurrentSequentialTargetIndex = 0;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Move Steps", meta = (ClampMin = "0", DisplayName = "Initial Step Index"))
+	int32 InitialSequentialTargetIndex = 0;
 
 	// 마지막 목표까지 간 뒤 다시 첫 목표로 돌아갈지 정합니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Move Steps", meta = (DisplayName = "Loop Move Steps"))
@@ -166,6 +214,11 @@ public:
 	UFUNCTION(BlueprintCallable, CallInEditor, Category = "Floor Platform|Move Steps", meta = (DisplayName = "Set Current Step To Start"))
 	void SetTargetToStart();
 
+	// 현재 선택된 이동 마커를 힌지 회전 결과 위치로 맞춥니다.
+	// 마커를 원하는 회전값으로 돌린 뒤 누르면 한 변이 붙은 최종 위치로 보정됩니다.
+	UFUNCTION(BlueprintCallable, CallInEditor, Category = "Floor Platform|Hinge", meta = (DisplayName = "Snap Current Step To Hinge Result"))
+	void SnapCurrentStepToHingeResult();
+
 	// 현재 목표 위치를 기준으로 새 순차 목표 마커를 만들고 배열 끝에 추가합니다.
 	UFUNCTION(BlueprintCallable, CallInEditor, Category = "Floor Platform|Move Steps", meta = (DisplayName = "Add Move Step"))
 	void AddSequentialTargetMarker();
@@ -198,6 +251,12 @@ protected:
 	// 시작 위치와 목표 위치를 현재 설정값 기준으로 계산합니다.
 	void RefreshTargetTransforms();
 
+	// 저장된 시작 위치가 있으면 사용하고, 없으면 현재 위치를 시작 위치로 저장합니다.
+	void EnsureStartTransform();
+
+	// 실행 중 이동 단계 인덱스를 에디터에 저장되는 초기 단계로 되돌립니다.
+	void ResetRuntimeStepIndex();
+
 	// 이동 완료 상태를 확정하고 이벤트를 전달합니다.
 	void FinishMoveToTarget();
 
@@ -227,6 +286,12 @@ protected:
 
 	// 두 트랜스폼 사이를 선택된 경로 모드와 회전 보간으로 계산합니다.
 	FTransform BuildTransformBetween(const FTransform& FromTransform, const FTransform& ToTransform, float Alpha) const;
+
+	// 선택된 힌지 변을 월드에 고정한 채 목표 회전값까지 접히는 변환을 계산합니다.
+	FTransform BuildHingeTransformBetween(const FTransform& FromTransform, const FTransform& ToTransform, float Alpha) const;
+
+	// PlatformMesh의 바운드와 커스텀 값을 이용해 액터 로컬 기준 힌지 위치를 계산합니다.
+	bool ResolveHingeLocalOffset(FVector& OutHingeLocalOffset) const;
 
 	// 선택된 경로 모드에 따라 시작점과 목표점 사이의 위치를 계산합니다.
 	FVector EvaluatePathLocation(const FTransform& FromTransform, const FTransform& ToTransform, float Alpha) const;
@@ -272,5 +337,15 @@ private:
 	// 시작 위치가 한 번이라도 기록되었는지 확인하는 값입니다.
 	UPROPERTY(Transient)
 	bool bHasCapturedStartTransform = false;
+
+	// 현재 실행 세션에서 다음으로 사용할 이동 단계입니다.
+	// 에디터 이동 테스트나 런타임 이동으로 바뀌지만 맵에는 저장되지 않습니다.
+	UPROPERTY(Transient)
+	int32 RuntimeSequentialTargetIndex = 0;
+
+	// 에디터 버튼으로 위치를 바꾸는 중인지 기록합니다.
+	// 자동 시작 위치 복귀가 스냅이나 이동 완료를 즉시 되돌리지 않게 막습니다.
+	UPROPERTY(Transient)
+	bool bIsApplyingEditorTransform = false;
 
 };
