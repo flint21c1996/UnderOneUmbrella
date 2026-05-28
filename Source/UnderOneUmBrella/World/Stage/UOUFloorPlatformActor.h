@@ -9,21 +9,15 @@
 
 class UCurveFloat;
 class UBoxComponent;
-class UPrimitiveComponent;
 class USceneComponent;
 class USplineComponent;
 class UStaticMeshComponent;
+class UUOUFloorPlatformCarryComponent;
+class UUOUFloorPlatformStepComponent;
 class AUOUFloorPlatformActor;
 class AUOUFloorPlatformTargetActor;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FUOUFloorPlatformMoveFinishedSignature, AUOUFloorPlatformActor*, Platform);
-
-// 플랫폼에 임시로 붙인 물리 컴포넌트의 원래 물리 상태를 되돌리기 위한 기록입니다.
-struct FUOUFloorPlatformCarriedPhysicsState
-{
-	TWeakObjectPtr<UPrimitiveComponent> Component;
-	bool bWasSimulatingPhysics = false;
-};
 
 // 플랫폼 이동 시간을 어떤 감속과 가속 곡선으로 보정할지 정합니다.
 UENUM(BlueprintType)
@@ -67,6 +61,14 @@ public:
 	// 플랫폼 이동 시 같이 데려갈 액터를 찾는 감지 박스입니다.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Floor Platform|Carry")
 	TObjectPtr<UBoxComponent> CarryDetectionBox = nullptr;
+
+	// 플랫폼 위 액터 운반과 물리 상태 복구를 담당하는 컴포넌트입니다.
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Floor Platform|Carry")
+	TObjectPtr<UUOUFloorPlatformCarryComponent> CarryComponent = nullptr;
+
+	// 순차 목표 마커 선택과 반복 이동 인덱스를 담당하는 컴포넌트입니다.
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Floor Platform|Move Steps")
+	TObjectPtr<UUOUFloorPlatformStepComponent> StepComponent = nullptr;
 
 	// 플랫폼 시작점과 목표 지점을 실제 선으로 이어서 보여주는 에디터 확인용 경로입니다.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Floor Platform|Preview")
@@ -140,34 +142,6 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Rules")
 	bool bStartAtTarget = false;
 
-	// 플랫폼 이동 중 감지 박스 안의 액터를 함께 이동시킬지 정합니다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Carry")
-	bool bCarryActorsOnMove = true;
-
-	// 캐릭터 계열은 CharacterMovement가 움직이는 바닥을 따라가므로 기본 운반 대상에서 제외합니다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Carry")
-	bool bCarryPlayerCharacters = false;
-
-	// 물리 시뮬레이션 중인 액터도 운반 대상에 포함할지 정합니다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Carry")
-	bool bCarryPhysicsSimulatingActors = true;
-
-	// 물리 액터를 운반하는 동안 물리 시뮬레이션을 잠시 끄고 완료 후 원래대로 복구할지 정합니다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Carry")
-	bool bPauseCarriedPhysicsDuringMove = true;
-
-	// 비어 있으면 클래스 필터를 쓰지 않고, 값이 있으면 이 클래스 계열 액터만 운반 후보로 봅니다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Carry")
-	TArray<TSubclassOf<AActor>> CarryActorClasses;
-
-	// 비어 있으면 태그 필터를 쓰지 않고, 값이 있으면 이 태그를 가진 액터만 운반 후보로 봅니다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Carry")
-	TArray<FName> CarryActorTags;
-
-	// 감지 박스 안에 있어도 운반하지 않을 액터 목록입니다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Carry")
-	TArray<TObjectPtr<AActor>> IgnoredCarryActors;
-
 	// 에디터에서 이동 기준점을 현재 액터 위치로 다시 잡을 때 사용합니다.
 	UFUNCTION(BlueprintCallable, CallInEditor, Category = "Floor Platform|Editor")
 	void CaptureCurrentAsStart();
@@ -229,36 +203,6 @@ protected:
 
 	// 목표 도착 상태에 따라 액터 전체 충돌을 켜거나 끕니다.
 	void ApplyTargetCollisionState();
-
-	// 감지 박스 안에서 플랫폼과 함께 이동할 액터를 찾아 임시로 붙입니다.
-	void AttachCarriedActors();
-
-	// 이전 이동에서 같이 움직였던 액터를 다시 운반 대상으로 붙입니다.
-	void AttachLastMovedActors();
-
-	// 오버랩 이벤트 상태와 상관없이 감지 박스 범위 안의 운반 후보 액터를 직접 찾습니다.
-	void CollectCarryCandidateActors(TArray<AActor*>& OutCandidateActors) const;
-
-	// 플랫폼 이동이 끝나거나 취소될 때 임시로 붙인 액터들을 월드 위치 유지 상태로 해제합니다.
-	void DetachCarriedActors();
-
-	// 감지된 액터가 이 플랫폼과 함께 이동할 수 있는 대상인지 검사합니다.
-	bool CanCarryActor(AActor* CandidateActor) const;
-
-	// 물리 액터가 부모 이동을 따라오도록 필요한 물리 상태를 잠시 멈춥니다.
-	void PrepareCarriedActorForAttach(AActor* CandidateActor);
-
-	// 플랫폼 이동 중 잠시 멈춘 물리 상태를 원래대로 되돌립니다.
-	void RestoreCarriedPhysicsStates();
-
-	// 액터가 물리 시뮬레이션 중인 컴포넌트를 가지고 있는지 확인합니다.
-	bool HasSimulatingPhysicsComponent(AActor* CandidateActor) const;
-
-	// 클래스나 태그 필터를 통과하는 운반 대상인지 확인합니다.
-	bool MatchesCarryFilters(AActor* CandidateActor) const;
-
-	// 이동 완료 후 다음 반대 이동에서도 같은 액터를 찾을 수 있도록 기록합니다.
-	void CacheLastMovedActors();
 
 	// 순차 목표 마커를 실제 이동 목표로 사용할 수 있는지 확인합니다.
 	bool ShouldUseSequentialTargetMarkers() const;
@@ -329,22 +273,4 @@ private:
 	UPROPERTY(Transient)
 	bool bHasCapturedStartTransform = false;
 
-	// 현재 이동 중인 순차 목표 인덱스입니다.
-	UPROPERTY(Transient)
-	int32 ActiveSequentialTargetIndex = INDEX_NONE;
-
-	// 반복 이동에서 다음 이동이 시작 위치로 돌아가는 구간인지 저장합니다.
-	UPROPERTY(Transient)
-	bool bNextSequentialMoveReturnsToStart = false;
-
-	// 이동 중 플랫폼에 임시로 붙여둔 액터 목록입니다.
-	UPROPERTY(Transient)
-	TArray<TObjectPtr<AActor>> CarriedActors;
-
-	// 직전 이동에서 함께 움직인 액터 목록입니다.
-	UPROPERTY(Transient)
-	TArray<TWeakObjectPtr<AActor>> LastMovedActors;
-
-	// 운반 중 잠시 물리를 꺼둔 컴포넌트들의 원래 상태입니다.
-	TArray<FUOUFloorPlatformCarriedPhysicsState> CarriedPhysicsStates;
 };
