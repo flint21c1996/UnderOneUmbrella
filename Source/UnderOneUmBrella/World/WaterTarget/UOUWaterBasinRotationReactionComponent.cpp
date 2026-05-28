@@ -305,7 +305,9 @@ bool UUOUWaterBasinRotationReactionComponent::IsRotationReactionEnabled() const
 
 bool UUOUWaterBasinRotationReactionComponent::EvaluateReactionCondition(FUOUWaterBasinReactionContext& Context)
 {
-	Context.RotationAngleDegrees = CurrentAppliedAngleDegrees;
+	// 실제 회전 누적값은 유지하고, 퍼즐 조건 비교에는 정규화된 각도를 노출합니다.
+	Context.RotationAngleDegrees = FRotator::ClampAxis(CurrentAppliedAngleDegrees);
+	Context.SignedRotationAngleDegrees = FRotator::NormalizeAxis(CurrentAppliedAngleDegrees);
 	return Super::EvaluateReactionCondition(Context);
 }
 

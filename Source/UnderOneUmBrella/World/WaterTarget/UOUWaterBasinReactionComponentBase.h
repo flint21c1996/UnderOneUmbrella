@@ -20,7 +20,8 @@ enum class EUOUWaterBasinReactionValueSource : uint8
 	WaterFillRatio UMETA(DisplayName = "Water Fill Ratio", ToolTip = "WaterTile의 현재 채움 비율을 비교합니다. 가득 참 조건은 Threshold를 1로 두면 됩니다."),
 	WaterVolume UMETA(DisplayName = "Water Volume", ToolTip = "WaterTile의 현재 물 부피를 비교합니다."),
 	PlatformWorldZ UMETA(DisplayName = "Platform World Z", ToolTip = "플랫폼의 현재 월드 Z를 비교합니다."),
-	RotationAngleDegrees UMETA(DisplayName = "Rotation Angle Degrees", ToolTip = "RotationReactionComponent가 실제로 적용한 현재 회전 각도를 비교합니다.")
+	RotationAngleDegrees UMETA(DisplayName = "Rotation Angle Degrees", ToolTip = "RotationReactionComponent가 실제로 적용한 현재 회전 각도를 0~360도 기준으로 비교합니다."),
+	SignedRotationAngleDegrees UMETA(DisplayName = "Signed Rotation Angle Degrees", ToolTip = "RotationReactionComponent가 실제로 적용한 현재 회전 각도를 -180~180도 기준으로 비교합니다. 회전 방향 부호가 필요한 조건에 사용합니다.")
 };
 
 // 현재 값을 기준값과 어떤 방식으로 비교할지 정합니다.
@@ -77,6 +78,9 @@ struct UNDERONEUMBRELLA_API FUOUWaterBasinReactionContext
 
 	UPROPERTY(BlueprintReadOnly, Category = "Water Basin Reaction|Rotation")
 	float RotationAngleDegrees = 0.0f;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Water Basin Reaction|Rotation")
+	float SignedRotationAngleDegrees = 0.0f;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Water Basin Reaction|Condition")
 	bool bIsSatisfied = false;

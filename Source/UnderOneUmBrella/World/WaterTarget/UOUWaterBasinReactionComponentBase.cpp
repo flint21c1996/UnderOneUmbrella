@@ -85,7 +85,8 @@ void UUOUWaterBasinReactionComponentBase::EvaluateReaction(bool bForceNotify)
 	UUOUWaterBasinTargetComponent* WaterBasinTarget = ResolveWaterBasinTarget();
 	if (!WaterBasinTarget
 		&& ValueSource != EUOUWaterBasinReactionValueSource::PlatformWorldZ
-		&& ValueSource != EUOUWaterBasinReactionValueSource::RotationAngleDegrees)
+		&& ValueSource != EUOUWaterBasinReactionValueSource::RotationAngleDegrees
+		&& ValueSource != EUOUWaterBasinReactionValueSource::SignedRotationAngleDegrees)
 	{
 		return;
 	}
@@ -118,6 +119,7 @@ TArray<FString> UUOUWaterBasinReactionComponentBase::GetPuzzleDebugInfo_Implemen
 	DebugInfo.Add(FString::Printf(TEXT("Reaction Value: %.3f / %.3f"), LastContext.CurrentValue, LastContext.ThresholdValue));
 	DebugInfo.Add(FString::Printf(TEXT("Water Fill: %.3f"), LastContext.WaterFillRatio));
 	DebugInfo.Add(FString::Printf(TEXT("Rotation Angle: %.2f"), LastContext.RotationAngleDegrees));
+	DebugInfo.Add(FString::Printf(TEXT("Signed Rotation Angle: %.2f"), LastContext.SignedRotationAngleDegrees));
 	DebugInfo.Add(FString::Printf(TEXT("Reaction Events: +%d / -%d"), SatisfiedEventCount, UnsatisfiedEventCount));
 	return DebugInfo;
 }
@@ -253,6 +255,8 @@ float UUOUWaterBasinReactionComponentBase::ResolveCurrentValue(const FUOUWaterBa
 		return Context.PlatformWorldZ;
 	case EUOUWaterBasinReactionValueSource::RotationAngleDegrees:
 		return Context.RotationAngleDegrees;
+	case EUOUWaterBasinReactionValueSource::SignedRotationAngleDegrees:
+		return Context.SignedRotationAngleDegrees;
 	default:
 		return InvalidReactionValue;
 	}
