@@ -6,7 +6,6 @@
 #include "GameFramework/Actor.h"
 #include "UOUFloorPlatformTargetActor.generated.h"
 
-class UArrowComponent;
 class UMaterialInterface;
 class USceneComponent;
 class USphereComponent;
@@ -30,10 +29,6 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Floor Platform|Target")
 	TObjectPtr<USphereComponent> TargetOriginMarker = nullptr;
 
-	// 목표 회전의 앞 방향을 보여주는 화살표입니다.
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Floor Platform|Target")
-	TObjectPtr<UArrowComponent> TargetForwardArrow = nullptr;
-
 	// 목표 위치에 놓일 플랫폼 모습을 보여주는 확인용 메쉬입니다.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Floor Platform|Target")
 	TObjectPtr<UStaticMeshComponent> TargetPreviewMesh = nullptr;
@@ -44,4 +39,7 @@ public:
 
 	// 플랫폼 메쉬와 같은 리소스를 목표 미리보기 메쉬에 복사합니다.
 	void SyncPreviewFromMesh(const UStaticMeshComponent* SourceMesh);
+
+	// 목표 위치에 놓인 결과 플랫폼 미리보기 메쉬만 켜고 끕니다.
+	void SetTargetPreviewMeshVisible(bool bVisible);
 };

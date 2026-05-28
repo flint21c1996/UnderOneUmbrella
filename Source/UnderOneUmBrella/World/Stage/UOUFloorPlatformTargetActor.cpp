@@ -2,7 +2,6 @@
 
 #include "World/Stage/UOUFloorPlatformTargetActor.h"
 
-#include "Components/ArrowComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/SphereComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -25,6 +24,7 @@ AUOUFloorPlatformTargetActor::AUOUFloorPlatformTargetActor()
 	RootScene->SetMobility(EComponentMobility::Movable);
 
 	TargetOriginMarker = CreateDefaultSubobject<USphereComponent>(TEXT("TargetOriginMarker"));
+	TargetOriginMarker->bEditableWhenInherited = false;
 	TargetOriginMarker->SetupAttachment(RootScene);
 	TargetOriginMarker->SetMobility(EComponentMobility::Movable);
 	TargetOriginMarker->SetSphereRadius(34.0f);
@@ -33,16 +33,8 @@ AUOUFloorPlatformTargetActor::AUOUFloorPlatformTargetActor()
 	TargetOriginMarker->SetHiddenInGame(true);
 	TargetOriginMarker->ShapeColor = FColor::Green;
 
-	TargetForwardArrow = CreateDefaultSubobject<UArrowComponent>(TEXT("TargetForwardArrow"));
-	TargetForwardArrow->SetupAttachment(RootScene);
-	TargetForwardArrow->SetMobility(EComponentMobility::Movable);
-	TargetForwardArrow->SetUsingAbsoluteScale(true);
-	TargetForwardArrow->SetArrowLength(240.0f);
-	TargetForwardArrow->SetArrowSize(0.5f);
-	TargetForwardArrow->SetHiddenInGame(true);
-	TargetForwardArrow->SetArrowFColor(FColor::Green);
-
 	TargetPreviewMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("TargetPreviewMesh"));
+	TargetPreviewMesh->bEditableWhenInherited = false;
 	TargetPreviewMesh->SetupAttachment(RootScene);
 	TargetPreviewMesh->SetMobility(EComponentMobility::Movable);
 	TargetPreviewMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
@@ -74,4 +66,14 @@ void AUOUFloorPlatformTargetActor::SyncPreviewFromMesh(const UStaticMeshComponen
 
 		TargetPreviewMesh->SetMaterial(MaterialIndex, PreviewMaterial);
 	}
+}
+
+void AUOUFloorPlatformTargetActor::SetTargetPreviewMeshVisible(bool bVisible)
+{
+	if (TargetPreviewMesh == nullptr)
+	{
+		return;
+	}
+
+	TargetPreviewMesh->SetVisibility(bVisible, true);
 }
