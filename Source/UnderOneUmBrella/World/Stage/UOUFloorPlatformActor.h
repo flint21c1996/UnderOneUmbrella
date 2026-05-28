@@ -139,11 +139,11 @@ public:
 	EUOUFloorPlatformRotationMode RotationMode = EUOUFloorPlatformRotationMode::TransformLerp;
 
 	// Hinge 모드에서 움직이지 않는 고정 변입니다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Hinge", meta = (EditCondition = "RotationMode == EUOUFloorPlatformRotationMode::Hinge", EditConditionHides))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Movement", meta = (EditCondition = "RotationMode == EUOUFloorPlatformRotationMode::Hinge", EditConditionHides, DisplayAfter = "RotationMode"))
 	EUOUFloorPlatformHingeEdge HingeEdge = EUOUFloorPlatformHingeEdge::NegativeY;
 
 	// HingeEdge가 Custom일 때 사용하는 액터 로컬 기준 힌지 위치입니다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Hinge", meta = (EditCondition = "RotationMode == EUOUFloorPlatformRotationMode::Hinge && HingeEdge == EUOUFloorPlatformHingeEdge::Custom", EditConditionHides))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Movement", meta = (EditCondition = "RotationMode == EUOUFloorPlatformRotationMode::Hinge && HingeEdge == EUOUFloorPlatformHingeEdge::Custom", EditConditionHides, DisplayAfter = "HingeEdge"))
 	FVector CustomHingeLocalOffset = FVector::ZeroVector;
 
 	// CubicBezier 경로에서 시작점 쪽 조절점을 시작점 기준 로컬 오프셋으로 정합니다.
@@ -187,7 +187,7 @@ public:
 	bool bDisableCollisionAtTarget = false;
 
 	// 게임 시작 시 이미 목표 위치에 있어야 하는 플랫폼인지 정합니다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Rules")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Rules", meta = (EditCondition = "!bUseSequentialTargetMarkers", EditConditionHides, DisplayName = "Start At Target Single Target Only"))
 	bool bStartAtTarget = false;
 
 	// 에디터에서 이동 기준점을 현재 액터 위치로 다시 잡을 때 사용합니다.
@@ -216,7 +216,7 @@ public:
 
 	// 현재 선택된 이동 마커를 힌지 회전 결과 위치로 맞춥니다.
 	// 마커를 원하는 회전값으로 돌린 뒤 누르면 한 변이 붙은 최종 위치로 보정됩니다.
-	UFUNCTION(BlueprintCallable, CallInEditor, Category = "Floor Platform|Hinge", meta = (DisplayName = "Snap Current Step To Hinge Result"))
+	UFUNCTION(BlueprintCallable, CallInEditor, Category = "Floor Platform|Movement", meta = (DisplayName = "Snap Current Step To Hinge Result"))
 	void SnapCurrentStepToHingeResult();
 
 	// 현재 목표 위치를 기준으로 새 순차 목표 마커를 만들고 배열 끝에 추가합니다.
@@ -239,6 +239,7 @@ public:
 	virtual void ApplyPuzzleResult_Implementation(EOUUPuzzleResultAction Action) override;
 
 protected:
+	virtual void PostLoad() override;
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void OnConstruction(const FTransform& Transform) override;

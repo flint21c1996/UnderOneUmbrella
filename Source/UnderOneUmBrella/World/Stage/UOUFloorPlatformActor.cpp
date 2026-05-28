@@ -66,6 +66,30 @@ AUOUFloorPlatformActor::AUOUFloorPlatformActor()
 
 }
 
+void AUOUFloorPlatformActor::PostLoad()
+{
+	Super::PostLoad();
+
+#if WITH_EDITOR
+	if (HasAnyFlags(RF_ClassDefaultObject))
+	{
+		return;
+	}
+
+	EnsureStartTransform();
+	ResetRuntimeStepIndex();
+
+	// 맵을 다시 열 때만 저장된 시작 위치로 복구합니다.
+	// OnConstruction에서 처리하면 에디터 수동 배치까지 막히기 때문에 로드 시점으로 제한합니다.
+	if (bKeepActorAtSavedStartInEditor && bUseSavedStartTransform)
+	{
+		bIsApplyingEditorTransform = true;
+		SetActorTransform(StartTransform, false, nullptr, ETeleportType::TeleportPhysics);
+		bIsApplyingEditorTransform = false;
+	}
+#endif
+}
+
 void AUOUFloorPlatformActor::BeginPlay()
 {
 	Super::BeginPlay();
@@ -79,7 +103,8 @@ void AUOUFloorPlatformActor::BeginPlay()
 	ResetRuntimeStepIndex();
 	SetActorTransform(StartTransform, false, nullptr, ETeleportType::TeleportPhysics);
 
-	if (bStartAtTarget)
+	const bool bShouldStartAtTarget = bStartAtTarget && !ShouldUseSequentialTargetMarkers();
+	if (bShouldStartAtTarget)
 	{
 		SnapToTarget();
 	}
@@ -110,16 +135,6 @@ void AUOUFloorPlatformActor::OnConstruction(const FTransform& Transform)
 	}
 
 	EnsureStartTransform();
-
-#if WITH_EDITOR
-	if (bKeepActorAtSavedStartInEditor && bUseSavedStartTransform && !bIsMoving && !bIsApplyingEditorTransform && GetWorld() != nullptr && !GetWorld()->IsGameWorld())
-	{
-		if (!GetActorTransform().Equals(StartTransform))
-		{
-			SetActorTransform(StartTransform, false, nullptr, ETeleportType::TeleportPhysics);
-		}
-	}
-#endif
 
 	RefreshTargetTransforms();
 	UpdateEditorPreviewVisuals();
@@ -451,9 +466,9 @@ void AUOUFloorPlatformActor::EnsureStartTransform()
 		return;
 	}
 
+	// 아직 시작 위치를 저장하지 않은 플랫폼은 현재 배치 위치를 임시 시작점으로 사용합니다.
+	// 실제 저장 시작점은 CaptureCurrentAsStart 버튼을 눌렀을 때만 확정합니다.
 	StartTransform = GetActorTransform();
-	SavedStartTransform = StartTransform;
-	bUseSavedStartTransform = true;
 	bHasCapturedStartTransform = true;
 }
 
