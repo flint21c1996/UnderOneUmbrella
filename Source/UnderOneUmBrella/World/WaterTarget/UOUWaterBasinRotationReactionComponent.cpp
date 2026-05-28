@@ -701,10 +701,14 @@ void UUOUWaterBasinRotationReactionComponent::DrawInputSideDebug() const
 		return;
 	}
 
-	const float DrawScale = FMath::Max(InputSideDebugDrawScale, 0.0f);
-	const float SphereRadius = FMath::Max(InputSideDebugSphereRadius, 0.0f);
-	const float Thickness = FMath::Max(InputSideDebugThickness, 0.0f);
-	const float ArrowSize = FMath::Max(DrawScale * 0.2f, 8.0f);
+	// 기존 배치 인스턴스에 작은 값이 남아 있어도 플랫폼 기준이 충분히 크게 보이도록 최소 표시 크기를 둡니다.
+	const float MinVisibleDrawScale = 500.0f;
+	const float MinVisibleSphereRadius = 30.0f;
+	const float MinVisibleThickness = 8.0f;
+	const float DrawScale = FMath::Max(InputSideDebugDrawScale, MinVisibleDrawScale);
+	const float SphereRadius = FMath::Max(InputSideDebugSphereRadius, MinVisibleSphereRadius);
+	const float Thickness = FMath::Max(InputSideDebugThickness, MinVisibleThickness);
+	const float ArrowSize = FMath::Max(DrawScale * 0.25f, 48.0f);
 	const float DrawDuration = 0.05f;
 	FVector Center = FVector::ZeroVector;
 	FVector ForwardDirection = FVector::ZeroVector;

@@ -157,13 +157,13 @@ public:
 	bool bDrawInputSideDebug = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Debug", meta = (ClampMin = "0.0", EditCondition = "bDrawInputSideDebug", EditConditionHides, ToolTip = "디버그 화살표 길이입니다."))
-	float InputSideDebugDrawScale = 120.0f;
+	float InputSideDebugDrawScale = 500.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Debug", meta = (ClampMin = "0.0", EditCondition = "bDrawInputSideDebug", EditConditionHides, ToolTip = "중심과 입력 위치를 표시하는 디버그 구체 반지름입니다."))
-	float InputSideDebugSphereRadius = 12.0f;
+	float InputSideDebugSphereRadius = 30.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Debug", meta = (ClampMin = "0.0", EditCondition = "bDrawInputSideDebug", EditConditionHides, ToolTip = "디버그 선과 화살표의 두께입니다."))
-	float InputSideDebugThickness = 3.0f;
+	float InputSideDebugThickness = 8.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Debug", meta = (EditCondition = "bDrawInputSideDebug", EditConditionHides, ToolTip = "켜져 있으면 디버그 라벨을 함께 그립니다."))
 	bool bDrawInputSideDebugLabel = true;
