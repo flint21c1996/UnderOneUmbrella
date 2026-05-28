@@ -403,8 +403,8 @@ private:
 	// 공통 SurfaceWorldZ를 기준으로 각 Target의 CurrentWaterVolume을 다시 계산합니다.
 	void ApplyGroupSurfaceToTargets(const TArray<UUOUWaterBasinTargetComponent*>& Group, float SurfaceWorldZ);
 
-	// CurrentWaterVolume에서 Depth, FillRatio, SurfaceWorldZ를 다시 계산하고 WaterVisual을 갱신합니다.
-	void UpdateCachedWaterState();
+	// CurrentWaterVolume에서 Depth, FillRatio, SurfaceWorldZ를 다시 계산합니다. 필요할 때만 WaterVisual도 갱신합니다.
+	void UpdateCachedWaterState(bool bUpdateVisual = true);
 
 	// 그룹 합산 정보를 그룹에 속한 각 Target의 LastGroup... 런타임 값에 복사합니다.
 	void UpdateGroupRuntimeCache(const FUOUWaterBasinGroupDebugData& GroupData);

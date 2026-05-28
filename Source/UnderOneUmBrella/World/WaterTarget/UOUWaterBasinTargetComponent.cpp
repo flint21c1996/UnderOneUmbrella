@@ -34,6 +34,23 @@ namespace
 	// 1,000,000 Unreal Unit 높이의 큰 맵에서도 마지막 오차 폭이 약 0.000001uu 이하가 됩니다.
 	// 수면 시각 표현이나 퍼즐 판정에서 체감할 수 없는 수준이라 고정 반복으로 충분합니다.
 	constexpr int32 SurfaceSolveBinarySearchIterationCount = 40;
+
+	bool IsFiniteVector(const FVector& Vector)
+	{
+		return FMath::IsFinite(Vector.X)
+			&& FMath::IsFinite(Vector.Y)
+			&& FMath::IsFinite(Vector.Z);
+	}
+
+	bool IsUsableBounds(const FBox& Bounds)
+	{
+		return Bounds.IsValid
+			&& IsFiniteVector(Bounds.Min)
+			&& IsFiniteVector(Bounds.Max)
+			&& Bounds.Min.X <= Bounds.Max.X
+			&& Bounds.Min.Y <= Bounds.Max.Y
+			&& Bounds.Min.Z <= Bounds.Max.Z;
+	}
 }
 
 UUOUWaterBasinTargetComponent::UUOUWaterBasinTargetComponent()
@@ -100,35 +117,12 @@ void UUOUWaterBasinTargetComponent::PostEditChangeProperty(FPropertyChangedEvent
 		ChangedPropertyName == GET_MEMBER_NAME_CHECKED(UUOUWaterBasinTargetComponent, InitialWaterFillMode)
 		|| ChangedPropertyName == GET_MEMBER_NAME_CHECKED(UUOUWaterBasinTargetComponent, InitialWaterVolume)
 		|| ChangedPropertyName == GET_MEMBER_NAME_CHECKED(UUOUWaterBasinTargetComponent, InitialWaterFillRatio);
-	const bool bChangedWaterStatePreview =
-		bChangedInitialWaterSetting
-		|| ChangedPropertyName == GET_MEMBER_NAME_CHECKED(UUOUWaterBasinTargetComponent, CurrentWaterDepth)
+	const bool bChangedRuntimeWaterPreview =
+		ChangedPropertyName == GET_MEMBER_NAME_CHECKED(UUOUWaterBasinTargetComponent, CurrentWaterDepth)
 		|| ChangedPropertyName == GET_MEMBER_NAME_CHECKED(UUOUWaterBasinTargetComponent, CurrentFillRatio)
 		|| ChangedPropertyName == GET_MEMBER_NAME_CHECKED(UUOUWaterBasinTargetComponent, WaterSurfaceWorldZ);
 
-	if (ChangedPropertyName == GET_MEMBER_NAME_CHECKED(UUOUWaterBasinTargetComponent, InitialWaterFillMode))
-	{
-		const float Capacity = GetCapacity();
-		switch (InitialWaterFillMode)
-		{
-		case EUOUWaterBasinInitialWaterFillMode::FillRatio:
-			InitialWaterFillRatio = Capacity > KINDA_SMALL_NUMBER
-				? FMath::Clamp(InitialWaterVolume / Capacity, 0.0f, 1.0f)
-				: 0.0f;
-			break;
-
-		case EUOUWaterBasinInitialWaterFillMode::Volume:
-		default:
-			InitialWaterVolume = FMath::Clamp(InitialWaterFillRatio, 0.0f, 1.0f) * Capacity;
-			break;
-		}
-	}
-
-	if (bChangedInitialWaterSetting)
-	{
-		CurrentWaterVolume = ResolveInitialWaterVolume();
-	}
-	else if (ChangedPropertyName == GET_MEMBER_NAME_CHECKED(UUOUWaterBasinTargetComponent, CurrentWaterDepth))
+	if (ChangedPropertyName == GET_MEMBER_NAME_CHECKED(UUOUWaterBasinTargetComponent, CurrentWaterDepth))
 	{
 		CurrentWaterVolume = FMath::Clamp(CurrentWaterDepth, 0.0f, GetMaxWaterHeight()) * GetSurfaceArea();
 	}
@@ -143,7 +137,12 @@ void UUOUWaterBasinTargetComponent::PostEditChangeProperty(FPropertyChangedEvent
 
 	Super::PostEditChangeProperty(PropertyChangedEvent);
 
-	if (bChangedWaterStatePreview)
+	if (bChangedInitialWaterSetting)
+	{
+		CurrentWaterVolume = ResolveInitialWaterVolume();
+		UpdateCachedWaterState(false);
+	}
+	else if (bChangedRuntimeWaterPreview)
 	{
 		UpdateCachedWaterState();
 	}
@@ -616,14 +615,15 @@ void UUOUWaterBasinTargetComponent::ApplyWaterVolumeToSingleTarget(float NewVolu
 
 float UUOUWaterBasinTargetComponent::ResolveInitialWaterVolume() const
 {
+	const float Capacity = GetCapacity();
 	switch (InitialWaterFillMode)
 	{
 	case EUOUWaterBasinInitialWaterFillMode::FillRatio:
-		return FMath::Clamp(InitialWaterFillRatio, 0.0f, 1.0f) * GetCapacity();
+		return FMath::Clamp(InitialWaterFillRatio, 0.0f, 1.0f) * Capacity;
 
 	case EUOUWaterBasinInitialWaterFillMode::Volume:
 	default:
-		return FMath::Clamp(InitialWaterVolume, 0.0f, GetCapacity());
+		return FMath::Clamp(InitialWaterVolume, 0.0f, Capacity);
 	}
 }
 
@@ -789,7 +789,7 @@ void UUOUWaterBasinTargetComponent::ApplyGroupSurfaceToTargets(const TArray<UUOU
 	}
 }
 
-void UUOUWaterBasinTargetComponent::UpdateCachedWaterState()
+void UUOUWaterBasinTargetComponent::UpdateCachedWaterState(bool bUpdateVisual)
 {
 	const float Capacity = GetCapacity();
 	CurrentWaterVolume = FMath::Clamp(CurrentWaterVolume, 0.0f, Capacity);
@@ -806,7 +806,10 @@ void UUOUWaterBasinTargetComponent::UpdateCachedWaterState()
 	CurrentFillRatio = MaxHeight > KINDA_SMALL_NUMBER ? CurrentWaterDepth / MaxHeight : 0.0f;
 	WaterSurfaceWorldZ = GetBottomWorldZ() + GetWaterDepthWorld();
 
-	UpdateWaterVisual();
+	if (bUpdateVisual)
+	{
+		UpdateWaterVisual();
+	}
 }
 
 void UUOUWaterBasinTargetComponent::UpdateGroupRuntimeCache(const FUOUWaterBasinGroupDebugData& GroupData)
@@ -1419,14 +1422,15 @@ bool UUOUWaterBasinTargetComponent::TryGetBasinBounds(FBox& OutBounds) const
 			continue;
 		}
 
+		PrimitiveComponent->UpdateBounds();
 		const FBox ComponentBounds = PrimitiveComponent->Bounds.GetBox();
-		if (ComponentBounds.IsValid)
+		if (IsUsableBounds(ComponentBounds))
 		{
 			Bounds += ComponentBounds;
 		}
 	}
 
-	if (!Bounds.IsValid)
+	if (!IsUsableBounds(Bounds))
 	{
 		return false;
 	}
