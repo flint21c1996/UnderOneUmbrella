@@ -38,6 +38,13 @@ namespace
 		return (Direction - SafeAxis * FVector::DotProduct(Direction, SafeAxis)).GetSafeNormal();
 	}
 
+	bool IsFiniteWorldLocation(const FVector& WorldLocation)
+	{
+		return FMath::IsFinite(WorldLocation.X)
+			&& FMath::IsFinite(WorldLocation.Y)
+			&& FMath::IsFinite(WorldLocation.Z);
+	}
+
 	float CalculateInputSideValueByCross(
 		const FVector& Center,
 		const FVector& InputLocation,
@@ -577,6 +584,8 @@ void UUOUWaterBasinRotationReactionComponent::CacheInputSideDebug(const FUOUWate
 {
 	bHasLastInputSideDebug = true;
 	LastInputSideDebugWorldLocation = InputContext.WorldLocation;
+	bLastInputSideDebugHasValidWorldLocation = InputContext.bHasValidWorldLocation
+		&& IsFiniteWorldLocation(InputContext.WorldLocation);
 	LastInputSideDebugRotationSign = RotationSign;
 	LastInputSideDebugVolume = InputContext.Volume;
 	LastInputSideDebugSource = InputContext.Source;
@@ -669,7 +678,7 @@ void UUOUWaterBasinRotationReactionComponent::DrawInputSideDebug() const
 		return;
 	}
 
-	const FVector InputLocation = LastInputSideDebugWorldLocation.IsNearlyZero() ? Center : LastInputSideDebugWorldLocation;
+	const FVector InputLocation = bLastInputSideDebugHasValidWorldLocation ? LastInputSideDebugWorldLocation : Center;
 	const FVector InputOffset = InputLocation - Center;
 	const FVector PlanarInputOffset = AxisWorld.IsNearlyZero()
 		? InputOffset
@@ -774,6 +783,11 @@ float UUOUWaterBasinRotationReactionComponent::ResolveInputRotationSign(const FU
 
 float UUOUWaterBasinRotationReactionComponent::ResolveInputSideSign(const FUOUWaterBasinInputContext& InputContext) const
 {
+	if (!InputContext.bHasValidWorldLocation || !IsFiniteWorldLocation(InputContext.WorldLocation))
+	{
+		return 0.0f;
+	}
+
 	const float DeadZone = FMath::Max(InputSideDeadZone, 0.0f);
 	const USceneComponent* TargetComponent = ResolveRotationTargetComponent();
 	const USceneComponent* CenterComponent = ResolveInputSideCenterComponent(TargetComponent);

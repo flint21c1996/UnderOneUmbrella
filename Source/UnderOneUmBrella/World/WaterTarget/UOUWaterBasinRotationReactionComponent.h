@@ -172,6 +172,7 @@ private:
 
 	bool bHasLastInputSideDebug = false;
 	FVector LastInputSideDebugWorldLocation = FVector::ZeroVector;
+	bool bLastInputSideDebugHasValidWorldLocation = false;
 	float LastInputSideDebugRotationSign = 0.0f;
 	float LastInputSideDebugVolume = 0.0f;
 	EUOUWaterBasinInputSource LastInputSideDebugSource = EUOUWaterBasinInputSource::Unknown;

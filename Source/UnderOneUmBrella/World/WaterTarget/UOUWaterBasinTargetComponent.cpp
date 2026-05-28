@@ -28,6 +28,7 @@ namespace
 	constexpr float DebugMaxWaterBoxLifeTime = 0.0f;
 	constexpr float DebugMaxWaterBoxThickness = 3.0f;
 	constexpr float MinWaterVisualDepthWorld = 0.1f;
+	constexpr float InputLocationBoundsToleranceWorld = 1.0f;
 
 	// 연결 그룹의 공통 수면 높이는 이분 탐색으로 찾습니다.
 	// 40회 반복하면 탐색 높이 범위가 2^40번 쪼개지므로,
@@ -524,6 +525,34 @@ float UUOUWaterBasinTargetComponent::GetCapacity() const
 	return GetSurfaceArea() * GetMaxWaterHeight();
 }
 
+bool UUOUWaterBasinTargetComponent::IsWorldLocationInsideBasin(const FVector& WorldLocation) const
+{
+	if (!IsFiniteVector(WorldLocation))
+	{
+		return false;
+	}
+
+	const AActor* Owner = GetOwner();
+	if (!Owner)
+	{
+		return false;
+	}
+
+	FVector ActorOrigin = FVector::ZeroVector;
+	FVector ActorExtent = FVector::ZeroVector;
+	Owner->GetActorBounds(false, ActorOrigin, ActorExtent);
+	if (!IsFiniteVector(ActorOrigin) || !IsFiniteVector(ActorExtent))
+	{
+		return false;
+	}
+
+	const FVector SafeActorExtent = ActorExtent.GetAbs();
+	return WorldLocation.X >= ActorOrigin.X - SafeActorExtent.X - InputLocationBoundsToleranceWorld
+		&& WorldLocation.X <= ActorOrigin.X + SafeActorExtent.X + InputLocationBoundsToleranceWorld
+		&& WorldLocation.Y >= ActorOrigin.Y - SafeActorExtent.Y - InputLocationBoundsToleranceWorld
+		&& WorldLocation.Y <= ActorOrigin.Y + SafeActorExtent.Y + InputLocationBoundsToleranceWorld;
+}
+
 float UUOUWaterBasinTargetComponent::GetWaterDepthWorld() const
 {
 	return CurrentWaterDepth * FMath::Max(WorldUnitsPerTile, MinWorldUnitsPerTile);
@@ -850,7 +879,10 @@ void UUOUWaterBasinTargetComponent::NotifyWaterInputReceived(const FUOUWaterBasi
 
 	if (!InputContext.bApplyToConnectedGroup)
 	{
-		OnWaterInputReceived.Broadcast(this, InputContext);
+		FUOUWaterBasinInputContext TargetInputContext = InputContext;
+		TargetInputContext.bHasValidWorldLocation = InputContext.bHasValidWorldLocation
+			&& IsWorldLocationInsideBasin(InputContext.WorldLocation);
+		OnWaterInputReceived.Broadcast(this, TargetInputContext);
 		return;
 	}
 
@@ -858,7 +890,10 @@ void UUOUWaterBasinTargetComponent::NotifyWaterInputReceived(const FUOUWaterBasi
 	GetConnectedGroup(Group);
 	if (Group.Num() == 0)
 	{
-		OnWaterInputReceived.Broadcast(this, InputContext);
+		FUOUWaterBasinInputContext TargetInputContext = InputContext;
+		TargetInputContext.bHasValidWorldLocation = InputContext.bHasValidWorldLocation
+			&& IsWorldLocationInsideBasin(InputContext.WorldLocation);
+		OnWaterInputReceived.Broadcast(this, TargetInputContext);
 		return;
 	}
 
@@ -866,7 +901,10 @@ void UUOUWaterBasinTargetComponent::NotifyWaterInputReceived(const FUOUWaterBasi
 	{
 		if (IsValid(Target))
 		{
-			Target->OnWaterInputReceived.Broadcast(Target, InputContext);
+			FUOUWaterBasinInputContext TargetInputContext = InputContext;
+			TargetInputContext.bHasValidWorldLocation = InputContext.bHasValidWorldLocation
+				&& Target->IsWorldLocationInsideBasin(InputContext.WorldLocation);
+			Target->OnWaterInputReceived.Broadcast(Target, TargetInputContext);
 		}
 	}
 }

@@ -85,6 +85,9 @@ struct FUOUWaterBasinInputContext
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Input")
 	FVector WorldLocation = FVector::ZeroVector;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Input", meta = (ToolTip = "World Location이 해당 WaterBasinTarget 소유 Actor의 영역 안에 있는 실제 물 입력 지점인지 나타냅니다. 좌우 판정 같은 위치 기반 반응은 이 값이 켜져 있을 때만 World Location을 사용합니다."))
+	bool bHasValidWorldLocation = false;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Input")
 	TObjectPtr<AActor> InstigatorActor = nullptr;
 
@@ -339,6 +342,10 @@ public:
 	// 이 Target 하나가 가질 수 있는 최대 물 부피입니다. Capacity = SurfaceArea * MaxWaterHeight입니다.
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Water Basin")
 	float GetCapacity() const;
+
+	// 지정한 월드 위치가 이 Target 소유 Actor의 X/Y 영역 안에 있는지 확인합니다.
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Water Basin")
+	bool IsWorldLocationInsideBasin(const FVector& WorldLocation) const;
 
 	// 현재 물 깊이를 언리얼 월드 단위(cm)로 변환한 값입니다.
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Water Basin")
