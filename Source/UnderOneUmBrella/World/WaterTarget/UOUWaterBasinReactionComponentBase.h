@@ -86,6 +86,9 @@ struct UNDERONEUMBRELLA_API FUOUWaterBasinReactionContext
 	bool bIsSatisfied = false;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Water Basin Reaction|Condition")
+	EUOUWaterBasinReactionValueSource ValueSource = EUOUWaterBasinReactionValueSource::WaterFillRatio;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Water Basin Reaction|Condition")
 	float CurrentValue = 0.0f;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Water Basin Reaction|Condition")
