@@ -4,11 +4,9 @@
 
 #include "World/Stage/UOUFloorPlatformTargetActor.h"
 
-#include "Components/ArrowComponent.h"
 #include "Components/BoxComponent.h"
 #include "Components/PrimitiveComponent.h"
 #include "Components/SceneComponent.h"
-#include "Components/SphereComponent.h"
 #include "Components/SplineComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Curves/CurveFloat.h"
@@ -30,6 +28,7 @@ AUOUFloorPlatformActor::AUOUFloorPlatformActor()
 	PlatformMesh->SetMobility(EComponentMobility::Movable);
 
 	CarryDetectionBox = CreateDefaultSubobject<UBoxComponent>(TEXT("CarryDetectionBox"));
+	CarryDetectionBox->bEditableWhenInherited = false;
 	CarryDetectionBox->SetupAttachment(RootScene);
 	CarryDetectionBox->SetMobility(EComponentMobility::Movable);
 	CarryDetectionBox->SetBoxExtent(FVector(300.0f, 300.0f, 160.0f));
@@ -38,33 +37,13 @@ AUOUFloorPlatformActor::AUOUFloorPlatformActor()
 	CarryDetectionBox->SetCollisionResponseToAllChannels(ECR_Overlap);
 	CarryDetectionBox->SetGenerateOverlapEvents(true);
 
-	RotationPivot = CreateDefaultSubobject<UArrowComponent>(TEXT("RotationPivot"));
-	RotationPivot->SetupAttachment(RootScene);
-	RotationPivot->SetMobility(EComponentMobility::Movable);
-	RotationPivot->SetRelativeLocation(FVector::ZeroVector);
-	RotationPivot->SetRelativeRotation(FRotator::ZeroRotator);
-	// 플랫폼 크기 조절과 상관없이 회전축 표시가 과하게 커지지 않도록 화살표 표시 스케일만 고정합니다.
-	RotationPivot->SetUsingAbsoluteScale(true);
-	RotationPivot->SetRelativeScale3D(FVector::OneVector);
-	RotationPivot->SetArrowLength(140.0f);
-	RotationPivot->SetArrowSize(0.45f);
-	RotationPivot->SetIsScreenSizeScaled(true);
-	RotationPivot->SetScreenSize(0.0025f);
-	RotationPivot->SetHiddenInGame(true);
-	RotationPivot->SetArrowFColor(FColor::Red);
-
-	RotationPivotMarker = CreateDefaultSubobject<USphereComponent>(TEXT("RotationPivotMarker"));
-	RotationPivotMarker->SetupAttachment(RotationPivot);
-	RotationPivotMarker->SetMobility(EComponentMobility::Movable);
-	RotationPivotMarker->SetUsingAbsoluteScale(true);
-	RotationPivotMarker->SetSphereRadius(28.0f);
-	RotationPivotMarker->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	RotationPivotMarker->SetHiddenInGame(true);
-	RotationPivotMarker->ShapeColor = FColor::Red;
-
 	MovePreviewPath = CreateDefaultSubobject<USplineComponent>(TEXT("MovePreviewPath"));
+	MovePreviewPath->bEditableWhenInherited = false;
 	MovePreviewPath->SetupAttachment(RootScene);
 	MovePreviewPath->SetMobility(EComponentMobility::Movable);
+	MovePreviewPath->SetUsingAbsoluteLocation(true);
+	MovePreviewPath->SetUsingAbsoluteRotation(true);
+	MovePreviewPath->SetUsingAbsoluteScale(true);
 	MovePreviewPath->SetHiddenInGame(true);
 	MovePreviewPath->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	MovePreviewPath->ClearSplinePoints(false);
@@ -81,14 +60,6 @@ AUOUFloorPlatformActor::AUOUFloorPlatformActor()
 #endif
 	MovePreviewPath->UpdateSpline();
 
-	TransformPreviewMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("TransformPreviewMesh"));
-	TransformPreviewMesh->SetupAttachment(RootScene);
-	TransformPreviewMesh->SetMobility(EComponentMobility::Movable);
-	TransformPreviewMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	TransformPreviewMesh->SetGenerateOverlapEvents(false);
-	TransformPreviewMesh->SetHiddenInGame(true);
-	TransformPreviewMesh->SetCastShadow(false);
-	TransformPreviewMesh->SetRenderCustomDepth(true);
 }
 
 void AUOUFloorPlatformActor::BeginPlay()
@@ -134,7 +105,7 @@ void AUOUFloorPlatformActor::Tick(float DeltaSeconds)
 	Super::Tick(DeltaSeconds);
 
 #if WITH_EDITOR
-	if (!bIsMoving && GetWorld() != nullptr && !GetWorld()->IsGameWorld() && ShouldUseTargetMarkerTransform())
+	if (!bIsMoving && GetWorld() != nullptr && !GetWorld()->IsGameWorld() && ShouldUseSequentialTargetMarkers())
 	{
 		RefreshTargetTransforms();
 		UpdateEditorPreviewVisuals();
@@ -153,7 +124,7 @@ void AUOUFloorPlatformActor::Tick(float DeltaSeconds)
 	const float RawAlpha = FMath::Clamp(MoveElapsedTime / SafeDuration, 0.0f, 1.0f);
 	const float MoveAlpha = ResolveMoveAlpha(RawAlpha);
 
-	SetActorTransform(BuildPlatformTransformAtAlpha(MoveAlpha), false, nullptr, ETeleportType::TeleportPhysics);
+	SetActorTransform(BuildActivePlatformTransformAtAlpha(MoveAlpha), false, nullptr, ETeleportType::TeleportPhysics);
 
 	if (RawAlpha >= 1.0f)
 	{
@@ -172,25 +143,26 @@ void AUOUFloorPlatformActor::CaptureCurrentAsStart()
 
 void AUOUFloorPlatformActor::MoveToTarget()
 {
-	if (bIsMoving || bIsAtTarget)
+	MoveToNextSequentialTarget();
+}
+
+void AUOUFloorPlatformActor::MoveToNextSequentialTarget()
+{
+	if (bIsMoving)
 	{
 		return;
 	}
 
-	if (!bHasCapturedStartTransform)
+	FTransform NextTargetTransform;
+	int32 NextTargetIndex = INDEX_NONE;
+	if (!ResolveNextSequentialTargetTransform(NextTargetTransform, NextTargetIndex))
 	{
-		CaptureCurrentAsStart();
+		return;
 	}
 
-	RefreshTargetTransforms();
-
-	bIsMoving = true;
-	bIsAtTarget = false;
-	MoveElapsedTime = 0.0f;
-	ApplyTargetCollisionState();
-
-	SetActorTransform(StartTransform, false, nullptr, ETeleportType::TeleportPhysics);
-	AttachCarriedActors();
+	bNextSequentialMoveReturnsToStart = false;
+	ActiveSequentialTargetIndex = NextTargetIndex;
+	BeginMoveToTransform(NextTargetTransform);
 }
 
 void AUOUFloorPlatformActor::ResetPlatform()
@@ -210,6 +182,11 @@ void AUOUFloorPlatformActor::ResetPlatform()
 	bIsMoving = false;
 	bIsAtTarget = false;
 	MoveElapsedTime = 0.0f;
+	CurrentSequentialTargetIndex = 0;
+	ActiveSequentialTargetIndex = INDEX_NONE;
+	bNextSequentialMoveReturnsToStart = false;
+	MoveStartTransform = StartTransform;
+	MoveTargetTransform = TargetTransform;
 
 	SetActorTransform(StartTransform, false, nullptr, ETeleportType::TeleportPhysics);
 	ApplyTargetCollisionState();
@@ -229,18 +206,49 @@ void AUOUFloorPlatformActor::SnapToTarget()
 
 	AttachCarriedActors();
 
+	FTransform SnapTargetTransform = FTransform::Identity;
+	int32 SnapTargetIndex = INDEX_NONE;
+	if (!ResolveNextSequentialTargetTransform(SnapTargetTransform, SnapTargetIndex))
+	{
+		DetachCarriedActors();
+		return;
+	}
+
 	bIsMoving = false;
 	bIsAtTarget = true;
 	MoveElapsedTime = MoveDuration;
+	bNextSequentialMoveReturnsToStart = false;
+	ActiveSequentialTargetIndex = SnapTargetIndex;
+	MoveStartTransform = GetActorTransform();
+	MoveTargetTransform = SnapTargetTransform;
 
-	SetActorTransform(TargetTransform, false, nullptr, ETeleportType::TeleportPhysics);
+	SetActorTransform(SnapTargetTransform, false, nullptr, ETeleportType::TeleportPhysics);
 	ApplyTargetCollisionState();
 	CacheLastMovedActors();
 	DetachCarriedActors();
+	AdvanceSequentialTargetIndex();
 	UpdateEditorPreviewVisuals();
 }
 
-void AUOUFloorPlatformActor::CreateOrUpdateTargetMarker()
+void AUOUFloorPlatformActor::SetTargetToStart()
+{
+	if (!bHasCapturedStartTransform)
+	{
+		CaptureCurrentAsStart();
+	}
+
+	if (AUOUFloorPlatformTargetActor* SequentialTargetMarker = GetCurrentSequentialTargetMarker())
+	{
+		SequentialTargetMarker->SetActorTransform(StartTransform, false, nullptr, ETeleportType::TeleportPhysics);
+		SequentialTargetMarker->SyncPreviewFromMesh(PlatformMesh);
+		SequentialTargetMarker->SetTargetPreviewMeshVisible(bShowTransformPreview);
+	}
+
+	RefreshTargetTransforms();
+	UpdateEditorPreviewVisuals();
+}
+
+void AUOUFloorPlatformActor::AddSequentialTargetMarker()
 {
 #if WITH_EDITOR
 	if (GetWorld() == nullptr)
@@ -253,47 +261,43 @@ void AUOUFloorPlatformActor::CreateOrUpdateTargetMarker()
 		CaptureCurrentAsStart();
 	}
 
-	const bool bHadTargetMarker = ShouldUseTargetMarkerTransform();
-	if (!bHadTargetMarker)
+	RefreshTargetTransforms();
+
+	FTransform NewTargetTransform = TargetTransform;
+	for (int32 MarkerIndex = SequentialTargetMarkers.Num() - 1; MarkerIndex >= 0; --MarkerIndex)
 	{
-		TargetTransform = StartTransform;
-		TargetTransform = BuildPlatformTransformAtAlpha(1.0f);
-	}
-
-	if (!IsValid(TargetMarkerActor))
-	{
-		FActorSpawnParameters SpawnParameters;
-		SpawnParameters.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-		SpawnParameters.Name = MakeUniqueObjectName(GetWorld()->GetCurrentLevel(), AUOUFloorPlatformTargetActor::StaticClass(), *FString::Printf(TEXT("%s_Target"), *GetName()));
-
-		TargetMarkerActor = GetWorld()->SpawnActor<AUOUFloorPlatformTargetActor>(
-			AUOUFloorPlatformTargetActor::StaticClass(),
-			TargetTransform,
-			SpawnParameters);
-
-		if (TargetMarkerActor != nullptr)
+		if (IsValid(SequentialTargetMarkers[MarkerIndex]))
 		{
-			TargetMarkerActor->SetActorLabel(FString::Printf(TEXT("%s_Target"), *GetActorLabel()));
+			NewTargetTransform = SequentialTargetMarkers[MarkerIndex]->GetActorTransform();
+			break;
 		}
 	}
-	else if (!bHadTargetMarker)
+
+	FActorSpawnParameters SpawnParameters;
+	SpawnParameters.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	SpawnParameters.Name = MakeUniqueObjectName(GetWorld()->GetCurrentLevel(), AUOUFloorPlatformTargetActor::StaticClass(), *FString::Printf(TEXT("%s_MoveStep"), *GetName()));
+
+	AUOUFloorPlatformTargetActor* NewTargetMarker = GetWorld()->SpawnActor<AUOUFloorPlatformTargetActor>(
+		AUOUFloorPlatformTargetActor::StaticClass(),
+		NewTargetTransform,
+		SpawnParameters);
+
+	if (NewTargetMarker == nullptr)
 	{
-		TargetMarkerActor->SetActorTransform(TargetTransform, false, nullptr, ETeleportType::TeleportPhysics);
+		return;
 	}
 
-	bUseTargetMarkerTransform = true;
-	SyncTargetMarkerPreview();
+	NewTargetMarker->SetActorLabel(FString::Printf(TEXT("%s_MoveStep_%d"), *GetActorLabel(), SequentialTargetMarkers.Num()));
+	NewTargetMarker->SyncPreviewFromMesh(PlatformMesh);
+	NewTargetMarker->SetTargetPreviewMeshVisible(bShowTransformPreview);
+
+	SequentialTargetMarkers.Add(NewTargetMarker);
+	bUseSequentialTargetMarkers = true;
+	CurrentSequentialTargetIndex = FMath::Clamp(CurrentSequentialTargetIndex, 0, FMath::Max(0, SequentialTargetMarkers.Num() - 1));
+
 	RefreshTargetTransforms();
 	UpdateEditorPreviewVisuals();
 #endif
-}
-
-void AUOUFloorPlatformActor::ClearTargetMarkerReference()
-{
-	bUseTargetMarkerTransform = false;
-	TargetMarkerActor = nullptr;
-	RefreshTargetTransforms();
-	UpdateEditorPreviewVisuals();
 }
 
 bool AUOUFloorPlatformActor::IsMoving() const
@@ -318,7 +322,11 @@ void AUOUFloorPlatformActor::ApplyPuzzleResult_Implementation(EOUUPuzzleResultAc
 		ResetPlatform();
 		break;
 	case EOUUPuzzleResultAction::Toggle:
-		if (bIsAtTarget)
+		if (ShouldUseSequentialTargetMarkers())
+		{
+			MoveToNextSequentialTarget();
+		}
+		else if (bIsAtTarget)
 		{
 			ResetPlatform();
 		}
@@ -338,7 +346,7 @@ void AUOUFloorPlatformActor::ApplyPuzzleResult_Implementation(EOUUPuzzleResultAc
 #if WITH_EDITOR
 bool AUOUFloorPlatformActor::ShouldTickIfViewportsOnly() const
 {
-	return bIsMoving || ShouldUseTargetMarkerTransform();
+	return bIsMoving || ShouldUseSequentialTargetMarkers();
 }
 #endif
 
@@ -351,13 +359,9 @@ void AUOUFloorPlatformActor::RefreshTargetTransforms()
 	}
 
 	TargetTransform = StartTransform;
-	if (ShouldUseTargetMarkerTransform())
+	if (AUOUFloorPlatformTargetActor* SequentialTargetMarker = GetCurrentSequentialTargetMarker())
 	{
-		TargetTransform = TargetMarkerActor->GetActorTransform();
-	}
-	else
-	{
-		TargetTransform = BuildPlatformTransformAtAlpha(1.0f);
+		TargetTransform = SequentialTargetMarker->GetActorTransform();
 	}
 }
 
@@ -367,10 +371,11 @@ void AUOUFloorPlatformActor::FinishMoveToTarget()
 	bIsAtTarget = true;
 	MoveElapsedTime = MoveDuration;
 
-	SetActorTransform(TargetTransform, false, nullptr, ETeleportType::TeleportPhysics);
+	SetActorTransform(MoveTargetTransform, false, nullptr, ETeleportType::TeleportPhysics);
 	ApplyTargetCollisionState();
 	CacheLastMovedActors();
 	DetachCarriedActors();
+	AdvanceSequentialTargetIndex();
 
 	OnMoveFinished.Broadcast(this);
 }
@@ -384,6 +389,139 @@ void AUOUFloorPlatformActor::ApplyTargetCollisionState()
 	}
 
 	SetActorEnableCollision(!bIsAtTarget);
+}
+
+bool AUOUFloorPlatformActor::ShouldUseSequentialTargetMarkers() const
+{
+	return bUseSequentialTargetMarkers && GetCurrentSequentialTargetMarker() != nullptr;
+}
+
+AUOUFloorPlatformTargetActor* AUOUFloorPlatformActor::GetSequentialTargetMarkerAt(int32 TargetIndex) const
+{
+	if (!SequentialTargetMarkers.IsValidIndex(TargetIndex))
+	{
+		return nullptr;
+	}
+
+	return SequentialTargetMarkers[TargetIndex].Get();
+}
+
+AUOUFloorPlatformTargetActor* AUOUFloorPlatformActor::GetCurrentSequentialTargetMarker() const
+{
+	if (!bUseSequentialTargetMarkers || SequentialTargetMarkers.Num() == 0)
+	{
+		return nullptr;
+	}
+
+	const int32 ClampedIndex = FMath::Clamp(CurrentSequentialTargetIndex, 0, SequentialTargetMarkers.Num() - 1);
+	if (AUOUFloorPlatformTargetActor* DirectTargetMarker = GetSequentialTargetMarkerAt(ClampedIndex))
+	{
+		return DirectTargetMarker;
+	}
+
+	for (int32 TargetIndex = 0; TargetIndex < SequentialTargetMarkers.Num(); ++TargetIndex)
+	{
+		if (AUOUFloorPlatformTargetActor* SequentialTargetMarker = GetSequentialTargetMarkerAt(TargetIndex))
+		{
+			return SequentialTargetMarker;
+		}
+	}
+
+	return nullptr;
+}
+
+bool AUOUFloorPlatformActor::ResolveNextSequentialTargetTransform(FTransform& OutTargetTransform, int32& OutTargetIndex) const
+{
+	OutTargetTransform = FTransform::Identity;
+	OutTargetIndex = INDEX_NONE;
+
+	if (bNextSequentialMoveReturnsToStart)
+	{
+		OutTargetTransform = StartTransform;
+		return true;
+	}
+
+	if (!bUseSequentialTargetMarkers || SequentialTargetMarkers.Num() == 0)
+	{
+		return false;
+	}
+
+	const int32 ClampedIndex = FMath::Clamp(CurrentSequentialTargetIndex, 0, SequentialTargetMarkers.Num() - 1);
+	if (AUOUFloorPlatformTargetActor* DirectTargetMarker = GetSequentialTargetMarkerAt(ClampedIndex))
+	{
+		OutTargetTransform = DirectTargetMarker->GetActorTransform();
+		OutTargetIndex = ClampedIndex;
+		return true;
+	}
+
+	for (int32 TargetIndex = 0; TargetIndex < SequentialTargetMarkers.Num(); ++TargetIndex)
+	{
+		if (AUOUFloorPlatformTargetActor* SequentialTargetMarker = GetSequentialTargetMarkerAt(TargetIndex))
+		{
+			OutTargetTransform = SequentialTargetMarker->GetActorTransform();
+			OutTargetIndex = TargetIndex;
+			return true;
+		}
+	}
+
+	return false;
+}
+
+void AUOUFloorPlatformActor::AdvanceSequentialTargetIndex()
+{
+	if (!bUseSequentialTargetMarkers || ActiveSequentialTargetIndex == INDEX_NONE || SequentialTargetMarkers.Num() == 0)
+	{
+		ActiveSequentialTargetIndex = INDEX_NONE;
+		return;
+	}
+
+	const int32 TargetCount = SequentialTargetMarkers.Num();
+
+	for (int32 CandidateIndex = ActiveSequentialTargetIndex + 1; CandidateIndex < TargetCount; ++CandidateIndex)
+	{
+		if (GetSequentialTargetMarkerAt(CandidateIndex) != nullptr)
+		{
+			CurrentSequentialTargetIndex = CandidateIndex;
+			ActiveSequentialTargetIndex = INDEX_NONE;
+			return;
+		}
+	}
+
+	if (bLoopSequentialTargetMarkers)
+	{
+		for (int32 CandidateIndex = 0; CandidateIndex < TargetCount; ++CandidateIndex)
+		{
+			if (GetSequentialTargetMarkerAt(CandidateIndex) != nullptr)
+			{
+				CurrentSequentialTargetIndex = CandidateIndex;
+				bNextSequentialMoveReturnsToStart = bLoopMoveStepsThroughStart;
+				ActiveSequentialTargetIndex = INDEX_NONE;
+				return;
+			}
+		}
+	}
+
+	CurrentSequentialTargetIndex = FMath::Clamp(ActiveSequentialTargetIndex, 0, TargetCount - 1);
+	ActiveSequentialTargetIndex = INDEX_NONE;
+}
+
+bool AUOUFloorPlatformActor::BeginMoveToTransform(const FTransform& InTargetTransform)
+{
+	if (bIsMoving)
+	{
+		return false;
+	}
+
+	MoveStartTransform = GetActorTransform();
+	MoveTargetTransform = InTargetTransform;
+
+	bIsMoving = true;
+	bIsAtTarget = false;
+	MoveElapsedTime = 0.0f;
+	ApplyTargetCollisionState();
+	AttachCarriedActors();
+
+	return true;
 }
 
 void AUOUFloorPlatformActor::AttachCarriedActors()
@@ -629,169 +767,133 @@ void AUOUFloorPlatformActor::CacheLastMovedActors()
 	}
 }
 
-FTransform AUOUFloorPlatformActor::BuildPlatformTransformAtAlpha(float Alpha) const
+FTransform AUOUFloorPlatformActor::BuildActivePlatformTransformAtAlpha(float Alpha) const
+{
+	return BuildTransformBetween(MoveStartTransform, MoveTargetTransform, Alpha);
+}
+
+FTransform AUOUFloorPlatformActor::BuildTransformBetween(const FTransform& FromTransform, const FTransform& ToTransform, float Alpha) const
 {
 	const float SafeAlpha = FMath::Clamp(Alpha, 0.0f, 1.0f);
+	const FVector NewLocation = EvaluatePathLocation(FromTransform, ToTransform, SafeAlpha);
+	const FQuat NewRotation = FQuat::Slerp(FromTransform.GetRotation(), ToTransform.GetRotation(), SafeAlpha);
+	const FVector NewScale = FMath::Lerp(FromTransform.GetScale3D(), ToTransform.GetScale3D(), SafeAlpha);
 
-	if (ShouldUseTargetMarkerTransform())
+	return FTransform(NewRotation, NewLocation, NewScale);
+}
+
+FVector AUOUFloorPlatformActor::EvaluatePathLocation(const FTransform& FromTransform, const FTransform& ToTransform, float Alpha) const
+{
+	const float SafeAlpha = FMath::Clamp(Alpha, 0.0f, 1.0f);
+	const FVector StartLocation = FromTransform.GetLocation();
+	const FVector TargetLocation = ToTransform.GetLocation();
+
+	if (PathMode != EUOUFloorPlatformPathMode::CubicBezier)
 	{
-		const FQuat NewRotation = FQuat::Slerp(StartTransform.GetRotation(), TargetMarkerActor->GetActorQuat(), SafeAlpha);
-		const FVector NewLocation = FMath::Lerp(StartTransform.GetLocation(), TargetMarkerActor->GetActorLocation(), SafeAlpha);
-
-		return FTransform(NewRotation, NewLocation, StartTransform.GetScale3D());
+		return FMath::Lerp(StartLocation, TargetLocation, SafeAlpha);
 	}
 
-	const FVector MoveOffsetWorld = StartTransform.TransformVectorNoScale(TargetLocalOffset) * SafeAlpha;
+	const FVector StartControlLocation = StartLocation + FromTransform.TransformVectorNoScale(BezierStartControlOffset);
+	const FVector TargetControlLocation = TargetLocation + ToTransform.TransformVectorNoScale(BezierEndControlOffset);
+	const float InverseAlpha = 1.0f - SafeAlpha;
 
-	FQuat RotationDelta = FQuat::Identity;
-	FVector RotationLocationOffset = FVector::ZeroVector;
+	return (InverseAlpha * InverseAlpha * InverseAlpha * StartLocation)
+		+ (3.0f * InverseAlpha * InverseAlpha * SafeAlpha * StartControlLocation)
+		+ (3.0f * InverseAlpha * SafeAlpha * SafeAlpha * TargetControlLocation)
+		+ (SafeAlpha * SafeAlpha * SafeAlpha * TargetLocation);
+}
 
-	if (bUseTargetRotation && !FMath::IsNearlyZero(TargetRotationAngleDegrees))
+void AUOUFloorPlatformActor::SyncSequentialTargetMarkerPreviews()
+{
+	for (const TObjectPtr<AUOUFloorPlatformTargetActor>& SequentialTargetMarker : SequentialTargetMarkers)
 	{
-		const FVector RotationAxisWorld = GetRotationAxisWorldDirection();
-		if (!RotationAxisWorld.IsNearlyZero())
+		if (!IsValid(SequentialTargetMarker))
 		{
-			const FVector PivotWorldLocation = GetRotationPivotWorldLocation();
-			const float RotationRadians = FMath::DegreesToRadians(TargetRotationAngleDegrees * SafeAlpha);
-
-			RotationDelta = FQuat(RotationAxisWorld, RotationRadians);
-			RotationLocationOffset = PivotWorldLocation
-				+ RotationDelta.RotateVector(StartTransform.GetLocation() - PivotWorldLocation)
-				- StartTransform.GetLocation();
+			continue;
 		}
+
+		SequentialTargetMarker->SyncPreviewFromMesh(PlatformMesh);
+		SequentialTargetMarker->SetTargetPreviewMeshVisible(bShowTransformPreview);
 	}
-
-	const FVector NewLocation = StartTransform.GetLocation() + MoveOffsetWorld + RotationLocationOffset;
-	const FQuat NewRotation = RotationDelta * StartTransform.GetRotation();
-
-	return FTransform(NewRotation, NewLocation, StartTransform.GetScale3D());
-}
-
-FTransform AUOUFloorPlatformActor::BuildPreviewMeshWorldTransform(float Alpha) const
-{
-	const FTransform PreviewActorTransform = BuildPlatformTransformAtAlpha(Alpha);
-	if (PlatformMesh == nullptr)
-	{
-		return PreviewActorTransform;
-	}
-
-	return PlatformMesh->GetRelativeTransform() * PreviewActorTransform;
-}
-
-bool AUOUFloorPlatformActor::ShouldUseTargetMarkerTransform() const
-{
-	return bUseTargetMarkerTransform && IsValid(TargetMarkerActor);
-}
-
-void AUOUFloorPlatformActor::SyncTargetMarkerPreview()
-{
-	if (!ShouldUseTargetMarkerTransform())
-	{
-		return;
-	}
-
-	TargetMarkerActor->SyncPreviewFromMesh(PlatformMesh);
 }
 
 void AUOUFloorPlatformActor::UpdateEditorPreviewVisuals()
 {
-	const bool bUsesTargetMarker = ShouldUseTargetMarkerTransform();
-	SyncTargetMarkerPreview();
-
-	if (RotationPivot != nullptr)
-	{
-		RotationPivot->SetVisibility(!bUsesTargetMarker, true);
-	}
-
-	if (RotationPivotMarker != nullptr)
-	{
-		RotationPivotMarker->SetVisibility(bUseTargetRotation && !bUsesTargetMarker, true);
-	}
+	SyncSequentialTargetMarkerPreviews();
 
 	const FVector StartWorldLocation = StartTransform.GetLocation();
-	const FVector TargetWorldLocation = bUsesTargetMarker
-		? TargetMarkerActor->GetActorLocation()
-		: StartTransform.GetLocation() + StartTransform.TransformVectorNoScale(TargetLocalOffset);
-	const FVector MoveOffsetWorld = TargetWorldLocation - StartWorldLocation;
-	const bool bHasMoveOffset = !MoveOffsetWorld.IsNearlyZero();
+	TArray<FVector> PreviewPathPoints;
+	PreviewPathPoints.Add(StartWorldLocation);
 
-	if (MovePreviewPath != nullptr)
+	if (bUseSequentialTargetMarkers && SequentialTargetMarkers.Num() > 0)
 	{
-		MovePreviewPath->SetVisibility(bShowMovePreviewArrow && bHasMoveOffset, true);
-		if (bHasMoveOffset)
+		for (const TObjectPtr<AUOUFloorPlatformTargetActor>& SequentialTargetMarker : SequentialTargetMarkers)
 		{
-			// 시작점과 목표 지점을 실제 스플라인 선으로 이어서 경로를 명확하게 보여줍니다.
-			MovePreviewPath->SetLocationAtSplinePoint(0, StartWorldLocation, ESplineCoordinateSpace::World, false);
-			MovePreviewPath->SetLocationAtSplinePoint(1, TargetWorldLocation, ESplineCoordinateSpace::World, false);
-			MovePreviewPath->SetSplinePointType(0, ESplinePointType::Linear, false);
-			MovePreviewPath->SetSplinePointType(1, ESplinePointType::Linear, false);
-			MovePreviewPath->UpdateSpline();
+			if (IsValid(SequentialTargetMarker))
+			{
+				PreviewPathPoints.Add(SequentialTargetMarker->GetActorLocation());
+			}
+		}
+
+		if (bLoopSequentialTargetMarkers && PreviewPathPoints.Num() > 1)
+		{
+			PreviewPathPoints.Add(bLoopMoveStepsThroughStart ? StartWorldLocation : PreviewPathPoints[1]);
 		}
 	}
 
-	if (TransformPreviewMesh == nullptr)
+	if (PreviewPathPoints.Num() == 1)
 	{
-		return;
+		PreviewPathPoints.Add(TargetTransform.GetLocation());
 	}
 
-	const bool bHasPreviewMesh = PlatformMesh != nullptr && PlatformMesh->GetStaticMesh() != nullptr;
-	// 목표 마커 액터를 쓰는 동안에는 목표 마커 쪽 미리보기만 남겨서 중복 표시를 피합니다.
-	const bool bShouldShowPreview = bShowTransformPreview && bHasPreviewMesh && !bUsesTargetMarker;
-	TransformPreviewMesh->SetVisibility(bShouldShowPreview, true);
-
-	if (!bShouldShowPreview)
+	bool bHasMoveOffset = false;
+	for (int32 PointIndex = 1; PointIndex < PreviewPathPoints.Num(); ++PointIndex)
 	{
-		return;
+		if (!PreviewPathPoints[PointIndex].Equals(PreviewPathPoints[PointIndex - 1]))
+		{
+			bHasMoveOffset = true;
+			break;
+		}
 	}
 
-	SyncTransformPreviewMesh();
-	TransformPreviewMesh->SetWorldTransform(BuildPreviewMeshWorldTransform(PreviewAlpha), false, nullptr, ETeleportType::TeleportPhysics);
-}
-
-void AUOUFloorPlatformActor::SyncTransformPreviewMesh()
-{
-	if (PlatformMesh == nullptr || TransformPreviewMesh == nullptr)
+	if (MovePreviewPath != nullptr)
 	{
-		return;
+		// 경로 미리보기는 플랫폼의 자식 컴포넌트지만 월드 기준으로 고정해 플랫폼 이동을 따라가지 않게 합니다.
+		MovePreviewPath->SetWorldTransform(FTransform::Identity, false, nullptr, ETeleportType::TeleportPhysics);
+		MovePreviewPath->SetVisibility(bShowMovePreviewPath && bHasMoveOffset, true);
+		if (bHasMoveOffset)
+		{
+			// 시작점과 목표 지점을 실제 스플라인 선으로 이어서 경로를 명확하게 보여줍니다.
+			MovePreviewPath->ClearSplinePoints(false);
+			for (int32 PointIndex = 0; PointIndex < PreviewPathPoints.Num(); ++PointIndex)
+			{
+				MovePreviewPath->AddSplinePoint(PreviewPathPoints[PointIndex], ESplineCoordinateSpace::World, false);
+				MovePreviewPath->SetSplinePointType(PointIndex, ESplinePointType::Linear, false);
+			}
+			MovePreviewPath->UpdateSpline();
+		}
 	}
-
-	TransformPreviewMesh->SetStaticMesh(PlatformMesh->GetStaticMesh());
-	TransformPreviewMesh->SetRelativeScale3D(PlatformMesh->GetRelativeScale3D());
-
-	const int32 MaterialCount = PlatformMesh->GetNumMaterials();
-	for (int32 MaterialIndex = 0; MaterialIndex < MaterialCount; ++MaterialIndex)
-	{
-		TransformPreviewMesh->SetMaterial(MaterialIndex, PlatformMesh->GetMaterial(MaterialIndex));
-	}
-}
-
-FVector AUOUFloorPlatformActor::GetRotationPivotWorldLocation() const
-{
-	if (RotationPivot == nullptr)
-	{
-		return StartTransform.GetLocation();
-	}
-
-	return StartTransform.TransformPosition(RotationPivot->GetRelativeLocation());
-}
-
-FVector AUOUFloorPlatformActor::GetRotationAxisWorldDirection() const
-{
-	if (RotationPivot == nullptr)
-	{
-		return StartTransform.GetRotation().GetAxisX();
-	}
-
-	const FVector PivotAxisLocal = RotationPivot->GetRelativeTransform().TransformVectorNoScale(FVector::ForwardVector);
-	return StartTransform.TransformVectorNoScale(PivotAxisLocal).GetSafeNormal();
 }
 
 float AUOUFloorPlatformActor::ResolveMoveAlpha(float RawAlpha) const
 {
+	const float SafeRawAlpha = FMath::Clamp(RawAlpha, 0.0f, 1.0f);
+
 	if (MoveCurve == nullptr)
 	{
-		return RawAlpha;
+		switch (EasingMode)
+		{
+		case EUOUFloorPlatformEasingMode::EaseIn:
+			return FMath::InterpEaseIn(0.0f, 1.0f, SafeRawAlpha, EaseExponent);
+		case EUOUFloorPlatformEasingMode::EaseOut:
+			return FMath::InterpEaseOut(0.0f, 1.0f, SafeRawAlpha, EaseExponent);
+		case EUOUFloorPlatformEasingMode::EaseInOut:
+			return FMath::InterpEaseInOut(0.0f, 1.0f, SafeRawAlpha, EaseExponent);
+		case EUOUFloorPlatformEasingMode::Linear:
+		default:
+			return SafeRawAlpha;
+		}
 	}
 
-	return FMath::Clamp(MoveCurve->GetFloatValue(RawAlpha), 0.0f, 1.0f);
+	return FMath::Clamp(MoveCurve->GetFloatValue(SafeRawAlpha), 0.0f, 1.0f);
 }
