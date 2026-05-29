@@ -90,6 +90,27 @@ bool AUOUPlayerBlockingWallActor::IsWallEnabled() const
 	return bWallEnabled;
 }
 
+void AUOUPlayerBlockingWallActor::ApplyPuzzleResult_Implementation(EOUUPuzzleResultAction Action)
+{
+	switch (Action)
+	{
+	case EOUUPuzzleResultAction::Activate:
+		DisableWall();
+		break;
+	case EOUUPuzzleResultAction::Deactivate:
+		EnableWall();
+		break;
+	case EOUUPuzzleResultAction::Toggle:
+		ToggleWall();
+		break;
+	case EOUUPuzzleResultAction::None:
+	case EOUUPuzzleResultAction::Pause:
+	case EOUUPuzzleResultAction::Resume:
+	default:
+		break;
+	}
+}
+
 void AUOUPlayerBlockingWallActor::ApplyCollisionSettings()
 {
 	if (BlockingVolume == nullptr)

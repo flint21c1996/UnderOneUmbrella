@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "Puzzle/Core/UOUPuzzleResultReceiver.h"
 #include "UOUPlayerBlockingWallActor.generated.h"
 
 class UBoxComponent;
@@ -14,7 +15,7 @@ class UStaticMeshComponent;
 // 플레이어 이동만 막기 위한 투명 벽 액터입니다.
 // 충돌 켜기와 끄기를 에디터 버튼과 런타임 함수 양쪽에서 사용할 수 있습니다.
 UCLASS(Blueprintable, meta=(DisplayName="UOU Player Blocking Wall Actor"))
-class AUOUPlayerBlockingWallActor : public AActor
+class AUOUPlayerBlockingWallActor : public AActor, public IUOUPuzzleResultReceiver
 {
 	GENERATED_BODY()
 
@@ -84,6 +85,10 @@ public:
 	// 현재 투명 벽이 플레이어를 막는 상태인지 반환합니다.
 	UFUNCTION(BlueprintPure, Category = "Player Blocking Wall|Runtime")
 	bool IsWallEnabled() const;
+
+	// 퍼즐 결과를 받아 투명벽의 활성 상태로 변환합니다.
+	// Activate는 벽 제거, Deactivate는 벽 복구, Toggle은 현재 상태 반전으로 사용합니다.
+	virtual void ApplyPuzzleResult_Implementation(EOUUPuzzleResultAction Action) override;
 
 protected:
 	virtual void BeginPlay() override;
