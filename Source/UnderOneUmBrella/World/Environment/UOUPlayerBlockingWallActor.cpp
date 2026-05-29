@@ -62,6 +62,34 @@ void AUOUPlayerBlockingWallActor::OnConstruction(const FTransform& Transform)
 	ApplyPreviewSettings();
 }
 
+void AUOUPlayerBlockingWallActor::EnableWall()
+{
+	SetWallEnabled(true);
+}
+
+void AUOUPlayerBlockingWallActor::DisableWall()
+{
+	SetWallEnabled(false);
+}
+
+void AUOUPlayerBlockingWallActor::ToggleWall()
+{
+	SetWallEnabled(!bWallEnabled);
+}
+
+void AUOUPlayerBlockingWallActor::SetWallEnabled(bool bNewEnabled)
+{
+	bWallEnabled = bNewEnabled;
+
+	ApplyCollisionSettings();
+	ApplyPreviewSettings();
+}
+
+bool AUOUPlayerBlockingWallActor::IsWallEnabled() const
+{
+	return bWallEnabled;
+}
+
 void AUOUPlayerBlockingWallActor::ApplyCollisionSettings()
 {
 	if (BlockingVolume == nullptr)
@@ -70,11 +98,18 @@ void AUOUPlayerBlockingWallActor::ApplyCollisionSettings()
 	}
 
 	BlockingVolume->SetBoxExtent(WallExtent);
-	BlockingVolume->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 	BlockingVolume->SetCollisionObjectType(ECC_WorldStatic);
 	BlockingVolume->SetCollisionResponseToAllChannels(ECR_Ignore);
 	BlockingVolume->SetCollisionResponseToChannel(BlockedChannel, ECR_Block);
 	BlockingVolume->SetGenerateOverlapEvents(false);
+
+	if (!bWallEnabled)
+	{
+		BlockingVolume->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		return;
+	}
+
+	BlockingVolume->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 }
 
 void AUOUPlayerBlockingWallActor::ApplyPreviewSettings()
@@ -89,7 +124,7 @@ void AUOUPlayerBlockingWallActor::ApplyPreviewSettings()
 		PreviewMesh->SetMaterial(0, PreviewMaterial);
 	}
 
-	// 엔진 기본 Cube는 한 변이 100cm라서 Box Extent를 50으로 나누면 충돌 박스와 같은 크기가 됩니다.
+	// 엔진 기본 Cube는 전체 크기가 100cm라서 Box Extent를 50으로 나누면 충돌 박스와 같은 크기가 됩니다.
 	const FVector SafeExtent(
 		FMath::Max(1.0f, WallExtent.X),
 		FMath::Max(1.0f, WallExtent.Y),
