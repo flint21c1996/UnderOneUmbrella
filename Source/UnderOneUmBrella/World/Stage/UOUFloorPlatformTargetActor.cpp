@@ -77,3 +77,31 @@ void AUOUFloorPlatformTargetActor::SetTargetPreviewMeshVisible(bool bVisible)
 
 	TargetPreviewMesh->SetVisibility(bVisible, true);
 }
+
+EUOUFloorPlatformRotationMode AUOUFloorPlatformTargetActor::ResolveRotationMode(EUOUFloorPlatformRotationMode PlatformDefault) const
+{
+	switch (StepRotationMode)
+	{
+	case EUOUFloorPlatformStepRotationMode::TransformLerp:
+		return EUOUFloorPlatformRotationMode::TransformLerp;
+	case EUOUFloorPlatformStepRotationMode::Hinge:
+		return EUOUFloorPlatformRotationMode::Hinge;
+	case EUOUFloorPlatformStepRotationMode::UsePlatformDefault:
+	default:
+		return PlatformDefault;
+	}
+}
+
+EUOUFloorPlatformHingeEdge AUOUFloorPlatformTargetActor::ResolveHingeEdge(EUOUFloorPlatformHingeEdge PlatformDefault) const
+{
+	return StepRotationMode == EUOUFloorPlatformStepRotationMode::Hinge
+		? StepHingeEdge
+		: PlatformDefault;
+}
+
+FVector AUOUFloorPlatformTargetActor::ResolveCustomHingeLocalOffset(const FVector& PlatformDefault) const
+{
+	return StepRotationMode == EUOUFloorPlatformStepRotationMode::Hinge
+		? StepCustomHingeLocalOffset
+		: PlatformDefault;
+}

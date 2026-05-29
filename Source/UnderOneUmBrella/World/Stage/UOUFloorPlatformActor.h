@@ -280,7 +280,7 @@ protected:
 	void AdvanceSequentialTargetIndex();
 
 	// 현재 위치에서 지정한 목표 트랜스폼까지 이동을 시작합니다.
-	bool BeginMoveToTransform(const FTransform& InTargetTransform);
+	bool BeginMoveToTransform(const FTransform& InTargetTransform, const AUOUFloorPlatformTargetActor* TargetMarker);
 
 	// 현재 이동 구간의 시작과 목표를 기준으로 실제 플랫폼 트랜스폼을 계산합니다.
 	FTransform BuildActivePlatformTransformAtAlpha(float Alpha) const;
@@ -288,11 +288,38 @@ protected:
 	// 두 트랜스폼 사이를 선택된 경로 모드와 회전 보간으로 계산합니다.
 	FTransform BuildTransformBetween(const FTransform& FromTransform, const FTransform& ToTransform, float Alpha) const;
 
+	// 지정한 이동 설정으로 두 트랜스폼 사이의 실제 플랫폼 트랜스폼을 계산합니다.
+	FTransform BuildTransformBetween(
+		const FTransform& FromTransform,
+		const FTransform& ToTransform,
+		float Alpha,
+		EUOUFloorPlatformRotationMode InRotationMode,
+		EUOUFloorPlatformHingeEdge InHingeEdge,
+		const FVector& InCustomHingeLocalOffset) const;
+
 	// 선택된 힌지 변을 월드에 고정한 채 목표 회전값까지 접히는 변환을 계산합니다.
-	FTransform BuildHingeTransformBetween(const FTransform& FromTransform, const FTransform& ToTransform, float Alpha) const;
+	FTransform BuildHingeTransformBetween(
+		const FTransform& FromTransform,
+		const FTransform& ToTransform,
+		float Alpha,
+		EUOUFloorPlatformHingeEdge InHingeEdge,
+		const FVector& InCustomHingeLocalOffset) const;
 
 	// PlatformMesh의 바운드와 커스텀 값을 이용해 액터 로컬 기준 힌지 위치를 계산합니다.
-	bool ResolveHingeLocalOffset(FVector& OutHingeLocalOffset) const;
+	bool ResolveHingeLocalOffset(
+		FVector& OutHingeLocalOffset,
+		EUOUFloorPlatformHingeEdge InHingeEdge,
+		const FVector& InCustomHingeLocalOffset) const;
+
+	// 목표 마커가 가진 구간별 설정과 플랫폼 기본 설정을 합쳐 이번 이동에 사용할 값을 결정합니다.
+	void ResolveMoveSettingsFromTarget(
+		const AUOUFloorPlatformTargetActor* TargetMarker,
+		EUOUFloorPlatformRotationMode& OutRotationMode,
+		EUOUFloorPlatformHingeEdge& OutHingeEdge,
+		FVector& OutCustomHingeLocalOffset) const;
+
+	// 실제 이동 중 Tick에서 같은 설정을 계속 쓰도록 현재 구간 설정을 보관합니다.
+	void CacheActiveMoveSettings(const AUOUFloorPlatformTargetActor* TargetMarker);
 
 	// 선택된 경로 모드에 따라 시작점과 목표점 사이의 위치를 계산합니다.
 	FVector EvaluatePathLocation(const FTransform& FromTransform, const FTransform& ToTransform, float Alpha) const;
@@ -334,6 +361,18 @@ private:
 	// 현재 진행 중인 이동 구간의 실제 목표 트랜스폼입니다.
 	UPROPERTY(Transient)
 	FTransform MoveTargetTransform = FTransform::Identity;
+
+	// 현재 이동 구간에서 사용할 회전 방식입니다.
+	UPROPERTY(Transient)
+	EUOUFloorPlatformRotationMode ActiveMoveRotationMode = EUOUFloorPlatformRotationMode::TransformLerp;
+
+	// 현재 이동 구간에서 사용할 힌지 고정 변입니다.
+	UPROPERTY(Transient)
+	EUOUFloorPlatformHingeEdge ActiveMoveHingeEdge = EUOUFloorPlatformHingeEdge::NegativeY;
+
+	// 현재 이동 구간에서 사용할 커스텀 힌지 로컬 위치입니다.
+	UPROPERTY(Transient)
+	FVector ActiveMoveCustomHingeLocalOffset = FVector::ZeroVector;
 
 	// 시작 위치가 한 번이라도 기록되었는지 확인하는 값입니다.
 	UPROPERTY(Transient)

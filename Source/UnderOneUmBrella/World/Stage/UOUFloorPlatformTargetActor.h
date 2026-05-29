@@ -4,12 +4,23 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "World/Stage/UOUFloorPlatformActor.h"
 #include "UOUFloorPlatformTargetActor.generated.h"
 
 class UMaterialInterface;
 class USceneComponent;
 class USphereComponent;
 class UStaticMeshComponent;
+
+// 목표 마커가 이동 구간별 회전 방식을 직접 덮어쓸지 정합니다.
+// 기본값을 사용하면 플랫폼 액터에 있는 Movement 설정을 그대로 따릅니다.
+UENUM(BlueprintType)
+enum class EUOUFloorPlatformStepRotationMode : uint8
+{
+	UsePlatformDefault,
+	TransformLerp,
+	Hinge
+};
 
 // 층 플랫폼의 목표 위치와 목표 회전을 월드에 직접 배치해서 정하는 마커 액터입니다.
 // 디자이너가 이 액터를 움직이고 돌리면 플랫폼은 해당 트랜스폼을 최종 상태로 사용합니다.
@@ -37,9 +48,30 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Target")
 	TObjectPtr<UMaterialInterface> TargetPreviewMaterial = nullptr;
 
+	// 이 마커로 이동하는 구간에서 사용할 회전 방식을 정합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Move Step", meta = (DisplayName = "Step Rotation Mode"))
+	EUOUFloorPlatformStepRotationMode StepRotationMode = EUOUFloorPlatformStepRotationMode::UsePlatformDefault;
+
+	// Step Rotation Mode가 Hinge일 때 이 구간에서만 사용할 고정 변입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Move Step", meta = (EditCondition = "StepRotationMode == EUOUFloorPlatformStepRotationMode::Hinge", EditConditionHides, DisplayName = "Step Hinge Edge"))
+	EUOUFloorPlatformHingeEdge StepHingeEdge = EUOUFloorPlatformHingeEdge::NegativeY;
+
+	// Step Hinge Edge가 Custom일 때 이 구간에서만 사용할 로컬 힌지 위치입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Move Step", meta = (EditCondition = "StepRotationMode == EUOUFloorPlatformStepRotationMode::Hinge && StepHingeEdge == EUOUFloorPlatformHingeEdge::Custom", EditConditionHides, DisplayName = "Step Custom Hinge Local Offset"))
+	FVector StepCustomHingeLocalOffset = FVector::ZeroVector;
+
 	// 플랫폼 메쉬와 같은 리소스를 목표 미리보기 메쉬에 복사합니다.
 	void SyncPreviewFromMesh(const UStaticMeshComponent* SourceMesh);
 
 	// 목표 위치에 놓인 결과 플랫폼 미리보기 메쉬만 켜고 끕니다.
 	void SetTargetPreviewMeshVisible(bool bVisible);
+
+	// 플랫폼 기본 설정과 마커의 덮어쓰기 값을 합쳐 실제 이동 회전 방식을 반환합니다.
+	EUOUFloorPlatformRotationMode ResolveRotationMode(EUOUFloorPlatformRotationMode PlatformDefault) const;
+
+	// 플랫폼 기본 설정과 마커의 덮어쓰기 값을 합쳐 실제 힌지 변을 반환합니다.
+	EUOUFloorPlatformHingeEdge ResolveHingeEdge(EUOUFloorPlatformHingeEdge PlatformDefault) const;
+
+	// 플랫폼 기본 설정과 마커의 덮어쓰기 값을 합쳐 실제 커스텀 힌지 위치를 반환합니다.
+	FVector ResolveCustomHingeLocalOffset(const FVector& PlatformDefault) const;
 };

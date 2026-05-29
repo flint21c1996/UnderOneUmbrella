@@ -208,7 +208,7 @@ void AUOUFloorPlatformActor::MoveToNextSequentialTarget()
 		StepComponent->ClearReturnToStartRequest();
 		StepComponent->SetActiveTargetIndex(NextTargetIndex);
 	}
-	BeginMoveToTransform(NextTargetTransform);
+	BeginMoveToTransform(NextTargetTransform, GetSequentialTargetMarkerAt(NextTargetIndex));
 }
 
 void AUOUFloorPlatformActor::ResetPlatform()
@@ -274,7 +274,18 @@ void AUOUFloorPlatformActor::SnapToTarget()
 		return;
 	}
 
-	const FTransform ResolvedSnapTargetTransform = BuildTransformBetween(GetActorTransform(), SnapTargetTransform, 1.0f);
+	EUOUFloorPlatformRotationMode SnapRotationMode;
+	EUOUFloorPlatformHingeEdge SnapHingeEdge;
+	FVector SnapCustomHingeLocalOffset;
+	ResolveMoveSettingsFromTarget(GetSequentialTargetMarkerAt(SnapTargetIndex), SnapRotationMode, SnapHingeEdge, SnapCustomHingeLocalOffset);
+
+	const FTransform ResolvedSnapTargetTransform = BuildTransformBetween(
+		GetActorTransform(),
+		SnapTargetTransform,
+		1.0f,
+		SnapRotationMode,
+		SnapHingeEdge,
+		SnapCustomHingeLocalOffset);
 
 	bIsMoving = false;
 	bIsAtTarget = true;
@@ -321,11 +332,6 @@ void AUOUFloorPlatformActor::SetTargetToStart()
 
 void AUOUFloorPlatformActor::SnapCurrentStepToHingeResult()
 {
-	if (RotationMode != EUOUFloorPlatformRotationMode::Hinge)
-	{
-		return;
-	}
-
 	EnsureStartTransform();
 
 	RefreshTargetTransforms();
@@ -336,8 +342,22 @@ void AUOUFloorPlatformActor::SnapCurrentStepToHingeResult()
 		return;
 	}
 
+	EUOUFloorPlatformRotationMode ResolvedRotationMode;
+	EUOUFloorPlatformHingeEdge ResolvedHingeEdge;
+	FVector ResolvedCustomHingeLocalOffset;
+	ResolveMoveSettingsFromTarget(SequentialTargetMarker, ResolvedRotationMode, ResolvedHingeEdge, ResolvedCustomHingeLocalOffset);
+	if (ResolvedRotationMode != EUOUFloorPlatformRotationMode::Hinge)
+	{
+		return;
+	}
+
 	// 목표 마커의 회전은 유지하고 위치만 힌지 접힘 결과에 맞춰서 보정합니다.
-	const FTransform HingeTargetTransform = BuildHingeTransformBetween(GetActorTransform(), SequentialTargetMarker->GetActorTransform(), 1.0f);
+	const FTransform HingeTargetTransform = BuildHingeTransformBetween(
+		GetActorTransform(),
+		SequentialTargetMarker->GetActorTransform(),
+		1.0f,
+		ResolvedHingeEdge,
+		ResolvedCustomHingeLocalOffset);
 	SequentialTargetMarker->SetActorTransform(HingeTargetTransform, false, nullptr, ETeleportType::TeleportPhysics);
 	SequentialTargetMarker->SyncPreviewFromMesh(PlatformMesh);
 	SequentialTargetMarker->SetTargetPreviewMeshVisible(bShowTransformPreview);
@@ -575,15 +595,23 @@ void AUOUFloorPlatformActor::AdvanceSequentialTargetIndex()
 		RuntimeSequentialTargetIndex);
 }
 
-bool AUOUFloorPlatformActor::BeginMoveToTransform(const FTransform& InTargetTransform)
+bool AUOUFloorPlatformActor::BeginMoveToTransform(const FTransform& InTargetTransform, const AUOUFloorPlatformTargetActor* TargetMarker)
 {
 	if (bIsMoving)
 	{
 		return false;
 	}
 
+	CacheActiveMoveSettings(TargetMarker);
+
 	MoveStartTransform = GetActorTransform();
-	MoveTargetTransform = BuildTransformBetween(MoveStartTransform, InTargetTransform, 1.0f);
+	MoveTargetTransform = BuildTransformBetween(
+		MoveStartTransform,
+		InTargetTransform,
+		1.0f,
+		ActiveMoveRotationMode,
+		ActiveMoveHingeEdge,
+		ActiveMoveCustomHingeLocalOffset);
 
 	bIsMoving = true;
 	bIsAtTarget = false;
@@ -599,15 +627,38 @@ bool AUOUFloorPlatformActor::BeginMoveToTransform(const FTransform& InTargetTran
 
 FTransform AUOUFloorPlatformActor::BuildActivePlatformTransformAtAlpha(float Alpha) const
 {
-	return BuildTransformBetween(MoveStartTransform, MoveTargetTransform, Alpha);
+	return BuildTransformBetween(
+		MoveStartTransform,
+		MoveTargetTransform,
+		Alpha,
+		ActiveMoveRotationMode,
+		ActiveMoveHingeEdge,
+		ActiveMoveCustomHingeLocalOffset);
 }
 
 FTransform AUOUFloorPlatformActor::BuildTransformBetween(const FTransform& FromTransform, const FTransform& ToTransform, float Alpha) const
 {
+	return BuildTransformBetween(
+		FromTransform,
+		ToTransform,
+		Alpha,
+		RotationMode,
+		HingeEdge,
+		CustomHingeLocalOffset);
+}
+
+FTransform AUOUFloorPlatformActor::BuildTransformBetween(
+	const FTransform& FromTransform,
+	const FTransform& ToTransform,
+	float Alpha,
+	EUOUFloorPlatformRotationMode InRotationMode,
+	EUOUFloorPlatformHingeEdge InHingeEdge,
+	const FVector& InCustomHingeLocalOffset) const
+{
 	const float SafeAlpha = FMath::Clamp(Alpha, 0.0f, 1.0f);
-	if (RotationMode == EUOUFloorPlatformRotationMode::Hinge)
+	if (InRotationMode == EUOUFloorPlatformRotationMode::Hinge)
 	{
-		return BuildHingeTransformBetween(FromTransform, ToTransform, SafeAlpha);
+		return BuildHingeTransformBetween(FromTransform, ToTransform, SafeAlpha, InHingeEdge, InCustomHingeLocalOffset);
 	}
 
 	const FVector NewLocation = EvaluatePathLocation(FromTransform, ToTransform, SafeAlpha);
@@ -617,12 +668,17 @@ FTransform AUOUFloorPlatformActor::BuildTransformBetween(const FTransform& FromT
 	return FTransform(NewRotation, NewLocation, NewScale);
 }
 
-FTransform AUOUFloorPlatformActor::BuildHingeTransformBetween(const FTransform& FromTransform, const FTransform& ToTransform, float Alpha) const
+FTransform AUOUFloorPlatformActor::BuildHingeTransformBetween(
+	const FTransform& FromTransform,
+	const FTransform& ToTransform,
+	float Alpha,
+	EUOUFloorPlatformHingeEdge InHingeEdge,
+	const FVector& InCustomHingeLocalOffset) const
 {
 	const float SafeAlpha = FMath::Clamp(Alpha, 0.0f, 1.0f);
 
 	FVector HingeLocalOffset = FVector::ZeroVector;
-	if (!ResolveHingeLocalOffset(HingeLocalOffset))
+	if (!ResolveHingeLocalOffset(HingeLocalOffset, InHingeEdge, InCustomHingeLocalOffset))
 	{
 		const FVector NewLocation = EvaluatePathLocation(FromTransform, ToTransform, SafeAlpha);
 		const FQuat NewRotation = FQuat::Slerp(FromTransform.GetRotation(), ToTransform.GetRotation(), SafeAlpha);
@@ -641,18 +697,21 @@ FTransform AUOUFloorPlatformActor::BuildHingeTransformBetween(const FTransform& 
 	return FTransform(NewRotation, NewLocation, NewScale);
 }
 
-bool AUOUFloorPlatformActor::ResolveHingeLocalOffset(FVector& OutHingeLocalOffset) const
+bool AUOUFloorPlatformActor::ResolveHingeLocalOffset(
+	FVector& OutHingeLocalOffset,
+	EUOUFloorPlatformHingeEdge InHingeEdge,
+	const FVector& InCustomHingeLocalOffset) const
 {
-	if (HingeEdge == EUOUFloorPlatformHingeEdge::Custom)
+	if (InHingeEdge == EUOUFloorPlatformHingeEdge::Custom)
 	{
-		OutHingeLocalOffset = CustomHingeLocalOffset;
+		OutHingeLocalOffset = InCustomHingeLocalOffset;
 		return true;
 	}
 
 	if (PlatformMesh == nullptr || PlatformMesh->GetStaticMesh() == nullptr)
 	{
-		OutHingeLocalOffset = CustomHingeLocalOffset;
-		return !CustomHingeLocalOffset.IsNearlyZero();
+		OutHingeLocalOffset = InCustomHingeLocalOffset;
+		return !InCustomHingeLocalOffset.IsNearlyZero();
 	}
 
 	FVector MeshBoundsMin = FVector::ZeroVector;
@@ -660,7 +719,7 @@ bool AUOUFloorPlatformActor::ResolveHingeLocalOffset(FVector& OutHingeLocalOffse
 	PlatformMesh->GetLocalBounds(MeshBoundsMin, MeshBoundsMax);
 
 	FVector MeshLocalHingeOffset = (MeshBoundsMin + MeshBoundsMax) * 0.5f;
-	switch (HingeEdge)
+	switch (InHingeEdge)
 	{
 	case EUOUFloorPlatformHingeEdge::PositiveX:
 		MeshLocalHingeOffset.X = MeshBoundsMax.X;
@@ -682,6 +741,35 @@ bool AUOUFloorPlatformActor::ResolveHingeLocalOffset(FVector& OutHingeLocalOffse
 	// 메쉬가 루트에서 떨어져 있거나 스케일된 경우를 고려해 메쉬 로컬 위치를 액터 로컬 위치로 변환합니다.
 	OutHingeLocalOffset = PlatformMesh->GetRelativeTransform().TransformPosition(MeshLocalHingeOffset);
 	return true;
+}
+
+void AUOUFloorPlatformActor::ResolveMoveSettingsFromTarget(
+	const AUOUFloorPlatformTargetActor* TargetMarker,
+	EUOUFloorPlatformRotationMode& OutRotationMode,
+	EUOUFloorPlatformHingeEdge& OutHingeEdge,
+	FVector& OutCustomHingeLocalOffset) const
+{
+	OutRotationMode = RotationMode;
+	OutHingeEdge = HingeEdge;
+	OutCustomHingeLocalOffset = CustomHingeLocalOffset;
+
+	if (TargetMarker == nullptr)
+	{
+		return;
+	}
+
+	OutRotationMode = TargetMarker->ResolveRotationMode(OutRotationMode);
+	OutHingeEdge = TargetMarker->ResolveHingeEdge(OutHingeEdge);
+	OutCustomHingeLocalOffset = TargetMarker->ResolveCustomHingeLocalOffset(OutCustomHingeLocalOffset);
+}
+
+void AUOUFloorPlatformActor::CacheActiveMoveSettings(const AUOUFloorPlatformTargetActor* TargetMarker)
+{
+	ResolveMoveSettingsFromTarget(
+		TargetMarker,
+		ActiveMoveRotationMode,
+		ActiveMoveHingeEdge,
+		ActiveMoveCustomHingeLocalOffset);
 }
 
 FVector AUOUFloorPlatformActor::EvaluatePathLocation(const FTransform& FromTransform, const FTransform& ToTransform, float Alpha) const
@@ -727,18 +815,40 @@ void AUOUFloorPlatformActor::UpdateEditorPreviewVisuals()
 	TArray<FVector> PreviewPathPoints;
 	PreviewPathPoints.Add(StartWorldLocation);
 
-	auto AppendPreviewSegment = [this, &PreviewPathPoints](const FTransform& SegmentFromTransform, const FTransform& SegmentToTransform)
+	auto AppendPreviewSegment = [this, &PreviewPathPoints](
+		const FTransform& SegmentFromTransform,
+		const FTransform& SegmentToTransform,
+		const AUOUFloorPlatformTargetActor* TargetMarker) -> FTransform
 	{
+		EUOUFloorPlatformRotationMode ResolvedRotationMode;
+		EUOUFloorPlatformHingeEdge ResolvedHingeEdge;
+		FVector ResolvedCustomHingeLocalOffset;
+		ResolveMoveSettingsFromTarget(TargetMarker, ResolvedRotationMode, ResolvedHingeEdge, ResolvedCustomHingeLocalOffset);
+
 		constexpr int32 PreviewSampleCount = 8;
-		const int32 SampleCount = (RotationMode == EUOUFloorPlatformRotationMode::Hinge || PathMode == EUOUFloorPlatformPathMode::CubicBezier)
+		const int32 SampleCount = (ResolvedRotationMode == EUOUFloorPlatformRotationMode::Hinge || PathMode == EUOUFloorPlatformPathMode::CubicBezier)
 			? PreviewSampleCount
 			: 1;
 
 		for (int32 SampleIndex = 1; SampleIndex <= SampleCount; ++SampleIndex)
 		{
 			const float SampleAlpha = static_cast<float>(SampleIndex) / static_cast<float>(SampleCount);
-			PreviewPathPoints.Add(BuildTransformBetween(SegmentFromTransform, SegmentToTransform, SampleAlpha).GetLocation());
+			PreviewPathPoints.Add(BuildTransformBetween(
+				SegmentFromTransform,
+				SegmentToTransform,
+				SampleAlpha,
+				ResolvedRotationMode,
+				ResolvedHingeEdge,
+				ResolvedCustomHingeLocalOffset).GetLocation());
 		}
+
+		return BuildTransformBetween(
+			SegmentFromTransform,
+			SegmentToTransform,
+			1.0f,
+			ResolvedRotationMode,
+			ResolvedHingeEdge,
+			ResolvedCustomHingeLocalOffset);
 	};
 
 	FTransform PreviewSegmentStartTransform = StartTransform;
@@ -749,8 +859,7 @@ void AUOUFloorPlatformActor::UpdateEditorPreviewVisuals()
 			if (IsValid(SequentialTargetMarker))
 			{
 				const FTransform RawTargetTransform = SequentialTargetMarker->GetActorTransform();
-				AppendPreviewSegment(PreviewSegmentStartTransform, RawTargetTransform);
-				PreviewSegmentStartTransform = BuildTransformBetween(PreviewSegmentStartTransform, RawTargetTransform, 1.0f);
+				PreviewSegmentStartTransform = AppendPreviewSegment(PreviewSegmentStartTransform, RawTargetTransform, SequentialTargetMarker.Get());
 			}
 		}
 
@@ -758,7 +867,7 @@ void AUOUFloorPlatformActor::UpdateEditorPreviewVisuals()
 		{
 			if (bLoopMoveStepsThroughStart)
 			{
-				AppendPreviewSegment(PreviewSegmentStartTransform, StartTransform);
+				AppendPreviewSegment(PreviewSegmentStartTransform, StartTransform, nullptr);
 			}
 			else
 			{
@@ -766,7 +875,7 @@ void AUOUFloorPlatformActor::UpdateEditorPreviewVisuals()
 				{
 					if (IsValid(SequentialTargetMarker))
 					{
-						AppendPreviewSegment(PreviewSegmentStartTransform, SequentialTargetMarker->GetActorTransform());
+						AppendPreviewSegment(PreviewSegmentStartTransform, SequentialTargetMarker->GetActorTransform(), SequentialTargetMarker.Get());
 						break;
 					}
 				}
@@ -776,7 +885,7 @@ void AUOUFloorPlatformActor::UpdateEditorPreviewVisuals()
 
 	if (PreviewPathPoints.Num() == 1)
 	{
-		AppendPreviewSegment(StartTransform, TargetTransform);
+		AppendPreviewSegment(StartTransform, TargetTransform, nullptr);
 	}
 
 	bool bHasMoveOffset = false;
