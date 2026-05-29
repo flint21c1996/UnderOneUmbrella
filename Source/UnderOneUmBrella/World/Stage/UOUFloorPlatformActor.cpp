@@ -101,6 +101,7 @@ void AUOUFloorPlatformActor::BeginPlay()
 
 	EnsureStartTransform();
 	ResetRuntimeStepIndex();
+	PendingSequentialMoveCount = 0;
 	SetActorTransform(StartTransform, false, nullptr, ETeleportType::TeleportPhysics);
 
 	const bool bShouldStartAtTarget = bStartAtTarget && !ShouldUseSequentialTargetMarkers();
@@ -186,29 +187,12 @@ void AUOUFloorPlatformActor::CaptureCurrentAsStart()
 
 void AUOUFloorPlatformActor::MoveToTarget()
 {
-	MoveToNextSequentialTarget();
+	RequestSequentialMoveSteps(MoveStepCountPerActivate);
 }
 
 void AUOUFloorPlatformActor::MoveToNextSequentialTarget()
 {
-	if (bIsMoving)
-	{
-		return;
-	}
-
-	FTransform NextTargetTransform;
-	int32 NextTargetIndex = INDEX_NONE;
-	if (!ResolveNextSequentialTargetTransform(NextTargetTransform, NextTargetIndex))
-	{
-		return;
-	}
-
-	if (StepComponent != nullptr)
-	{
-		StepComponent->ClearReturnToStartRequest();
-		StepComponent->SetActiveTargetIndex(NextTargetIndex);
-	}
-	BeginMoveToTransform(NextTargetTransform, GetSequentialTargetMarkerAt(NextTargetIndex));
+	RequestSequentialMoveSteps(1);
 }
 
 void AUOUFloorPlatformActor::ResetPlatform()
@@ -228,6 +212,8 @@ void AUOUFloorPlatformActor::ResetPlatform()
 	bIsMoving = false;
 	bIsAtTarget = false;
 	MoveElapsedTime = 0.0f;
+	PendingSequentialMoveCount = 0;
+	ActiveMoveTargetMarker = nullptr;
 	ResetRuntimeStepIndex();
 	if (StepComponent != nullptr)
 	{
@@ -290,6 +276,8 @@ void AUOUFloorPlatformActor::SnapToTarget()
 	bIsMoving = false;
 	bIsAtTarget = true;
 	MoveElapsedTime = MoveDuration;
+	PendingSequentialMoveCount = 0;
+	ActiveMoveTargetMarker = nullptr;
 	if (StepComponent != nullptr)
 	{
 		StepComponent->ClearReturnToStartRequest();
@@ -500,6 +488,10 @@ void AUOUFloorPlatformActor::ResetRuntimeStepIndex()
 
 void AUOUFloorPlatformActor::FinishMoveToTarget()
 {
+	const bool bShouldContinueFromArrivedMarker = ActiveMoveTargetMarker != nullptr
+		&& ActiveMoveTargetMarker->bContinueToNextStepOnArrival;
+	ActiveMoveTargetMarker = nullptr;
+
 	bIsMoving = false;
 	bIsAtTarget = true;
 	MoveElapsedTime = MoveDuration;
@@ -520,6 +512,11 @@ void AUOUFloorPlatformActor::FinishMoveToTarget()
 	AdvanceSequentialTargetIndex();
 
 	OnMoveFinished.Broadcast(this);
+	if (bShouldContinueFromArrivedMarker)
+	{
+		PendingSequentialMoveCount = FMath::Max(PendingSequentialMoveCount, 1);
+	}
+	TryStartQueuedSequentialMove();
 }
 
 void AUOUFloorPlatformActor::ApplyTargetCollisionState()
@@ -595,7 +592,7 @@ void AUOUFloorPlatformActor::AdvanceSequentialTargetIndex()
 		RuntimeSequentialTargetIndex);
 }
 
-bool AUOUFloorPlatformActor::BeginMoveToTransform(const FTransform& InTargetTransform, const AUOUFloorPlatformTargetActor* TargetMarker)
+bool AUOUFloorPlatformActor::BeginMoveToTransform(const FTransform& InTargetTransform, AUOUFloorPlatformTargetActor* TargetMarker)
 {
 	if (bIsMoving)
 	{
@@ -603,6 +600,7 @@ bool AUOUFloorPlatformActor::BeginMoveToTransform(const FTransform& InTargetTran
 	}
 
 	CacheActiveMoveSettings(TargetMarker);
+	ActiveMoveTargetMarker = TargetMarker;
 
 	MoveStartTransform = GetActorTransform();
 	MoveTargetTransform = BuildTransformBetween(
@@ -623,6 +621,46 @@ bool AUOUFloorPlatformActor::BeginMoveToTransform(const FTransform& InTargetTran
 	}
 
 	return true;
+}
+
+void AUOUFloorPlatformActor::RequestSequentialMoveSteps(int32 StepCount)
+{
+	const int32 SafeStepCount = FMath::Max(1, StepCount);
+	PendingSequentialMoveCount += SafeStepCount;
+	TryStartQueuedSequentialMove();
+}
+
+bool AUOUFloorPlatformActor::TryStartQueuedSequentialMove()
+{
+	if (bIsMoving || PendingSequentialMoveCount <= 0)
+	{
+		return false;
+	}
+
+	FTransform NextTargetTransform;
+	int32 NextTargetIndex = INDEX_NONE;
+	if (!ResolveNextSequentialTargetTransform(NextTargetTransform, NextTargetIndex))
+	{
+		PendingSequentialMoveCount = 0;
+		return false;
+	}
+
+	if (GetActorTransform().Equals(NextTargetTransform))
+	{
+		PendingSequentialMoveCount = 0;
+		return false;
+	}
+
+	AUOUFloorPlatformTargetActor* NextTargetMarker = GetSequentialTargetMarkerAt(NextTargetIndex);
+
+	if (StepComponent != nullptr)
+	{
+		StepComponent->ClearReturnToStartRequest();
+		StepComponent->SetActiveTargetIndex(NextTargetIndex);
+	}
+
+	--PendingSequentialMoveCount;
+	return BeginMoveToTransform(NextTargetTransform, NextTargetMarker);
 }
 
 FTransform AUOUFloorPlatformActor::BuildActivePlatformTransformAtAlpha(float Alpha) const

@@ -65,6 +65,11 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Move Step", meta = (EditCondition = "StepRotationMode == EUOUFloorPlatformStepRotationMode::Hinge && StepHingeEdge == EUOUFloorPlatformHingeEdge::Custom", EditConditionHides, DisplayName = "Step Custom Hinge Local Offset"))
 	FVector StepCustomHingeLocalOffset = FVector::ZeroVector;
 
+	// 이 마커에 도착한 직후 다음 이동 스텝을 자동으로 한 번 더 실행할지 정합니다.
+	// 특정 구간만 1->2->3처럼 이어붙이고, 이후 구간은 버튼 입력마다 한 칸씩 움직이게 할 때 사용합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Move Step", meta = (DisplayName = "Continue To Next Step On Arrival"))
+	bool bContinueToNextStepOnArrival = false;
+
 	// 플랫폼 메쉬와 같은 리소스를 목표 미리보기 메쉬에 복사합니다.
 	void SyncPreviewFromMesh(const UStaticMeshComponent* SourceMesh);
 

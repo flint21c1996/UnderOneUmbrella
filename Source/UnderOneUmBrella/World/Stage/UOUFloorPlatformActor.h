@@ -174,6 +174,11 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Move Steps", meta = (DisplayName = "Loop Through Start"))
 	bool bLoopMoveStepsThroughStart = true;
 
+	// Activate가 한 번 들어왔을 때 연속으로 소비할 이동 스텝 수입니다.
+	// 예를 들어 2로 두면 퍼즐 버튼 한 번으로 현재 위치에서 다음 마커, 그 다음 마커까지 이어서 이동합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Move Steps", meta = (ClampMin = "1", UIMin = "1", DisplayName = "Move Step Count Per Activate"))
+	int32 MoveStepCountPerActivate = 1;
+
 	// 에디터에서 이동과 회전 결과를 미리 볼지 정합니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Preview", meta = (DisplayName = "Show Step Platform Preview"))
 	bool bShowTransformPreview = true;
@@ -280,7 +285,13 @@ protected:
 	void AdvanceSequentialTargetIndex();
 
 	// 현재 위치에서 지정한 목표 트랜스폼까지 이동을 시작합니다.
-	bool BeginMoveToTransform(const FTransform& InTargetTransform, const AUOUFloorPlatformTargetActor* TargetMarker);
+	bool BeginMoveToTransform(const FTransform& InTargetTransform, AUOUFloorPlatformTargetActor* TargetMarker);
+
+	// 요청된 스텝 수만큼 이동을 예약하고, 멈춰 있다면 즉시 첫 이동을 시작합니다.
+	void RequestSequentialMoveSteps(int32 StepCount);
+
+	// 예약된 이동 스텝이 남아 있으면 다음 마커 이동을 하나 시작합니다.
+	bool TryStartQueuedSequentialMove();
 
 	// 현재 이동 구간의 시작과 목표를 기준으로 실제 플랫폼 트랜스폼을 계산합니다.
 	FTransform BuildActivePlatformTransformAtAlpha(float Alpha) const;
@@ -374,6 +385,11 @@ private:
 	UPROPERTY(Transient)
 	FVector ActiveMoveCustomHingeLocalOffset = FVector::ZeroVector;
 
+	// 현재 이동이 향하고 있는 마커입니다.
+	// 도착 후 자동으로 다음 스텝을 이어갈지 같은 마커별 규칙을 확인하는 데 사용합니다.
+	UPROPERTY(Transient)
+	TObjectPtr<AUOUFloorPlatformTargetActor> ActiveMoveTargetMarker = nullptr;
+
 	// 시작 위치가 한 번이라도 기록되었는지 확인하는 값입니다.
 	UPROPERTY(Transient)
 	bool bHasCapturedStartTransform = false;
@@ -382,6 +398,10 @@ private:
 	// 에디터 이동 테스트나 런타임 이동으로 바뀌지만 맵에는 저장되지 않습니다.
 	UPROPERTY(Transient)
 	int32 RuntimeSequentialTargetIndex = 0;
+
+	// 현재 이동이 끝난 뒤 이어서 실행해야 하는 남은 스텝 수입니다.
+	UPROPERTY(Transient)
+	int32 PendingSequentialMoveCount = 0;
 
 	// 에디터 버튼으로 위치를 바꾸는 중인지 기록합니다.
 	// 자동 시작 위치 복귀가 스냅이나 이동 완료를 즉시 되돌리지 않게 막습니다.
