@@ -36,13 +36,6 @@ enum class EUOUWaterBasinRotationInputSidePolicy : uint8
 };
 
 UENUM(BlueprintType)
-enum class EUOUWaterBasinRotationInputSideReferenceMode : uint8
-{
-	Current UMETA(DisplayName = "현재 기준", ToolTip = "물 입력마다 현재 중심/전방/회전축으로 좌우를 판단합니다. 회전 대상과 기준이 함께 회전할 수 있습니다."),
-	InputSession UMETA(DisplayName = "물 입력 세션 기준", ToolTip = "물이 처음 들어온 순간의 중심/전방/회전축을 유지하고, 입력이 끊긴 뒤 다음 입력에서 기준을 새로 잡습니다.")
-};
-
-UENUM(BlueprintType)
 enum class EUOUWaterBasinDrainRotationDirection : uint8
 {
 	SameAsIncrease UMETA(DisplayName = "증가와 같은 방향", ToolTip = "물이 배수될 때 물이 찰 때와 같은 방향으로 회전합니다."),
@@ -104,12 +97,6 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Input Side", meta = (EditCondition = "RotationMode == EUOUWaterBasinRotationReactionMode::IncrementalOnWaterInput", EditConditionHides, ToolTip = "스크립트 또는 알 수 없는 입력의 회전 부호 결정 방식입니다."))
 	EUOUWaterBasinRotationInputSidePolicy ScriptInputSidePolicy = EUOUWaterBasinRotationInputSidePolicy::FixedPositive;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Input Side", meta = (EditCondition = "RotationMode == EUOUWaterBasinRotationReactionMode::IncrementalOnWaterInput && (PlayerPourInputSidePolicy == EUOUWaterBasinRotationInputSidePolicy::ByInputSide || RainInputSidePolicy == EUOUWaterBasinRotationInputSidePolicy::ByInputSide || ScriptInputSidePolicy == EUOUWaterBasinRotationInputSidePolicy::ByInputSide)", EditConditionHides, ToolTip = "입력 위치의 왼쪽/오른쪽을 판단할 기준을 언제 갱신할지 정합니다. 물 입력 세션 기준은 계속 붓는 동안 같은 기준을 유지합니다."))
-	EUOUWaterBasinRotationInputSideReferenceMode InputSideReferenceMode = EUOUWaterBasinRotationInputSideReferenceMode::InputSession;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Input Side", meta = (ClampMin = "0.0", EditCondition = "RotationMode == EUOUWaterBasinRotationReactionMode::IncrementalOnWaterInput && InputSideReferenceMode == EUOUWaterBasinRotationInputSideReferenceMode::InputSession && (PlayerPourInputSidePolicy == EUOUWaterBasinRotationInputSidePolicy::ByInputSide || RainInputSidePolicy == EUOUWaterBasinRotationInputSidePolicy::ByInputSide || ScriptInputSidePolicy == EUOUWaterBasinRotationInputSidePolicy::ByInputSide)", EditConditionHides, ToolTip = "이 시간 동안 새 물 입력이 없으면 입력 세션 기준을 버립니다. 다음 물 입력은 그 시점의 플랫폼 방향을 새 기준으로 사용합니다."))
-	float InputSideSessionResetDelay = 0.15f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Input Side", meta = (EditCondition = "RotationMode == EUOUWaterBasinRotationReactionMode::IncrementalOnWaterInput && (PlayerPourInputSidePolicy == EUOUWaterBasinRotationInputSidePolicy::ByInputSide || RainInputSidePolicy == EUOUWaterBasinRotationInputSidePolicy::ByInputSide || ScriptInputSidePolicy == EUOUWaterBasinRotationInputSidePolicy::ByInputSide)", EditConditionHides, ToolTip = "물 입력 위치가 왼쪽인지 오른쪽인지 판단할 중심입니다. 비어 있으면 이름으로 찾고, 그래도 없으면 회전 대상을 사용합니다."))
 	TObjectPtr<USceneComponent> InputSideCenterComponent = nullptr;
@@ -204,12 +191,6 @@ private:
 	float LastInputSideDebugRotationSign = 0.0f;
 	float LastInputSideDebugVolume = 0.0f;
 	EUOUWaterBasinInputSource LastInputSideDebugSource = EUOUWaterBasinInputSource::Unknown;
-	bool bHasInputSideSessionReference = false;
-	float LastInputSideSessionInputTime = 0.0f;
-	FVector InputSideSessionCenter = FVector::ZeroVector;
-	FVector InputSideSessionForwardDirection = FVector::ZeroVector;
-	FVector InputSideSessionAxisWorld = FVector::ZeroVector;
-
 	UFUNCTION()
 	void HandleWaterInputReceived(UUOUWaterBasinTargetComponent* Target, const FUOUWaterBasinInputContext& InputContext);
 
@@ -225,9 +206,6 @@ private:
 	void UpdateInterpolatedRotation(float DeltaTime);
 	void ApplyRotationAngle(float AngleDegrees);
 	void CacheInputSideDebug(const FUOUWaterBasinInputContext& InputContext, float RotationSign);
-	void PrepareInputSideReferenceForInput(const FUOUWaterBasinInputContext& InputContext);
-	void UpdateInputSideSessionLifetime();
-	void ClearInputSideSessionReference();
 	void EvaluateRotationAngleConditionIfNeeded();
 	bool CaptureCurrentInputSideReference(FVector& OutCenter, FVector& OutForwardDirection, FVector& OutAxisWorld) const;
 	bool ResolveInputSideReference(FVector& OutCenter, FVector& OutForwardDirection, FVector& OutAxisWorld) const;
