@@ -7,6 +7,7 @@
 #include "Components/StaticMeshComponent.h"
 #include "Materials/MaterialInterface.h"
 #include "UObject/ConstructorHelpers.h"
+#include "UObject/UnrealType.h"
 
 AUOUFloorPlatformTargetActor::AUOUFloorPlatformTargetActor()
 {
@@ -34,7 +35,7 @@ AUOUFloorPlatformTargetActor::AUOUFloorPlatformTargetActor()
 	TargetOriginMarker->ShapeColor = FColor::Green;
 
 	TargetPreviewMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("TargetPreviewMesh"));
-	TargetPreviewMesh->bEditableWhenInherited = false;
+	TargetPreviewMesh->bEditableWhenInherited = true;
 	TargetPreviewMesh->SetupAttachment(RootScene);
 	TargetPreviewMesh->SetMobility(EComponentMobility::Movable);
 	TargetPreviewMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
@@ -42,7 +43,7 @@ AUOUFloorPlatformTargetActor::AUOUFloorPlatformTargetActor()
 	TargetPreviewMesh->SetHiddenInGame(true);
 	TargetPreviewMesh->SetCastShadow(false);
 	TargetPreviewMesh->SetRenderCustomDepth(true);
-	TargetPreviewMesh->SetOverlayMaterial(TargetPreviewMaterial);
+	ApplyPreviewMaterialSettings(nullptr);
 }
 
 void AUOUFloorPlatformTargetActor::SyncPreviewFromMesh(const UStaticMeshComponent* SourceMesh)
@@ -55,17 +56,7 @@ void AUOUFloorPlatformTargetActor::SyncPreviewFromMesh(const UStaticMeshComponen
 	TargetPreviewMesh->SetStaticMesh(SourceMesh->GetStaticMesh());
 	TargetPreviewMesh->SetRelativeTransform(SourceMesh->GetRelativeTransform());
 
-	const int32 MaterialCount = SourceMesh->GetNumMaterials();
-	for (int32 MaterialIndex = 0; MaterialIndex < MaterialCount; ++MaterialIndex)
-	{
-		UMaterialInterface* PreviewMaterial = TargetPreviewMaterial.Get();
-		if (PreviewMaterial == nullptr)
-		{
-			PreviewMaterial = SourceMesh->GetMaterial(MaterialIndex);
-		}
-
-		TargetPreviewMesh->SetMaterial(MaterialIndex, PreviewMaterial);
-	}
+	ApplyPreviewMaterialSettings(SourceMesh);
 }
 
 void AUOUFloorPlatformTargetActor::SetTargetPreviewMeshVisible(bool bVisible)
@@ -104,4 +95,51 @@ FVector AUOUFloorPlatformTargetActor::ResolveCustomHingeLocalOffset(const FVecto
 	return StepRotationMode == EUOUFloorPlatformStepRotationMode::Hinge
 		? StepCustomHingeLocalOffset
 		: PlatformDefault;
+}
+
+void AUOUFloorPlatformTargetActor::OnConstruction(const FTransform& Transform)
+{
+	Super::OnConstruction(Transform);
+
+	ApplyPreviewMaterialSettings(nullptr);
+}
+
+#if WITH_EDITOR
+void AUOUFloorPlatformTargetActor::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent)
+{
+	Super::PostEditChangeProperty(PropertyChangedEvent);
+
+	ApplyPreviewMaterialSettings(nullptr);
+}
+#endif
+
+void AUOUFloorPlatformTargetActor::ApplyPreviewMaterialSettings(const UStaticMeshComponent* SourceMesh)
+{
+	if (TargetPreviewMesh == nullptr)
+	{
+		return;
+	}
+
+	// Overlay Material은 실제 머티리얼 슬롯 변경을 가려서, 미리보기 머티리얼은 슬롯에 직접 적용합니다.
+	TargetPreviewMesh->SetOverlayMaterial(nullptr);
+
+	if (!bOverrideTargetPreviewMeshMaterial)
+	{
+		return;
+	}
+
+	const int32 MaterialCount = FMath::Max(1, TargetPreviewMesh->GetNumMaterials());
+	for (int32 MaterialIndex = 0; MaterialIndex < MaterialCount; ++MaterialIndex)
+	{
+		UMaterialInterface* PreviewMaterial = TargetPreviewMaterial.Get();
+		if (PreviewMaterial == nullptr && SourceMesh != nullptr)
+		{
+			PreviewMaterial = SourceMesh->GetMaterial(MaterialIndex);
+		}
+
+		if (PreviewMaterial != nullptr)
+		{
+			TargetPreviewMesh->SetMaterial(MaterialIndex, PreviewMaterial);
+		}
+	}
 }

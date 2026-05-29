@@ -48,6 +48,11 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Target")
 	TObjectPtr<UMaterialInterface> TargetPreviewMaterial = nullptr;
 
+	// 켜져 있으면 Target Preview Material을 미리보기 메쉬에 계속 적용합니다.
+	// 끄면 TargetPreviewMesh 컴포넌트의 머티리얼 슬롯을 직접 수정할 수 있습니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Target")
+	bool bOverrideTargetPreviewMeshMaterial = true;
+
 	// 이 마커로 이동하는 구간에서 사용할 회전 방식을 정합니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Move Step", meta = (DisplayName = "Step Rotation Mode"))
 	EUOUFloorPlatformStepRotationMode StepRotationMode = EUOUFloorPlatformStepRotationMode::UsePlatformDefault;
@@ -74,4 +79,14 @@ public:
 
 	// 플랫폼 기본 설정과 마커의 덮어쓰기 값을 합쳐 실제 커스텀 힌지 위치를 반환합니다.
 	FVector ResolveCustomHingeLocalOffset(const FVector& PlatformDefault) const;
+
+protected:
+	virtual void OnConstruction(const FTransform& Transform) override;
+
+#if WITH_EDITOR
+	virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
+#endif
+
+	// 미리보기 머티리얼 덮어쓰기 설정을 실제 PreviewMesh에 반영합니다.
+	void ApplyPreviewMaterialSettings(const UStaticMeshComponent* SourceMesh);
 };
