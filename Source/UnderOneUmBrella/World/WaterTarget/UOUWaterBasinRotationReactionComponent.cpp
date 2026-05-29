@@ -254,7 +254,6 @@ void UUOUWaterBasinRotationReactionComponent::TickComponent(float DeltaTime, ELe
 		return;
 	}
 
-	UpdateInputSideSessionLifetime();
 	UpdateInterpolatedRotation(DeltaTime);
 	DrawInputSideDebug();
 }
@@ -272,7 +271,6 @@ void UUOUWaterBasinRotationReactionComponent::ResetRotationReaction(bool bResetO
 
 	TargetAngleDegrees = 0.0f;
 	CurrentAppliedAngleDegrees = 0.0f;
-	ClearInputSideSessionReference();
 	if (bApplyBaseRotation)
 	{
 		ApplyRotationAngle(CurrentAppliedAngleDegrees);
@@ -288,7 +286,6 @@ void UUOUWaterBasinRotationReactionComponent::SetRotationReactionEnabled(bool bE
 	}
 
 	bRotationReactionEnabled = bEnabled;
-	ClearInputSideSessionReference();
 
 	if (bRotationReactionEnabled)
 	{
@@ -424,7 +421,6 @@ void UUOUWaterBasinRotationReactionComponent::HandleWaterInputReceived(UUOUWater
 		return;
 	}
 
-	PrepareInputSideReferenceForInput(InputContext);
 	const float RotationSign = ResolveInputRotationSign(InputContext);
 	CacheInputSideDebug(InputContext, RotationSign);
 	if (FMath::IsNearlyZero(RotationSign))
@@ -553,8 +549,6 @@ void UUOUWaterBasinRotationReactionComponent::UnbindFromWaterInputTarget()
 		BoundInputWaterBasinTarget->OnWaterInputReceived.RemoveDynamic(this, &UUOUWaterBasinRotationReactionComponent::HandleWaterInputReceived);
 		BoundInputWaterBasinTarget = nullptr;
 	}
-
-	ClearInputSideSessionReference();
 }
 
 void UUOUWaterBasinRotationReactionComponent::CacheBaseRotationIfNeeded()
@@ -654,62 +648,6 @@ void UUOUWaterBasinRotationReactionComponent::CacheInputSideDebug(const FUOUWate
 	LastInputSideDebugSource = InputContext.Source;
 }
 
-void UUOUWaterBasinRotationReactionComponent::PrepareInputSideReferenceForInput(const FUOUWaterBasinInputContext& InputContext)
-{
-	if (InputSideReferenceMode != EUOUWaterBasinRotationInputSideReferenceMode::InputSession
-		|| GetInputSidePolicy(InputContext.Source) != EUOUWaterBasinRotationInputSidePolicy::ByInputSide
-		|| !InputContext.bHasValidWorldLocation
-		|| !IsFiniteWorldLocation(InputContext.WorldLocation))
-	{
-		return;
-	}
-
-	if (const UWorld* World = GetWorld())
-	{
-		LastInputSideSessionInputTime = World->GetTimeSeconds();
-	}
-
-	if (bHasInputSideSessionReference)
-	{
-		return;
-	}
-
-	bHasInputSideSessionReference = CaptureCurrentInputSideReference(
-		InputSideSessionCenter,
-		InputSideSessionForwardDirection,
-		InputSideSessionAxisWorld);
-}
-
-void UUOUWaterBasinRotationReactionComponent::UpdateInputSideSessionLifetime()
-{
-	if (InputSideReferenceMode != EUOUWaterBasinRotationInputSideReferenceMode::InputSession
-		|| !bHasInputSideSessionReference)
-	{
-		return;
-	}
-
-	const UWorld* World = GetWorld();
-	if (!World)
-	{
-		return;
-	}
-
-	const float ResetDelay = FMath::Max(InputSideSessionResetDelay, 0.0f);
-	if (World->GetTimeSeconds() - LastInputSideSessionInputTime > ResetDelay)
-	{
-		ClearInputSideSessionReference();
-	}
-}
-
-void UUOUWaterBasinRotationReactionComponent::ClearInputSideSessionReference()
-{
-	bHasInputSideSessionReference = false;
-	LastInputSideSessionInputTime = 0.0f;
-	InputSideSessionCenter = FVector::ZeroVector;
-	InputSideSessionForwardDirection = FVector::ZeroVector;
-	InputSideSessionAxisWorld = FVector::ZeroVector;
-}
-
 void UUOUWaterBasinRotationReactionComponent::EvaluateRotationAngleConditionIfNeeded()
 {
 	const bool bUsesRotationAngleValue =
@@ -747,15 +685,6 @@ bool UUOUWaterBasinRotationReactionComponent::ResolveInputSideReference(
 	FVector& OutForwardDirection,
 	FVector& OutAxisWorld) const
 {
-	if (InputSideReferenceMode == EUOUWaterBasinRotationInputSideReferenceMode::InputSession
-		&& bHasInputSideSessionReference)
-	{
-		OutCenter = InputSideSessionCenter;
-		OutForwardDirection = InputSideSessionForwardDirection;
-		OutAxisWorld = InputSideSessionAxisWorld;
-		return !OutForwardDirection.IsNearlyZero() && !OutAxisWorld.IsNearlyZero();
-	}
-
 	return CaptureCurrentInputSideReference(OutCenter, OutForwardDirection, OutAxisWorld);
 }
 
@@ -844,7 +773,7 @@ void UUOUWaterBasinRotationReactionComponent::DrawInputSideDebug() const
 		DrawDebugString(
 			World,
 			Center + FVector(0.0f, 0.0f, SphereRadius * 2.0f),
-			bHasInputSideSessionReference ? TEXT("입력 좌우 세션 기준 / 회전축 / 전방 / 오른쪽") : TEXT("입력 좌우 현재 기준 / 회전축 / 전방 / 오른쪽"),
+			TEXT("입력 좌우 현재 기준 / 회전축 / 전방 / 오른쪽"),
 			nullptr,
 			FColor::Yellow,
 			DrawDuration,
