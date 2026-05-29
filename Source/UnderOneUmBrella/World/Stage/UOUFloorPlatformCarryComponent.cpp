@@ -140,6 +140,14 @@ bool UUOUFloorPlatformCarryComponent::CanCarryActor(AActor* CandidateActor) cons
 		}
 	}
 
+	for (const TSubclassOf<AActor>& IgnoredActorClass : IgnoredCarryActorClasses)
+	{
+		if (*IgnoredActorClass != nullptr && CandidateActor->IsA(IgnoredActorClass))
+		{
+			return false;
+		}
+	}
+
 	if (CandidateActor->GetAttachParentActor() != nullptr && CandidateActor->GetAttachParentActor() != OwnerActor)
 	{
 		return false;

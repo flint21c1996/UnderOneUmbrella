@@ -54,6 +54,11 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Carry")
 	TArray<TObjectPtr<AActor>> IgnoredCarryActors;
 
+	// 여기에 넣은 BP 클래스와 그 자식 클래스는 감지 박스 안에 있어도 같이 이동하지 않습니다.
+	// 특정 장치나 투명벽처럼 플랫폼 이동에 딸려오면 안 되는 액터 타입을 제외할 때 사용합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Carry")
+	TArray<TSubclassOf<AActor>> IgnoredCarryActorClasses;
+
 	// 운반 후보를 찾는 박스 컴포넌트를 연결합니다.
 	void SetDetectionBox(UBoxComponent* InDetectionBox);
 
