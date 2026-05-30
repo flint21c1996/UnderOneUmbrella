@@ -1138,7 +1138,10 @@ void UUOUUmbrellaComponent::UpdatePouring(float DeltaTime)
 					EUOUUmbrellaPourReceiverType ReceiverType = EUOUUmbrellaPourReceiverType::None;
 					bLastPourDeliveredWater = TryReceiveWaterAtHit(HitResult, PourAmount, EffectivePourDuration, TraceDirection, ReceiverType);
 					LastPourReceiverType = ReceiverType;
-					break;
+					if (bLastPourDeliveredWater || HitResult.bBlockingHit)
+					{
+						break;
+					}
 				}
 			}
 		}
@@ -1330,6 +1333,17 @@ bool UUOUUmbrellaComponent::TryReceiveWaterAtHit(const FHitResult& HitResult, fl
 		OutReceiverType = EUOUUmbrellaPourReceiverType::WaterContainer;
 		WaterTargetContainer->AddAmount(WaterAmount);
 		return true;
+	}
+
+	if (AActor* ParentActor = HitActor->GetAttachParentActor())
+	{
+		if (UUOUWaterContainerComponent* ParentWaterTargetContainer = ParentActor->FindComponentByClass<UUOUWaterContainerComponent>())
+		{
+			LastPourTargetName = ParentActor->GetName();
+			OutReceiverType = EUOUUmbrellaPourReceiverType::WaterContainer;
+			ParentWaterTargetContainer->AddAmount(WaterAmount);
+			return true;
+		}
 	}
 
 	return false;
