@@ -28,9 +28,19 @@ struct FOUUPuzzleResultBinding
 	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Puzzle")
 	EOUUPuzzleResultAction SatisfiedAction = EOUUPuzzleResultAction::Activate;
 
+	// 조건 만족 결과를 한 번만 보낼지 정합니다.
+	// 버튼을 다시 눌러도 같은 결과 액터가 다음 단계로 또 진행되지 않게 막을 때 사용합니다.
+	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Puzzle")
+	bool bRunSatisfiedActionOnlyOnce = false;
+
 	// 조건이 해제되었을 때 대상 액터에 전달할 액션입니다.
 	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Puzzle")
 	EOUUPuzzleResultAction UnsatisfiedAction = EOUUPuzzleResultAction::Deactivate;
+
+	// 조건 만족 결과가 이미 실행되었는지 기록합니다.
+	// 에디터 설정값이 아니라 플레이 중 중복 실행을 막기 위한 런타임 상태입니다.
+	UPROPERTY(Transient)
+	bool bHasRunSatisfiedAction = false;
 };
 
 // 여러 퍼즐 원인과 결과를 씬에서 직접 이어주는 조건 그룹 액터입니다.
@@ -110,6 +120,11 @@ public:
 	UFUNCTION(BlueprintImplementableEvent, Category = "Puzzle|Group Actor|Events")
 	void ReceiveGroupStateChanged(bool bNewSatisfied);
 
+	// 한 번만 실행 옵션이 기록한 런타임 실행 상태를 초기화합니다.
+	// 테스트 중 같은 버튼 결과를 다시 발동시키고 싶을 때 사용합니다.
+	UFUNCTION(BlueprintCallable, CallInEditor, Category = "Puzzle|Group Actor|Results")
+	void ResetResultBindingExecutionState();
+
 protected:
 	// 내부 그룹 컴포넌트의 만족 이벤트를 받아 외부 결과로 확장합니다.
 	UFUNCTION()
@@ -127,8 +142,8 @@ protected:
 	void ResolveConditionSourcesFromActors();
 
 	// 현재 만족 여부에 맞는 결과 액션을 모든 바인딩에 전달합니다.
-	void DispatchResultBindings(bool bSatisfied) const;
+	void DispatchResultBindings(bool bSatisfied);
 
 	// 개별 결과 액터 하나에 액션을 전달합니다.
-	void ExecuteResultAction(AActor* TargetActor, EOUUPuzzleResultAction Action) const;
+	bool ExecuteResultAction(AActor* TargetActor, EOUUPuzzleResultAction Action) const;
 };

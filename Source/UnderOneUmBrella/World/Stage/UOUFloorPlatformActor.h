@@ -8,20 +8,54 @@
 #include "UOUFloorPlatformActor.generated.h"
 
 class UCurveFloat;
-class UArrowComponent;
 class UBoxComponent;
-class UPrimitiveComponent;
 class USceneComponent;
+class USplineComponent;
 class UStaticMeshComponent;
+class UUOUFloorPlatformCarryComponent;
+class UUOUFloorPlatformStepComponent;
 class AUOUFloorPlatformActor;
+class AUOUFloorPlatformTargetActor;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FUOUFloorPlatformMoveFinishedSignature, AUOUFloorPlatformActor*, Platform);
 
-// 플랫폼에 임시로 붙인 물리 컴포넌트의 원래 물리 상태를 되돌리기 위한 기록입니다.
-struct FUOUFloorPlatformCarriedPhysicsState
+// 플랫폼 이동 시간을 어떤 감속과 가속 곡선으로 보정할지 정합니다.
+UENUM(BlueprintType)
+enum class EUOUFloorPlatformEasingMode : uint8
 {
-	TWeakObjectPtr<UPrimitiveComponent> Component;
-	bool bWasSimulatingPhysics = false;
+	Linear,
+	EaseIn,
+	EaseOut,
+	EaseInOut
+};
+
+// 플랫폼이 시작점과 목표점 사이의 위치를 어떤 경로로 지나갈지 정합니다.
+UENUM(BlueprintType)
+enum class EUOUFloorPlatformPathMode : uint8
+{
+	Linear,
+	CubicBezier
+};
+
+// 플랫폼 이동 중 회전을 어떤 기준으로 처리할지 정합니다.
+// TransformLerp는 기존처럼 목표 마커의 위치와 회전을 직접 보간하고, Hinge는 한 변을 고정한 접힘 회전을 사용합니다.
+UENUM(BlueprintType)
+enum class EUOUFloorPlatformRotationMode : uint8
+{
+	TransformLerp,
+	Hinge
+};
+
+// 힌지 회전에서 고정할 플랫폼의 변을 정합니다.
+// 방향은 PlatformMesh의 로컬 바운드를 기준으로 계산합니다.
+UENUM(BlueprintType)
+enum class EUOUFloorPlatformHingeEdge : uint8
+{
+	PositiveX,
+	NegativeX,
+	PositiveY,
+	NegativeY,
+	Custom
 };
 
 // 층 기반 스테이지에서 한 층의 플랫폼 이동을 담당하는 액터입니다.
@@ -49,18 +83,36 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Floor Platform|Carry")
 	TObjectPtr<UBoxComponent> CarryDetectionBox = nullptr;
 
-	// 회전 중심과 회전 축을 에디터에서 직접 조정하기 위한 기준 화살표입니다.
-	// 화살표 위치는 회전 중심, 화살표가 바라보는 X 방향은 회전 축으로 사용됩니다.
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Floor Platform|Rotation")
-	TObjectPtr<UArrowComponent> RotationPivot = nullptr;
+	// 플랫폼 위 액터 운반과 물리 상태 복구를 담당하는 컴포넌트입니다.
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Floor Platform|Carry")
+	TObjectPtr<UUOUFloorPlatformCarryComponent> CarryComponent = nullptr;
+
+	// 순차 목표 마커 선택과 반복 이동 인덱스를 담당하는 컴포넌트입니다.
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Floor Platform|Move Steps")
+	TObjectPtr<UUOUFloorPlatformStepComponent> StepComponent = nullptr;
+
+	// 플랫폼 시작점과 목표 지점을 실제 선으로 이어서 보여주는 에디터 확인용 경로입니다.
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Floor Platform|Preview")
+	TObjectPtr<USplineComponent> MovePreviewPath = nullptr;
 
 	// 이 플랫폼이 어떤 층에 속하는지 구분하기 위한 값입니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform")
 	int32 FloorIndex = 4;
 
-	// 액터 기준으로 플랫폼이 이동할 목표 로컬 오프셋입니다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Movement")
-	FVector TargetLocalOffset = FVector(0.0f, 1200.0f, 0.0f);
+	// 플랫폼이 처음 출발해야 하는 위치입니다.
+	// 에디터에서 이동 테스트를 하더라도 이 값이 있으면 시작점이 덮어써지지 않습니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Start", meta = (DisplayName = "Saved Start Transform"))
+	FTransform SavedStartTransform = FTransform::Identity;
+
+	// 저장된 시작 위치를 사용할지 정합니다.
+	// 꺼져 있으면 처음 배치된 현재 위치를 시작점으로 한 번 저장합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Start", meta = (DisplayName = "Use Saved Start Transform"))
+	bool bUseSavedStartTransform = false;
+
+	// 에디터에서 다시 열었을 때 액터를 저장된 시작 위치로 되돌릴지 정합니다.
+	// 이동 테스트 후 저장해도 다음 작업을 시작 위치에서 이어가게 하기 위한 옵션입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Start", meta = (DisplayName = "Keep Actor At Saved Start In Editor"))
+	bool bKeepActorAtSavedStartInEditor = true;
 
 	// 시작 위치에서 목표 위치까지 이동하는 데 걸리는 시간입니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Movement", meta = (ClampMin = "0.0"))
@@ -70,49 +122,78 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Movement")
 	TObjectPtr<UCurveFloat> MoveCurve = nullptr;
 
-	// 목표 위치로 이동하는 동안 회전도 함께 적용할지 정합니다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Rotation")
-	bool bUseTargetRotation = false;
+	// MoveCurve가 없을 때 사용할 기본 가속과 감속 방식입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Movement")
+	EUOUFloorPlatformEasingMode EasingMode = EUOUFloorPlatformEasingMode::EaseInOut;
 
-	// RotationPivot의 축을 기준으로 목표 지점까지 회전할 각도입니다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Rotation")
-	float TargetRotationAngleDegrees = 0.0f;
+	// EaseIn, EaseOut, EaseInOut 계산의 강도를 조절합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Movement", meta = (ClampMin = "0.1"))
+	float EaseExponent = 2.0f;
+
+	// 목표 위치까지 직선으로 갈지, 베지어 곡선을 따라 갈지 정합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Movement")
+	EUOUFloorPlatformPathMode PathMode = EUOUFloorPlatformPathMode::Linear;
+
+	// 플랫폼 회전을 일반 보간으로 할지, 선택한 변을 중심으로 접히게 할지 정합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Movement")
+	EUOUFloorPlatformRotationMode RotationMode = EUOUFloorPlatformRotationMode::TransformLerp;
+
+	// Hinge 모드에서 움직이지 않는 고정 변입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Movement", meta = (EditCondition = "RotationMode == EUOUFloorPlatformRotationMode::Hinge", EditConditionHides, DisplayAfter = "RotationMode"))
+	EUOUFloorPlatformHingeEdge HingeEdge = EUOUFloorPlatformHingeEdge::NegativeY;
+
+	// HingeEdge가 Custom일 때 사용하는 액터 로컬 기준 힌지 위치입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Movement", meta = (EditCondition = "RotationMode == EUOUFloorPlatformRotationMode::Hinge && HingeEdge == EUOUFloorPlatformHingeEdge::Custom", EditConditionHides, DisplayAfter = "HingeEdge"))
+	FVector CustomHingeLocalOffset = FVector::ZeroVector;
+
+	// CubicBezier 경로에서 시작점 쪽 조절점을 시작점 기준 로컬 오프셋으로 정합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Movement")
+	FVector BezierStartControlOffset = FVector(400.0f, 0.0f, 0.0f);
+
+	// CubicBezier 경로에서 목표점 쪽 조절점을 목표점 기준 로컬 오프셋으로 정합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Movement")
+	FVector BezierEndControlOffset = FVector(-400.0f, 0.0f, 0.0f);
+
+	// 여러 목표 마커를 순서대로 사용해서 Activate마다 다음 위치로 이동할지 정합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Move Steps", meta = (DisplayName = "Use Move Steps"))
+	bool bUseSequentialTargetMarkers = false;
+
+	// 플랫폼이 차례대로 이동할 목표 마커 목록입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Move Steps", meta = (DisplayName = "Move Step Markers"))
+	TArray<TObjectPtr<AUOUFloorPlatformTargetActor>> SequentialTargetMarkers;
+
+	// 다음 Activate가 사용할 순차 목표 인덱스입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Move Steps", meta = (ClampMin = "0", DisplayName = "Initial Step Index"))
+	int32 InitialSequentialTargetIndex = 0;
+
+	// 마지막 목표까지 간 뒤 다시 첫 목표로 돌아갈지 정합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Move Steps", meta = (DisplayName = "Loop Move Steps"))
+	bool bLoopSequentialTargetMarkers = false;
+
+	// 반복 이동에서 마지막 단계가 끝난 뒤 시작 위치를 한 번 거쳐 첫 단계로 돌아갈지 정합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Move Steps", meta = (DisplayName = "Loop Through Start"))
+	bool bLoopMoveStepsThroughStart = true;
+
+	// Activate가 한 번 들어왔을 때 연속으로 소비할 이동 스텝 수입니다.
+	// 예를 들어 2로 두면 퍼즐 버튼 한 번으로 현재 위치에서 다음 마커, 그 다음 마커까지 이어서 이동합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Move Steps", meta = (ClampMin = "1", UIMin = "1", DisplayName = "Move Step Count Per Activate"))
+	int32 MoveStepCountPerActivate = 1;
+
+	// 에디터에서 이동과 회전 결과를 미리 볼지 정합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Preview", meta = (DisplayName = "Show Step Platform Preview"))
+	bool bShowTransformPreview = true;
+
+	// 에디터에서 플랫폼 시작점과 목표 지점을 잇는 이동 경로 선을 보여줄지 정합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Preview", meta = (DisplayName = "Show Move Path Preview"))
+	bool bShowMovePreviewPath = true;
 
 	// 목표 위치에 도착한 뒤 플레이어와 다른 오브젝트가 이 플랫폼과 충돌하지 않게 할지 정합니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Rules")
 	bool bDisableCollisionAtTarget = false;
 
 	// 게임 시작 시 이미 목표 위치에 있어야 하는 플랫폼인지 정합니다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Rules")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Rules", meta = (EditCondition = "!bUseSequentialTargetMarkers", EditConditionHides, DisplayName = "Start At Target Single Target Only"))
 	bool bStartAtTarget = false;
-
-	// 플랫폼 이동 중 감지 박스 안의 액터를 함께 이동시킬지 정합니다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Carry")
-	bool bCarryActorsOnMove = true;
-
-	// 캐릭터 계열은 CharacterMovement가 움직이는 바닥을 따라가므로 기본 운반 대상에서 제외합니다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Carry")
-	bool bCarryPlayerCharacters = false;
-
-	// 물리 시뮬레이션 중인 액터도 운반 대상에 포함할지 정합니다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Carry")
-	bool bCarryPhysicsSimulatingActors = true;
-
-	// 물리 액터를 운반하는 동안 물리 시뮬레이션을 잠시 끄고 완료 후 원래대로 복구할지 정합니다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Carry")
-	bool bPauseCarriedPhysicsDuringMove = true;
-
-	// 비어 있으면 클래스 필터를 쓰지 않고, 값이 있으면 이 클래스 계열 액터만 운반 후보로 봅니다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Carry")
-	TArray<TSubclassOf<AActor>> CarryActorClasses;
-
-	// 비어 있으면 태그 필터를 쓰지 않고, 값이 있으면 이 태그를 가진 액터만 운반 후보로 봅니다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Carry")
-	TArray<FName> CarryActorTags;
-
-	// 감지 박스 안에 있어도 운반하지 않을 액터 목록입니다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Carry")
-	TArray<TObjectPtr<AActor>> IgnoredCarryActors;
 
 	// 에디터에서 이동 기준점을 현재 액터 위치로 다시 잡을 때 사용합니다.
 	UFUNCTION(BlueprintCallable, CallInEditor, Category = "Floor Platform|Editor")
@@ -122,6 +203,10 @@ public:
 	UFUNCTION(BlueprintCallable, CallInEditor, Category = "Floor Platform|Actions")
 	void MoveToTarget();
 
+	// 순차 목표 마커를 사용할 때 현재 인덱스의 목표로 이동합니다.
+	UFUNCTION(BlueprintCallable, CallInEditor, Category = "Floor Platform|Actions", meta = (DisplayName = "Move To Next Step"))
+	void MoveToNextSequentialTarget();
+
 	// 플랫폼을 시작 위치로 되돌립니다.
 	UFUNCTION(BlueprintCallable, CallInEditor, Category = "Floor Platform|Actions")
 	void ResetPlatform();
@@ -129,6 +214,19 @@ public:
 	// 플랫폼을 이동 없이 바로 목표 위치로 보냅니다.
 	UFUNCTION(BlueprintCallable, CallInEditor, Category = "Floor Platform|Actions")
 	void SnapToTarget();
+
+	// 목표 위치를 시작 위치와 같게 맞춰서 다시 배치하기 쉬운 상태로 되돌립니다.
+	UFUNCTION(BlueprintCallable, CallInEditor, Category = "Floor Platform|Move Steps", meta = (DisplayName = "Set Current Step To Start"))
+	void SetTargetToStart();
+
+	// 현재 선택된 이동 마커를 힌지 회전 결과 위치로 맞춥니다.
+	// 마커를 원하는 회전값으로 돌린 뒤 누르면 한 변이 붙은 최종 위치로 보정됩니다.
+	UFUNCTION(BlueprintCallable, CallInEditor, Category = "Floor Platform|Movement", meta = (DisplayName = "Snap Current Step To Hinge Result"))
+	void SnapCurrentStepToHingeResult();
+
+	// 현재 목표 위치를 기준으로 새 순차 목표 마커를 만들고 배열 끝에 추가합니다.
+	UFUNCTION(BlueprintCallable, CallInEditor, Category = "Floor Platform|Move Steps", meta = (DisplayName = "Add Move Step"))
+	void AddSequentialTargetMarker();
 
 	// 현재 플랫폼이 이동 중인지 반환합니다.
 	UFUNCTION(BlueprintPure, Category = "Floor Platform|Runtime")
@@ -146,6 +244,7 @@ public:
 	virtual void ApplyPuzzleResult_Implementation(EOUUPuzzleResultAction Action) override;
 
 protected:
+	virtual void PostLoad() override;
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void OnConstruction(const FTransform& Transform) override;
@@ -158,50 +257,89 @@ protected:
 	// 시작 위치와 목표 위치를 현재 설정값 기준으로 계산합니다.
 	void RefreshTargetTransforms();
 
+	// 저장된 시작 위치가 있으면 사용하고, 없으면 현재 위치를 시작 위치로 저장합니다.
+	void EnsureStartTransform();
+
+	// 실행 중 이동 단계 인덱스를 에디터에 저장되는 초기 단계로 되돌립니다.
+	void ResetRuntimeStepIndex();
+
 	// 이동 완료 상태를 확정하고 이벤트를 전달합니다.
 	void FinishMoveToTarget();
 
 	// 목표 도착 상태에 따라 액터 전체 충돌을 켜거나 끕니다.
 	void ApplyTargetCollisionState();
 
-	// 감지 박스 안에서 플랫폼과 함께 이동할 액터를 찾아 임시로 붙입니다.
-	void AttachCarriedActors();
+	// 순차 목표 마커를 실제 이동 목표로 사용할 수 있는지 확인합니다.
+	bool ShouldUseSequentialTargetMarkers() const;
 
-	// 이전 이동에서 같이 움직였던 액터를 다시 운반 대상으로 붙입니다.
-	void AttachLastMovedActors();
+	// 순차 목표 배열에서 사용할 수 있는 목표 마커를 찾아 반환합니다.
+	AUOUFloorPlatformTargetActor* GetSequentialTargetMarkerAt(int32 TargetIndex) const;
 
-	// 오버랩 이벤트 상태와 상관없이 감지 박스 범위 안의 운반 후보 액터를 직접 찾습니다.
-	void CollectCarryCandidateActors(TArray<AActor*>& OutCandidateActors) const;
+	// 현재 순차 목표 인덱스에서 사용할 수 있는 목표 마커를 반환합니다.
+	AUOUFloorPlatformTargetActor* GetCurrentSequentialTargetMarker() const;
 
-	// 플랫폼 이동이 끝나거나 취소될 때 임시로 붙인 액터들을 월드 위치 유지 상태로 해제합니다.
-	void DetachCarriedActors();
+	// 이동과 스냅이 같은 기준으로 다음 순차 목표를 고를 수 있게 목표 트랜스폼과 인덱스를 계산합니다.
+	bool ResolveNextSequentialTargetTransform(FTransform& OutTargetTransform, int32& OutTargetIndex) const;
 
-	// 감지된 액터가 이 플랫폼과 함께 이동할 수 있는 대상인지 검사합니다.
-	bool CanCarryActor(AActor* CandidateActor) const;
+	// 다음 Activate가 사용할 순차 목표 인덱스를 이동 완료 후 갱신합니다.
+	void AdvanceSequentialTargetIndex();
 
-	// 물리 액터가 부모 이동을 따라오도록 필요한 물리 상태를 잠시 멈춥니다.
-	void PrepareCarriedActorForAttach(AActor* CandidateActor);
+	// 현재 위치에서 지정한 목표 트랜스폼까지 이동을 시작합니다.
+	bool BeginMoveToTransform(const FTransform& InTargetTransform, AUOUFloorPlatformTargetActor* TargetMarker);
 
-	// 플랫폼 이동 중 잠시 멈춘 물리 상태를 원래대로 되돌립니다.
-	void RestoreCarriedPhysicsStates();
+	// 요청된 스텝 수만큼 이동을 예약하고, 멈춰 있다면 즉시 첫 이동을 시작합니다.
+	void RequestSequentialMoveSteps(int32 StepCount);
 
-	// 액터가 물리 시뮬레이션 중인 컴포넌트를 가지고 있는지 확인합니다.
-	bool HasSimulatingPhysicsComponent(AActor* CandidateActor) const;
+	// 예약된 이동 스텝이 남아 있으면 다음 마커 이동을 하나 시작합니다.
+	bool TryStartQueuedSequentialMove();
 
-	// 클래스나 태그 필터를 통과하는 운반 대상인지 확인합니다.
-	bool MatchesCarryFilters(AActor* CandidateActor) const;
+	// 현재 이동 구간의 시작과 목표를 기준으로 실제 플랫폼 트랜스폼을 계산합니다.
+	FTransform BuildActivePlatformTransformAtAlpha(float Alpha) const;
 
-	// 이동 완료 후 다음 반대 이동에서도 같은 액터를 찾을 수 있도록 기록합니다.
-	void CacheLastMovedActors();
+	// 두 트랜스폼 사이를 선택된 경로 모드와 회전 보간으로 계산합니다.
+	FTransform BuildTransformBetween(const FTransform& FromTransform, const FTransform& ToTransform, float Alpha) const;
 
-	// 현재 알파 값에 맞는 플랫폼 트랜스폼을 계산합니다.
-	FTransform BuildPlatformTransformAtAlpha(float Alpha) const;
+	// 지정한 이동 설정으로 두 트랜스폼 사이의 실제 플랫폼 트랜스폼을 계산합니다.
+	FTransform BuildTransformBetween(
+		const FTransform& FromTransform,
+		const FTransform& ToTransform,
+		float Alpha,
+		EUOUFloorPlatformRotationMode InRotationMode,
+		EUOUFloorPlatformHingeEdge InHingeEdge,
+		const FVector& InCustomHingeLocalOffset) const;
 
-	// 시작 트랜스폼 기준으로 회전 중심의 월드 위치를 계산합니다.
-	FVector GetRotationPivotWorldLocation() const;
+	// 선택된 힌지 변을 월드에 고정한 채 목표 회전값까지 접히는 변환을 계산합니다.
+	FTransform BuildHingeTransformBetween(
+		const FTransform& FromTransform,
+		const FTransform& ToTransform,
+		float Alpha,
+		EUOUFloorPlatformHingeEdge InHingeEdge,
+		const FVector& InCustomHingeLocalOffset) const;
 
-	// 시작 트랜스폼 기준으로 회전에 사용할 월드 축을 계산합니다.
-	FVector GetRotationAxisWorldDirection() const;
+	// PlatformMesh의 바운드와 커스텀 값을 이용해 액터 로컬 기준 힌지 위치를 계산합니다.
+	bool ResolveHingeLocalOffset(
+		FVector& OutHingeLocalOffset,
+		EUOUFloorPlatformHingeEdge InHingeEdge,
+		const FVector& InCustomHingeLocalOffset) const;
+
+	// 목표 마커가 가진 구간별 설정과 플랫폼 기본 설정을 합쳐 이번 이동에 사용할 값을 결정합니다.
+	void ResolveMoveSettingsFromTarget(
+		const AUOUFloorPlatformTargetActor* TargetMarker,
+		EUOUFloorPlatformRotationMode& OutRotationMode,
+		EUOUFloorPlatformHingeEdge& OutHingeEdge,
+		FVector& OutCustomHingeLocalOffset) const;
+
+	// 실제 이동 중 Tick에서 같은 설정을 계속 쓰도록 현재 구간 설정을 보관합니다.
+	void CacheActiveMoveSettings(const AUOUFloorPlatformTargetActor* TargetMarker);
+
+	// 선택된 경로 모드에 따라 시작점과 목표점 사이의 위치를 계산합니다.
+	FVector EvaluatePathLocation(const FTransform& FromTransform, const FTransform& ToTransform, float Alpha) const;
+
+	// 순차 목표 마커들의 미리보기 메쉬 표시 상태를 현재 프리뷰 옵션에 맞춰 갱신합니다.
+	void SyncSequentialTargetMarkerPreviews();
+
+	// 에디터에서 이동 경로와 목표 위치 미리보기를 갱신합니다.
+	void UpdateEditorPreviewVisuals();
 
 	// 이동 곡선이 있으면 곡선 값을 사용하고 없으면 기본 알파를 그대로 사용합니다.
 	float ResolveMoveAlpha(float RawAlpha) const;
@@ -227,18 +365,47 @@ private:
 	UPROPERTY(Transient)
 	FTransform TargetTransform = FTransform::Identity;
 
+	// 현재 진행 중인 이동 구간의 실제 시작 트랜스폼입니다.
+	UPROPERTY(Transient)
+	FTransform MoveStartTransform = FTransform::Identity;
+
+	// 현재 진행 중인 이동 구간의 실제 목표 트랜스폼입니다.
+	UPROPERTY(Transient)
+	FTransform MoveTargetTransform = FTransform::Identity;
+
+	// 현재 이동 구간에서 사용할 회전 방식입니다.
+	UPROPERTY(Transient)
+	EUOUFloorPlatformRotationMode ActiveMoveRotationMode = EUOUFloorPlatformRotationMode::TransformLerp;
+
+	// 현재 이동 구간에서 사용할 힌지 고정 변입니다.
+	UPROPERTY(Transient)
+	EUOUFloorPlatformHingeEdge ActiveMoveHingeEdge = EUOUFloorPlatformHingeEdge::NegativeY;
+
+	// 현재 이동 구간에서 사용할 커스텀 힌지 로컬 위치입니다.
+	UPROPERTY(Transient)
+	FVector ActiveMoveCustomHingeLocalOffset = FVector::ZeroVector;
+
+	// 현재 이동이 향하고 있는 마커입니다.
+	// 도착 후 자동으로 다음 스텝을 이어갈지 같은 마커별 규칙을 확인하는 데 사용합니다.
+	UPROPERTY(Transient)
+	TObjectPtr<AUOUFloorPlatformTargetActor> ActiveMoveTargetMarker = nullptr;
+
 	// 시작 위치가 한 번이라도 기록되었는지 확인하는 값입니다.
 	UPROPERTY(Transient)
 	bool bHasCapturedStartTransform = false;
 
-	// 이동 중 플랫폼에 임시로 붙여둔 액터 목록입니다.
+	// 현재 실행 세션에서 다음으로 사용할 이동 단계입니다.
+	// 에디터 이동 테스트나 런타임 이동으로 바뀌지만 맵에는 저장되지 않습니다.
 	UPROPERTY(Transient)
-	TArray<TObjectPtr<AActor>> CarriedActors;
+	int32 RuntimeSequentialTargetIndex = 0;
 
-	// 직전 이동에서 함께 움직인 액터 목록입니다.
+	// 현재 이동이 끝난 뒤 이어서 실행해야 하는 남은 스텝 수입니다.
 	UPROPERTY(Transient)
-	TArray<TWeakObjectPtr<AActor>> LastMovedActors;
+	int32 PendingSequentialMoveCount = 0;
 
-	// 운반 중 잠시 물리를 꺼둔 컴포넌트들의 원래 상태입니다.
-	TArray<FUOUFloorPlatformCarriedPhysicsState> CarriedPhysicsStates;
+	// 에디터 버튼으로 위치를 바꾸는 중인지 기록합니다.
+	// 자동 시작 위치 복귀가 스냅이나 이동 완료를 즉시 되돌리지 않게 막습니다.
+	UPROPERTY(Transient)
+	bool bIsApplyingEditorTransform = false;
+
 };
