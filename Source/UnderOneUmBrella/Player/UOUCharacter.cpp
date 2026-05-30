@@ -6,6 +6,7 @@
 #include "Components/ActorComponent.h"
 #include "Components/ArrowComponent.h"
 #include "Components/CapsuleComponent.h"
+#include "Components/PrimitiveComponent.h"
 #include "Components/SceneComponent.h"
 #include "Debug/UOUDebugSubsystem.h"
 #include "EnhancedInputComponent.h"
@@ -17,7 +18,9 @@
 #include "GameFramework/SpringArmComponent.h"
 #include "InputActionValue.h"
 #include "InputCoreTypes.h"
+#include "Interaction/UOUInteractable.h"
 #include "Player/UOUCameraControllerComponent.h"
+#include "Player/UOUInteractionComponent.h"
 #include "Player/UOUPushPullInteractorComponent.h"
 #include "Player/UOUUmbrellaComponent.h"
 
@@ -378,6 +381,11 @@ void AUOUCharacter::HandleContextInteractPressed()
 		}
 	}
 
+	if (TryContextInteractable())
+	{
+		return;
+	}
+
 	HandlePushPullPressed();
 }
 
@@ -428,6 +436,54 @@ void AUOUCharacter::HandlePushPullReleased()
 	{
 		PushPullInteractorComponent->HandleGrabReleased();
 	}
+}
+
+bool AUOUCharacter::TryContextInteractable()
+{
+	auto TryExecuteInteract = [this](UObject* TargetObject) -> bool
+	{
+		if (TargetObject == nullptr || !TargetObject->GetClass()->ImplementsInterface(UUOUInteractable::StaticClass()))
+		{
+			return false;
+		}
+
+		IUOUInteractable::Execute_Interact(TargetObject, this);
+		return true;
+	};
+
+	UUOUInteractionComponent* InteractionComponent = FindComponentByClass<UUOUInteractionComponent>();
+	if (InteractionComponent == nullptr)
+	{
+		return false;
+	}
+
+	InteractionComponent->RefreshCandidate();
+
+	UPrimitiveComponent* CandidateComponent = InteractionComponent->CurrentCandidateComponent;
+	if (TryExecuteInteract(CandidateComponent))
+	{
+		return true;
+	}
+
+	AActor* CandidateActor = CandidateComponent != nullptr ? CandidateComponent->GetOwner() : nullptr;
+	if (TryExecuteInteract(CandidateActor))
+	{
+		return true;
+	}
+
+	if (CandidateActor != nullptr)
+	{
+		TInlineComponentArray<UActorComponent*> CandidateActorComponents(CandidateActor);
+		for (UActorComponent* CandidateActorComponent : CandidateActorComponents)
+		{
+			if (TryExecuteInteract(CandidateActorComponent))
+			{
+				return true;
+			}
+		}
+	}
+
+	return false;
 }
 
 UUOUUmbrellaComponent* AUOUCharacter::FindUmbrellaComponent() const
