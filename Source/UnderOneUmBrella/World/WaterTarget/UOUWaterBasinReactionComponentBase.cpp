@@ -16,6 +16,22 @@ namespace
 	// DrawDebugString에서 0초는 한 프레임 표시를 의미합니다.
 	// 이 컴포넌트는 Tick마다 다시 그리므로 지속 시간을 길게 주면 이전 텍스트가 겹쳐 보일 수 있습니다.
 	constexpr float ReactionDebugTextLifeTime = 0.0f;
+
+	FString GetReactionValueSourceDebugName(EUOUWaterBasinReactionValueSource InValueSource)
+	{
+		if (const UEnum* ValueSourceEnum = StaticEnum<EUOUWaterBasinReactionValueSource>())
+		{
+			const FText DisplayName = ValueSourceEnum->GetDisplayNameTextByValue(static_cast<int64>(InValueSource));
+			if (!DisplayName.IsEmpty())
+			{
+				return DisplayName.ToString();
+			}
+
+			return ValueSourceEnum->GetNameStringByValue(static_cast<int64>(InValueSource));
+		}
+
+		return TEXT("Unknown");
+	}
 }
 
 UUOUWaterBasinReactionComponentBase::UUOUWaterBasinReactionComponentBase()
@@ -83,7 +99,10 @@ void UUOUWaterBasinReactionComponentBase::EvaluateReaction(bool bForceNotify)
 	BindToWaterBasinTarget();
 
 	UUOUWaterBasinTargetComponent* WaterBasinTarget = ResolveWaterBasinTarget();
-	if (!WaterBasinTarget && ValueSource != EUOUWaterBasinReactionValueSource::PlatformWorldZ)
+	if (!WaterBasinTarget
+		&& ValueSource != EUOUWaterBasinReactionValueSource::PlatformWorldZ
+		&& ValueSource != EUOUWaterBasinReactionValueSource::RotationAngleDegrees
+		&& ValueSource != EUOUWaterBasinReactionValueSource::SignedRotationAngleDegrees)
 	{
 		return;
 	}
@@ -108,6 +127,19 @@ bool UUOUWaterBasinReactionComponentBase::IsReactionConditionSatisfied() const
 FUOUWaterBasinReactionContext UUOUWaterBasinReactionComponentBase::GetLastReactionContext() const
 {
 	return LastContext;
+}
+
+TArray<FString> UUOUWaterBasinReactionComponentBase::GetPuzzleDebugInfo_Implementation() const
+{
+	TArray<FString> DebugInfo = Super::GetPuzzleDebugInfo_Implementation();
+	const EUOUWaterBasinReactionValueSource DebugValueSource = bHasEvaluated ? LastContext.ValueSource : ValueSource;
+	DebugInfo.Add(FString::Printf(TEXT("Value Source: %s"), *GetReactionValueSourceDebugName(DebugValueSource)));
+	DebugInfo.Add(FString::Printf(TEXT("Reaction Value: %.3f / %.3f"), LastContext.CurrentValue, LastContext.ThresholdValue));
+	DebugInfo.Add(FString::Printf(TEXT("Water Fill: %.3f"), LastContext.WaterFillRatio));
+	DebugInfo.Add(FString::Printf(TEXT("Rotation Angle: %.2f"), LastContext.RotationAngleDegrees));
+	DebugInfo.Add(FString::Printf(TEXT("Signed Rotation Angle: %.2f"), LastContext.SignedRotationAngleDegrees));
+	DebugInfo.Add(FString::Printf(TEXT("Reaction Events: +%d / -%d"), SatisfiedEventCount, UnsatisfiedEventCount));
+	return DebugInfo;
 }
 
 void UUOUWaterBasinReactionComponentBase::OnWaterBasinReactionStateUpdated_Implementation(const FUOUWaterBasinReactionContext& /*Context*/)
@@ -183,6 +215,7 @@ FUOUWaterBasinReactionContext UUOUWaterBasinReactionComponentBase::BuildReaction
 	FUOUWaterBasinReactionContext Context;
 	Context.ReactionOwner = GetOwner();
 	Context.ReactionComponent = this;
+	Context.ValueSource = ValueSource;
 	Context.ThresholdValue = ThresholdValue;
 	Context.PlatformComponent = ResolvePlatformComponent();
 
@@ -239,6 +272,10 @@ float UUOUWaterBasinReactionComponentBase::ResolveCurrentValue(const FUOUWaterBa
 		return Context.WaterVolume;
 	case EUOUWaterBasinReactionValueSource::PlatformWorldZ:
 		return Context.PlatformWorldZ;
+	case EUOUWaterBasinReactionValueSource::RotationAngleDegrees:
+		return Context.RotationAngleDegrees;
+	case EUOUWaterBasinReactionValueSource::SignedRotationAngleDegrees:
+		return Context.SignedRotationAngleDegrees;
 	default:
 		return InvalidReactionValue;
 	}
@@ -311,6 +348,11 @@ void UUOUWaterBasinReactionComponentBase::UnbindFromWaterBasinTarget()
 
 void UUOUWaterBasinReactionComponentBase::NotifyReactionResult(const FUOUWaterBasinReactionContext& Context, bool bWasSatisfied, bool bForceNotify)
 {
+	if (bExposeAsPuzzleCondition)
+	{
+		// Reaction 조건 결과를 퍼즐 조건 소스 상태에도 동기화합니다.
+		SetSatisfiedState(Context.bIsSatisfied, true);
+	}
 	const bool bBecameSatisfied = !bWasSatisfied && Context.bIsSatisfied;
 	const bool bBecameUnsatisfied = bWasSatisfied && !Context.bIsSatisfied;
 	const bool bCanTriggerSatisfied = !bTriggerOnce || !bHasTriggeredOnce;
@@ -352,9 +394,10 @@ void UUOUWaterBasinReactionComponentBase::DrawReactionDebugText()
 		bHasEvaluated ? (bIsConditionSatisfied ? DebugSatisfiedColor : DebugUnsatisfiedColor) : DebugWaitingColor);
 
 	const FString DebugText = FString::Printf(
-		TEXT("%s\nSatisfied: %s\nValue: %.3f / %.3f\nWater Z: %.1f\nDepth: %.3f\nFill: %.3f\nVolume: %.3f\nEvents: +%d / -%d"),
+		TEXT("%s\nSatisfied: %s\nValue Source: %s\nValue: %.3f / %.3f\nWater Z: %.1f\nDepth: %.3f\nFill: %.3f\nVolume: %.3f\nEvents: +%d / -%d"),
 		*GetName(),
 		bIsConditionSatisfied ? TEXT("TRUE") : TEXT("FALSE"),
+		*GetReactionValueSourceDebugName(bHasEvaluated ? LastContext.ValueSource : ValueSource),
 		LastContext.CurrentValue,
 		LastContext.ThresholdValue,
 		LastContext.WaterSurfaceWorldZ,
