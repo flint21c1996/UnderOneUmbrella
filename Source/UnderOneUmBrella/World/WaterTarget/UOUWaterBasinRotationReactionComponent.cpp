@@ -4,6 +4,7 @@
 
 #include "Components/SceneComponent.h"
 #include "DrawDebugHelpers.h"
+#include "Engine/World.h"
 #include "GameFramework/Actor.h"
 #include "World/WaterTarget/UOUWaterBasinTargetComponent.h"
 
@@ -36,6 +37,13 @@ namespace
 		}
 
 		return (Direction - SafeAxis * FVector::DotProduct(Direction, SafeAxis)).GetSafeNormal();
+	}
+
+	bool IsFiniteWorldLocation(const FVector& WorldLocation)
+	{
+		return FMath::IsFinite(WorldLocation.X)
+			&& FMath::IsFinite(WorldLocation.Y)
+			&& FMath::IsFinite(WorldLocation.Z);
 	}
 
 	float CalculateInputSideValueByCross(
@@ -241,6 +249,11 @@ void UUOUWaterBasinRotationReactionComponent::TickComponent(float DeltaTime, ELe
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
+	if (!bRotationReactionEnabled)
+	{
+		return;
+	}
+
 	UpdateInterpolatedRotation(DeltaTime);
 	DrawInputSideDebug();
 }
@@ -261,6 +274,46 @@ void UUOUWaterBasinRotationReactionComponent::ResetRotationReaction(bool bResetO
 	if (bApplyBaseRotation)
 	{
 		ApplyRotationAngle(CurrentAppliedAngleDegrees);
+		EvaluateRotationAngleConditionIfNeeded();
+	}
+}
+
+void UUOUWaterBasinRotationReactionComponent::SetRotationReactionEnabled(bool bEnabled)
+{
+	if (bRotationReactionEnabled == bEnabled)
+	{
+		return;
+	}
+
+	bRotationReactionEnabled = bEnabled;
+
+	if (bRotationReactionEnabled)
+	{
+		// 꺼져 있는 동안 바뀐 물 상태를 누적 회전으로 따라잡지 않도록 현재 상태를 새 기준으로 잡습니다.
+		bHasObservedValue = false;
+		EvaluateReaction(false);
+	}
+}
+
+bool UUOUWaterBasinRotationReactionComponent::IsRotationReactionEnabled() const
+{
+	return bRotationReactionEnabled;
+}
+
+bool UUOUWaterBasinRotationReactionComponent::EvaluateReactionCondition(FUOUWaterBasinReactionContext& Context)
+{
+	// 실제 회전 누적값은 유지하고, 퍼즐 조건 비교에는 정규화된 각도를 노출합니다.
+	Context.RotationAngleDegrees = FRotator::ClampAxis(CurrentAppliedAngleDegrees);
+	Context.SignedRotationAngleDegrees = FRotator::NormalizeAxis(CurrentAppliedAngleDegrees);
+	return Super::EvaluateReactionCondition(Context);
+}
+
+void UUOUWaterBasinRotationReactionComponent::OnWaterBasinReactionSatisfied_Implementation(const FUOUWaterBasinReactionContext& Context)
+{
+	Super::OnWaterBasinReactionSatisfied_Implementation(Context);
+	if (bDisableReactionWhenConditionSatisfied)
+	{
+		SetRotationReactionEnabled(false);
 	}
 }
 
@@ -268,6 +321,10 @@ void UUOUWaterBasinRotationReactionComponent::OnWaterBasinReactionStateUpdated_I
 {
 	CacheBaseRotationIfNeeded();
 	BindToWaterInputTarget();
+	if (!bRotationReactionEnabled)
+	{
+		return;
+	}
 
 	const float CurrentValue = Context.CurrentValue;
 	if (RotationMode == EUOUWaterBasinRotationReactionMode::IncrementalOnWaterInput)
@@ -329,6 +386,11 @@ void UUOUWaterBasinRotationReactionComponent::HandleWaterInputReceived(UUOUWater
 	const bool bCanRotateByFullWaterInput = RotationMode == EUOUWaterBasinRotationReactionMode::IncrementalOnIncrease
 		|| RotationMode == EUOUWaterBasinRotationReactionMode::IncrementalOnWaterChange;
 	const bool bRotateByFullWaterInput = bCanRotateByFullWaterInput && bRotateOnFullWaterInput;
+	if (!bRotationReactionEnabled)
+	{
+		return;
+	}
+
 	if ((!bRotateByEveryWaterInput && !bRotateByFullWaterInput)
 		|| Target == nullptr
 		|| InputContext.Volume <= 0.0f)
@@ -517,6 +579,7 @@ void UUOUWaterBasinRotationReactionComponent::SetTargetRotationAngle(float NewTa
 
 	CurrentAppliedAngleDegrees = TargetAngleDegrees;
 	ApplyRotationAngle(CurrentAppliedAngleDegrees);
+	EvaluateRotationAngleConditionIfNeeded();
 }
 
 void UUOUWaterBasinRotationReactionComponent::UpdateInterpolatedRotation(float DeltaTime)
@@ -545,6 +608,7 @@ void UUOUWaterBasinRotationReactionComponent::UpdateInterpolatedRotation(float D
 
 	CurrentAppliedAngleDegrees = NextAngle;
 	ApplyRotationAngle(CurrentAppliedAngleDegrees);
+	EvaluateRotationAngleConditionIfNeeded();
 }
 
 void UUOUWaterBasinRotationReactionComponent::ApplyRotationAngle(float AngleDegrees)
@@ -577,9 +641,51 @@ void UUOUWaterBasinRotationReactionComponent::CacheInputSideDebug(const FUOUWate
 {
 	bHasLastInputSideDebug = true;
 	LastInputSideDebugWorldLocation = InputContext.WorldLocation;
+	bLastInputSideDebugHasValidWorldLocation = InputContext.bHasValidWorldLocation
+		&& IsFiniteWorldLocation(InputContext.WorldLocation);
 	LastInputSideDebugRotationSign = RotationSign;
 	LastInputSideDebugVolume = InputContext.Volume;
 	LastInputSideDebugSource = InputContext.Source;
+}
+
+void UUOUWaterBasinRotationReactionComponent::EvaluateRotationAngleConditionIfNeeded()
+{
+	const bool bUsesRotationAngleValue =
+		ValueSource == EUOUWaterBasinReactionValueSource::RotationAngleDegrees
+		|| ValueSource == EUOUWaterBasinReactionValueSource::SignedRotationAngleDegrees;
+	if (!bUsesRotationAngleValue || bEvaluatingRotationAngleCondition)
+	{
+		return;
+	}
+
+	bEvaluatingRotationAngleCondition = true;
+	EvaluateReaction(false);
+	bEvaluatingRotationAngleCondition = false;
+}
+
+bool UUOUWaterBasinRotationReactionComponent::CaptureCurrentInputSideReference(
+	FVector& OutCenter,
+	FVector& OutForwardDirection,
+	FVector& OutAxisWorld) const
+{
+	const USceneComponent* TargetComponent = ResolveRotationTargetComponent();
+	const USceneComponent* CenterComponent = ResolveInputSideCenterComponent(TargetComponent);
+	const USceneComponent* ForwardReferenceComponent = ResolveInputSideForwardReferenceComponent(CenterComponent);
+	const USceneComponent* AxisComponent = CenterComponent != nullptr ? CenterComponent : TargetComponent;
+	OutCenter = CenterComponent != nullptr
+		? CenterComponent->GetComponentLocation()
+		: (TargetComponent != nullptr ? TargetComponent->GetComponentLocation() : FVector::ZeroVector);
+	OutForwardDirection = ResolveInputSideForwardWorldDirection(ForwardReferenceComponent);
+	OutAxisWorld = ResolveWorldRotationAxis(AxisComponent);
+	return !OutForwardDirection.IsNearlyZero() && !OutAxisWorld.IsNearlyZero();
+}
+
+bool UUOUWaterBasinRotationReactionComponent::ResolveInputSideReference(
+	FVector& OutCenter,
+	FVector& OutForwardDirection,
+	FVector& OutAxisWorld) const
+{
+	return CaptureCurrentInputSideReference(OutCenter, OutForwardDirection, OutAxisWorld);
 }
 
 void UUOUWaterBasinRotationReactionComponent::DrawInputSideDebug() const
@@ -596,17 +702,27 @@ void UUOUWaterBasinRotationReactionComponent::DrawInputSideDebug() const
 		return;
 	}
 
-	const float DrawScale = FMath::Max(InputSideDebugDrawScale, 0.0f);
-	const float SphereRadius = FMath::Max(InputSideDebugSphereRadius, 0.0f);
-	const float Thickness = FMath::Max(InputSideDebugThickness, 0.0f);
-	const float ArrowSize = FMath::Max(DrawScale * 0.2f, 8.0f);
+	// 기존 배치 인스턴스에 작은 값이 남아 있어도 플랫폼 기준이 충분히 크게 보이도록 최소 표시 크기를 둡니다.
+	const float MinVisibleDrawScale = 500.0f;
+	const float MinVisibleSphereRadius = 30.0f;
+	const float MinVisibleThickness = 8.0f;
+	const float DrawScale = FMath::Max(InputSideDebugDrawScale, MinVisibleDrawScale);
+	const float SphereRadius = FMath::Max(InputSideDebugSphereRadius, MinVisibleSphereRadius);
+	const float Thickness = FMath::Max(InputSideDebugThickness, MinVisibleThickness);
+	const float ArrowSize = FMath::Max(DrawScale * 0.25f, 48.0f);
 	const float DrawDuration = 0.05f;
-	const USceneComponent* CenterComponent = ResolveInputSideCenterComponent(TargetComponent);
-	const USceneComponent* ForwardReferenceComponent = ResolveInputSideForwardReferenceComponent(CenterComponent);
-	const FVector Center = CenterComponent != nullptr ? CenterComponent->GetComponentLocation() : TargetComponent->GetComponentLocation();
-	const FVector AxisWorld = ResolveWorldRotationAxis(CenterComponent != nullptr ? CenterComponent : TargetComponent);
-	const FVector ForwardDirection = ResolveInputSideForwardWorldDirection(ForwardReferenceComponent);
-	const FVector SideDirection = ResolveInputSideRightWorldDirection(ForwardReferenceComponent, CenterComponent != nullptr ? CenterComponent : TargetComponent);
+	FVector Center = FVector::ZeroVector;
+	FVector ForwardDirection = FVector::ZeroVector;
+	FVector AxisWorld = FVector::ZeroVector;
+	if (!ResolveInputSideReference(Center, ForwardDirection, AxisWorld))
+	{
+		return;
+	}
+
+	const FVector PlanarForwardDirection = ProjectDirectionOnRotationPlane(ForwardDirection, AxisWorld);
+	const FVector SideDirection = PlanarForwardDirection.IsNearlyZero()
+		? FVector::ZeroVector
+		: FVector::CrossProduct(AxisWorld.GetSafeNormal(), PlanarForwardDirection).GetSafeNormal();
 
 	DrawDebugSphere(World, Center, SphereRadius, 16, FColor::Yellow, false, DrawDuration, 0, Thickness);
 
@@ -657,7 +773,7 @@ void UUOUWaterBasinRotationReactionComponent::DrawInputSideDebug() const
 		DrawDebugString(
 			World,
 			Center + FVector(0.0f, 0.0f, SphereRadius * 2.0f),
-			TEXT("입력 좌우 중심 / 회전축 / 전방 / 오른쪽"),
+			TEXT("입력 좌우 현재 기준 / 회전축 / 전방 / 오른쪽"),
 			nullptr,
 			FColor::Yellow,
 			DrawDuration,
@@ -669,7 +785,7 @@ void UUOUWaterBasinRotationReactionComponent::DrawInputSideDebug() const
 		return;
 	}
 
-	const FVector InputLocation = LastInputSideDebugWorldLocation.IsNearlyZero() ? Center : LastInputSideDebugWorldLocation;
+	const FVector InputLocation = bLastInputSideDebugHasValidWorldLocation ? LastInputSideDebugWorldLocation : Center;
 	const FVector InputOffset = InputLocation - Center;
 	const FVector PlanarInputOffset = AxisWorld.IsNearlyZero()
 		? InputOffset
@@ -774,16 +890,20 @@ float UUOUWaterBasinRotationReactionComponent::ResolveInputRotationSign(const FU
 
 float UUOUWaterBasinRotationReactionComponent::ResolveInputSideSign(const FUOUWaterBasinInputContext& InputContext) const
 {
+	if (!InputContext.bHasValidWorldLocation || !IsFiniteWorldLocation(InputContext.WorldLocation))
+	{
+		return 0.0f;
+	}
+
 	const float DeadZone = FMath::Max(InputSideDeadZone, 0.0f);
-	const USceneComponent* TargetComponent = ResolveRotationTargetComponent();
-	const USceneComponent* CenterComponent = ResolveInputSideCenterComponent(TargetComponent);
-	const USceneComponent* ForwardReferenceComponent = ResolveInputSideForwardReferenceComponent(CenterComponent);
-	const USceneComponent* AxisComponent = CenterComponent != nullptr ? CenterComponent : TargetComponent;
-	const FVector Center = CenterComponent != nullptr
-		? CenterComponent->GetComponentLocation()
-		: (TargetComponent != nullptr ? TargetComponent->GetComponentLocation() : FVector::ZeroVector);
-	const FVector ForwardDirection = ResolveInputSideForwardWorldDirection(ForwardReferenceComponent);
-	const FVector AxisWorld = ResolveWorldRotationAxis(AxisComponent);
+	FVector Center = FVector::ZeroVector;
+	FVector ForwardDirection = FVector::ZeroVector;
+	FVector AxisWorld = FVector::ZeroVector;
+	if (!ResolveInputSideReference(Center, ForwardDirection, AxisWorld))
+	{
+		return 0.0f;
+	}
+
 	const float SideSignValue = CalculateInputSideValueByCross(Center, InputContext.WorldLocation, ForwardDirection, AxisWorld);
 	if (FMath::Abs(SideSignValue) <= DeadZone)
 	{

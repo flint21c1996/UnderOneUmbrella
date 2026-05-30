@@ -56,6 +56,9 @@ public:
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Activation", meta = (ToolTip = "꺼져 있으면 물 상태 변화와 물 입력 이벤트가 회전을 변경하지 않습니다. 퍼즐 결과로 회전 기믹을 켜고 끌 때 사용합니다."))
+	bool bRotationReactionEnabled = true;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Target", meta = (ToolTip = "회전시킬 씬 컴포넌트입니다. 비어 있으면 회전 대상 이름으로 찾고, 허용된 경우 소유자의 루트 컴포넌트를 사용합니다."))
 	TObjectPtr<USceneComponent> RotationTargetComponent = nullptr;
 
@@ -122,6 +125,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Condition", meta = (ToolTip = "켜져 있으면 기본 반응 조건이 만족될 때만 회전을 적용합니다."))
 	bool bRequireConditionSatisfied = false;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Condition", meta = (ToolTip = "켜져 있으면 Reaction 조건이 만족되는 순간 회전 반응을 비활성화합니다. 특정 각도에 도달한 뒤 플랫폼을 멈출 때 사용합니다."))
+	bool bDisableReactionWhenConditionSatisfied = false;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Clamp", meta = (ToolTip = "켜져 있으면 누적 회전 각도를 최소/최대 각도 사이로 제한합니다."))
 	bool bClampRotationAngle = false;
 
@@ -144,13 +150,13 @@ public:
 	bool bDrawInputSideDebug = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Debug", meta = (ClampMin = "0.0", EditCondition = "bDrawInputSideDebug", EditConditionHides, ToolTip = "디버그 화살표 길이입니다."))
-	float InputSideDebugDrawScale = 120.0f;
+	float InputSideDebugDrawScale = 500.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Debug", meta = (ClampMin = "0.0", EditCondition = "bDrawInputSideDebug", EditConditionHides, ToolTip = "중심과 입력 위치를 표시하는 디버그 구체 반지름입니다."))
-	float InputSideDebugSphereRadius = 12.0f;
+	float InputSideDebugSphereRadius = 30.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Debug", meta = (ClampMin = "0.0", EditCondition = "bDrawInputSideDebug", EditConditionHides, ToolTip = "디버그 선과 화살표의 두께입니다."))
-	float InputSideDebugThickness = 3.0f;
+	float InputSideDebugThickness = 8.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Debug", meta = (EditCondition = "bDrawInputSideDebug", EditConditionHides, ToolTip = "켜져 있으면 디버그 라벨을 함께 그립니다."))
 	bool bDrawInputSideDebugLabel = true;
@@ -158,12 +164,21 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Water Basin Rotation Reaction")
 	void ResetRotationReaction(bool bResetObservedValue = true, bool bApplyBaseRotation = true);
 
+	UFUNCTION(BlueprintCallable, Category = "Water Basin Rotation Reaction")
+	void SetRotationReactionEnabled(bool bEnabled);
+
+	UFUNCTION(BlueprintPure, Category = "Water Basin Rotation Reaction")
+	bool IsRotationReactionEnabled() const;
+
 protected:
 	virtual void OnWaterBasinReactionStateUpdated_Implementation(const FUOUWaterBasinReactionContext& Context) override;
+	virtual void OnWaterBasinReactionSatisfied_Implementation(const FUOUWaterBasinReactionContext& Context) override;
+	virtual bool EvaluateReactionCondition(FUOUWaterBasinReactionContext& Context) override;
 
 private:
 	bool bHasObservedValue = false;
 	bool bHasCachedBaseRotation = false;
+	bool bEvaluatingRotationAngleCondition = false;
 	FQuat BaseRelativeRotation = FQuat::Identity;
 	FQuat BaseWorldRotation = FQuat::Identity;
 
@@ -172,10 +187,10 @@ private:
 
 	bool bHasLastInputSideDebug = false;
 	FVector LastInputSideDebugWorldLocation = FVector::ZeroVector;
+	bool bLastInputSideDebugHasValidWorldLocation = false;
 	float LastInputSideDebugRotationSign = 0.0f;
 	float LastInputSideDebugVolume = 0.0f;
 	EUOUWaterBasinInputSource LastInputSideDebugSource = EUOUWaterBasinInputSource::Unknown;
-
 	UFUNCTION()
 	void HandleWaterInputReceived(UUOUWaterBasinTargetComponent* Target, const FUOUWaterBasinInputContext& InputContext);
 
@@ -191,6 +206,9 @@ private:
 	void UpdateInterpolatedRotation(float DeltaTime);
 	void ApplyRotationAngle(float AngleDegrees);
 	void CacheInputSideDebug(const FUOUWaterBasinInputContext& InputContext, float RotationSign);
+	void EvaluateRotationAngleConditionIfNeeded();
+	bool CaptureCurrentInputSideReference(FVector& OutCenter, FVector& OutForwardDirection, FVector& OutAxisWorld) const;
+	bool ResolveInputSideReference(FVector& OutCenter, FVector& OutForwardDirection, FVector& OutAxisWorld) const;
 	void DrawInputSideDebug() const;
 	float ResolveInputRotationSign(const FUOUWaterBasinInputContext& InputContext) const;
 	float ResolveInputSideSign(const FUOUWaterBasinInputContext& InputContext) const;

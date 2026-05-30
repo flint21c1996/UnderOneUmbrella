@@ -28,12 +28,30 @@ namespace
 	constexpr float DebugMaxWaterBoxLifeTime = 0.0f;
 	constexpr float DebugMaxWaterBoxThickness = 3.0f;
 	constexpr float MinWaterVisualDepthWorld = 0.1f;
+	constexpr float InputLocationBoundsToleranceWorld = 1.0f;
 
 	// 연결 그룹의 공통 수면 높이는 이분 탐색으로 찾습니다.
 	// 40회 반복하면 탐색 높이 범위가 2^40번 쪼개지므로,
 	// 1,000,000 Unreal Unit 높이의 큰 맵에서도 마지막 오차 폭이 약 0.000001uu 이하가 됩니다.
 	// 수면 시각 표현이나 퍼즐 판정에서 체감할 수 없는 수준이라 고정 반복으로 충분합니다.
 	constexpr int32 SurfaceSolveBinarySearchIterationCount = 40;
+
+	bool IsFiniteVector(const FVector& Vector)
+	{
+		return FMath::IsFinite(Vector.X)
+			&& FMath::IsFinite(Vector.Y)
+			&& FMath::IsFinite(Vector.Z);
+	}
+
+	bool IsUsableBounds(const FBox& Bounds)
+	{
+		return Bounds.IsValid
+			&& IsFiniteVector(Bounds.Min)
+			&& IsFiniteVector(Bounds.Max)
+			&& Bounds.Min.X <= Bounds.Max.X
+			&& Bounds.Min.Y <= Bounds.Max.Y
+			&& Bounds.Min.Z <= Bounds.Max.Z;
+	}
 }
 
 UUOUWaterBasinTargetComponent::UUOUWaterBasinTargetComponent()
@@ -46,7 +64,7 @@ void UUOUWaterBasinTargetComponent::BeginPlay()
 	Super::BeginPlay();
 
 	NormalizeConnections();
-	CurrentWaterVolume = FMath::Clamp(InitialWaterVolume, 0.0f, GetCapacity());
+	CurrentWaterVolume = ResolveInitialWaterVolume();
 	UpdateCachedWaterState();
 
 	// 모든 Actor의 BeginPlay가 끝난 뒤 첫 Tick에서 그룹 초기 물량을 한 번 맞춥니다.
@@ -96,11 +114,16 @@ void UUOUWaterBasinTargetComponent::PostEditChangeProperty(FPropertyChangedEvent
 		bCapturedWaterVisualTransform = false;
 	}
 
-	if (ChangedPropertyName == GET_MEMBER_NAME_CHECKED(UUOUWaterBasinTargetComponent, InitialWaterVolume))
-	{
-		CurrentWaterVolume = FMath::Clamp(InitialWaterVolume, 0.0f, GetCapacity());
-	}
-	else if (ChangedPropertyName == GET_MEMBER_NAME_CHECKED(UUOUWaterBasinTargetComponent, CurrentWaterDepth))
+	const bool bChangedInitialWaterSetting =
+		ChangedPropertyName == GET_MEMBER_NAME_CHECKED(UUOUWaterBasinTargetComponent, InitialWaterFillMode)
+		|| ChangedPropertyName == GET_MEMBER_NAME_CHECKED(UUOUWaterBasinTargetComponent, InitialWaterVolume)
+		|| ChangedPropertyName == GET_MEMBER_NAME_CHECKED(UUOUWaterBasinTargetComponent, InitialWaterFillRatio);
+	const bool bChangedRuntimeWaterPreview =
+		ChangedPropertyName == GET_MEMBER_NAME_CHECKED(UUOUWaterBasinTargetComponent, CurrentWaterDepth)
+		|| ChangedPropertyName == GET_MEMBER_NAME_CHECKED(UUOUWaterBasinTargetComponent, CurrentFillRatio)
+		|| ChangedPropertyName == GET_MEMBER_NAME_CHECKED(UUOUWaterBasinTargetComponent, WaterSurfaceWorldZ);
+
+	if (ChangedPropertyName == GET_MEMBER_NAME_CHECKED(UUOUWaterBasinTargetComponent, CurrentWaterDepth))
 	{
 		CurrentWaterVolume = FMath::Clamp(CurrentWaterDepth, 0.0f, GetMaxWaterHeight()) * GetSurfaceArea();
 	}
@@ -112,15 +135,18 @@ void UUOUWaterBasinTargetComponent::PostEditChangeProperty(FPropertyChangedEvent
 	{
 		CurrentWaterVolume = GetVolumeAtSurfaceWorldZ(WaterSurfaceWorldZ);
 	}
-	else if (ChangedPropertyName == GET_MEMBER_NAME_CHECKED(UUOUWaterBasinTargetComponent, InitialWaterVolume) 
-		|| ChangedPropertyName == GET_MEMBER_NAME_CHECKED(UUOUWaterBasinTargetComponent, CurrentWaterDepth)
-		|| ChangedPropertyName == GET_MEMBER_NAME_CHECKED(UUOUWaterBasinTargetComponent, CurrentFillRatio)
-		|| ChangedPropertyName == GET_MEMBER_NAME_CHECKED(UUOUWaterBasinTargetComponent, WaterSurfaceWorldZ))
+
+	Super::PostEditChangeProperty(PropertyChangedEvent);
+
+	if (bChangedInitialWaterSetting)
+	{
+		CurrentWaterVolume = ResolveInitialWaterVolume();
+		UpdateCachedWaterState(false);
+	}
+	else if (bChangedRuntimeWaterPreview)
 	{
 		UpdateCachedWaterState();
 	}
-
-	Super::PostEditChangeProperty(PropertyChangedEvent);
 }
 #endif
 
@@ -499,6 +525,34 @@ float UUOUWaterBasinTargetComponent::GetCapacity() const
 	return GetSurfaceArea() * GetMaxWaterHeight();
 }
 
+bool UUOUWaterBasinTargetComponent::IsWorldLocationInsideBasin(const FVector& WorldLocation) const
+{
+	if (!IsFiniteVector(WorldLocation))
+	{
+		return false;
+	}
+
+	const AActor* Owner = GetOwner();
+	if (!Owner)
+	{
+		return false;
+	}
+
+	FVector ActorOrigin = FVector::ZeroVector;
+	FVector ActorExtent = FVector::ZeroVector;
+	Owner->GetActorBounds(false, ActorOrigin, ActorExtent);
+	if (!IsFiniteVector(ActorOrigin) || !IsFiniteVector(ActorExtent))
+	{
+		return false;
+	}
+
+	const FVector SafeActorExtent = ActorExtent.GetAbs();
+	return WorldLocation.X >= ActorOrigin.X - SafeActorExtent.X - InputLocationBoundsToleranceWorld
+		&& WorldLocation.X <= ActorOrigin.X + SafeActorExtent.X + InputLocationBoundsToleranceWorld
+		&& WorldLocation.Y >= ActorOrigin.Y - SafeActorExtent.Y - InputLocationBoundsToleranceWorld
+		&& WorldLocation.Y <= ActorOrigin.Y + SafeActorExtent.Y + InputLocationBoundsToleranceWorld;
+}
+
 float UUOUWaterBasinTargetComponent::GetWaterDepthWorld() const
 {
 	return CurrentWaterDepth * FMath::Max(WorldUnitsPerTile, MinWorldUnitsPerTile);
@@ -586,6 +640,20 @@ void UUOUWaterBasinTargetComponent::ApplyWaterVolumeToSingleTarget(float NewVolu
 	LastGroupSurfaceWorldZ = SingleData.SurfaceWorldZ;
 
 	OnWaterStateChanged.Broadcast(this);
+}
+
+float UUOUWaterBasinTargetComponent::ResolveInitialWaterVolume() const
+{
+	const float Capacity = GetCapacity();
+	switch (InitialWaterFillMode)
+	{
+	case EUOUWaterBasinInitialWaterFillMode::FillRatio:
+		return FMath::Clamp(InitialWaterFillRatio, 0.0f, 1.0f) * Capacity;
+
+	case EUOUWaterBasinInitialWaterFillMode::Volume:
+	default:
+		return FMath::Clamp(InitialWaterVolume, 0.0f, Capacity);
+	}
 }
 
 void UUOUWaterBasinTargetComponent::ApplyWaterVolumeToConnectedGroup(float NewTotalVolume)
@@ -750,7 +818,7 @@ void UUOUWaterBasinTargetComponent::ApplyGroupSurfaceToTargets(const TArray<UUOU
 	}
 }
 
-void UUOUWaterBasinTargetComponent::UpdateCachedWaterState()
+void UUOUWaterBasinTargetComponent::UpdateCachedWaterState(bool bUpdateVisual)
 {
 	const float Capacity = GetCapacity();
 	CurrentWaterVolume = FMath::Clamp(CurrentWaterVolume, 0.0f, Capacity);
@@ -767,7 +835,10 @@ void UUOUWaterBasinTargetComponent::UpdateCachedWaterState()
 	CurrentFillRatio = MaxHeight > KINDA_SMALL_NUMBER ? CurrentWaterDepth / MaxHeight : 0.0f;
 	WaterSurfaceWorldZ = GetBottomWorldZ() + GetWaterDepthWorld();
 
-	UpdateWaterVisual();
+	if (bUpdateVisual)
+	{
+		UpdateWaterVisual();
+	}
 }
 
 void UUOUWaterBasinTargetComponent::UpdateGroupRuntimeCache(const FUOUWaterBasinGroupDebugData& GroupData)
@@ -808,7 +879,10 @@ void UUOUWaterBasinTargetComponent::NotifyWaterInputReceived(const FUOUWaterBasi
 
 	if (!InputContext.bApplyToConnectedGroup)
 	{
-		OnWaterInputReceived.Broadcast(this, InputContext);
+		FUOUWaterBasinInputContext TargetInputContext = InputContext;
+		TargetInputContext.bHasValidWorldLocation = InputContext.bHasValidWorldLocation
+			&& IsWorldLocationInsideBasin(InputContext.WorldLocation);
+		OnWaterInputReceived.Broadcast(this, TargetInputContext);
 		return;
 	}
 
@@ -816,7 +890,10 @@ void UUOUWaterBasinTargetComponent::NotifyWaterInputReceived(const FUOUWaterBasi
 	GetConnectedGroup(Group);
 	if (Group.Num() == 0)
 	{
-		OnWaterInputReceived.Broadcast(this, InputContext);
+		FUOUWaterBasinInputContext TargetInputContext = InputContext;
+		TargetInputContext.bHasValidWorldLocation = InputContext.bHasValidWorldLocation
+			&& IsWorldLocationInsideBasin(InputContext.WorldLocation);
+		OnWaterInputReceived.Broadcast(this, TargetInputContext);
 		return;
 	}
 
@@ -824,7 +901,10 @@ void UUOUWaterBasinTargetComponent::NotifyWaterInputReceived(const FUOUWaterBasi
 	{
 		if (IsValid(Target))
 		{
-			Target->OnWaterInputReceived.Broadcast(Target, InputContext);
+			FUOUWaterBasinInputContext TargetInputContext = InputContext;
+			TargetInputContext.bHasValidWorldLocation = InputContext.bHasValidWorldLocation
+				&& Target->IsWorldLocationInsideBasin(InputContext.WorldLocation);
+			Target->OnWaterInputReceived.Broadcast(Target, TargetInputContext);
 		}
 	}
 }
@@ -1380,14 +1460,15 @@ bool UUOUWaterBasinTargetComponent::TryGetBasinBounds(FBox& OutBounds) const
 			continue;
 		}
 
+		PrimitiveComponent->UpdateBounds();
 		const FBox ComponentBounds = PrimitiveComponent->Bounds.GetBox();
-		if (ComponentBounds.IsValid)
+		if (IsUsableBounds(ComponentBounds))
 		{
 			Bounds += ComponentBounds;
 		}
 	}
 
-	if (!Bounds.IsValid)
+	if (!IsUsableBounds(Bounds))
 	{
 		return false;
 	}
