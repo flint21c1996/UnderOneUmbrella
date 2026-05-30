@@ -32,9 +32,9 @@ AUOUFloorPlatformActor::AUOUFloorPlatformActor()
 	CarryDetectionBox->SetMobility(EComponentMobility::Movable);
 	CarryDetectionBox->SetBoxExtent(FVector(300.0f, 300.0f, 160.0f));
 	CarryDetectionBox->SetRelativeLocation(FVector(0.0f, 0.0f, 170.0f));
-	CarryDetectionBox->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
-	CarryDetectionBox->SetCollisionResponseToAllChannels(ECR_Overlap);
-	CarryDetectionBox->SetGenerateOverlapEvents(true);
+	CarryDetectionBox->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	CarryDetectionBox->SetCollisionResponseToAllChannels(ECR_Ignore);
+	CarryDetectionBox->SetGenerateOverlapEvents(false);
 
 	CarryComponent = CreateDefaultSubobject<UUOUFloorPlatformCarryComponent>(TEXT("CarryComponent"));
 	CarryComponent->SetDetectionBox(CarryDetectionBox);
@@ -96,6 +96,9 @@ void AUOUFloorPlatformActor::BeginPlay()
 
 	if (CarryComponent != nullptr)
 	{
+		CarryDetectionBox->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		CarryDetectionBox->SetCollisionResponseToAllChannels(ECR_Ignore);
+		CarryDetectionBox->SetGenerateOverlapEvents(false);
 		CarryComponent->SetDetectionBox(CarryDetectionBox);
 	}
 
@@ -132,6 +135,9 @@ void AUOUFloorPlatformActor::OnConstruction(const FTransform& Transform)
 
 	if (CarryComponent != nullptr)
 	{
+		CarryDetectionBox->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		CarryDetectionBox->SetCollisionResponseToAllChannels(ECR_Ignore);
+		CarryDetectionBox->SetGenerateOverlapEvents(false);
 		CarryComponent->SetDetectionBox(CarryDetectionBox);
 	}
 
