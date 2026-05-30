@@ -106,6 +106,14 @@ void AUOUPuzzleConditionGroupActor::HandleGroupStateChanged(bool bNewSatisfied)
 	ReceiveGroupStateChanged(bNewSatisfied);
 }
 
+void AUOUPuzzleConditionGroupActor::ResetResultBindingExecutionState()
+{
+	for (FOUUPuzzleResultBinding& Binding : ResultBindings)
+	{
+		Binding.bHasRunSatisfiedAction = false;
+	}
+}
+
 void AUOUPuzzleConditionGroupActor::ResolveConditionSourcesFromActors()
 {
 	// ConditionActors는 퍼즐 원인을 담는 액터 목록입니다.
@@ -135,30 +143,43 @@ void AUOUPuzzleConditionGroupActor::ResolveConditionSourcesFromActors()
 	}
 }
 
-void AUOUPuzzleConditionGroupActor::DispatchResultBindings(bool bSatisfied) const
+void AUOUPuzzleConditionGroupActor::DispatchResultBindings(bool bSatisfied)
 {
 	// 현재 만족 상태에 맞는 액션을 골라 결과 액터들에게 순서대로 전달합니다.
-	for (const FOUUPuzzleResultBinding& Binding : ResultBindings)
+	for (FOUUPuzzleResultBinding& Binding : ResultBindings)
 	{
-		ExecuteResultAction(
-			Binding.TargetActor.Get(),
-			bSatisfied ? Binding.SatisfiedAction : Binding.UnsatisfiedAction);
+		if (bSatisfied)
+		{
+			if (Binding.bRunSatisfiedActionOnlyOnce && Binding.bHasRunSatisfiedAction)
+			{
+				continue;
+			}
+
+			if (ExecuteResultAction(Binding.TargetActor.Get(), Binding.SatisfiedAction))
+			{
+				Binding.bHasRunSatisfiedAction = true;
+			}
+			continue;
+		}
+
+		ExecuteResultAction(Binding.TargetActor.Get(), Binding.UnsatisfiedAction);
 	}
 }
 
-void AUOUPuzzleConditionGroupActor::ExecuteResultAction(AActor* TargetActor, EOUUPuzzleResultAction Action) const
+bool AUOUPuzzleConditionGroupActor::ExecuteResultAction(AActor* TargetActor, EOUUPuzzleResultAction Action) const
 {
 	if (TargetActor == nullptr || Action == EOUUPuzzleResultAction::None)
 	{
-		return;
+		return false;
 	}
 
 	if (!TargetActor->GetClass()->ImplementsInterface(UUOUPuzzleResultReceiver::StaticClass()))
 	{
-		return;
+		return false;
 	}
 
 	// 결과 액터가 구현한 공통 인터페이스 진입점을 호출합니다.
 	// 내부에서 어떤 동작을 할지는 각 액터가 ApplyPuzzleResult로 재정의합니다.
 	IUOUPuzzleResultReceiver::Execute_ApplyPuzzleResult(TargetActor, Action);
+	return true;
 }
