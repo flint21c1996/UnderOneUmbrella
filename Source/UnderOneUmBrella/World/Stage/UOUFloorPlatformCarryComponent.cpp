@@ -84,6 +84,10 @@ void UUOUFloorPlatformCarryComponent::CollectCarryCandidateActors(TArray<AActor*
 	ObjectQueryParams.AddObjectTypesToQuery(ECC_PhysicsBody);
 	ObjectQueryParams.AddObjectTypesToQuery(ECC_Vehicle);
 	ObjectQueryParams.AddObjectTypesToQuery(ECC_Destructible);
+	for (const TEnumAsByte<ECollisionChannel>& CarryObjectChannel : AdditionalCarryObjectChannels)
+	{
+		ObjectQueryParams.AddObjectTypesToQuery(CarryObjectChannel.GetValue());
+	}
 
 	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(UOUFloorPlatformCarryOverlap), false, OwnerActor);
 	QueryParams.AddIgnoredActor(OwnerActor);
@@ -186,6 +190,12 @@ void UUOUFloorPlatformCarryComponent::PrepareCarriedActorForAttach(AActor* Candi
 		FUOUFloorPlatformCarriedPhysicsState PhysicsState;
 		PhysicsState.Component = PrimitiveComponent;
 		PhysicsState.bWasSimulatingPhysics = true;
+		PhysicsState.bLockXTranslation = PrimitiveComponent->BodyInstance.bLockXTranslation;
+		PhysicsState.bLockYTranslation = PrimitiveComponent->BodyInstance.bLockYTranslation;
+		PhysicsState.bLockZTranslation = PrimitiveComponent->BodyInstance.bLockZTranslation;
+		PhysicsState.bLockXRotation = PrimitiveComponent->BodyInstance.bLockXRotation;
+		PhysicsState.bLockYRotation = PrimitiveComponent->BodyInstance.bLockYRotation;
+		PhysicsState.bLockZRotation = PrimitiveComponent->BodyInstance.bLockZRotation;
 		CarriedPhysicsStates.Add(PhysicsState);
 
 		PrimitiveComponent->SetSimulatePhysics(false);
@@ -199,7 +209,31 @@ void UUOUFloorPlatformCarryComponent::RestoreCarriedPhysicsStates()
 		UPrimitiveComponent* PrimitiveComponent = PhysicsState.Component.Get();
 		if (PrimitiveComponent != nullptr)
 		{
+			const FTransform CarriedWorldTransform = PrimitiveComponent->GetComponentTransform();
+			if (PhysicsState.bWasSimulatingPhysics)
+			{
+				// 잠긴 물리 축이 예전 바디 위치를 되살리지 않도록 복구 순간에는 임시로 이동 잠금을 풉니다.
+				PrimitiveComponent->BodyInstance.bLockXTranslation = false;
+				PrimitiveComponent->BodyInstance.bLockYTranslation = false;
+				PrimitiveComponent->BodyInstance.bLockZTranslation = false;
+			}
+
 			PrimitiveComponent->SetSimulatePhysics(PhysicsState.bWasSimulatingPhysics);
+			if (PhysicsState.bWasSimulatingPhysics)
+			{
+				// 물리를 다시 켤 때 기존 물리 바디 위치로 튀지 않도록 최종 운반 위치를 물리 바디에 다시 적용합니다.
+				PrimitiveComponent->SetWorldTransform(CarriedWorldTransform, false, nullptr, ETeleportType::TeleportPhysics);
+				PrimitiveComponent->BodyInstance.bLockXTranslation = PhysicsState.bLockXTranslation;
+				PrimitiveComponent->BodyInstance.bLockYTranslation = PhysicsState.bLockYTranslation;
+				PrimitiveComponent->BodyInstance.bLockZTranslation = PhysicsState.bLockZTranslation;
+				PrimitiveComponent->BodyInstance.bLockXRotation = PhysicsState.bLockXRotation;
+				PrimitiveComponent->BodyInstance.bLockYRotation = PhysicsState.bLockYRotation;
+				PrimitiveComponent->BodyInstance.bLockZRotation = PhysicsState.bLockZRotation;
+				PrimitiveComponent->RecreatePhysicsState();
+				PrimitiveComponent->SetWorldTransform(CarriedWorldTransform, false, nullptr, ETeleportType::TeleportPhysics);
+				PrimitiveComponent->SetPhysicsLinearVelocity(FVector::ZeroVector);
+				PrimitiveComponent->SetPhysicsAngularVelocityInDegrees(FVector::ZeroVector);
+			}
 		}
 	}
 

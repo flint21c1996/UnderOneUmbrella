@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "Engine/EngineTypes.h"
 #include "UOUFloorPlatformCarryComponent.generated.h"
 
 class UBoxComponent;
@@ -14,6 +15,12 @@ struct FUOUFloorPlatformCarriedPhysicsState
 {
 	TWeakObjectPtr<UPrimitiveComponent> Component;
 	bool bWasSimulatingPhysics = false;
+	bool bLockXTranslation = false;
+	bool bLockYTranslation = false;
+	bool bLockZTranslation = false;
+	bool bLockXRotation = false;
+	bool bLockYRotation = false;
+	bool bLockZRotation = false;
 };
 
 // 이동 플랫폼 위에 놓인 액터를 함께 이동시키는 운반 처리를 담당하는 컴포넌트입니다.
@@ -49,6 +56,11 @@ public:
 	// 비어 있으면 태그 필터를 쓰지 않고, 값이 있으면 이 태그를 가진 액터만 운반 후보로 봅니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Carry")
 	TArray<FName> CarryActorTags;
+
+	// 기본 물리 채널 외에 운반 감지에 포함할 오브젝트 채널입니다.
+	// PuzzleWeight처럼 커스텀 채널을 쓰는 상자도 플랫폼과 함께 움직이게 할 때 사용합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Carry")
+	TArray<TEnumAsByte<ECollisionChannel>> AdditionalCarryObjectChannels = { ECC_GameTraceChannel1 };
 
 	// 감지 박스 안에 있어도 운반하지 않을 액터 목록입니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Carry")
