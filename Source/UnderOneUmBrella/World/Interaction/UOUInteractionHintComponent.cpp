@@ -138,15 +138,15 @@ bool UUOUInteractionHintComponent::PassesOverlapRules(AActor* OtherActor) const
 	return true;
 }
 
-void UUOUInteractionHintComponent::SetWidgetComponentVisible(bool bVisible) const
+void UUOUInteractionHintComponent::SetWidgetComponentVisible(bool bNewVisible) const
 {
 	if (!bControlWidgetComponentVisibility || HintWidgetComponent == nullptr)
 	{
 		return;
 	}
 
-	HintWidgetComponent->SetVisibility(bVisible, true);
-	HintWidgetComponent->SetHiddenInGame(!bVisible, true);
+	HintWidgetComponent->SetVisibility(bNewVisible, true);
+	HintWidgetComponent->SetHiddenInGame(!bNewVisible, true);
 }
 
 void UUOUInteractionHintComponent::CallWidgetShowFunction(UUserWidget* UserWidget) const

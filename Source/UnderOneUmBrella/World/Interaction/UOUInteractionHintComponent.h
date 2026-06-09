@@ -89,7 +89,7 @@ private:
 	void HandleEndOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex);
 
 	bool PassesOverlapRules(AActor* OtherActor) const;
-	void SetWidgetComponentVisible(bool bVisible) const;
+	void SetWidgetComponentVisible(bool bNewVisible) const;
 	void CallWidgetShowFunction(UUserWidget* UserWidget) const;
 	void CallWidgetHideFunction(UUserWidget* UserWidget) const;
 	UUserWidget* GetHintUserWidget();
