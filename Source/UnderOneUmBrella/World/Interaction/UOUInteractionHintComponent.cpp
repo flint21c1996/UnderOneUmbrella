@@ -12,7 +12,7 @@ namespace
 	struct FUOUShowBubbleParams
 	{
 		FText BubbleText;
-		float Duration = 0.0f;
+		double Duration = 0.0;
 	};
 }
 
