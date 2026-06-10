@@ -144,6 +144,9 @@ protected:
 	// 문맥 상호작용 종료를 현재 상태에 맞게 분기한다.
 	void HandleContextInteractReleased();
 
+	// 현재 상호작용 후보가 공용 인터페이스를 구현하면 Push/Pull보다 먼저 실행합니다.
+	bool TryContextInteractable();
+
 	// 밀고 당기기 잡기 시작 요청을 인터랙터에 넘긴다.
 	void HandlePushPullPressed();
 

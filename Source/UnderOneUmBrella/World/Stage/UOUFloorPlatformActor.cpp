@@ -27,7 +27,6 @@ AUOUFloorPlatformActor::AUOUFloorPlatformActor()
 	PlatformMesh->SetMobility(EComponentMobility::Movable);
 
 	CarryDetectionBox = CreateDefaultSubobject<UBoxComponent>(TEXT("CarryDetectionBox"));
-	CarryDetectionBox->bEditableWhenInherited = false;
 	CarryDetectionBox->SetupAttachment(RootScene);
 	CarryDetectionBox->SetMobility(EComponentMobility::Movable);
 	CarryDetectionBox->SetBoxExtent(FVector(300.0f, 300.0f, 160.0f));

@@ -21,7 +21,9 @@ public class UnderOneUmBrella : ModuleRules
 			"NavigationSystem",
 			"GameplayTasks",
 			"Niagara",
-			"UMG"
+			"UMG",
+			"LevelSequence",
+			"MovieScene"
         });
 
 		PrivateDependencyModuleNames.AddRange(new string[]
