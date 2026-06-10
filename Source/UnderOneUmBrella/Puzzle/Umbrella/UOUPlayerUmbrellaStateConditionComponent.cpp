@@ -2,36 +2,40 @@
 
 #include "Puzzle/Umbrella/UOUPlayerUmbrellaStateConditionComponent.h"
 
+#include "Engine/World.h"
 #include "GameFramework/Pawn.h"
 #include "Kismet/GameplayStatics.h"
+#include "TimerManager.h"
+
+namespace
+{
+	constexpr float PlayerResolveRetryInterval = 0.1f;
+}
 
 UUOUPlayerUmbrellaStateConditionComponent::UUOUPlayerUmbrellaStateConditionComponent()
 {
-	PrimaryComponentTick.bCanEverTick = true;
+	PrimaryComponentTick.bCanEverTick = false;
 }
 
 void UUOUPlayerUmbrellaStateConditionComponent::BeginPlay()
 {
 	Super::BeginPlay();
 	RefreshPlayerUmbrellaReference();
+	if (CachedUmbrellaComponent == nullptr)
+	{
+		StartWaitingForPlayerSpawn();
+		StartPlayerResolveRetry();
+	}
+
 	RefreshConditionState();
 }
 
 void UUOUPlayerUmbrellaStateConditionComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	StopWaitingForPlayerSpawn();
+	StopPlayerResolveRetry();
 	ClearPlayerUmbrellaReference();
 	Super::EndPlay(EndPlayReason);
-}
-
-void UUOUPlayerUmbrellaStateConditionComponent::TickComponent(
-	float DeltaTime,
-	ELevelTick TickType,
-	FActorComponentTickFunction* ThisTickFunction)
-{
-	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
-
-	RefreshPlayerUmbrellaReference();
-	RefreshConditionState();
 }
 
 TArray<FString> UUOUPlayerUmbrellaStateConditionComponent::GetPuzzleDebugInfo_Implementation() const
@@ -78,6 +82,8 @@ void UUOUPlayerUmbrellaStateConditionComponent::RefreshPlayerUmbrellaReference()
 		CachedUmbrellaComponent->OnUmbrellaStateChanged.AddUniqueDynamic(
 			this,
 			&UUOUPlayerUmbrellaStateConditionComponent::HandleUmbrellaStateChanged);
+		StopWaitingForPlayerSpawn();
+		StopPlayerResolveRetry();
 	}
 }
 
@@ -86,6 +92,96 @@ void UUOUPlayerUmbrellaStateConditionComponent::HandleUmbrellaStateChanged(
 	bool bHasUmbrella)
 {
 	RefreshConditionState();
+}
+
+void UUOUPlayerUmbrellaStateConditionComponent::HandleActorSpawned(AActor* SpawnedActor)
+{
+	APawn* SpawnedPawn = Cast<APawn>(SpawnedActor);
+	if (SpawnedPawn == nullptr || SpawnedPawn->FindComponentByClass<UUOUUmbrellaComponent>() == nullptr)
+	{
+		return;
+	}
+
+	APawn* PlayerPawn = UGameplayStatics::GetPlayerPawn(this, PlayerIndex);
+	if (PlayerPawn == nullptr)
+	{
+		StartPlayerResolveRetry();
+		return;
+	}
+
+	if (SpawnedPawn != PlayerPawn)
+	{
+		return;
+	}
+
+	RefreshPlayerUmbrellaReference();
+	RefreshConditionState();
+}
+
+void UUOUPlayerUmbrellaStateConditionComponent::StartWaitingForPlayerSpawn()
+{
+	if (ActorSpawnedHandle.IsValid())
+	{
+		return;
+	}
+
+	if (UWorld* World = GetWorld())
+	{
+		ActorSpawnedHandle = World->AddOnActorSpawnedHandler(
+			FOnActorSpawned::FDelegate::CreateUObject(
+				this,
+				&UUOUPlayerUmbrellaStateConditionComponent::HandleActorSpawned));
+	}
+}
+
+void UUOUPlayerUmbrellaStateConditionComponent::StopWaitingForPlayerSpawn()
+{
+	if (!ActorSpawnedHandle.IsValid())
+	{
+		return;
+	}
+
+	if (UWorld* World = GetWorld())
+	{
+		World->RemoveOnActorSpawnedHandler(ActorSpawnedHandle);
+	}
+
+	ActorSpawnedHandle.Reset();
+}
+
+void UUOUPlayerUmbrellaStateConditionComponent::StartPlayerResolveRetry()
+{
+	UWorld* World = GetWorld();
+	if (World == nullptr || World->GetTimerManager().IsTimerActive(PlayerResolveRetryTimerHandle))
+	{
+		return;
+	}
+
+	World->GetTimerManager().SetTimer(
+		PlayerResolveRetryTimerHandle,
+		this,
+		&UUOUPlayerUmbrellaStateConditionComponent::RetryPlayerUmbrellaReference,
+		PlayerResolveRetryInterval,
+		true);
+}
+
+void UUOUPlayerUmbrellaStateConditionComponent::StopPlayerResolveRetry()
+{
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(PlayerResolveRetryTimerHandle);
+	}
+}
+
+void UUOUPlayerUmbrellaStateConditionComponent::RetryPlayerUmbrellaReference()
+{
+	RefreshPlayerUmbrellaReference();
+	RefreshConditionState();
+
+	if (CachedUmbrellaComponent != nullptr)
+	{
+		StopPlayerResolveRetry();
+	}
 }
 
 void UUOUPlayerUmbrellaStateConditionComponent::ClearPlayerUmbrellaReference()

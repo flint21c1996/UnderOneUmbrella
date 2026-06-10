@@ -20,7 +20,6 @@ public:
 
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
-	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 	virtual TArray<FString> GetPuzzleDebugInfo_Implementation() const override;
 	virtual void GetPuzzleDebugInputActors_Implementation(TArray<AActor*>& OutInputActors) const override;
 
@@ -43,7 +42,16 @@ protected:
 	UFUNCTION()
 	void HandleUmbrellaStateChanged(EUOUUmbrellaState NewState, bool bHasUmbrella);
 
+	void HandleActorSpawned(AActor* SpawnedActor);
+	void StartWaitingForPlayerSpawn();
+	void StopWaitingForPlayerSpawn();
+	void StartPlayerResolveRetry();
+	void StopPlayerResolveRetry();
+	void RetryPlayerUmbrellaReference();
 	void ClearPlayerUmbrellaReference();
 	void RefreshConditionState();
 	bool DoesCurrentUmbrellaStateMatch() const;
+
+	FDelegateHandle ActorSpawnedHandle;
+	FTimerHandle PlayerResolveRetryTimerHandle;
 };
