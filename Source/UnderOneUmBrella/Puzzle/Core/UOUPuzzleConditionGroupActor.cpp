@@ -151,6 +151,11 @@ void AUOUPuzzleConditionGroupActor::DispatchResultBindings(bool bSatisfied)
 	{
 		if (bSatisfied)
 		{
+			if (ShouldSkipSatisfiedAction(Binding))
+			{
+				continue;
+			}
+
 			if (Binding.bRunSatisfiedActionOnlyOnce && Binding.bHasRunSatisfiedAction)
 			{
 				continue;
@@ -170,6 +175,12 @@ void AUOUPuzzleConditionGroupActor::DispatchResultBindings(bool bSatisfied)
 
 		ExecuteResultAction(Binding.TargetActor.Get(), Binding.UnsatisfiedAction);
 	}
+}
+
+bool AUOUPuzzleConditionGroupActor::ShouldSkipSatisfiedAction(const FOUUPuzzleResultBinding& Binding) const
+{
+	return Binding.bIgnoreSatisfiedActionAfterResultCompleted
+		&& IsResultActionCompleted(Binding.TargetActor.Get(), Binding.SatisfiedAction);
 }
 
 bool AUOUPuzzleConditionGroupActor::ShouldSkipUnsatisfiedAction(const FOUUPuzzleResultBinding& Binding) const
