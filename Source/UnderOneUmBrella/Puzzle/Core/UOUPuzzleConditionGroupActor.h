@@ -37,6 +37,10 @@ struct FOUUPuzzleResultBinding
 	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Puzzle")
 	EOUUPuzzleResultAction UnsatisfiedAction = EOUUPuzzleResultAction::Deactivate;
 
+	// If enabled, UnsatisfiedAction is skipped after the satisfied result action reports completion.
+	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Puzzle")
+	bool bIgnoreUnsatisfiedActionAfterResultCompleted = false;
+
 	// 조건 만족 결과가 이미 실행되었는지 기록합니다.
 	// 에디터 설정값이 아니라 플레이 중 중복 실행을 막기 위한 런타임 상태입니다.
 	UPROPERTY(Transient)
@@ -146,4 +150,6 @@ protected:
 
 	// 개별 결과 액터 하나에 액션을 전달합니다.
 	bool ExecuteResultAction(AActor* TargetActor, EOUUPuzzleResultAction Action) const;
+	bool ShouldSkipUnsatisfiedAction(const FOUUPuzzleResultBinding& Binding) const;
+	bool IsResultActionCompleted(AActor* TargetActor, EOUUPuzzleResultAction Action) const;
 };
