@@ -1,0 +1,88 @@
+// Copyright Epic Games, Inc. All Rights Reserved.
+
+#pragma once
+
+#include "CoreMinimal.h"
+#include "Player/UOUUmbrellaComponent.h"
+#include "UOUUITypes.generated.h"
+
+// Snapshot data used by the HUD to draw umbrella ownership, state, and water level at once.
+USTRUCT(BlueprintType)
+struct UNDERONEUMBRELLA_API FUOUUmbrellaHUDState
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "UI|Umbrella")
+	bool bHasUmbrella = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "UI|Umbrella")
+	EUOUUmbrellaState UmbrellaState = EUOUUmbrellaState::Closed;
+
+	UPROPERTY(BlueprintReadOnly, Category = "UI|Umbrella")
+	float StoredWater = 0.0f;
+
+	UPROPERTY(BlueprintReadOnly, Category = "UI|Umbrella")
+	float MaxStoredWater = 0.0f;
+
+	UPROPERTY(BlueprintReadOnly, Category = "UI|Umbrella")
+	float StoredWaterRatio = 0.0f;
+
+	UPROPERTY(BlueprintReadOnly, Category = "UI|Umbrella")
+	float PlayerRainAmount = 0.0f;
+
+	UPROPERTY(BlueprintReadOnly, Category = "UI|Umbrella")
+	bool bBlockingRain = false;
+};
+
+// A single dialogue beat that can feed both the NPC bubble and the bottom dialogue box.
+USTRUCT(BlueprintType)
+struct UNDERONEUMBRELLA_API FUOUDialogueLine
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "UI|Dialogue")
+	FName LineId = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "UI|Dialogue")
+	FText SpeakerName;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "UI|Dialogue")
+	FText BubbleText;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "UI|Dialogue")
+	FText DialogueText;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "UI|Dialogue")
+	FName Emotion = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "UI|Dialogue", meta = (ClampMin = "0.0"))
+	float BubbleDuration = 1.5f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "UI|Dialogue", meta = (ClampMin = "0.0"))
+	float DialogueDuration = 3.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "UI|Dialogue")
+	bool bWaitForInput = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "UI|Dialogue")
+	bool bShowBubbleFirst = true;
+};
+
+// Short title-card data for chapter names, place names, or stage introductions.
+USTRUCT(BlueprintType)
+struct UNDERONEUMBRELLA_API FUOUTitleDisplayData
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "UI|Title")
+	FText Title;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "UI|Title")
+	FText Subtitle;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "UI|Title", meta = (ClampMin = "0.0"))
+	float DisplayDuration = 2.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "UI|Title")
+	bool bCanReplay = false;
+};
