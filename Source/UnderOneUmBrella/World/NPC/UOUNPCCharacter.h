@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
+#include "Puzzle/Core/UOUPuzzleResultCompletionState.h"
 #include "Puzzle/Core/UOUPuzzleResultReceiver.h"
 #include "World/NPC/UOUNPCActionTypes.h"
 #include "UOUNPCCharacter.generated.h"
@@ -28,7 +29,7 @@ enum class EOUUNPCActivationAction : uint8
 
 // 퍼즐에서 전달한 이동, 점프, 애니메이션 요청을 처리하는 NPC 베이스 캐릭터입니다.
 UCLASS(Blueprintable, meta = (DisplayName = "UOU NPC Character", ToolTip = "퍼즐 액션과 Behavior Tree 태스크로 제어되는 NPC 캐릭터입니다."))
-class AUOUNPCCharacter : public ACharacter, public IUOUPuzzleResultReceiver
+class AUOUNPCCharacter : public ACharacter, public IUOUPuzzleResultReceiver, public IUOUPuzzleResultCompletionState
 {
 	GENERATED_BODY()
 
@@ -75,6 +76,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "NPC|Activation", meta = (ToolTip = "플레이 시작 시 기존 직접 활성화 액션을 자동으로 실행합니다."))
 	bool bActivateOnBeginPlay = false;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "NPC|Activation", meta = (ToolTip = "When enabled, legacy Activate actions report completion when their behavior task finishes."))
+	bool bCompleteLegacyActivationOnFinish = false;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "NPC|Runtime", meta = (ToolTip = "Behavior Tree 블랙보드에서 사용하는 현재 활성화 상태입니다."))
 	bool bActivated = false;
 
@@ -90,6 +94,9 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "NPC|Runtime", meta = (ToolTip = "현재 액션을 요청한 오브젝트입니다. 액션 완료 시 시퀀스에 알릴 때 사용합니다."))
 	TObjectPtr<UObject> ActiveActionSource = nullptr;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "NPC|Runtime")
+	bool bHasCompletedResultSinceLastActivation = false;
+
 	UPROPERTY(BlueprintAssignable, Category = "NPC|Action")
 	FOnUOUNPCActionCompletedSignature OnNPCActionCompleted;
 
@@ -103,6 +110,7 @@ public:
 	void Toggle();
 
 	virtual void ApplyPuzzleResult_Implementation(EOUUPuzzleResultAction Action) override;
+	virtual bool IsPuzzleResultCompleted_Implementation(EOUUPuzzleResultAction Action) const override;
 
 	UFUNCTION(BlueprintCallable, Category = "NPC|Movement")
 	bool MoveToConfiguredTarget();

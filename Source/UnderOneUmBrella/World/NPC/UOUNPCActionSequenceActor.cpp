@@ -36,12 +36,14 @@ void AUOUNPCActionSequenceActor::EndPlay(const EEndPlayReason::Type EndPlayReaso
 void AUOUNPCActionSequenceActor::Activate()
 {
 	bActivated = true;
+	bHasCompletedResultSinceLastActivation = false;
 	StartSequence(ActivateActions, false);
 }
 
 void AUOUNPCActionSequenceActor::Deactivate()
 {
 	bActivated = false;
+	bHasCompletedResultSinceLastActivation = false;
 	StartSequence(DeactivateActions, true);
 }
 
@@ -90,6 +92,11 @@ void AUOUNPCActionSequenceActor::ApplyPuzzleResult_Implementation(EOUUPuzzleResu
 	default:
 		break;
 	}
+}
+
+bool AUOUNPCActionSequenceActor::IsPuzzleResultCompleted_Implementation(EOUUPuzzleResultAction Action) const
+{
+	return Action == EOUUPuzzleResultAction::Activate && bHasCompletedResultSinceLastActivation;
 }
 
 void AUOUNPCActionSequenceActor::StartSequence(
@@ -142,10 +149,17 @@ void AUOUNPCActionSequenceActor::RunCurrentAction()
 
 void AUOUNPCActionSequenceActor::FinishSequence()
 {
+	const bool bCompletedActivateSequence = bActivated && !bRunningDeactivateSequence;
+
 	bRunningSequence = false;
 	bRunningDeactivateSequence = false;
 	CurrentActionIndex = INDEX_NONE;
 	CurrentSequenceActions.Reset();
+
+	if (bCompletedActivateSequence)
+	{
+		bHasCompletedResultSinceLastActivation = true;
+	}
 }
 
 void AUOUNPCActionSequenceActor::BindToTargetNPC()

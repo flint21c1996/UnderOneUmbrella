@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "Puzzle/Core/UOUPuzzleResultCompletionState.h"
 #include "Puzzle/Core/UOUPuzzleResultReceiver.h"
 #include "World/NPC/UOUNPCActionTypes.h"
 #include "UOUNPCActionSequenceActor.generated.h"
@@ -13,7 +14,7 @@ class USceneComponent;
 
 // 활성화 또는 비활성화될 때 NPC 액션 요청 목록을 순서대로 실행하는 액터입니다.
 UCLASS(Blueprintable, meta = (DisplayName = "UOU NPC Action Sequence", ToolTip = "설정된 NPC 액션 목록을 순서대로 실행합니다."))
-class AUOUNPCActionSequenceActor : public AActor, public IUOUPuzzleResultReceiver
+class AUOUNPCActionSequenceActor : public AActor, public IUOUPuzzleResultReceiver, public IUOUPuzzleResultCompletionState
 {
 	GENERATED_BODY()
 
@@ -52,6 +53,9 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "NPC|Runtime", meta = (ToolTip = "현재 실행 중인 액션의 인덱스입니다."))
 	int32 CurrentActionIndex = INDEX_NONE;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "NPC|Runtime")
+	bool bHasCompletedResultSinceLastActivation = false;
+
 	UFUNCTION(BlueprintCallable, Category = "Puzzle|Actions")
 	void Activate();
 
@@ -65,6 +69,7 @@ public:
 	void StopSequence();
 
 	virtual void ApplyPuzzleResult_Implementation(EOUUPuzzleResultAction Action) override;
+	virtual bool IsPuzzleResultCompleted_Implementation(EOUUPuzzleResultAction Action) const override;
 
 protected:
 	UPROPERTY()

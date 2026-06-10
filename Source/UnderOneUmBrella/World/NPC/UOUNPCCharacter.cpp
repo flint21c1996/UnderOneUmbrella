@@ -142,6 +142,7 @@ void AUOUNPCCharacter::Landed(const FHitResult& Hit)
 void AUOUNPCCharacter::Activate()
 {
 	bActivated = true;
+	bHasCompletedResultSinceLastActivation = false;
 	if (!bHasActiveActionRequest)
 	{
 		ActiveActionRequest = BuildLegacyActionRequest();
@@ -168,6 +169,7 @@ void AUOUNPCCharacter::Deactivate()
 	bActivated = false;
 	bPendingMoveAfterJumpLanding = false;
 	bHasActiveActionRequest = false;
+	bHasCompletedResultSinceLastActivation = false;
 	ActiveActionRequest = FUOUNPCActionRequest();
 	ActiveActionSource = nullptr;
 	SyncActivationBlackboard();
@@ -217,6 +219,11 @@ void AUOUNPCCharacter::ApplyPuzzleResult_Implementation(EOUUPuzzleResultAction A
 	default:
 		break;
 	}
+}
+
+bool AUOUNPCCharacter::IsPuzzleResultCompleted_Implementation(EOUUPuzzleResultAction Action) const
+{
+	return Action == EOUUPuzzleResultAction::Activate && bHasCompletedResultSinceLastActivation;
 }
 
 bool AUOUNPCCharacter::MoveToConfiguredTarget()
@@ -308,6 +315,7 @@ bool AUOUNPCCharacter::RequestNPCAction(UObject* ActionSource, const FUOUNPCActi
 	ActiveActionSource = ActionSource;
 	bHasActiveActionRequest = true;
 	bActivated = true;
+	bHasCompletedResultSinceLastActivation = false;
 
 	const bool bBehaviorTreeHandled = SyncActivationBlackboard();
 	if (!bBehaviorTreeHandled)
@@ -346,6 +354,7 @@ void AUOUNPCCharacter::CompleteActiveNPCAction()
 	bActivated = false;
 	bPendingMoveAfterJumpLanding = false;
 	bHasActiveActionRequest = false;
+	bHasCompletedResultSinceLastActivation = true;
 	ActiveActionRequest = FUOUNPCActionRequest();
 	ActiveActionSource = nullptr;
 	SyncActivationBlackboard();
@@ -442,6 +451,7 @@ FUOUNPCActionRequest AUOUNPCCharacter::BuildLegacyActionRequest() const
 	ActionRequest.AnimationMontage = ActivationMontage;
 	ActionRequest.AnimationPlayRate = ActivationMontagePlayRate;
 	ActionRequest.AnimationStartSection = ActivationMontageStartSection;
+	ActionRequest.bClearActionOnFinish = bCompleteLegacyActivationOnFinish;
 	return ActionRequest;
 }
 
