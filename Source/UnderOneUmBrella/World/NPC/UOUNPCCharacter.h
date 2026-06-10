@@ -111,6 +111,7 @@ public:
 
 	virtual void ApplyPuzzleResult_Implementation(EOUUPuzzleResultAction Action) override;
 	virtual bool IsPuzzleResultCompleted_Implementation(EOUUPuzzleResultAction Action) const override;
+	virtual FOnUOUPuzzleResultCompletionStateChangedNativeSignature* GetPuzzleResultCompletionStateChangedEvent() override;
 
 	UFUNCTION(BlueprintCallable, Category = "NPC|Movement")
 	bool MoveToConfiguredTarget();
@@ -161,6 +162,7 @@ protected:
 	AUOUNPCController* GetNPCController();
 	bool SyncActivationBlackboard();
 	void ExecuteCurrentActionDirectly();
+	void SetActivationResultCompleted(bool bNewCompleted);
 	FUOUNPCActionRequest BuildLegacyActionRequest() const;
 	FUOUNPCActionRequest GetCurrentActionRequest() const;
 	bool GetTargetLocationFromActionRequest(const FUOUNPCActionRequest& ActionRequest, FVector& OutTargetLocation) const;
@@ -170,4 +172,6 @@ protected:
 	FString BuildNPCDebugText(const class UUOUNPCDebugControllerComponent& DebugController) const;
 	void DrawNPCMoveTargetDebug(const class UUOUNPCDebugControllerComponent& DebugController, FColor DebugColor) const;
 	void DrawNPCPathDebug(const class UUOUNPCDebugControllerComponent& DebugController, FColor DebugColor) const;
+
+	FOnUOUPuzzleResultCompletionStateChangedNativeSignature OnPuzzleResultCompletionStateChanged;
 };

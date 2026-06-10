@@ -70,6 +70,7 @@ public:
 
 	virtual void ApplyPuzzleResult_Implementation(EOUUPuzzleResultAction Action) override;
 	virtual bool IsPuzzleResultCompleted_Implementation(EOUUPuzzleResultAction Action) const override;
+	virtual FOnUOUPuzzleResultCompletionStateChangedNativeSignature* GetPuzzleResultCompletionStateChangedEvent() override;
 
 protected:
 	UPROPERTY()
@@ -78,9 +79,12 @@ protected:
 	void StartSequence(const TArray<FUOUNPCActionRequest>& Actions, bool bDeactivateSequence);
 	void RunCurrentAction();
 	void FinishSequence();
+	void SetActivationResultCompleted(bool bNewCompleted);
 	void BindToTargetNPC();
 	void UnbindFromTargetNPC();
 
 	UFUNCTION()
 	void HandleNPCActionCompleted(AUOUNPCCharacter* NPC, UObject* ActionSource);
+
+	FOnUOUPuzzleResultCompletionStateChangedNativeSignature OnPuzzleResultCompletionStateChanged;
 };
