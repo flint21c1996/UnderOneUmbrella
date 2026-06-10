@@ -33,6 +33,10 @@ struct FOUUPuzzleResultBinding
 	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Puzzle")
 	bool bRunSatisfiedActionOnlyOnce = false;
 
+	// SatisfiedAction이 한 번 실행된 뒤에는 조건이 다시 깨져도 UnsatisfiedAction을 보내지 않습니다.
+	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Puzzle")
+	bool bIgnoreUnsatisfiedActionAfterSatisfied = false;
+
 	// 조건이 해제되었을 때 대상 액터에 전달할 액션입니다.
 	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Puzzle")
 	EOUUPuzzleResultAction UnsatisfiedAction = EOUUPuzzleResultAction::Deactivate;

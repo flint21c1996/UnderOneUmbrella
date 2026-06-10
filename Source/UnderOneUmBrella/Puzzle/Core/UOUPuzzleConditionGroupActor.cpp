@@ -162,6 +162,11 @@ void AUOUPuzzleConditionGroupActor::DispatchResultBindings(bool bSatisfied)
 			continue;
 		}
 
+		if (Binding.bIgnoreUnsatisfiedActionAfterSatisfied && Binding.bHasRunSatisfiedAction)
+		{
+			continue;
+		}
+
 		ExecuteResultAction(Binding.TargetActor.Get(), Binding.UnsatisfiedAction);
 	}
 }
