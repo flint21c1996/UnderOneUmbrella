@@ -9,6 +9,7 @@
 
 class UBoxComponent;
 class UPrimitiveComponent;
+class USceneComponent;
 
 // 플랫폼에 임시로 붙인 물리 컴포넌트의 원래 물리 상태를 되돌리기 위한 기록입니다.
 struct FUOUFloorPlatformCarriedPhysicsState
@@ -21,6 +22,12 @@ struct FUOUFloorPlatformCarriedPhysicsState
 	bool bLockXRotation = false;
 	bool bLockYRotation = false;
 	bool bLockZRotation = false;
+};
+
+struct FUOUFloorPlatformCarriedMobilityState
+{
+	TWeakObjectPtr<USceneComponent> Component;
+	EComponentMobility::Type Mobility = EComponentMobility::Static;
 };
 
 // 이동 플랫폼 위에 놓인 액터를 함께 이동시키는 운반 처리를 담당하는 컴포넌트입니다.
@@ -48,6 +55,12 @@ public:
 	// 물리 액터를 운반하는 동안 물리 시뮬레이션을 잠시 끄고 완료 후 원래대로 복구할지 정합니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Carry")
 	bool bPauseCarriedPhysicsDuringMove = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Carry", meta = (ToolTip = "켜져 있으면 Static Mobility 컴포넌트를 가진 액터는 이동 발판 운반 대상에서 제외합니다. Movable 부모에 Static 자식을 붙일 수 없어서 기본값은 켜져 있습니다."))
+	bool bIgnoreStaticMobilityActors = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Carry", meta = (ToolTip = "켜져 있으면 Static Mobility 액터를 발판에 붙이기 전에 Movable로 임시 전환하고, 분리할 때 원래 Mobility로 복구합니다. 의도적으로 발판과 함께 움직일 정적 프롭에만 사용하세요."))
+	bool bForceMovableBeforeAttach = false;
 
 	// 비어 있으면 클래스 필터를 쓰지 않고, 값이 있으면 이 클래스 계열 액터만 운반 후보로 봅니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Carry")
@@ -98,12 +111,15 @@ private:
 
 	// 물리 액터가 부모 이동을 따라오도록 필요한 물리 상태를 잠시 멈춥니다.
 	void PrepareCarriedActorForAttach(AActor* CandidateActor);
+	void PrepareCarriedActorMobilityForAttach(AActor* CandidateActor);
 
 	// 플랫폼 이동 중 잠시 멈춘 물리 상태를 원래대로 되돌립니다.
 	void RestoreCarriedPhysicsStates();
+	void RestoreCarriedMobilityStates();
 
 	// 액터가 물리 시뮬레이션 중인 컴포넌트를 가지고 있는지 확인합니다.
 	bool HasSimulatingPhysicsComponent(AActor* CandidateActor) const;
+	bool HasStaticMobilityComponent(AActor* CandidateActor) const;
 
 	// 클래스나 태그 필터를 통과하는 운반 대상인지 확인합니다.
 	bool MatchesCarryFilters(AActor* CandidateActor) const;
@@ -122,4 +138,5 @@ private:
 
 	// 운반 중 잠시 물리를 꺼둔 컴포넌트들의 원래 상태입니다.
 	TArray<FUOUFloorPlatformCarriedPhysicsState> CarriedPhysicsStates;
+	TArray<FUOUFloorPlatformCarriedMobilityState> CarriedMobilityStates;
 };

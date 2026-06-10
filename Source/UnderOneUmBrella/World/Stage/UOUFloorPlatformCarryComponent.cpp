@@ -4,6 +4,7 @@
 
 #include "Components/BoxComponent.h"
 #include "Components/PrimitiveComponent.h"
+#include "Components/SceneComponent.h"
 #include "Engine/OverlapResult.h"
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
@@ -126,6 +127,7 @@ void UUOUFloorPlatformCarryComponent::DetachCarriedActors()
 
 	CarriedActors.Reset();
 	RestoreCarriedPhysicsStates();
+	RestoreCarriedMobilityStates();
 }
 
 bool UUOUFloorPlatformCarryComponent::CanCarryActor(AActor* CandidateActor) const
@@ -168,11 +170,18 @@ bool UUOUFloorPlatformCarryComponent::CanCarryActor(AActor* CandidateActor) cons
 		return false;
 	}
 
+	if (HasStaticMobilityComponent(CandidateActor) && bIgnoreStaticMobilityActors && !bForceMovableBeforeAttach)
+	{
+		return false;
+	}
+
 	return MatchesCarryFilters(CandidateActor);
 }
 
 void UUOUFloorPlatformCarryComponent::PrepareCarriedActorForAttach(AActor* CandidateActor)
 {
+	PrepareCarriedActorMobilityForAttach(CandidateActor);
+
 	if (!bPauseCarriedPhysicsDuringMove || CandidateActor == nullptr)
 	{
 		return;
@@ -199,6 +208,30 @@ void UUOUFloorPlatformCarryComponent::PrepareCarriedActorForAttach(AActor* Candi
 		CarriedPhysicsStates.Add(PhysicsState);
 
 		PrimitiveComponent->SetSimulatePhysics(false);
+	}
+}
+
+void UUOUFloorPlatformCarryComponent::PrepareCarriedActorMobilityForAttach(AActor* CandidateActor)
+{
+	if (!bForceMovableBeforeAttach || CandidateActor == nullptr)
+	{
+		return;
+	}
+
+	TInlineComponentArray<USceneComponent*> SceneComponents(CandidateActor);
+	for (USceneComponent* SceneComponent : SceneComponents)
+	{
+		if (SceneComponent == nullptr || SceneComponent->Mobility == EComponentMobility::Movable)
+		{
+			continue;
+		}
+
+		FUOUFloorPlatformCarriedMobilityState MobilityState;
+		MobilityState.Component = SceneComponent;
+		MobilityState.Mobility = SceneComponent->Mobility;
+		CarriedMobilityStates.Add(MobilityState);
+
+		SceneComponent->SetMobility(EComponentMobility::Movable);
 	}
 }
 
@@ -240,6 +273,20 @@ void UUOUFloorPlatformCarryComponent::RestoreCarriedPhysicsStates()
 	CarriedPhysicsStates.Reset();
 }
 
+void UUOUFloorPlatformCarryComponent::RestoreCarriedMobilityStates()
+{
+	for (const FUOUFloorPlatformCarriedMobilityState& MobilityState : CarriedMobilityStates)
+	{
+		USceneComponent* SceneComponent = MobilityState.Component.Get();
+		if (SceneComponent != nullptr && SceneComponent->Mobility != MobilityState.Mobility)
+		{
+			SceneComponent->SetMobility(MobilityState.Mobility);
+		}
+	}
+
+	CarriedMobilityStates.Reset();
+}
+
 bool UUOUFloorPlatformCarryComponent::HasSimulatingPhysicsComponent(AActor* CandidateActor) const
 {
 	if (CandidateActor == nullptr)
@@ -252,6 +299,25 @@ bool UUOUFloorPlatformCarryComponent::HasSimulatingPhysicsComponent(AActor* Cand
 	for (const UPrimitiveComponent* PrimitiveComponent : PrimitiveComponents)
 	{
 		if (PrimitiveComponent != nullptr && PrimitiveComponent->IsSimulatingPhysics())
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+bool UUOUFloorPlatformCarryComponent::HasStaticMobilityComponent(AActor* CandidateActor) const
+{
+	if (CandidateActor == nullptr)
+	{
+		return false;
+	}
+
+	TInlineComponentArray<USceneComponent*> SceneComponents(CandidateActor);
+	for (const USceneComponent* SceneComponent : SceneComponents)
+	{
+		if (SceneComponent != nullptr && SceneComponent->Mobility == EComponentMobility::Static)
 		{
 			return true;
 		}

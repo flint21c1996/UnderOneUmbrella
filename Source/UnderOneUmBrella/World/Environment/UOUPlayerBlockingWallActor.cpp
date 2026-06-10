@@ -5,14 +5,18 @@
 #include "Components/BoxComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Debug/UOUDebugSubsystem.h"
+#include "DrawDebugHelpers.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
+#include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
 #include "UObject/ConstructorHelpers.h"
 
 AUOUPlayerBlockingWallActor::AUOUPlayerBlockingWallActor()
 {
-	PrimaryActorTick.bCanEverTick = false;
+	PrimaryActorTick.bCanEverTick = true;
+	PrimaryActorTick.bStartWithTickEnabled = false;
 
 	RootScene = CreateDefaultSubobject<USceneComponent>(TEXT("RootScene"));
 	SetRootComponent(RootScene);
@@ -52,6 +56,8 @@ void AUOUPlayerBlockingWallActor::BeginPlay()
 
 	ApplyCollisionSettings();
 	ApplyPreviewSettings();
+
+	SetActorTickEnabled(bShowPreviewInGameWhenPuzzleDebug);
 }
 
 void AUOUPlayerBlockingWallActor::OnConstruction(const FTransform& Transform)
@@ -59,6 +65,13 @@ void AUOUPlayerBlockingWallActor::OnConstruction(const FTransform& Transform)
 	Super::OnConstruction(Transform);
 
 	ApplyCollisionSettings();
+	ApplyPreviewSettings();
+}
+
+void AUOUPlayerBlockingWallActor::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+
 	ApplyPreviewSettings();
 }
 
@@ -80,6 +93,7 @@ void AUOUPlayerBlockingWallActor::ToggleWall()
 void AUOUPlayerBlockingWallActor::SetWallEnabled(bool bNewEnabled)
 {
 	bWallEnabled = bNewEnabled;
+	bHasAppliedPreviewMaterialState = false;
 
 	ApplyCollisionSettings();
 	ApplyPreviewSettings();
@@ -140,10 +154,7 @@ void AUOUPlayerBlockingWallActor::ApplyPreviewSettings()
 		return;
 	}
 
-	if (bOverridePreviewMeshMaterial && PreviewMaterial != nullptr)
-	{
-		PreviewMesh->SetMaterial(0, PreviewMaterial);
-	}
+	ApplyPreviewMaterialSettings();
 
 	// 엔진 기본 Cube는 전체 크기가 100cm라서 Box Extent를 50으로 나누면 충돌 박스와 같은 크기가 됩니다.
 	const FVector SafeExtent(
@@ -158,8 +169,75 @@ void AUOUPlayerBlockingWallActor::ApplyPreviewSettings()
 
 	const UWorld* World = GetWorld();
 	const bool bIsGameWorld = World != nullptr && World->IsGameWorld();
-	const bool bShouldShowPreview = bIsGameWorld ? bShowPreviewInGame : bShowPreviewInEditor;
+	const bool bShouldShowDebugPreview = bIsGameWorld
+		&& bShowPreviewInGameWhenPuzzleDebug
+		&& UUOUDebugSubsystem::IsDebugWorldDrawEnabled(this, EUOUDebugCategory::Puzzle);
+	const bool bShouldShowPreview = bIsGameWorld
+		? (bShowPreviewInGame || bShouldShowDebugPreview)
+		: bShowPreviewInEditor;
 
 	PreviewMesh->SetVisibility(bShouldShowPreview, true);
-	PreviewMesh->SetHiddenInGame(!bShowPreviewInGame);
+	PreviewMesh->SetHiddenInGame(!bShouldShowPreview);
+
+	if (bShouldShowDebugPreview)
+	{
+		const FColor StateColor = (bWallEnabled ? EnabledPreviewColor : DisabledPreviewColor).ToFColor(true);
+		DrawDebugBox(
+			World,
+			BlockingVolume->GetComponentLocation(),
+			BlockingVolume->GetScaledBoxExtent(),
+			BlockingVolume->GetComponentQuat(),
+			StateColor,
+			false,
+			0.0f,
+			0,
+			4.0f);
+	}
+}
+
+void AUOUPlayerBlockingWallActor::ApplyPreviewMaterialSettings()
+{
+	if (PreviewMesh == nullptr || !bOverridePreviewMeshMaterial || PreviewMaterial == nullptr)
+	{
+		return;
+	}
+
+	const UWorld* World = GetWorld();
+	const bool bCanCreateRuntimeMaterial = World != nullptr && World->IsGameWorld() && !HasAnyFlags(RF_ClassDefaultObject);
+	if (!bCanCreateRuntimeMaterial)
+	{
+		PreviewMaterialInstance = nullptr;
+		PreviewMaterialInstanceSource = nullptr;
+		bHasAppliedPreviewMaterialState = false;
+		PreviewMesh->SetMaterial(0, PreviewMaterial);
+		return;
+	}
+
+	if (PreviewMaterialInstance == nullptr || PreviewMaterialInstanceSource != PreviewMaterial)
+	{
+		PreviewMaterialInstance = PreviewMesh->CreateDynamicMaterialInstance(0, PreviewMaterial);
+		PreviewMaterialInstanceSource = PreviewMaterial;
+		bHasAppliedPreviewMaterialState = false;
+	}
+
+	if (PreviewMaterialInstance == nullptr)
+	{
+		PreviewMesh->SetMaterial(0, PreviewMaterial);
+		return;
+	}
+
+	const FLinearColor PreviewColor = bWallEnabled ? EnabledPreviewColor : DisabledPreviewColor;
+	if (bHasAppliedPreviewMaterialState && AppliedPreviewColor.Equals(PreviewColor))
+	{
+		return;
+	}
+
+	AppliedPreviewColor = PreviewColor;
+	bHasAppliedPreviewMaterialState = true;
+
+	PreviewMaterialInstance->SetVectorParameterValue(TEXT("Color"), PreviewColor);
+	PreviewMaterialInstance->SetVectorParameterValue(TEXT("BaseColor"), PreviewColor);
+	PreviewMaterialInstance->SetVectorParameterValue(TEXT("Tint"), PreviewColor);
+	PreviewMaterialInstance->SetScalarParameterValue(TEXT("Opacity"), PreviewColor.A);
+	PreviewMaterialInstance->SetScalarParameterValue(TEXT("Alpha"), PreviewColor.A);
 }
