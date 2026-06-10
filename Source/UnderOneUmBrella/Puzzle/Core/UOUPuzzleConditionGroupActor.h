@@ -37,7 +37,7 @@ struct FOUUPuzzleResultBinding
 	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Puzzle")
 	EOUUPuzzleResultAction UnsatisfiedAction = EOUUPuzzleResultAction::Deactivate;
 
-	// If enabled, UnsatisfiedAction is skipped after the satisfied result action reports completion.
+	// 켜져 있으면 만족 결과 액션이 완료된 뒤에는 불만족 액션을 보내지 않습니다.
 	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Puzzle")
 	bool bIgnoreUnsatisfiedActionAfterResultCompleted = false;
 

@@ -76,7 +76,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "NPC|Activation", meta = (ToolTip = "플레이 시작 시 기존 직접 활성화 액션을 자동으로 실행합니다."))
 	bool bActivateOnBeginPlay = false;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "NPC|Activation", meta = (ToolTip = "When enabled, legacy Activate actions report completion when their behavior task finishes."))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "NPC|Activation", meta = (ToolTip = "켜져 있으면 기존 직접 Activate 액션의 Behavior Tree 태스크가 끝났을 때 결과 완료로 보고합니다."))
 	bool bCompleteLegacyActivationOnFinish = false;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "NPC|Runtime", meta = (ToolTip = "Behavior Tree 블랙보드에서 사용하는 현재 활성화 상태입니다."))

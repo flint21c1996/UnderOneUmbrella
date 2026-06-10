@@ -9,7 +9,7 @@
 
 class APawn;
 
-// Exposes the current player's umbrella state as a puzzle condition source.
+// 현재 플레이어의 우산 상태를 퍼즐 조건 소스로 노출합니다.
 UCLASS(ClassGroup=(Puzzle), meta=(BlueprintSpawnableComponent, DisplayName="UOU Player Umbrella State Condition"))
 class UNDERONEUMBRELLA_API UUOUPlayerUmbrellaStateConditionComponent : public UUOUPuzzleConditionSourceComponent
 {
