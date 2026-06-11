@@ -35,6 +35,7 @@ struct UNDERONEUMBRELLA_API FUOUUmbrellaHUDState
 };
 
 // A single dialogue beat that can feed both the NPC bubble and the bottom dialogue box.
+// TODO: NPC의 짧은 반복 대사, 느낌표와 물음표 반응, 플레이어 행동에 따른 아이콘 전환을 별도 반응 데이터로 확장합니다.
 USTRUCT(BlueprintType)
 struct UNDERONEUMBRELLA_API FUOUDialogueLine
 {
