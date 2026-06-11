@@ -64,6 +64,15 @@ public:
 	// 통합 플레이어 디버그 HUD에서 현재 가림 처리 중인 메시 수를 확인합니다.
 	int32 GetOccludedMeshCount() const { return OccludedMeshStates.Num(); }
 
+	UFUNCTION(BlueprintCallable, Category = "Camera|Dialogue")
+	void StartDialogueFocus(AActor* SpeakerActor);
+
+	UFUNCTION(BlueprintCallable, Category = "Camera|Dialogue")
+	void EndDialogueFocus();
+
+	UFUNCTION(BlueprintPure, Category = "Camera|Dialogue")
+	bool IsDialogueFocusActive() const { return bDialogueFocusActive; }
+
 protected:
 	// 참조를 수동으로 넣지 않아도 기본 카메라 구성을 자동으로 찾게 한다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Camera|References")
@@ -117,6 +126,30 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Camera|Occlusion")
 	TObjectPtr<UMaterialInterface> OccluderFadeMaterial = nullptr;
 
+	// 플레이어와 NPC 사이를 비추는 대화용 카메라 거리입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Camera|Dialogue", meta = (ClampMin = "0.0"))
+	float DialogueCameraDistance = 360.0f;
+
+	// 대화 카메라가 바라보는 기준점 높이입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Camera|Dialogue")
+	float DialogueLookAtHeight = 80.0f;
+
+	// 기준점 옆으로 빠지는 거리입니다. 값이 클수록 숄더뷰 느낌이 강해집니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Camera|Dialogue")
+	float DialogueShoulderOffset = 120.0f;
+
+	// 0.5는 플레이어와 NPC 중앙, 1.0은 NPC 위치를 기준점으로 사용합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Camera|Dialogue", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float DialogueFocusBiasToSpeaker = 0.55f;
+
+	// 현재 카메라가 있던 쪽을 유지해서 대화 시작 시 카메라가 반대편으로 튀지 않게 합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Camera|Dialogue")
+	bool bKeepCurrentDialogueCameraSide = true;
+
+	// 대화 카메라가 목표 구도로 따라가는 속도입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Camera|Dialogue", meta = (ClampMin = "0.0"))
+	float DialogueCameraInterpSpeed = 6.0f;
+
 	// 카메라가 최종적으로 도달해야 하는 목표 yaw 값이다.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Camera|Runtime")
 	float TargetCameraYaw = 0.0f;
@@ -126,6 +159,9 @@ protected:
 	float TargetCameraDistance = 0.0f;
 
 	// 현재 투명 처리 중인 메시와 원래 머티리얼 정보를 보관한다.
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Camera|Runtime")
+	bool bDialogueFocusActive = false;
+
 	TMap<TObjectPtr<UMeshComponent>, FOccludedMeshState> OccludedMeshStates;
 
 	// 소유 액터에서 카메라 관련 컴포넌트를 캐싱한다.
@@ -136,6 +172,7 @@ protected:
 
 	// 목표 yaw와 거리로 현재 카메라를 부드럽게 갱신한다.
 	void UpdateSnapCamera(float DeltaSeconds);
+	void UpdateDialogueCamera(float DeltaSeconds);
 
 	// 플레이어와 카메라 사이를 가리는 메시를 찾아 임시로 투명 처리한다.
 	void UpdateCameraOcclusion();
@@ -148,4 +185,15 @@ protected:
 
 	// 현재 가림 처리 중인 모든 메시를 한 번에 복구한다.
 	void RestoreAllOccludedMeshes();
+	FVector GetOwnerDialogueLocation() const;
+	FVector GetSpeakerDialogueLocation() const;
+
+	UPROPERTY(Transient)
+	TObjectPtr<AActor> DialogueSpeakerActor = nullptr;
+
+	FVector RegularCameraTargetOffset = FVector::ZeroVector;
+	FVector TargetCameraOffset = FVector::ZeroVector;
+	float SavedTargetCameraYaw = 0.0f;
+	float SavedTargetCameraDistance = 0.0f;
+	float DialogueSideSign = 1.0f;
 };
