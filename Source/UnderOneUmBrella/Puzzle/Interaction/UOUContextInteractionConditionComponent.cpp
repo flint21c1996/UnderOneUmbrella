@@ -23,6 +23,11 @@ void UUOUContextInteractionConditionComponent::Interact_Implementation(AActor* I
 		return;
 	}
 
+	if (bBlockInteractionAfterSatisfied && IsSatisfied())
+	{
+		return;
+	}
+
 	if (!CanStartContextInteraction(Interactor))
 	{
 		HandleRejectedContextInteraction(Interactor);
@@ -42,6 +47,9 @@ TArray<FString> UUOUContextInteractionConditionComponent::GetPuzzleDebugInfo_Imp
 	Lines.Add(FString::Printf(
 		TEXT("Waiting Player Interaction: %s"),
 		bWaitingForPlayerInteraction ? TEXT("Yes") : TEXT("No")));
+	Lines.Add(FString::Printf(
+		TEXT("Block After Satisfied: %s"),
+		bBlockInteractionAfterSatisfied ? TEXT("Yes") : TEXT("No")));
 	Lines.Add(FString::Printf(TEXT("Pending Interactor: %s"), *GetNameSafe(PendingInteractor.Get())));
 	return Lines;
 }

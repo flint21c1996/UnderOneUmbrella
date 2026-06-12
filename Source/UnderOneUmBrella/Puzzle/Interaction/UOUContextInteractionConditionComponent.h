@@ -29,6 +29,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Puzzle|Interaction", meta = (ToolTip = "켜져 있으면 플레이어 연출이 끝난 뒤 조건을 변경합니다. 꺼져 있으면 상호작용 즉시 조건을 변경합니다."))
 	bool bWaitForPlayerInteraction = true;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Puzzle|Interaction", meta = (ToolTip = "켜져 있으면 조건이 이미 만족된 뒤에는 다시 상호작용을 시작하지 않습니다."))
+	bool bBlockInteractionAfterSatisfied = true;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Puzzle|Runtime", meta = (ToolTip = "현재 이 컴포넌트가 플레이어 연출 완료를 기다리는 중이면 true입니다."))
 	bool bWaitingForPlayerInteraction = false;
 
