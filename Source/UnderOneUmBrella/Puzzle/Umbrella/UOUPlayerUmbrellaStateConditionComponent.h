@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Player/UOUUmbrellaComponent.h"
+#include "Puzzle/Umbrella/UOUUmbrellaConditionTypes.h"
 #include "Puzzle/Core/UOUPuzzleConditionSourceComponent.h"
 #include "UOUPlayerUmbrellaStateConditionComponent.generated.h"
 
@@ -29,6 +30,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Puzzle|Umbrella")
 	EUOUUmbrellaState RequiredUmbrellaState = EUOUUmbrellaState::Open;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Puzzle|Umbrella", meta = (ToolTip = "Any가 아니면 플레이어 우산 손잡이 방향까지 함께 검사합니다."))
+	EUOUUmbrellaDirectionRequirement RequiredUmbrellaDirection = EUOUUmbrellaDirectionRequirement::Any;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Puzzle|Runtime")
 	TObjectPtr<APawn> CachedPlayerPawn = nullptr;
 
@@ -51,6 +55,7 @@ protected:
 	void ClearPlayerUmbrellaReference();
 	void RefreshConditionState();
 	bool DoesCurrentUmbrellaStateMatch() const;
+	bool DoesCurrentUmbrellaDirectionMatch() const;
 
 	FDelegateHandle ActorSpawnedHandle;
 	FTimerHandle PlayerResolveRetryTimerHandle;

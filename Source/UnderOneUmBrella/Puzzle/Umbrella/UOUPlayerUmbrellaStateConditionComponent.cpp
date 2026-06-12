@@ -47,6 +47,9 @@ TArray<FString> UUOUPlayerUmbrellaStateConditionComponent::GetPuzzleDebugInfo_Im
 		FString::Printf(
 			TEXT("Required Umbrella: %s"),
 			*StaticEnum<EUOUUmbrellaState>()->GetNameStringByValue(static_cast<int64>(RequiredUmbrellaState))),
+		FString::Printf(
+			TEXT("Required Umbrella Direction: %s"),
+			*StaticEnum<EUOUUmbrellaDirectionRequirement>()->GetNameStringByValue(static_cast<int64>(RequiredUmbrellaDirection))),
 		FString::Printf(TEXT("Player: %s"), *GetNameSafe(CachedPlayerPawn.Get())),
 		FString::Printf(TEXT("Umbrella Component: %s"), *GetNameSafe(CachedUmbrellaComponent.Get()))
 	};
@@ -209,6 +212,11 @@ bool UUOUPlayerUmbrellaStateConditionComponent::DoesCurrentUmbrellaStateMatch() 
 		return false;
 	}
 
+	if (!DoesCurrentUmbrellaDirectionMatch())
+	{
+		return false;
+	}
+
 	switch (RequiredUmbrellaState)
 	{
 	case EUOUUmbrellaState::Closed:
@@ -222,6 +230,29 @@ bool UUOUPlayerUmbrellaStateConditionComponent::DoesCurrentUmbrellaStateMatch() 
 
 	case EUOUUmbrellaState::Pouring:
 		return CachedUmbrellaComponent->IsPouring();
+
+	default:
+		return false;
+	}
+}
+
+bool UUOUPlayerUmbrellaStateConditionComponent::DoesCurrentUmbrellaDirectionMatch() const
+{
+	if (CachedUmbrellaComponent == nullptr)
+	{
+		return false;
+	}
+
+	switch (RequiredUmbrellaDirection)
+	{
+	case EUOUUmbrellaDirectionRequirement::Any:
+		return true;
+
+	case EUOUUmbrellaDirectionRequirement::Normal:
+		return CachedUmbrellaComponent->IsNormalDirection();
+
+	case EUOUUmbrellaDirectionRequirement::Reversed:
+		return CachedUmbrellaComponent->IsReversedDirection();
 
 	default:
 		return false;

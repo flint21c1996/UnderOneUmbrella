@@ -15,6 +15,9 @@ TArray<FString> UUOUUmbrellaInteractionConditionComponent::GetPuzzleDebugInfo_Im
 	Lines.Add(FString::Printf(
 		TEXT("Required Umbrella: %s"),
 		*StaticEnum<EUOUUmbrellaState>()->GetNameStringByValue(static_cast<int64>(RequiredUmbrellaState))));
+	Lines.Add(FString::Printf(
+		TEXT("Required Umbrella Direction: %s"),
+		*StaticEnum<EUOUUmbrellaDirectionRequirement>()->GetNameStringByValue(static_cast<int64>(RequiredUmbrellaDirection))));
 	Lines.Add(FString::Printf(TEXT("Last Rejected Interactor: %s"), *GetNameSafe(LastRejectedInteractor.Get())));
 	return Lines;
 }
@@ -54,6 +57,11 @@ bool UUOUUmbrellaInteractionConditionComponent::DoesInteractorUmbrellaStateMatch
 		return false;
 	}
 
+	if (!DoesUmbrellaDirectionMatch(*UmbrellaComponent))
+	{
+		return false;
+	}
+
 	switch (RequiredUmbrellaState)
 	{
 	case EUOUUmbrellaState::Closed:
@@ -67,6 +75,25 @@ bool UUOUUmbrellaInteractionConditionComponent::DoesInteractorUmbrellaStateMatch
 
 	case EUOUUmbrellaState::Pouring:
 		return UmbrellaComponent->IsPouring();
+
+	default:
+		return false;
+	}
+}
+
+bool UUOUUmbrellaInteractionConditionComponent::DoesUmbrellaDirectionMatch(
+	const UUOUUmbrellaComponent& UmbrellaComponent) const
+{
+	switch (RequiredUmbrellaDirection)
+	{
+	case EUOUUmbrellaDirectionRequirement::Any:
+		return true;
+
+	case EUOUUmbrellaDirectionRequirement::Normal:
+		return UmbrellaComponent.IsNormalDirection();
+
+	case EUOUUmbrellaDirectionRequirement::Reversed:
+		return UmbrellaComponent.IsReversedDirection();
 
 	default:
 		return false;
