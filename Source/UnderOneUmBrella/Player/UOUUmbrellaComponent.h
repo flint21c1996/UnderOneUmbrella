@@ -85,7 +85,7 @@ public:
 
 	// 닫힘과 펼침을 전환하는 기본 키입니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Input")
-	FKey ToggleUmbrellaKey = EKeys::F;
+	FKey ToggleUmbrellaKey = EKeys::LeftMouseButton;
 
 	// 우산을 뒤집거나 닫힘으로 되돌리는 기본 키입니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Input")
