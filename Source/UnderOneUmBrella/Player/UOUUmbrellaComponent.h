@@ -454,6 +454,9 @@ protected:
 	// 우산 상태를 안전하게 바꾸고 비주얼과 이벤트를 함께 갱신합니다.
 	void SetState(EUOUUmbrellaState NewState);
 
+	// 현재 방향으로 우산을 펼쳤을 때 외부에 노출할 기존 상태를 계산합니다.
+	EUOUUmbrellaState GetOpenStateForCurrentDirection() const;
+
 	// 현재 상태와 보유 여부에 맞게 우산 비주얼 표시를 맞춥니다.
 	void RefreshVisuals();
 
