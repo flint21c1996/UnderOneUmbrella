@@ -366,6 +366,16 @@ bool UUOUUmbrellaComponent::IsPouring() const
 	return bHasUmbrella && CurrentState == EUOUUmbrellaState::Pouring;
 }
 
+bool UUOUUmbrellaComponent::IsNormalDirection() const
+{
+	return bHasUmbrella && CurrentDirectionState == EUOUUmbrellaDirectionState::Normal;
+}
+
+bool UUOUUmbrellaComponent::IsReversedDirection() const
+{
+	return bHasUmbrella && CurrentDirectionState == EUOUUmbrellaDirectionState::Reversed;
+}
+
 // 우산이 뒤집혔거나 물을 붓는 중이면 점프를 막아 플레이 감각을 안정시킵니다.
 bool UUOUUmbrellaComponent::BlocksJumping() const
 {
