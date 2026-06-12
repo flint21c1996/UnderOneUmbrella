@@ -4,19 +4,18 @@
 
 #include "CoreMinimal.h"
 #include "Player/UOUUmbrellaComponent.h"
-#include "Puzzle/Interaction/UOUInteractionConditionComponent.h"
+#include "Puzzle/Interaction/UOUContextInteractionConditionComponent.h"
 #include "UOUUmbrellaInteractionConditionComponent.generated.h"
 
 // 상호작용한 플레이어의 우산 상태가 맞을 때만 퍼즐 조건을 변경하는 컴포넌트입니다.
 UCLASS(ClassGroup=(Puzzle), meta=(BlueprintSpawnableComponent, DisplayName="UOU Umbrella Interaction Condition"))
-class UNDERONEUMBRELLA_API UUOUUmbrellaInteractionConditionComponent : public UUOUInteractionConditionComponent
+class UNDERONEUMBRELLA_API UUOUUmbrellaInteractionConditionComponent : public UUOUContextInteractionConditionComponent
 {
 	GENERATED_BODY()
 
 public:
 	UUOUUmbrellaInteractionConditionComponent();
 
-	virtual void Interact_Implementation(AActor* Interactor) override;
 	virtual TArray<FString> GetPuzzleDebugInfo_Implementation() const override;
 	virtual void GetPuzzleDebugInputActors_Implementation(TArray<AActor*>& OutInputActors) const override;
 
@@ -27,5 +26,9 @@ public:
 	TObjectPtr<AActor> LastRejectedInteractor = nullptr;
 
 protected:
+	virtual bool CanStartContextInteraction(AActor* Interactor) const override;
+	virtual void HandleAcceptedContextInteraction(AActor* Interactor) override;
+	virtual void HandleRejectedContextInteraction(AActor* Interactor) override;
+
 	bool DoesInteractorUmbrellaStateMatch(AActor* Interactor) const;
 };

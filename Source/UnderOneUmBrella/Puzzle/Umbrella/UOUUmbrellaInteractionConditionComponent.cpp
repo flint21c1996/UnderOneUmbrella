@@ -9,18 +9,6 @@ UUOUUmbrellaInteractionConditionComponent::UUOUUmbrellaInteractionConditionCompo
 	InteractionMode = EUOUInteractionConditionMode::SetSatisfied;
 }
 
-void UUOUUmbrellaInteractionConditionComponent::Interact_Implementation(AActor* Interactor)
-{
-	if (!DoesInteractorUmbrellaStateMatch(Interactor))
-	{
-		LastRejectedInteractor = Interactor;
-		return;
-	}
-
-	LastRejectedInteractor = nullptr;
-	Super::Interact_Implementation(Interactor);
-}
-
 TArray<FString> UUOUUmbrellaInteractionConditionComponent::GetPuzzleDebugInfo_Implementation() const
 {
 	TArray<FString> Lines = Super::GetPuzzleDebugInfo_Implementation();
@@ -40,6 +28,21 @@ void UUOUUmbrellaInteractionConditionComponent::GetPuzzleDebugInputActors_Implem
 	{
 		OutInputActors.AddUnique(LastRejectedInteractor.Get());
 	}
+}
+
+bool UUOUUmbrellaInteractionConditionComponent::CanStartContextInteraction(AActor* Interactor) const
+{
+	return Super::CanStartContextInteraction(Interactor) && DoesInteractorUmbrellaStateMatch(Interactor);
+}
+
+void UUOUUmbrellaInteractionConditionComponent::HandleAcceptedContextInteraction(AActor* Interactor)
+{
+	LastRejectedInteractor = nullptr;
+}
+
+void UUOUUmbrellaInteractionConditionComponent::HandleRejectedContextInteraction(AActor* Interactor)
+{
+	LastRejectedInteractor = Interactor;
 }
 
 bool UUOUUmbrellaInteractionConditionComponent::DoesInteractorUmbrellaStateMatch(AActor* Interactor) const
