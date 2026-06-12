@@ -267,7 +267,7 @@ void UUOUUmbrellaComponent::ToggleOpenState()
 	}
 }
 
-// 뒤집힌 상태는 닫힘으로 되돌리고, 그 외 상태에서는 뒤집힌 상태로 진입합니다.
+// 우산 손잡이 방향만 전환하고, 펼친 상태라면 방향에 맞는 기존 상태로 다시 계산합니다.
 void UUOUUmbrellaComponent::ToggleInvertState()
 {
 	CurrentDirectionState = CurrentDirectionState == EUOUUmbrellaDirectionState::Normal
