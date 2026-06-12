@@ -11,6 +11,8 @@
 #include "Kismet/GameplayStatics.h"
 #include "Player/UOUCameraControllerComponent.h"
 #include "Player/UOUUmbrellaComponent.h"
+#include "Player/UOUUmbrellaCoverVolumeComponent.h"
+#include "UI/UOUDialogueCoverTargetComponent.h"
 #include "UI/UOUDialogueSourceComponent.h"
 #include "UI/UOUUISubsystem.h"
 
@@ -58,15 +60,15 @@ void UUOUDialogueTriggerComponent::TickComponent(float DeltaTime, ELevelTick Tic
 		return;
 	}
 
-	// 현재 트리거 안에 있는 플레이어가 가진 우산 컴포넌트를 찾습니다.
+	// 디버그 문구에 우산 보유 여부를 보여주기 위해 우산 컴포넌트를 찾습니다.
 	const UUOUUmbrellaComponent* UmbrellaComponent = FindUmbrellaComponent(CurrentInstigatorActor);
 
 	// 플레이어인지, 우산을 가지고 있는지, 우산 상태가 맞는지 같은 기본 조건을 먼저 봅니다.
-	const bool bCanCheckCover = (UmbrellaComponent != nullptr) && PassesInstigatorRules(CurrentInstigatorActor);
+	const bool bCanCheckCover = PassesInstigatorRules(CurrentInstigatorActor);
 
-	// 실제 커버 판정입니다. 대화 대상의 여러 기준점 중 하나라도 우산 비 차단 박스 안에 있으면 성공입니다.
+	// 실제 커버 판정입니다. 대화 대상의 커버 타겟 스피어가 플레이어의 대화용 우산 커버 박스와 겹치면 성공입니다.
 	FString CoverDebugDetails;
-	const bool bCovered = bCanCheckCover && IsOwnerCoveredByUmbrella(*UmbrellaComponent, &CoverDebugDetails);
+	const bool bCovered = bCanCheckCover && IsOwnerCoveredByDialogueCover(CurrentInstigatorActor, &CoverDebugDetails);
 
 	if (!bCanCheckCover && CoverDebugDetails.IsEmpty())
 	{
@@ -123,10 +125,8 @@ bool UUOUDialogueTriggerComponent::TryStartDialogue(AActor* InstigatorActor)
 
 	if (bRequireUmbrellaCoverHold)
 	{
-		const UUOUUmbrellaComponent* UmbrellaComponent = FindUmbrellaComponent(InstigatorActor);
 		FString CoverDebugDetails;
-		if (UmbrellaComponent == nullptr
-			|| !IsOwnerCoveredByUmbrella(*UmbrellaComponent, &CoverDebugDetails)
+		if (!IsOwnerCoveredByDialogueCover(InstigatorActor, &CoverDebugDetails)
 			|| CurrentCoverHoldTime < RequiredCoverDuration)
 		{
 			ShowCoverDebugMessage(FString::Printf(TEXT("Dialogue Start Failed: cover hold not ready | %s"), *CoverDebugDetails), FColor::Red, 1.5f);
@@ -233,11 +233,6 @@ bool UUOUDialogueTriggerComponent::PassesInstigatorRules(AActor* InstigatorActor
 		return false;
 	}
 
-	if (bRequireBlockingRain && !UmbrellaComponent->IsBlockingRain())
-	{
-		return false;
-	}
-
 	return true;
 }
 
@@ -268,98 +263,134 @@ bool UUOUDialogueTriggerComponent::CanTrackOverlapActor(AActor* InstigatorActor)
 	return true;
 }
 
-bool UUOUDialogueTriggerComponent::IsOwnerCoveredByUmbrella(const UUOUUmbrellaComponent& UmbrellaComponent, FString* OutDebugDetails) const
+bool UUOUDialogueTriggerComponent::IsOwnerCoveredByDialogueCover(AActor* InstigatorActor, FString* OutDebugDetails) const
 {
-	if (!UmbrellaComponent.IsOpen())
+	TArray<UUOUDialogueCoverTargetComponent*> CoverTargets;
+	ResolveCoverTargets(CoverTargets);
+	if (CoverTargets.Num() <= 0)
 	{
 		if (OutDebugDetails != nullptr)
 		{
-			*OutDebugDetails = TEXT("UmbrellaOpen:No");
+			*OutDebugDetails = TEXT("CoverTarget:None");
 		}
 		return false;
 	}
 
-	FVector BlockerCenter = FVector::ZeroVector;
-	FRotator BlockerRotation = FRotator::ZeroRotator;
-	FVector BlockerHalfExtent = FVector::ZeroVector;
-	if (!UmbrellaComponent.TryGetRainBlockerVolumeData(BlockerCenter, BlockerRotation, BlockerHalfExtent))
+	TArray<UUOUUmbrellaCoverVolumeComponent*> CoverVolumes;
+	ResolveUmbrellaCoverVolumes(InstigatorActor, CoverVolumes);
+	if (CoverVolumes.Num() <= 0)
 	{
 		if (OutDebugDetails != nullptr)
 		{
-			*OutDebugDetails = TEXT("RainBlockerData:Missing");
+			*OutDebugDetails = TEXT("UmbrellaCoverVolume:None");
 		}
 		return false;
 	}
 
-	const AActor* OwnerActor = GetOwner();
-	if (OwnerActor == nullptr)
-	{
-		if (OutDebugDetails != nullptr)
-		{
-			*OutDebugDetails = TEXT("Owner:None");
-		}
-		return false;
-	}
-
-	const FTransform BlockerTransform(BlockerRotation, BlockerCenter);
-
-	struct FCoverCheckPoint
-	{
-		FString Name;
-		FVector WorldLocation = FVector::ZeroVector;
-	};
-
-	TArray<FCoverCheckPoint> CheckPoints;
-
-	// 디테일 창에서 조정하는 대표 검사점입니다. NPC 머리 위나 상자 중심처럼 원하는 지점을 맞출 때 씁니다.
-	CheckPoints.Add({ TEXT("Offset"), OwnerActor->GetActorLocation() + CoverTargetOffset });
-
-	// 액터 전체 바운드의 중심입니다. 메쉬 피벗이 바닥이나 한쪽에 치우친 액터도 어느 정도 안정적으로 잡기 위한 보조점입니다.
-	const FBox OwnerBounds = OwnerActor->GetComponentsBoundingBox(true);
-	if (OwnerBounds.IsValid)
-	{
-		CheckPoints.Add({ TEXT("BoundsCenter"), OwnerBounds.GetCenter() });
-	}
-
-	// 마지막 보조점입니다. 피벗 기준으로 판정하고 싶거나 바운드가 비정상일 때 확인용으로 사용합니다.
-	CheckPoints.Add({ TEXT("ActorLocation"), OwnerActor->GetActorLocation() });
-
+	// 대화 커버 판정은 이제 RainBlocker 좌표 계산을 쓰지 않습니다.
+	// NPC 쪽 DialogueCoverTarget 기준점 반경과 플레이어 쪽 UmbrellaCoverVolume 박스가 실제로 닿았는지 확인합니다.
 	FString LastDebugDetails;
-	for (const FCoverCheckPoint& CheckPoint : CheckPoints)
+	for (const UUOUDialogueCoverTargetComponent* Target : CoverTargets)
 	{
-		const FVector LocalTarget = BlockerTransform.InverseTransformPosition(CheckPoint.WorldLocation);
-		const bool bInsideX = FMath::Abs(LocalTarget.X) <= BlockerHalfExtent.X;
-		const bool bInsideY = FMath::Abs(LocalTarget.Y) <= BlockerHalfExtent.Y;
-		const bool bInsideZ = FMath::Abs(LocalTarget.Z) <= BlockerHalfExtent.Z;
-
-		LastDebugDetails = FString::Printf(
-			TEXT("%s Local %.1f %.1f %.1f Half %.1f %.1f %.1f Axis %s/%s/%s"),
-			*CheckPoint.Name,
-			LocalTarget.X,
-			LocalTarget.Y,
-			LocalTarget.Z,
-			BlockerHalfExtent.X,
-			BlockerHalfExtent.Y,
-			BlockerHalfExtent.Z,
-			bInsideX ? TEXT("XIn") : TEXT("XOut"),
-			bInsideY ? TEXT("YIn") : TEXT("YOut"),
-			bInsideZ ? TEXT("ZIn") : TEXT("ZOut"));
-
-		if (bInsideX && bInsideY && bInsideZ)
+		if (Target == nullptr)
 		{
-			if (OutDebugDetails != nullptr)
+			continue;
+		}
+
+		for (const UUOUUmbrellaCoverVolumeComponent* CoverVolume : CoverVolumes)
+		{
+			if (CoverVolume == nullptr)
 			{
-				*OutDebugDetails = LastDebugDetails;
+				continue;
 			}
-			return true;
+
+			const FVector TargetCenter = Target->GetComponentLocation();
+			const float TargetRadius = Target->GetScaledCoverRadius();
+			const float TouchTolerance = FMath::Max(0.0f, Target->CoverTouchTolerance);
+			const FBox CoverWorldBox = CoverVolume->Bounds.GetBox();
+			const FVector CoverBoxCenter = CoverWorldBox.GetCenter();
+			const FVector CoverBoxExtent = CoverWorldBox.GetExtent();
+			const FVector ClosestPoint = CoverWorldBox.IsValid ? CoverWorldBox.GetClosestPointTo(TargetCenter) : TargetCenter;
+			const float DistanceToBox = CoverWorldBox.IsValid ? FVector::Distance(ClosestPoint, TargetCenter) : TNumericLimits<float>::Max();
+			const float RequiredTouchDistance = TargetRadius + TouchTolerance;
+			const float GapToTouch = CoverWorldBox.IsValid ? FMath::Max(0.0f, DistanceToBox - RequiredTouchDistance) : -1.0f;
+
+			// 디버그에 표시하는 Gap 계산과 실제 성공 판정을 반드시 같은 값에서 뽑습니다.
+			// 이전처럼 별도 함수 결과를 섞으면 화면상 Gap 0인데 Touch No가 나와 원인을 헷갈리게 만듭니다.
+			const bool bTouching = CoverWorldBox.IsValid && DistanceToBox <= RequiredTouchDistance;
+
+			LastDebugDetails = FString::Printf(
+				TEXT("Targets:%d Volumes:%d | Target:%s Volume:%s Touch:%s | TargetCenter %.1f %.1f %.1f BoxCenter %.1f %.1f %.1f BoxExt %.1f %.1f %.1f R %.1f Tol %.1f Gap %.2f"),
+				CoverTargets.Num(),
+				CoverVolumes.Num(),
+				*GetNameSafe(Target),
+				*GetNameSafe(CoverVolume),
+				bTouching ? TEXT("Yes") : TEXT("No"),
+				TargetCenter.X,
+				TargetCenter.Y,
+				TargetCenter.Z,
+				CoverBoxCenter.X,
+				CoverBoxCenter.Y,
+				CoverBoxCenter.Z,
+				CoverBoxExtent.X,
+				CoverBoxExtent.Y,
+				CoverBoxExtent.Z,
+				TargetRadius,
+				TouchTolerance,
+				GapToTouch);
+
+			if (bTouching)
+			{
+				if (OutDebugDetails != nullptr)
+				{
+					*OutDebugDetails = LastDebugDetails;
+				}
+				return true;
+			}
 		}
 	}
 
 	if (OutDebugDetails != nullptr)
 	{
-		*OutDebugDetails = LastDebugDetails;
+		*OutDebugDetails = LastDebugDetails.IsEmpty() ? TEXT("CoverOverlap:No") : LastDebugDetails;
 	}
 	return false;
+}
+
+void UUOUDialogueTriggerComponent::ResolveCoverTargets(TArray<UUOUDialogueCoverTargetComponent*>& OutCoverTargets) const
+{
+	OutCoverTargets.Reset();
+
+	if (CoverTarget != nullptr)
+	{
+		OutCoverTargets.Add(CoverTarget.Get());
+		return;
+	}
+
+	if (!bAutoFindCoverTargets)
+	{
+		return;
+	}
+
+	const AActor* OwnerActor = GetOwner();
+	if (OwnerActor == nullptr)
+	{
+		return;
+	}
+
+	OwnerActor->GetComponents<UUOUDialogueCoverTargetComponent>(OutCoverTargets);
+}
+
+void UUOUDialogueTriggerComponent::ResolveUmbrellaCoverVolumes(AActor* InstigatorActor, TArray<UUOUUmbrellaCoverVolumeComponent*>& OutCoverVolumes) const
+{
+	OutCoverVolumes.Reset();
+
+	if (InstigatorActor == nullptr)
+	{
+		return;
+	}
+
+	InstigatorActor->GetComponents<UUOUUmbrellaCoverVolumeComponent>(OutCoverVolumes);
 }
 
 UUOUUISubsystem* UUOUDialogueTriggerComponent::ResolveUISubsystem() const

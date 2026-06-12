@@ -7,7 +7,9 @@
 #include "UOUDialogueTriggerComponent.generated.h"
 
 class UUOUDialogueSourceComponent;
+class UUOUDialogueCoverTargetComponent;
 class UUOUUmbrellaComponent;
+class UUOUUmbrellaCoverVolumeComponent;
 class UUOUCameraControllerComponent;
 class UUOUUISubsystem;
 class APlayerController;
@@ -54,11 +56,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue|Rules", meta = (EditCondition = "bRequireUmbrella"))
 	bool bRequireOpenUmbrella = true;
 
-	// 켜져 있으면 우산이 현재 비 차단 상태여야 합니다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue|Rules", meta = (EditCondition = "bRequireUmbrella"))
-	bool bRequireBlockingRain = false;
-
-	// 켜져 있으면 대화 대상이 플레이어 우산의 비 차단 박스 안에 일정 시간 머물러야 합니다.
+	// 켜져 있으면 대화 대상의 커버 타겟 기준점 반경이 플레이어의 대화용 우산 커버 박스와 일정 시간 닿아야 합니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue|Umbrella Cover", meta = (EditCondition = "bRequireUmbrella"))
 	bool bRequireUmbrellaCoverHold = false;
 
@@ -66,9 +64,13 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue|Umbrella Cover", meta = (EditCondition = "bRequireUmbrellaCoverHold", ClampMin = "0.0"))
 	float RequiredCoverDuration = 2.5f;
 
-	// 대화 대상 위치에서 어느 지점을 우산으로 씌울지 보정하는 월드 오프셋입니다.
+	// 커버 판정에 사용할 타겟 기준점입니다. 비어 있으면 이 액터에서 UOUDialogueCoverTargetComponent를 자동으로 찾습니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue|Umbrella Cover", meta = (EditCondition = "bRequireUmbrellaCoverHold"))
-	FVector CoverTargetOffset = FVector(0.0f, 0.0f, 90.0f);
+	TObjectPtr<UUOUDialogueCoverTargetComponent> CoverTarget = nullptr;
+
+	// 켜져 있으면 CoverTarget이 비어 있을 때 이 액터 안의 커버 타겟 기준점들을 자동으로 검사합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue|Umbrella Cover", meta = (EditCondition = "bRequireUmbrellaCoverHold"))
+	bool bAutoFindCoverTargets = true;
 
 	// PIE에서 우산 커버 판정과 대화 시작 상태를 화면에 띄웁니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue|Debug")
@@ -104,7 +106,9 @@ private:
 	bool PassesInstigatorRules(AActor* InstigatorActor) const;
 	UUOUUmbrellaComponent* FindUmbrellaComponent(AActor* InstigatorActor) const;
 	bool CanTrackOverlapActor(AActor* InstigatorActor) const;
-	bool IsOwnerCoveredByUmbrella(const UUOUUmbrellaComponent& UmbrellaComponent, FString* OutDebugDetails = nullptr) const;
+	bool IsOwnerCoveredByDialogueCover(AActor* InstigatorActor, FString* OutDebugDetails = nullptr) const;
+	void ResolveCoverTargets(TArray<UUOUDialogueCoverTargetComponent*>& OutCoverTargets) const;
+	void ResolveUmbrellaCoverVolumes(AActor* InstigatorActor, TArray<UUOUUmbrellaCoverVolumeComponent*>& OutCoverVolumes) const;
 	UUOUUISubsystem* ResolveUISubsystem() const;
 	UUOUCameraControllerComponent* FindCameraControllerComponent(AActor* InstigatorActor) const;
 	void StartDialogueCameraFocus(AActor* InstigatorActor, AActor* SpeakerActor);
