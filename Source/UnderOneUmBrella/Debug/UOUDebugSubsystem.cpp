@@ -153,6 +153,12 @@ namespace UOUDebugSubsystemPrivate
 	{
 		return GetEnumValueName(StaticEnum<EUOUUmbrellaState>(), static_cast<int64>(UmbrellaState));
 	}
+	
+	FString GetUmbrellaDirectionStateName(EUOUUmbrellaDirectionState UmbrellaState)
+	{
+		return GetEnumValueName(StaticEnum<EUOUUmbrellaDirectionState>(), static_cast<int64>(UmbrellaState));
+	}
+
 
 	FString GetPourReceiverTypeName(EUOUUmbrellaPourReceiverType ReceiverType)
 	{
@@ -1334,9 +1340,10 @@ FString UUOUDebugSubsystem::BuildPlayerDebugText(const UUOUPlayerDebugController
 				: 0.0f;
 
 			Lines.Add(FString::Printf(
-				TEXT("Umbrella: Owned %s | State: %s"),
+				TEXT("Umbrella: Owned %s | State: %s | Direction: %s"),
 				UOUDebugSubsystemPrivate::GetYesNo(UmbrellaComponent->HasUmbrella()),
-				*UOUDebugSubsystemPrivate::GetUmbrellaStateName(UmbrellaComponent->CurrentState)));
+				*UOUDebugSubsystemPrivate::GetUmbrellaStateName(UmbrellaComponent->CurrentState),
+				*UOUDebugSubsystemPrivate::GetUmbrellaDirectionStateName(UmbrellaComponent->CurrentDirectionState)));
 			Lines.Add(FString::Printf(
 				TEXT("Water: %.2f / %.2f | Rain: %.2f / %.2f"),
 				StoredWater,
