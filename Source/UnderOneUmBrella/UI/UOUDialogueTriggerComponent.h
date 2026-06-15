@@ -4,14 +4,18 @@
 
 #include "CoreMinimal.h"
 #include "Components/SphereComponent.h"
+#include "TimerManager.h"
 #include "UOUDialogueTriggerComponent.generated.h"
 
+class UUserWidget;
+class UWidgetComponent;
 class UUOUDialogueSourceComponent;
 class UUOUDialogueCoverTargetComponent;
 class UUOUUmbrellaComponent;
 class UUOUUmbrellaCoverVolumeComponent;
 class UUOUCameraControllerComponent;
 class UUOUUISubsystem;
+class AActor;
 class APlayerController;
 
 // 플레이어가 가까이 왔을 때 대화 소스를 실행하는 트리거 컴포넌트입니다.
@@ -32,6 +36,18 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Dialogue|Trigger")
 	bool TryStartDialogue(AActor* InstigatorActor);
 
+	// 현재 연결된 월드 힌트 위젯을 표시합니다.
+	UFUNCTION(BlueprintCallable, Category = "Dialogue|Hint")
+	void ShowInteractionHint();
+
+	// 현재 연결된 월드 힌트 위젯을 숨깁니다.
+	UFUNCTION(BlueprintCallable, Category = "Dialogue|Hint")
+	void HideInteractionHint();
+
+	// 소유 액터에서 사용할 힌트 위젯 컴포넌트를 다시 찾아 캐시합니다.
+	UFUNCTION(BlueprintCallable, Category = "Dialogue|Hint")
+	UWidgetComponent* ResolveHintWidgetComponent();
+
 	// 한 번만 실행 옵션으로 막힌 상태를 풀어서 다시 대화가 시작될 수 있게 합니다.
 	UFUNCTION(BlueprintCallable, Category = "Dialogue|Trigger")
 	void ResetTrigger();
@@ -43,6 +59,46 @@ public:
 	// 켜져 있으면 Pawn 계열 액터만 대화를 시작할 수 있습니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue|Rules")
 	bool bOnlyPawn = true;
+
+	// 켜져 있으면 이 대화 트리거 범위에 들어왔을 때 물음표나 느낌표 같은 월드 힌트를 같이 표시합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue|Hint")
+	bool bEnableInteractionHint = true;
+
+	// 직접 지정할 힌트 위젯 컴포넌트입니다. 비어 있으면 이름 또는 첫 번째 WidgetComponent로 자동 탐색합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue|Hint", meta = (EditCondition = "bEnableInteractionHint"))
+	TObjectPtr<UWidgetComponent> HintWidgetComponent = nullptr;
+
+	// 직접 지정하지 않았을 때 소유 액터 안에서 찾을 WidgetComponent 이름입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue|Hint", meta = (EditCondition = "bEnableInteractionHint"))
+	FName HintWidgetComponentName = TEXT("SpeechBubbleWidget");
+
+	// 이름으로 찾지 못했을 때 첫 번째 WidgetComponent를 힌트 위젯으로 사용할지 정합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue|Hint", meta = (EditCondition = "bEnableInteractionHint"))
+	bool bAutoFindFirstHintWidgetComponent = true;
+
+	// 힌트 위젯에 전달할 짧은 텍스트입니다. 물음표, 느낌표, 조사 필요 문구 등에 사용합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue|Hint", meta = (EditCondition = "bEnableInteractionHint"))
+	FText HintText;
+
+	// 힌트 표시 시간입니다. 0 이하이면 기본 힌트 시간으로 처리합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue|Hint", meta = (EditCondition = "bEnableInteractionHint", ClampMin = "-1.0"))
+	double HintDuration = 3.0;
+
+	// 힌트 위젯 블루프린트에서 표시를 담당하는 함수 이름입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue|Hint", meta = (EditCondition = "bEnableInteractionHint"))
+	FName HintShowFunctionName = TEXT("ShowBubble");
+
+	// 힌트 위젯 블루프린트에서 숨김을 담당하는 함수 이름입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue|Hint", meta = (EditCondition = "bEnableInteractionHint"))
+	FName HintHideFunctionName = TEXT("HideBubble");
+
+	// BeginPlay 때 힌트 위젯을 먼저 숨겨 처음부터 떠 있지 않게 합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue|Hint", meta = (EditCondition = "bEnableInteractionHint"))
+	bool bHideHintOnBeginPlay = true;
+
+	// true면 WidgetComponent 자체의 표시 상태도 함께 제어합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue|Hint", meta = (EditCondition = "bEnableInteractionHint"))
+	bool bControlHintWidgetComponentVisibility = true;
 
 	// 켜져 있으면 ResetTrigger가 호출되기 전까지 한 번만 실행됩니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue|Rules")
@@ -80,6 +136,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue|Control")
 	bool bLockMovementDuringDialogueFocus = true;
 
+	// 대화 UI가 닫힌 뒤 카메라가 원래 시점으로 돌아가기 전 기다리는 시간입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue|Control", meta = (ClampMin = "0.0"))
+	float DialogueFocusEndDelay = 0.5f;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Dialogue|Runtime")
 	bool bHasTriggered = false;
 
@@ -91,6 +151,9 @@ public:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Dialogue|Runtime")
 	bool bIsCurrentlyCoveredByUmbrella = false;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Dialogue|Runtime")
+	bool bHintVisible = false;
 
 private:
 	UFUNCTION()
@@ -106,6 +169,8 @@ private:
 	bool PassesInstigatorRules(AActor* InstigatorActor) const;
 	UUOUUmbrellaComponent* FindUmbrellaComponent(AActor* InstigatorActor) const;
 	bool CanTrackOverlapActor(AActor* InstigatorActor) const;
+	bool RegisterActorOverlap(AActor* InstigatorActor);
+	bool UnregisterActorOverlap(AActor* InstigatorActor);
 	bool IsOwnerCoveredByDialogueCover(AActor* InstigatorActor, FString* OutDebugDetails = nullptr) const;
 	void ResolveCoverTargets(TArray<UUOUDialogueCoverTargetComponent*>& OutCoverTargets) const;
 	void ResolveUmbrellaCoverVolumes(AActor* InstigatorActor, TArray<UUOUUmbrellaCoverVolumeComponent*>& OutCoverVolumes) const;
@@ -116,6 +181,10 @@ private:
 	void LockMovementForDialogue(AActor* InstigatorActor);
 	void UnlockMovementForDialogue();
 	void ClearCoverProgress();
+	void SetHintWidgetComponentVisible(bool bNewVisible) const;
+	void CallHintWidgetShowFunction(UUserWidget* UserWidget, const FText& DisplayHintText) const;
+	void CallHintWidgetHideFunction(UUserWidget* UserWidget) const;
+	UUserWidget* GetHintUserWidget();
 	void ShowCoverDebugMessage(const FString& Message, const FColor& Color, float Duration = 1.5f) const;
 	void ShowCoverDebugStatus(const FString& Message, const FColor& Color) const;
 
@@ -127,6 +196,10 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<APlayerController> LockedMovementPlayerController = nullptr;
+
+	TMap<TWeakObjectPtr<AActor>, int32> ActiveOverlapCounts;
+
+	FTimerHandle DialogueFocusEndDelayTimerHandle;
 
 	bool bDialogueMovementLocked = false;
 };

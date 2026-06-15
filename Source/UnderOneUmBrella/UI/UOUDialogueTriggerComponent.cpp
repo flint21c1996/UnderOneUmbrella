@@ -2,6 +2,8 @@
 
 #include "UI/UOUDialogueTriggerComponent.h"
 
+#include "Blueprint/UserWidget.h"
+#include "Components/WidgetComponent.h"
 #include "Engine/Engine.h"
 #include "Engine/LocalPlayer.h"
 #include "GameFramework/Pawn.h"
@@ -12,9 +14,20 @@
 #include "Player/UOUCameraControllerComponent.h"
 #include "Player/UOUUmbrellaComponent.h"
 #include "Player/UOUUmbrellaCoverVolumeComponent.h"
+#include "TimerManager.h"
 #include "UI/UOUDialogueCoverTargetComponent.h"
 #include "UI/UOUDialogueSourceComponent.h"
 #include "UI/UOUUISubsystem.h"
+
+namespace
+{
+	// WBP_NPCSpeechBubble의 ShowBubble 함수 입력 구조와 맞춘 임시 파라미터입니다.
+	struct FUOUDialogueHintBubbleParams
+	{
+		FText BubbleText;
+		double Duration = 0.0;
+	};
+}
 
 UUOUDialogueTriggerComponent::UUOUDialogueTriggerComponent()
 {
@@ -23,6 +36,8 @@ UUOUDialogueTriggerComponent::UUOUDialogueTriggerComponent()
 	SetGenerateOverlapEvents(true);
 	PrimaryComponentTick.bCanEverTick = true;
 	PrimaryComponentTick.bStartWithTickEnabled = false;
+
+	HintText = FText::FromString(TEXT("?"));
 }
 
 void UUOUDialogueTriggerComponent::BeginPlay()
@@ -32,6 +47,12 @@ void UUOUDialogueTriggerComponent::BeginPlay()
 	OnComponentBeginOverlap.AddDynamic(this, &UUOUDialogueTriggerComponent::HandleBeginOverlap);
 	OnComponentEndOverlap.AddDynamic(this, &UUOUDialogueTriggerComponent::HandleEndOverlap);
 	SetComponentTickEnabled(bRequireUmbrellaCoverHold);
+
+	ResolveHintWidgetComponent();
+	if (bEnableInteractionHint && bHideHintOnBeginPlay)
+	{
+		HideInteractionHint();
+	}
 
 	if (bRequireUmbrellaCoverHold)
 	{
@@ -149,6 +170,88 @@ bool UUOUDialogueTriggerComponent::TryStartDialogue(AActor* InstigatorActor)
 	return true;
 }
 
+void UUOUDialogueTriggerComponent::ShowInteractionHint()
+{
+	if (!bEnableInteractionHint)
+	{
+		return;
+	}
+
+	UUserWidget* UserWidget = GetHintUserWidget();
+	if (UserWidget == nullptr)
+	{
+		return;
+	}
+
+	FText DisplayHintText = HintText;
+	if (const UUOUDialogueSourceComponent* Source = ResolveDialogueSource())
+	{
+		if (Source->IsUsingDialogueTable())
+		{
+			DisplayHintText = Source->GetProximityBubbleText();
+		}
+	}
+
+	if (DisplayHintText.IsEmpty())
+	{
+		return;
+	}
+
+	SetHintWidgetComponentVisible(true);
+	CallHintWidgetShowFunction(UserWidget, DisplayHintText);
+	bHintVisible = true;
+}
+
+void UUOUDialogueTriggerComponent::HideInteractionHint()
+{
+	if (!bEnableInteractionHint)
+	{
+		return;
+	}
+
+	UUserWidget* UserWidget = GetHintUserWidget();
+	if (UserWidget != nullptr)
+	{
+		CallHintWidgetHideFunction(UserWidget);
+	}
+
+	SetHintWidgetComponentVisible(false);
+	bHintVisible = false;
+}
+
+UWidgetComponent* UUOUDialogueTriggerComponent::ResolveHintWidgetComponent()
+{
+	if (HintWidgetComponent != nullptr)
+	{
+		return HintWidgetComponent;
+	}
+
+	AActor* OwnerActor = GetOwner();
+	if (OwnerActor == nullptr)
+	{
+		return nullptr;
+	}
+
+	TArray<UWidgetComponent*> WidgetComponents;
+	OwnerActor->GetComponents<UWidgetComponent>(WidgetComponents);
+
+	for (UWidgetComponent* WidgetComponent : WidgetComponents)
+	{
+		if (WidgetComponent != nullptr && WidgetComponent->GetFName() == HintWidgetComponentName)
+		{
+			HintWidgetComponent = WidgetComponent;
+			return HintWidgetComponent;
+		}
+	}
+
+	if (bAutoFindFirstHintWidgetComponent && WidgetComponents.Num() > 0)
+	{
+		HintWidgetComponent = WidgetComponents[0];
+	}
+
+	return HintWidgetComponent;
+}
+
 void UUOUDialogueTriggerComponent::ResetTrigger()
 {
 	bHasTriggered = false;
@@ -157,6 +260,21 @@ void UUOUDialogueTriggerComponent::ResetTrigger()
 
 void UUOUDialogueTriggerComponent::HandleBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
+	if (!CanTrackOverlapActor(OtherActor))
+	{
+		if (bRequireUmbrellaCoverHold)
+		{
+			ShowCoverDebugMessage(TEXT("Dialogue Trigger Overlap Failed: not a valid actor"), FColor::Red, 1.5f);
+		}
+		return;
+	}
+
+	// 같은 캐릭터 안의 여러 컴포넌트가 닿아도 액터 기준 첫 진입만 처리합니다.
+	if (!RegisterActorOverlap(OtherActor))
+	{
+		return;
+	}
+
 	if (bRequireUmbrellaCoverHold)
 	{
 		ShowCoverDebugMessage(FString::Printf(TEXT("Dialogue Trigger Overlap: %s"), *GetNameSafe(OtherActor)), FColor::White, 1.5f);
@@ -165,6 +283,7 @@ void UUOUDialogueTriggerComponent::HandleBeginOverlap(UPrimitiveComponent* Overl
 		// 그래야 트리거 안에 먼저 들어온 뒤 우산을 펼치는 흐름도 Tick에서 다시 검사할 수 있습니다.
 		if (CanTrackOverlapActor(OtherActor))
 		{
+			ShowInteractionHint();
 			CurrentInstigatorActor = OtherActor;
 			CurrentCoverHoldTime = 0.0f;
 			bIsCurrentlyCoveredByUmbrella = false;
@@ -182,15 +301,35 @@ void UUOUDialogueTriggerComponent::HandleBeginOverlap(UPrimitiveComponent* Overl
 		return;
 	}
 
+	if (CanTrackOverlapActor(OtherActor))
+	{
+		ShowInteractionHint();
+	}
 	TryStartDialogue(OtherActor);
 }
 
 void UUOUDialogueTriggerComponent::HandleEndOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex)
 {
+	if (!CanTrackOverlapActor(OtherActor))
+	{
+		return;
+	}
+
+	// 아직 같은 액터의 다른 컴포넌트가 트리거 안에 남아 있으면 실제 이탈로 보지 않습니다.
+	if (!UnregisterActorOverlap(OtherActor))
+	{
+		return;
+	}
+
 	if (OtherActor == CurrentInstigatorActor)
 	{
 		ShowCoverDebugMessage(FString::Printf(TEXT("Dialogue Trigger EndOverlap: %s"), *GetNameSafe(OtherActor)), FColor::Orange, 1.5f);
 		ClearCoverProgress();
+	}
+
+	if (CanTrackOverlapActor(OtherActor))
+	{
+		HideInteractionHint();
 	}
 }
 
@@ -263,6 +402,46 @@ bool UUOUDialogueTriggerComponent::CanTrackOverlapActor(AActor* InstigatorActor)
 	return true;
 }
 
+bool UUOUDialogueTriggerComponent::RegisterActorOverlap(AActor* InstigatorActor)
+{
+	if (InstigatorActor == nullptr)
+	{
+		return false;
+	}
+
+	const TWeakObjectPtr<AActor> ActorKey(InstigatorActor);
+	int32& OverlapCount = ActiveOverlapCounts.FindOrAdd(ActorKey);
+	++OverlapCount;
+
+	// 1이면 이 액터가 처음 들어온 순간입니다.
+	return OverlapCount == 1;
+}
+
+bool UUOUDialogueTriggerComponent::UnregisterActorOverlap(AActor* InstigatorActor)
+{
+	if (InstigatorActor == nullptr)
+	{
+		return false;
+	}
+
+	const TWeakObjectPtr<AActor> ActorKey(InstigatorActor);
+	int32* OverlapCount = ActiveOverlapCounts.Find(ActorKey);
+	if (OverlapCount == nullptr)
+	{
+		return true;
+	}
+
+	--(*OverlapCount);
+	if (*OverlapCount > 0)
+	{
+		return false;
+	}
+
+	// 0이면 이 액터의 모든 겹침이 끝난 순간입니다.
+	ActiveOverlapCounts.Remove(ActorKey);
+	return true;
+}
+
 bool UUOUDialogueTriggerComponent::IsOwnerCoveredByDialogueCover(AActor* InstigatorActor, FString* OutDebugDetails) const
 {
 	TArray<UUOUDialogueCoverTargetComponent*> CoverTargets;
@@ -305,7 +484,7 @@ bool UUOUDialogueTriggerComponent::IsOwnerCoveredByDialogueCover(AActor* Instiga
 			}
 
 			const FVector TargetCenter = Target->GetComponentLocation();
-			const float TargetRadius = Target->GetScaledCoverRadius();
+			const float TargetRadius = FMath::Max(0.0f, Target->GetScaledSphereRadius());
 			const float TouchTolerance = FMath::Max(0.0f, Target->CoverTouchTolerance);
 			const FBox CoverWorldBox = CoverVolume->Bounds.GetBox();
 			const FVector CoverBoxCenter = CoverWorldBox.GetCenter();
@@ -423,6 +602,11 @@ UUOUCameraControllerComponent* UUOUDialogueTriggerComponent::FindCameraControlle
 
 void UUOUDialogueTriggerComponent::StartDialogueCameraFocus(AActor* InstigatorActor, AActor* SpeakerActor)
 {
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(DialogueFocusEndDelayTimerHandle);
+	}
+
 	UUOUCameraControllerComponent* CameraController = FindCameraControllerComponent(InstigatorActor);
 	if (CameraController == nullptr || SpeakerActor == nullptr)
 	{
@@ -444,6 +628,11 @@ void UUOUDialogueTriggerComponent::StartDialogueCameraFocus(AActor* InstigatorAc
 
 void UUOUDialogueTriggerComponent::StopDialogueCameraFocus()
 {
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(DialogueFocusEndDelayTimerHandle);
+	}
+
 	if (BoundUISubsystem != nullptr)
 	{
 		BoundUISubsystem->OnDialogueEnded.RemoveDynamic(this, &UUOUDialogueTriggerComponent::HandleDialogueEnded);
@@ -461,6 +650,23 @@ void UUOUDialogueTriggerComponent::StopDialogueCameraFocus()
 
 void UUOUDialogueTriggerComponent::HandleDialogueEnded()
 {
+	if (DialogueFocusEndDelay <= 0.0f)
+	{
+		StopDialogueCameraFocus();
+		return;
+	}
+
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().SetTimer(
+			DialogueFocusEndDelayTimerHandle,
+			this,
+			&UUOUDialogueTriggerComponent::StopDialogueCameraFocus,
+			DialogueFocusEndDelay,
+			false);
+		return;
+	}
+
 	StopDialogueCameraFocus();
 }
 
@@ -531,6 +737,56 @@ void UUOUDialogueTriggerComponent::ClearCoverProgress()
 	{
 		SetComponentTickEnabled(false);
 	}
+}
+
+void UUOUDialogueTriggerComponent::SetHintWidgetComponentVisible(bool bNewVisible) const
+{
+	if (!bControlHintWidgetComponentVisibility || HintWidgetComponent == nullptr)
+	{
+		return;
+	}
+
+	HintWidgetComponent->SetVisibility(bNewVisible, true);
+	HintWidgetComponent->SetHiddenInGame(!bNewVisible, true);
+}
+
+void UUOUDialogueTriggerComponent::CallHintWidgetShowFunction(UUserWidget* UserWidget, const FText& DisplayHintText) const
+{
+	if (UserWidget == nullptr || HintShowFunctionName.IsNone())
+	{
+		return;
+	}
+
+	UFunction* ShowFunction = UserWidget->FindFunction(HintShowFunctionName);
+	if (ShowFunction == nullptr)
+	{
+		return;
+	}
+
+	FUOUDialogueHintBubbleParams Params;
+	Params.BubbleText = DisplayHintText;
+	Params.Duration = HintDuration > 0.0 ? HintDuration : 3.0;
+	UserWidget->ProcessEvent(ShowFunction, &Params);
+}
+
+void UUOUDialogueTriggerComponent::CallHintWidgetHideFunction(UUserWidget* UserWidget) const
+{
+	if (UserWidget == nullptr || HintHideFunctionName.IsNone())
+	{
+		return;
+	}
+
+	UFunction* HideFunction = UserWidget->FindFunction(HintHideFunctionName);
+	if (HideFunction != nullptr)
+	{
+		UserWidget->ProcessEvent(HideFunction, nullptr);
+	}
+}
+
+UUserWidget* UUOUDialogueTriggerComponent::GetHintUserWidget()
+{
+	UWidgetComponent* WidgetComponent = ResolveHintWidgetComponent();
+	return WidgetComponent != nullptr ? WidgetComponent->GetUserWidgetObject() : nullptr;
 }
 
 void UUOUDialogueTriggerComponent::ShowCoverDebugMessage(const FString& Message, const FColor& Color, float Duration) const
