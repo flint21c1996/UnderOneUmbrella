@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Engine/DataTable.h"
 #include "Player/UOUUmbrellaComponent.h"
 #include "UOUUITypes.generated.h"
 
@@ -46,6 +47,53 @@ struct UNDERONEUMBRELLA_API FUOUDialogueLine
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "UI|Dialogue")
 	FText SpeakerName;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "UI|Dialogue")
+	FText BubbleText;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "UI|Dialogue")
+	FText DialogueText;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "UI|Dialogue")
+	FName Emotion = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "UI|Dialogue", meta = (ClampMin = "0.0"))
+	float BubbleDuration = 1.5f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "UI|Dialogue", meta = (ClampMin = "0.0"))
+	float DialogueDuration = 3.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "UI|Dialogue")
+	bool bWaitForInput = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "UI|Dialogue")
+	bool bShowBubbleFirst = true;
+};
+
+// CSV DataTable에서 읽어오는 대화 한 줄입니다.
+// 같은 ActorId와 DialogueState를 가진 행들을 LineOrder 순서로 모아 하나의 대화 리스트로 사용합니다.
+USTRUCT(BlueprintType)
+struct UNDERONEUMBRELLA_API FUOUDialogueTableRow : public FTableRowBase
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "UI|Dialogue")
+	FName ActorId = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "UI|Dialogue")
+	FName DialogueState = TEXT("Default");
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "UI|Dialogue")
+	int32 LineOrder = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "UI|Dialogue")
+	FName LineId = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "UI|Dialogue")
+	FText SpeakerName;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "UI|Dialogue")
+	FText ProximityBubbleText;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "UI|Dialogue")
 	FText BubbleText;
