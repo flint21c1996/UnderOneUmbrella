@@ -8,6 +8,7 @@
 #include "UOUInGameHUDWidget.generated.h"
 
 class AUOUMenuPlayerController;
+class UUOUDialogueBoxWidget;
 class UUOUDialogueSourceComponent;
 class UUOUUISubsystem;
 
@@ -36,6 +37,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "HUD|Dialogue")
 	void AdvanceDialogue();
 
+	// HUD BP에 배치된 대화 박스 위젯을 직접 지정합니다.
+	UFUNCTION(BlueprintCallable, Category = "HUD|Dialogue")
+	void SetDialogueBoxWidget(UUOUDialogueBoxWidget* InDialogueBoxWidget);
+
 	// Requests a title card from Blueprint or level triggers.
 	UFUNCTION(BlueprintCallable, Category = "HUD|Title")
 	void ShowTitle(const FUOUTitleDisplayData& TitleData);
@@ -45,20 +50,23 @@ public:
 	void HandleUmbrellaHUDStateChanged(const FUOUUmbrellaHUDState& State);
 
 	// Blueprint event used once when dialogue starts, before individual lines are shown.
-	UFUNCTION(BlueprintImplementableEvent, BlueprintCosmetic, Category = "HUD|Dialogue")
+	UFUNCTION(BlueprintNativeEvent, BlueprintCosmetic, Category = "HUD|Dialogue")
 	void BeginDialoguePresentation(AActor* SpeakerActor, UUOUDialogueSourceComponent* DialogueSource);
+	virtual void BeginDialoguePresentation_Implementation(AActor* SpeakerActor, UUOUDialogueSourceComponent* DialogueSource);
 
 	// Blueprint event used to spawn a short speech bubble above an NPC or object.
 	UFUNCTION(BlueprintImplementableEvent, BlueprintCosmetic, Category = "HUD|Dialogue")
 	void ShowNPCSpeechBubble(AActor* SpeakerActor, const FText& BubbleText, float Duration);
 
 	// Blueprint event used to display one bottom dialogue-box line.
-	UFUNCTION(BlueprintImplementableEvent, BlueprintCosmetic, Category = "HUD|Dialogue")
+	UFUNCTION(BlueprintNativeEvent, BlueprintCosmetic, Category = "HUD|Dialogue")
 	void ShowDialogueLine(AActor* SpeakerActor, const FUOUDialogueLine& Line);
+	virtual void ShowDialogueLine_Implementation(AActor* SpeakerActor, const FUOUDialogueLine& Line);
 
 	// Blueprint event used to clear dialogue UI and related presentation.
-	UFUNCTION(BlueprintImplementableEvent, BlueprintCosmetic, Category = "HUD|Dialogue")
+	UFUNCTION(BlueprintNativeEvent, BlueprintCosmetic, Category = "HUD|Dialogue")
 	void HideDialogue();
+	virtual void HideDialogue_Implementation();
 
 	// Blueprint event used to display a chapter, place, or stage title card.
 	UFUNCTION(BlueprintImplementableEvent, BlueprintCosmetic, Category = "HUD|Title")
@@ -67,4 +75,8 @@ public:
 private:
 	AUOUMenuPlayerController* GetMenuPlayerController() const;
 	UUOUUISubsystem* GetUISubsystem() const;
+
+	// WBP_InGameHUD 안에 같은 이름으로 배치하면 자동 연결됩니다.
+	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional, AllowPrivateAccess = "true"), Category = "HUD|Dialogue")
+	TObjectPtr<UUOUDialogueBoxWidget> DialogueBoxWidget = nullptr;
 };

@@ -6,6 +6,7 @@
 #include "Engine/LocalPlayer.h"
 #include "GameFramework/Pawn.h"
 #include "Player/UOUUmbrellaComponent.h"
+#include "UI/UOUDialogueBoxWidget.h"
 #include "UI/UOUUISubsystem.h"
 
 void UUOUInGameHUDWidget::NativeConstruct()
@@ -73,11 +74,36 @@ void UUOUInGameHUDWidget::AdvanceDialogue()
 	}
 }
 
+void UUOUInGameHUDWidget::SetDialogueBoxWidget(UUOUDialogueBoxWidget* InDialogueBoxWidget)
+{
+	DialogueBoxWidget = InDialogueBoxWidget;
+}
+
 void UUOUInGameHUDWidget::ShowTitle(const FUOUTitleDisplayData& TitleData)
 {
 	if (UUOUUISubsystem* UISubsystem = GetUISubsystem())
 	{
 		UISubsystem->ShowTitle(TitleData);
+	}
+}
+
+void UUOUInGameHUDWidget::BeginDialoguePresentation_Implementation(AActor* SpeakerActor, UUOUDialogueSourceComponent* DialogueSource)
+{
+}
+
+void UUOUInGameHUDWidget::ShowDialogueLine_Implementation(AActor* SpeakerActor, const FUOUDialogueLine& Line)
+{
+	if (DialogueBoxWidget != nullptr)
+	{
+		DialogueBoxWidget->ShowDialogueLine(SpeakerActor, Line);
+	}
+}
+
+void UUOUInGameHUDWidget::HideDialogue_Implementation()
+{
+	if (DialogueBoxWidget != nullptr)
+	{
+		DialogueBoxWidget->HideDialogueBox();
 	}
 }
 
