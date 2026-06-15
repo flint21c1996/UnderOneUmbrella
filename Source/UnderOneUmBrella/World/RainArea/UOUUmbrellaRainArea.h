@@ -136,7 +136,7 @@ protected:
 	void ApplyRainToWaterBasinTargets(float DeltaSeconds, bool bHasRainBlocker, const FVector& RainBlockerWorldCenter, const FRotator& RainBlockerWorldRotation, const FVector& RainBlockerHalfExtent) const;
 	// 대상 Actor의 bounds가 RainVolume과 겹치는지 확인합니다.
 	bool DoesActorBoundsOverlapRainVolume(const AActor* Actor) const;
-	// 대상 Actor의 bounds 중심이 우산 차단 영역 아래에 있는지 확인합니다.
+	// 대상 Actor의 bounds가 우산 차단 영역 아래에 걸치는지 확인합니다.
 	bool IsActorBlockedByRainBlocker(const AActor* Actor, const FVector& BlockerWorldCenter, const FRotator& BlockerWorldRotation, const FVector& BlockerHalfExtent) const;
 	// 비주얼 디버그 박스를 그려서 환경 연동 범위를 확인합니다.
 	void DrawRainVisualDebug() const;

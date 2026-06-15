@@ -431,10 +431,30 @@ bool AUOUUmbrellaRainArea::IsActorBlockedByRainBlocker(const AActor* Actor, cons
 	}
 
 	const FTransform BlockerTransform(BlockerWorldRotation, BlockerWorldCenter);
-	const FVector LocalPoint = BlockerTransform.InverseTransformPosition(ActorOrigin);
-	return FMath::Abs(LocalPoint.X) <= SafeHalfExtent.X
-		&& FMath::Abs(LocalPoint.Y) <= SafeHalfExtent.Y
-		&& LocalPoint.Z <= SafeHalfExtent.Z;
+	FBox ActorBoundsInBlockerLocal(ForceInit);
+
+	for (int32 XIndex = 0; XIndex < 2; ++XIndex)
+	{
+		for (int32 YIndex = 0; YIndex < 2; ++YIndex)
+		{
+			for (int32 ZIndex = 0; ZIndex < 2; ++ZIndex)
+			{
+				const FVector CornerWorldLocation = ActorOrigin + FVector(
+					XIndex == 0 ? -ActorExtent.X : ActorExtent.X,
+					YIndex == 0 ? -ActorExtent.Y : ActorExtent.Y,
+					ZIndex == 0 ? -ActorExtent.Z : ActorExtent.Z);
+
+				ActorBoundsInBlockerLocal += BlockerTransform.InverseTransformPosition(CornerWorldLocation);
+			}
+		}
+	}
+
+	const bool bOverlapsBlockerArea = ActorBoundsInBlockerLocal.Min.X <= SafeHalfExtent.X
+		&& ActorBoundsInBlockerLocal.Max.X >= -SafeHalfExtent.X
+		&& ActorBoundsInBlockerLocal.Min.Y <= SafeHalfExtent.Y
+		&& ActorBoundsInBlockerLocal.Max.Y >= -SafeHalfExtent.Y;
+
+	return bOverlapsBlockerArea && ActorBoundsInBlockerLocal.Min.Z <= SafeHalfExtent.Z;
 }
 
 void AUOUUmbrellaRainArea::DrawRainVisualDebug() const
