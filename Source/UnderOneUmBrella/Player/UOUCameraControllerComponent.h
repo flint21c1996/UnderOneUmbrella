@@ -138,6 +138,14 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Camera|Dialogue")
 	float DialogueShoulderOffset = 120.0f;
 
+	// Player와 NPC 사이를 기준으로 카메라를 좌우로 공전시키는 각도입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Camera|Dialogue", meta = (ClampMin = "-80.0", ClampMax = "80.0"))
+	float DialogueOrbitAngleDegrees = 60.0f;
+
+	// 대화 카메라가 바라보는 지점보다 살짝 위에서 내려다보도록 올리는 높이입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Camera|Dialogue")
+	float DialogueCameraHeightOffset = 40.0f;
+
 	// 0.5는 플레이어와 NPC 중앙, 1.0은 NPC 위치를 기준점으로 사용합니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Camera|Dialogue", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float DialogueFocusBiasToSpeaker = 0.55f;

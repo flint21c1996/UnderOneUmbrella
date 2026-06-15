@@ -228,9 +228,11 @@ void UUOUCameraControllerComponent::UpdateDialogueCamera(float DeltaSeconds)
 	}
 
 	const FVector PairRight = FVector::CrossProduct(FVector::UpVector, PairDirection).GetSafeNormal();
+	const FVector CameraBackDirection = (-PairDirection).RotateAngleAxis(DialogueOrbitAngleDegrees * DialogueSideSign, FVector::UpVector).GetSafeNormal();
 	const FVector DesiredCameraLocation = FocusLocation
-		- PairDirection * DialogueCameraDistance
-		+ PairRight * DialogueShoulderOffset * DialogueSideSign;
+		+ CameraBackDirection * DialogueCameraDistance
+		+ PairRight * DialogueShoulderOffset * DialogueSideSign
+		+ FVector(0.0f, 0.0f, DialogueCameraHeightOffset);
 	const FRotator DesiredRotation = (FocusLocation - DesiredCameraLocation).Rotation();
 	const float DesiredDistance = FVector::Distance(FocusLocation, DesiredCameraLocation);
 
