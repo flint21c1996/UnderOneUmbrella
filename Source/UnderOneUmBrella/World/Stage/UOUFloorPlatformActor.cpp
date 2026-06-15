@@ -112,6 +112,10 @@ void AUOUFloorPlatformActor::BeginPlay()
 	PendingSequentialMoveCount = 0;
 	SetActorTransform(ResolveAuthoredWorldTransformForMovementBase(StartTransform), false, nullptr, ETeleportType::TeleportPhysics);
 	RefreshCurrentMovementBaseRelativeTransform();
+	if (CarryComponent != nullptr)
+	{
+		CarryComponent->AttachPermanentCarriedActors();
+	}
 
 	const bool bShouldStartAtTarget = bStartAtTarget && !ShouldUseSequentialTargetMarkers();
 	if (bShouldStartAtTarget)
@@ -130,6 +134,7 @@ void AUOUFloorPlatformActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	if (CarryComponent != nullptr)
 	{
 		CarryComponent->DetachCarriedActors();
+		CarryComponent->DetachPermanentCarriedActors();
 	}
 
 	Super::EndPlay(EndPlayReason);

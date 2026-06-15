@@ -20,9 +20,42 @@ void UUOUFloorPlatformCarryComponent::SetDetectionBox(UBoxComponent* InDetection
 	DetectionBox = InDetectionBox;
 }
 
+void UUOUFloorPlatformCarryComponent::AttachPermanentCarriedActors()
+{
+	if (!bCarryActorsOnMove)
+	{
+		return;
+	}
+
+	AActor* OwnerActor = GetOwner();
+	if (OwnerActor == nullptr)
+	{
+		return;
+	}
+
+	for (const TObjectPtr<AActor>& PermanentActorPtr : PermanentCarriedActors)
+	{
+		AActor* PermanentActor = PermanentActorPtr.Get();
+		if (!CanCarryPermanentActor(PermanentActor))
+		{
+			continue;
+		}
+
+		if (PermanentActor->GetAttachParentActor() == OwnerActor)
+		{
+			continue;
+		}
+
+		PreparePermanentCarriedActorForAttach(PermanentActor);
+		PermanentActor->AttachToActor(OwnerActor, FAttachmentTransformRules::KeepWorldTransform);
+		AttachedPermanentActors.AddUnique(PermanentActor);
+	}
+}
+
 void UUOUFloorPlatformCarryComponent::AttachCarriedActors()
 {
 	DetachCarriedActors();
+	AttachPermanentCarriedActors();
 
 	if (!bCarryActorsOnMove || DetectionBox == nullptr)
 	{
@@ -48,6 +81,7 @@ void UUOUFloorPlatformCarryComponent::AttachCarriedActors()
 void UUOUFloorPlatformCarryComponent::AttachLastMovedActors()
 {
 	DetachCarriedActors();
+	AttachPermanentCarriedActors();
 
 	if (!bCarryActorsOnMove)
 	{
@@ -130,10 +164,31 @@ void UUOUFloorPlatformCarryComponent::DetachCarriedActors()
 	RestoreCarriedMobilityStates();
 }
 
+void UUOUFloorPlatformCarryComponent::DetachPermanentCarriedActors()
+{
+	AActor* OwnerActor = GetOwner();
+	for (AActor* PermanentActor : AttachedPermanentActors)
+	{
+		if (IsValid(PermanentActor) && PermanentActor->GetAttachParentActor() == OwnerActor)
+		{
+			PermanentActor->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
+		}
+	}
+
+	AttachedPermanentActors.Reset();
+	RestorePhysicsStates(PermanentCarriedPhysicsStates);
+	RestoreMobilityStates(PermanentCarriedMobilityStates);
+}
+
 bool UUOUFloorPlatformCarryComponent::CanCarryActor(AActor* CandidateActor) const
 {
 	AActor* OwnerActor = GetOwner();
 	if (!IsValid(CandidateActor) || CandidateActor == OwnerActor)
+	{
+		return false;
+	}
+
+	if (IsPermanentCarryActor(CandidateActor))
 	{
 		return false;
 	}
@@ -178,9 +233,107 @@ bool UUOUFloorPlatformCarryComponent::CanCarryActor(AActor* CandidateActor) cons
 	return MatchesCarryFilters(CandidateActor);
 }
 
+bool UUOUFloorPlatformCarryComponent::CanCarryPermanentActor(AActor* CandidateActor) const
+{
+	AActor* OwnerActor = GetOwner();
+	if (!IsValid(CandidateActor) || CandidateActor == OwnerActor)
+	{
+		return false;
+	}
+
+	for (const TObjectPtr<AActor>& IgnoredActor : IgnoredCarryActors)
+	{
+		if (IgnoredActor.Get() == CandidateActor)
+		{
+			return false;
+		}
+	}
+
+	for (const TSubclassOf<AActor>& IgnoredActorClass : IgnoredCarryActorClasses)
+	{
+		if (*IgnoredActorClass != nullptr && CandidateActor->IsA(IgnoredActorClass))
+		{
+			return false;
+		}
+	}
+
+	AActor* AttachParentActor = CandidateActor->GetAttachParentActor();
+	if (AttachParentActor != nullptr && AttachParentActor != OwnerActor)
+	{
+		return false;
+	}
+
+	const bool bIsCharacter = CandidateActor->IsA<ACharacter>();
+	if (bIsCharacter && !bCarryPlayerCharacters)
+	{
+		return false;
+	}
+
+	if (!bCarryPhysicsSimulatingActors && HasSimulatingPhysicsComponent(CandidateActor))
+	{
+		return false;
+	}
+
+	if (HasStaticMobilityComponent(CandidateActor) && bIgnoreStaticMobilityActors && !bForcePermanentActorsMovableBeforeAttach)
+	{
+		return false;
+	}
+
+	return true;
+}
+
+bool UUOUFloorPlatformCarryComponent::IsPermanentCarryActor(AActor* CandidateActor) const
+{
+	if (CandidateActor == nullptr)
+	{
+		return false;
+	}
+
+	for (const TObjectPtr<AActor>& PermanentActor : PermanentCarriedActors)
+	{
+		if (PermanentActor.Get() == CandidateActor)
+		{
+			return true;
+		}
+	}
+
+	for (const TObjectPtr<AActor>& PermanentActor : AttachedPermanentActors)
+	{
+		if (PermanentActor.Get() == CandidateActor)
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
 void UUOUFloorPlatformCarryComponent::PrepareCarriedActorForAttach(AActor* CandidateActor)
 {
-	PrepareCarriedActorMobilityForAttach(CandidateActor);
+	PrepareActorForAttach(CandidateActor, bForceMovableBeforeAttach, CarriedPhysicsStates, CarriedMobilityStates);
+}
+
+void UUOUFloorPlatformCarryComponent::PreparePermanentCarriedActorForAttach(AActor* CandidateActor)
+{
+	PrepareActorForAttach(
+		CandidateActor,
+		bForcePermanentActorsMovableBeforeAttach,
+		PermanentCarriedPhysicsStates,
+		PermanentCarriedMobilityStates);
+}
+
+void UUOUFloorPlatformCarryComponent::PrepareCarriedActorMobilityForAttach(AActor* CandidateActor)
+{
+	PrepareActorMobilityForAttach(CandidateActor, bForceMovableBeforeAttach, CarriedMobilityStates);
+}
+
+void UUOUFloorPlatformCarryComponent::PrepareActorForAttach(
+	AActor* CandidateActor,
+	bool bShouldForceMovable,
+	TArray<FUOUFloorPlatformCarriedPhysicsState>& OutPhysicsStates,
+	TArray<FUOUFloorPlatformCarriedMobilityState>& OutMobilityStates)
+{
+	PrepareActorMobilityForAttach(CandidateActor, bShouldForceMovable, OutMobilityStates);
 
 	if (!bPauseCarriedPhysicsDuringMove || CandidateActor == nullptr)
 	{
@@ -205,15 +358,18 @@ void UUOUFloorPlatformCarryComponent::PrepareCarriedActorForAttach(AActor* Candi
 		PhysicsState.bLockXRotation = PrimitiveComponent->BodyInstance.bLockXRotation;
 		PhysicsState.bLockYRotation = PrimitiveComponent->BodyInstance.bLockYRotation;
 		PhysicsState.bLockZRotation = PrimitiveComponent->BodyInstance.bLockZRotation;
-		CarriedPhysicsStates.Add(PhysicsState);
+		OutPhysicsStates.Add(PhysicsState);
 
 		PrimitiveComponent->SetSimulatePhysics(false);
 	}
 }
 
-void UUOUFloorPlatformCarryComponent::PrepareCarriedActorMobilityForAttach(AActor* CandidateActor)
+void UUOUFloorPlatformCarryComponent::PrepareActorMobilityForAttach(
+	AActor* CandidateActor,
+	bool bShouldForceMovable,
+	TArray<FUOUFloorPlatformCarriedMobilityState>& OutMobilityStates)
 {
-	if (!bForceMovableBeforeAttach || CandidateActor == nullptr)
+	if (!bShouldForceMovable || CandidateActor == nullptr)
 	{
 		return;
 	}
@@ -229,7 +385,7 @@ void UUOUFloorPlatformCarryComponent::PrepareCarriedActorMobilityForAttach(AActo
 		FUOUFloorPlatformCarriedMobilityState MobilityState;
 		MobilityState.Component = SceneComponent;
 		MobilityState.Mobility = SceneComponent->Mobility;
-		CarriedMobilityStates.Add(MobilityState);
+		OutMobilityStates.Add(MobilityState);
 
 		SceneComponent->SetMobility(EComponentMobility::Movable);
 	}
@@ -237,7 +393,17 @@ void UUOUFloorPlatformCarryComponent::PrepareCarriedActorMobilityForAttach(AActo
 
 void UUOUFloorPlatformCarryComponent::RestoreCarriedPhysicsStates()
 {
-	for (const FUOUFloorPlatformCarriedPhysicsState& PhysicsState : CarriedPhysicsStates)
+	RestorePhysicsStates(CarriedPhysicsStates);
+}
+
+void UUOUFloorPlatformCarryComponent::RestoreCarriedMobilityStates()
+{
+	RestoreMobilityStates(CarriedMobilityStates);
+}
+
+void UUOUFloorPlatformCarryComponent::RestorePhysicsStates(TArray<FUOUFloorPlatformCarriedPhysicsState>& InOutPhysicsStates)
+{
+	for (const FUOUFloorPlatformCarriedPhysicsState& PhysicsState : InOutPhysicsStates)
 	{
 		UPrimitiveComponent* PrimitiveComponent = PhysicsState.Component.Get();
 		if (PrimitiveComponent != nullptr)
@@ -270,12 +436,12 @@ void UUOUFloorPlatformCarryComponent::RestoreCarriedPhysicsStates()
 		}
 	}
 
-	CarriedPhysicsStates.Reset();
+	InOutPhysicsStates.Reset();
 }
 
-void UUOUFloorPlatformCarryComponent::RestoreCarriedMobilityStates()
+void UUOUFloorPlatformCarryComponent::RestoreMobilityStates(TArray<FUOUFloorPlatformCarriedMobilityState>& InOutMobilityStates)
 {
-	for (const FUOUFloorPlatformCarriedMobilityState& MobilityState : CarriedMobilityStates)
+	for (const FUOUFloorPlatformCarriedMobilityState& MobilityState : InOutMobilityStates)
 	{
 		USceneComponent* SceneComponent = MobilityState.Component.Get();
 		if (SceneComponent != nullptr && SceneComponent->Mobility != MobilityState.Mobility)
@@ -284,7 +450,7 @@ void UUOUFloorPlatformCarryComponent::RestoreCarriedMobilityStates()
 		}
 	}
 
-	CarriedMobilityStates.Reset();
+	InOutMobilityStates.Reset();
 }
 
 bool UUOUFloorPlatformCarryComponent::HasSimulatingPhysicsComponent(AActor* CandidateActor) const

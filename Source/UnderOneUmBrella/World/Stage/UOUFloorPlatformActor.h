@@ -80,11 +80,11 @@ public:
 	TObjectPtr<UStaticMeshComponent> PlatformMesh = nullptr;
 
 	// 플랫폼 이동 시 같이 데려갈 액터를 찾는 감지 박스입니다.
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Floor Platform|Carry")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Floor Platform|Components")
 	TObjectPtr<UBoxComponent> CarryDetectionBox = nullptr;
 
 	// 플랫폼 위 액터 운반과 물리 상태 복구를 담당하는 컴포넌트입니다.
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Floor Platform|Carry")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Floor Platform|Components")
 	TObjectPtr<UUOUFloorPlatformCarryComponent> CarryComponent = nullptr;
 
 	// 순차 목표 마커 선택과 반복 이동 인덱스를 담당하는 컴포넌트입니다.
