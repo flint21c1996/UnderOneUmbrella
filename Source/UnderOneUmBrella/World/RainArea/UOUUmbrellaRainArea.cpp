@@ -335,7 +335,7 @@ void AUOUUmbrellaRainArea::ApplyRainToWaterBasinTargets(float DeltaSeconds, bool
 
 		AActor* TargetOwner = Target->GetOwner();
 		if (!IsValid(TargetOwner)
-			|| !IsActorInsideRainVolume(TargetOwner)
+			|| !DoesActorBoundsOverlapRainVolume(TargetOwner)
 			|| (bHasRainBlocker && IsActorBlockedByRainBlocker(TargetOwner, RainBlockerWorldCenter, RainBlockerWorldRotation, RainBlockerHalfExtent)))
 		{
 			continue;
@@ -363,7 +363,7 @@ void AUOUUmbrellaRainArea::ApplyRainToWaterBasinTargets(float DeltaSeconds, bool
 	}
 }
 
-bool AUOUUmbrellaRainArea::IsActorInsideRainVolume(const AActor* Actor) const
+bool AUOUUmbrellaRainArea::DoesActorBoundsOverlapRainVolume(const AActor* Actor) const
 {
 	if (RainVolume == nullptr || !IsValid(Actor))
 	{
@@ -378,11 +378,32 @@ bool AUOUUmbrellaRainArea::IsActorInsideRainVolume(const AActor* Actor) const
 		ActorOrigin = Actor->GetActorLocation();
 	}
 
-	const FVector LocalPoint = RainVolume->GetComponentTransform().InverseTransformPosition(ActorOrigin);
+	const FTransform RainVolumeTransform = RainVolume->GetComponentTransform();
 	const FVector BoxExtent = RainVolume->GetUnscaledBoxExtent();
-	return FMath::Abs(LocalPoint.X) <= BoxExtent.X
-		&& FMath::Abs(LocalPoint.Y) <= BoxExtent.Y
-		&& FMath::Abs(LocalPoint.Z) <= BoxExtent.Z;
+	FBox ActorBoundsInRainVolumeLocal(ForceInit);
+
+	for (int32 XIndex = 0; XIndex < 2; ++XIndex)
+	{
+		for (int32 YIndex = 0; YIndex < 2; ++YIndex)
+		{
+			for (int32 ZIndex = 0; ZIndex < 2; ++ZIndex)
+			{
+				const FVector CornerWorldLocation = ActorOrigin + FVector(
+					XIndex == 0 ? -ActorExtent.X : ActorExtent.X,
+					YIndex == 0 ? -ActorExtent.Y : ActorExtent.Y,
+					ZIndex == 0 ? -ActorExtent.Z : ActorExtent.Z);
+
+				ActorBoundsInRainVolumeLocal += RainVolumeTransform.InverseTransformPosition(CornerWorldLocation);
+			}
+		}
+	}
+
+	return ActorBoundsInRainVolumeLocal.Min.X <= BoxExtent.X
+		&& ActorBoundsInRainVolumeLocal.Max.X >= -BoxExtent.X
+		&& ActorBoundsInRainVolumeLocal.Min.Y <= BoxExtent.Y
+		&& ActorBoundsInRainVolumeLocal.Max.Y >= -BoxExtent.Y
+		&& ActorBoundsInRainVolumeLocal.Min.Z <= BoxExtent.Z
+		&& ActorBoundsInRainVolumeLocal.Max.Z >= -BoxExtent.Z;
 }
 
 bool AUOUUmbrellaRainArea::IsActorBlockedByRainBlocker(const AActor* Actor, const FVector& BlockerWorldCenter, const FRotator& BlockerWorldRotation, const FVector& BlockerHalfExtent) const
