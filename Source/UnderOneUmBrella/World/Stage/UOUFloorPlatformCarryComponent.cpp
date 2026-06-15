@@ -154,7 +154,7 @@ bool UUOUFloorPlatformCarryComponent::CanCarryActor(AActor* CandidateActor) cons
 		}
 	}
 
-	if (CandidateActor->GetAttachParentActor() != nullptr && CandidateActor->GetAttachParentActor() != OwnerActor)
+	if (CandidateActor->GetAttachParentActor() != nullptr)
 	{
 		return false;
 	}
