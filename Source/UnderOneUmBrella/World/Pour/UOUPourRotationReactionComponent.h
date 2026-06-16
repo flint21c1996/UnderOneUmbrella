@@ -31,6 +31,13 @@ enum class EUOUPourRotationDirectionMode : uint8
 	ByPourTorque UMETA(DisplayName = "By Pour Torque")
 };
 
+UENUM(BlueprintType)
+enum class EUOUPourRotationDrivenMovementSpace : uint8
+{
+	Relative UMETA(DisplayName = "Relative"),
+	World UMETA(DisplayName = "World")
+};
+
 UCLASS(ClassGroup=(Puzzle), meta=(BlueprintSpawnableComponent, DisplayName="UOU Pour Rotation Reaction"))
 class UNDERONEUMBRELLA_API UUOUPourRotationReactionComponent : public UActorComponent
 {
@@ -107,11 +114,44 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pour Rotation|Clamp", meta = (EditCondition = "bClampRotationAngle", EditConditionHides))
 	float MaxRotationAngleDegrees = 90.0f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pour Rotation|Driven Movement")
+	bool bDriveMovementFromRotation = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pour Rotation|Driven Movement", meta = (EditCondition = "bDriveMovementFromRotation", EditConditionHides))
+	TObjectPtr<USceneComponent> MovementTargetComponent = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pour Rotation|Driven Movement", meta = (EditCondition = "bDriveMovementFromRotation", EditConditionHides))
+	FName MovementTargetComponentName = TEXT("Platform");
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pour Rotation|Driven Movement", meta = (EditCondition = "bDriveMovementFromRotation", EditConditionHides))
+	bool bUseOwnerRootWhenMovementTargetMissing = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pour Rotation|Driven Movement", meta = (EditCondition = "bDriveMovementFromRotation", EditConditionHides))
+	EUOUPourRotationDrivenMovementSpace MovementSpace = EUOUPourRotationDrivenMovementSpace::Relative;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pour Rotation|Driven Movement", meta = (EditCondition = "bDriveMovementFromRotation", EditConditionHides))
+	FVector MovementAxis = FVector(0.0f, 0.0f, 1.0f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pour Rotation|Driven Movement", meta = (EditCondition = "bDriveMovementFromRotation", EditConditionHides))
+	float DistancePerRotationDegree = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pour Rotation|Driven Movement", meta = (EditCondition = "bDriveMovementFromRotation", EditConditionHides))
+	bool bClampMovementDistance = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pour Rotation|Driven Movement", meta = (EditCondition = "bDriveMovementFromRotation && bClampMovementDistance", EditConditionHides))
+	float MinMovementDistance = 0.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pour Rotation|Driven Movement", meta = (EditCondition = "bDriveMovementFromRotation && bClampMovementDistance", EditConditionHides))
+	float MaxMovementDistance = 300.0f;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Pour Rotation|Runtime")
 	float TargetAngleDegrees = 0.0f;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Pour Rotation|Runtime")
 	float CurrentAppliedAngleDegrees = 0.0f;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Pour Rotation|Runtime")
+	float CurrentMovementDistance = 0.0f;
 
 	UFUNCTION(BlueprintCallable, Category = "Pour Rotation")
 	void ResetRotationReaction(bool bApplyBaseRotation = true);
@@ -124,8 +164,11 @@ public:
 
 private:
 	bool bHasCachedBaseRotation = false;
+	bool bHasCachedBaseMovementLocation = false;
 	FQuat BaseRelativeRotation = FQuat::Identity;
 	FQuat BaseWorldRotation = FQuat::Identity;
+	FVector BaseRelativeMovementLocation = FVector::ZeroVector;
+	FVector BaseWorldMovementLocation = FVector::ZeroVector;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UUOUPourReceiverComponent> BoundPourReceiverComponent = nullptr;
@@ -135,15 +178,19 @@ private:
 
 	UUOUPourReceiverComponent* ResolvePourReceiverComponent() const;
 	USceneComponent* ResolveRotationTargetComponent() const;
+	USceneComponent* ResolveMovementTargetComponent() const;
 	const USceneComponent* ResolveTorqueCenterComponent(const USceneComponent* TargetComponent) const;
 	USceneComponent* FindRotationTargetComponent() const;
+	USceneComponent* FindMovementTargetComponent() const;
 	USceneComponent* FindSceneComponentByNameOrTag(FName ComponentName) const;
 	void BindToPourReceiver();
 	void UnbindFromPourReceiver();
 	void CacheBaseRotationIfNeeded();
+	void CacheBaseMovementLocationIfNeeded();
 	void SetTargetRotationAngle(float NewTargetAngleDegrees);
 	void UpdateInterpolatedRotation(float DeltaTime);
 	void ApplyRotationAngle(float AngleDegrees);
+	void ApplyDrivenMovement(float AngleDegrees);
 	float ResolveRotationSign(const FUOUPourInputContext& PourContext) const;
 	float ResolvePourTorqueRotationSign(const FUOUPourInputContext& PourContext) const;
 	FVector ResolveWorldRotationAxis(const USceneComponent* TargetComponent) const;

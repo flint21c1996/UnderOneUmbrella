@@ -15,6 +15,7 @@ void UUOUPourRotationReactionComponent::OnRegister()
 	Super::OnRegister();
 
 	CacheBaseRotationIfNeeded();
+	CacheBaseMovementLocationIfNeeded();
 }
 
 void UUOUPourRotationReactionComponent::BeginPlay()
@@ -22,6 +23,7 @@ void UUOUPourRotationReactionComponent::BeginPlay()
 	Super::BeginPlay();
 
 	CacheBaseRotationIfNeeded();
+	CacheBaseMovementLocationIfNeeded();
 	BindToPourReceiver();
 }
 
@@ -47,10 +49,13 @@ void UUOUPourRotationReactionComponent::TickComponent(float DeltaTime, ELevelTic
 void UUOUPourRotationReactionComponent::ResetRotationReaction(bool bApplyBaseRotation)
 {
 	bHasCachedBaseRotation = false;
+	bHasCachedBaseMovementLocation = false;
 	CacheBaseRotationIfNeeded();
+	CacheBaseMovementLocationIfNeeded();
 
 	TargetAngleDegrees = 0.0f;
 	CurrentAppliedAngleDegrees = 0.0f;
+	CurrentMovementDistance = 0.0f;
 	if (bApplyBaseRotation)
 	{
 		ApplyRotationAngle(CurrentAppliedAngleDegrees);
@@ -122,9 +127,29 @@ USceneComponent* UUOUPourRotationReactionComponent::ResolveRotationTargetCompone
 	return bUseOwnerRootWhenTargetMissing && GetOwner() ? GetOwner()->GetRootComponent() : nullptr;
 }
 
+USceneComponent* UUOUPourRotationReactionComponent::ResolveMovementTargetComponent() const
+{
+	if (IsValid(MovementTargetComponent))
+	{
+		return MovementTargetComponent.Get();
+	}
+
+	if (USceneComponent* FoundComponent = FindMovementTargetComponent())
+	{
+		return FoundComponent;
+	}
+
+	return bUseOwnerRootWhenMovementTargetMissing && GetOwner() ? GetOwner()->GetRootComponent() : nullptr;
+}
+
 USceneComponent* UUOUPourRotationReactionComponent::FindRotationTargetComponent() const
 {
 	return FindSceneComponentByNameOrTag(RotationTargetComponentName);
+}
+
+USceneComponent* UUOUPourRotationReactionComponent::FindMovementTargetComponent() const
+{
+	return FindSceneComponentByNameOrTag(MovementTargetComponentName);
 }
 
 const USceneComponent* UUOUPourRotationReactionComponent::ResolveTorqueCenterComponent(const USceneComponent* TargetComponent) const
@@ -216,6 +241,24 @@ void UUOUPourRotationReactionComponent::CacheBaseRotationIfNeeded()
 	bHasCachedBaseRotation = true;
 }
 
+void UUOUPourRotationReactionComponent::CacheBaseMovementLocationIfNeeded()
+{
+	if (!bDriveMovementFromRotation || bHasCachedBaseMovementLocation)
+	{
+		return;
+	}
+
+	USceneComponent* TargetComponent = ResolveMovementTargetComponent();
+	if (TargetComponent == nullptr)
+	{
+		return;
+	}
+
+	BaseRelativeMovementLocation = TargetComponent->GetRelativeLocation();
+	BaseWorldMovementLocation = TargetComponent->GetComponentLocation();
+	bHasCachedBaseMovementLocation = true;
+}
+
 void UUOUPourRotationReactionComponent::SetTargetRotationAngle(float NewTargetAngleDegrees)
 {
 	TargetAngleDegrees = ClampRotationAngle(NewTargetAngleDegrees);
@@ -259,27 +302,63 @@ void UUOUPourRotationReactionComponent::UpdateInterpolatedRotation(float DeltaTi
 void UUOUPourRotationReactionComponent::ApplyRotationAngle(float AngleDegrees)
 {
 	USceneComponent* TargetComponent = ResolveRotationTargetComponent();
+	const FVector SafeAxis = RotationAxis.GetSafeNormal();
+	if (TargetComponent != nullptr && !SafeAxis.IsNearlyZero())
+	{
+		CacheBaseRotationIfNeeded();
+
+		const FQuat RotationDelta(SafeAxis, FMath::DegreesToRadians(AngleDegrees));
+		if (RotationSpace == EUOUPourRotationReactionSpace::World)
+		{
+			TargetComponent->SetWorldRotation((RotationDelta * BaseWorldRotation).Rotator());
+		}
+		else
+		{
+			TargetComponent->SetRelativeRotation((BaseRelativeRotation * RotationDelta).Rotator());
+		}
+	}
+
+	ApplyDrivenMovement(AngleDegrees);
+}
+
+void UUOUPourRotationReactionComponent::ApplyDrivenMovement(float AngleDegrees)
+{
+	if (!bDriveMovementFromRotation)
+	{
+		return;
+	}
+
+	USceneComponent* TargetComponent = ResolveMovementTargetComponent();
 	if (TargetComponent == nullptr)
 	{
 		return;
 	}
 
-	const FVector SafeAxis = RotationAxis.GetSafeNormal();
+	const FVector SafeAxis = MovementAxis.GetSafeNormal();
 	if (SafeAxis.IsNearlyZero())
 	{
 		return;
 	}
 
-	CacheBaseRotationIfNeeded();
+	CacheBaseMovementLocationIfNeeded();
 
-	const FQuat RotationDelta(SafeAxis, FMath::DegreesToRadians(AngleDegrees));
-	if (RotationSpace == EUOUPourRotationReactionSpace::World)
+	float MovementDistance = AngleDegrees * DistancePerRotationDegree;
+	if (bClampMovementDistance)
 	{
-		TargetComponent->SetWorldRotation((RotationDelta * BaseWorldRotation).Rotator());
+		const float MinDistance = FMath::Min(MinMovementDistance, MaxMovementDistance);
+		const float MaxDistance = FMath::Max(MinMovementDistance, MaxMovementDistance);
+		MovementDistance = FMath::Clamp(MovementDistance, MinDistance, MaxDistance);
+	}
+
+	CurrentMovementDistance = MovementDistance;
+
+	if (MovementSpace == EUOUPourRotationDrivenMovementSpace::World)
+	{
+		TargetComponent->SetWorldLocation(BaseWorldMovementLocation + SafeAxis * MovementDistance);
 		return;
 	}
 
-	TargetComponent->SetRelativeRotation((BaseRelativeRotation * RotationDelta).Rotator());
+	TargetComponent->SetRelativeLocation(BaseRelativeMovementLocation + SafeAxis * MovementDistance);
 }
 
 float UUOUPourRotationReactionComponent::ResolveRotationSign(const FUOUPourInputContext& PourContext) const
