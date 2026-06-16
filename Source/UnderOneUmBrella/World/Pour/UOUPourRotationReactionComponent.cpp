@@ -134,6 +134,11 @@ USceneComponent* UUOUPourRotationReactionComponent::ResolveMovementTargetCompone
 		return MovementTargetComponent.Get();
 	}
 
+	if (IsValid(MovementTargetActor))
+	{
+		return MovementTargetActor->GetRootComponent();
+	}
+
 	if (USceneComponent* FoundComponent = FindMovementTargetComponent())
 	{
 		return FoundComponent;
@@ -334,7 +339,7 @@ void UUOUPourRotationReactionComponent::ApplyDrivenMovement(float AngleDegrees)
 		return;
 	}
 
-	const FVector SafeAxis = MovementAxis.GetSafeNormal();
+	const FVector SafeAxis = ResolveMovementAxis().GetSafeNormal();
 	if (SafeAxis.IsNearlyZero())
 	{
 		return;
@@ -359,6 +364,22 @@ void UUOUPourRotationReactionComponent::ApplyDrivenMovement(float AngleDegrees)
 	}
 
 	TargetComponent->SetRelativeLocation(BaseRelativeMovementLocation + SafeAxis * MovementDistance);
+}
+
+FVector UUOUPourRotationReactionComponent::ResolveMovementAxis() const
+{
+	switch (MovementAxisMode)
+	{
+	case EUOUPourRotationDrivenMovementAxis::X:
+		return FVector::XAxisVector;
+	case EUOUPourRotationDrivenMovementAxis::Y:
+		return FVector::YAxisVector;
+	case EUOUPourRotationDrivenMovementAxis::Custom:
+		return MovementAxis;
+	case EUOUPourRotationDrivenMovementAxis::Z:
+	default:
+		return FVector::ZAxisVector;
+	}
 }
 
 float UUOUPourRotationReactionComponent::ResolveRotationSign(const FUOUPourInputContext& PourContext) const
