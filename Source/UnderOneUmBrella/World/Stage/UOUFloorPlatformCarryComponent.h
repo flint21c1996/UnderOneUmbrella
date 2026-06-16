@@ -9,6 +9,7 @@
 
 class UBoxComponent;
 class UPrimitiveComponent;
+class USceneComponent;
 
 // 플랫폼에 임시로 붙인 물리 컴포넌트의 원래 물리 상태를 되돌리기 위한 기록입니다.
 struct FUOUFloorPlatformCarriedPhysicsState
@@ -21,6 +22,12 @@ struct FUOUFloorPlatformCarriedPhysicsState
 	bool bLockXRotation = false;
 	bool bLockYRotation = false;
 	bool bLockZRotation = false;
+};
+
+struct FUOUFloorPlatformCarriedMobilityState
+{
+	TWeakObjectPtr<USceneComponent> Component;
+	EComponentMobility::Type Mobility = EComponentMobility::Static;
 };
 
 // 이동 플랫폼 위에 놓인 액터를 함께 이동시키는 운반 처리를 담당하는 컴포넌트입니다.
@@ -49,6 +56,18 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Carry")
 	bool bPauseCarriedPhysicsDuringMove = true;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Carry", meta = (ToolTip = "켜져 있으면 Static Mobility 컴포넌트를 가진 액터는 이동 발판 운반 대상에서 제외합니다. Movable 부모에 Static 자식을 붙일 수 없어서 기본값은 켜져 있습니다."))
+	bool bIgnoreStaticMobilityActors = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Carry", meta = (ToolTip = "켜져 있으면 Static Mobility 액터를 발판에 붙이기 전에 Movable로 임시 전환하고, 분리할 때 원래 Mobility로 복구합니다. 의도적으로 발판과 함께 움직일 정적 프롭에만 사용하세요."))
+	bool bForceMovableBeforeAttach = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Carry", meta = (ToolTip = "플랫폼과 항상 같이 움직여야 하는 버튼, 벽, 장식 같은 액터 목록입니다. 감지 박스에 들어오지 않아도 이동 전 플랫폼에 붙습니다."))
+	TArray<TObjectPtr<AActor>> PermanentCarriedActors;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Carry", meta = (ToolTip = "켜져 있으면 Permanent Carried Actors에 등록된 Static Mobility 액터를 붙이기 전에 Movable로 임시 전환합니다."))
+	bool bForcePermanentActorsMovableBeforeAttach = true;
+
 	// 비어 있으면 클래스 필터를 쓰지 않고, 값이 있으면 이 클래스 계열 액터만 운반 후보로 봅니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Carry")
 	TArray<TSubclassOf<AActor>> CarryActorClasses;
@@ -74,6 +93,9 @@ public:
 	// 운반 후보를 찾는 박스 컴포넌트를 연결합니다.
 	void SetDetectionBox(UBoxComponent* InDetectionBox);
 
+	// PermanentCarriedActors에 등록된 액터를 감지 박스와 무관하게 플랫폼에 붙입니다.
+	void AttachPermanentCarriedActors();
+
 	// 감지 박스 안에서 플랫폼과 함께 이동할 액터를 찾아 임시로 붙입니다.
 	void AttachCarriedActors();
 
@@ -82,6 +104,9 @@ public:
 
 	// 플랫폼 이동이 끝나거나 취소될 때 임시로 붙인 액터들을 월드 위치 유지 상태로 해제합니다.
 	void DetachCarriedActors();
+
+	// 런타임에 플랫폼에 붙인 PermanentCarriedActors를 원래 월드 위치 유지 상태로 분리합니다.
+	void DetachPermanentCarriedActors();
 
 	// 이동 완료 후 다음 반대 이동에서도 같은 액터를 찾을 수 있도록 기록합니다.
 	void CacheLastMovedActors();
@@ -95,15 +120,32 @@ private:
 
 	// 감지된 액터가 이 플랫폼과 함께 이동할 수 있는 대상인지 검사합니다.
 	bool CanCarryActor(AActor* CandidateActor) const;
+	bool CanCarryPermanentActor(AActor* CandidateActor) const;
+	bool IsPermanentCarryActor(AActor* CandidateActor) const;
 
 	// 물리 액터가 부모 이동을 따라오도록 필요한 물리 상태를 잠시 멈춥니다.
 	void PrepareCarriedActorForAttach(AActor* CandidateActor);
+	void PreparePermanentCarriedActorForAttach(AActor* CandidateActor);
+	void PrepareCarriedActorMobilityForAttach(AActor* CandidateActor);
+	void PrepareActorForAttach(
+		AActor* CandidateActor,
+		bool bShouldForceMovable,
+		TArray<FUOUFloorPlatformCarriedPhysicsState>& OutPhysicsStates,
+		TArray<FUOUFloorPlatformCarriedMobilityState>& OutMobilityStates);
+	void PrepareActorMobilityForAttach(
+		AActor* CandidateActor,
+		bool bShouldForceMovable,
+		TArray<FUOUFloorPlatformCarriedMobilityState>& OutMobilityStates);
 
 	// 플랫폼 이동 중 잠시 멈춘 물리 상태를 원래대로 되돌립니다.
 	void RestoreCarriedPhysicsStates();
+	void RestoreCarriedMobilityStates();
+	void RestorePhysicsStates(TArray<FUOUFloorPlatformCarriedPhysicsState>& InOutPhysicsStates);
+	void RestoreMobilityStates(TArray<FUOUFloorPlatformCarriedMobilityState>& InOutMobilityStates);
 
 	// 액터가 물리 시뮬레이션 중인 컴포넌트를 가지고 있는지 확인합니다.
 	bool HasSimulatingPhysicsComponent(AActor* CandidateActor) const;
+	bool HasStaticMobilityComponent(AActor* CandidateActor) const;
 
 	// 클래스나 태그 필터를 통과하는 운반 대상인지 확인합니다.
 	bool MatchesCarryFilters(AActor* CandidateActor) const;
@@ -116,10 +158,17 @@ private:
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<AActor>> CarriedActors;
 
+	// 런타임에 플랫폼에 붙인 고정 운반 액터 목록입니다.
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<AActor>> AttachedPermanentActors;
+
 	// 직전 이동에서 함께 움직인 액터 목록입니다.
 	UPROPERTY(Transient)
 	TArray<TWeakObjectPtr<AActor>> LastMovedActors;
 
 	// 운반 중 잠시 물리를 꺼둔 컴포넌트들의 원래 상태입니다.
 	TArray<FUOUFloorPlatformCarriedPhysicsState> CarriedPhysicsStates;
+	TArray<FUOUFloorPlatformCarriedMobilityState> CarriedMobilityStates;
+	TArray<FUOUFloorPlatformCarriedPhysicsState> PermanentCarriedPhysicsStates;
+	TArray<FUOUFloorPlatformCarriedMobilityState> PermanentCarriedMobilityStates;
 };
