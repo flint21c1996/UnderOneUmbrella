@@ -45,7 +45,8 @@ enum class EUOUUmbrellaPourReceiverType : uint8
 	None,
 	UmbrellaWaterTarget,
 	WaterBasinTarget,
-	WaterContainer
+	WaterContainer,
+	PurePourReceiver
 };
 
 // 우산 보유 여부나 상태가 바뀌었을 때 블루프린트와 다른 시스템에 알려주는 이벤트입니다.
@@ -214,6 +215,10 @@ public:
 	// 초당 붓는 물의 양입니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Water", meta = (ClampMin = "0.0"))
 	float PourRate = 1.5f;
+
+	// 물을 부을 때 저장된 물이 줄어드는 양에 곱할 배율입니다. 1이면 기존과 같고, 0.5이면 절반만 소모합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Umbrella|Water", meta = (ClampMin = "0.0", ToolTip = "물을 부을 때 우산에 저장된 물이 줄어드는 양에 곱할 배율입니다. 1이면 기존과 같고, 0.5이면 절반만 소모합니다."))
+	float PourStoredWaterConsumptionMultiplier = 1.0f;
 
 	// 물 붓기 라인트레이스가 닿을 수 있는 최대 거리입니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Water", meta = (ClampMin = "0.0"))

@@ -19,6 +19,7 @@
 #include "Materials/MaterialInterface.h"
 #include "Player/UOURainReceiverComponent.h"
 #include "Player/UOUWaterContainerComponent.h"
+#include "World/Pour/UOUPourReceiverComponent.h"
 #include "World/WaterTarget/UOUWaterBasinTargetComponent.h"
 #include "World/WaterTarget/UOUUmbrellaWaterTarget.h"
 
@@ -29,6 +30,8 @@ const TCHAR* GetPourReceiverTypeText(EUOUUmbrellaPourReceiverType ReceiverType)
 {
 	switch (ReceiverType)
 	{
+	case EUOUUmbrellaPourReceiverType::PurePourReceiver:
+		return TEXT("PurePourReceiver");
 	case EUOUUmbrellaPourReceiverType::UmbrellaWaterTarget:
 		return TEXT("UmbrellaWaterTarget");
 	case EUOUUmbrellaPourReceiverType::WaterBasinTarget:
@@ -1101,9 +1104,19 @@ void UUOUUmbrellaComponent::UpdatePouring(float DeltaTime)
 	}
 
 	const float StoredWaterBefore = GetCurrentStoredWater();
+	if (StoredWaterBefore <= KINDA_SMALL_NUMBER)
+	{
+		EndPour();
+		return;
+	}
+
 	const float SafePourRate = FMath::Max(0.0f, PourRate);
+	const float SafeConsumptionMultiplier = FMath::Max(0.0f, PourStoredWaterConsumptionMultiplier);
 	const float RequestedPourAmount = SafePourRate * FMath::Max(0.0f, DeltaTime);
-	const float PourAmount = FMath::Min(StoredWaterBefore, RequestedPourAmount);
+	const float MaxPourAmountByStoredWater = SafeConsumptionMultiplier > KINDA_SMALL_NUMBER
+		? StoredWaterBefore / SafeConsumptionMultiplier
+		: RequestedPourAmount;
+	const float PourAmount = FMath::Min(MaxPourAmountByStoredWater, RequestedPourAmount);
 	if (PourAmount <= KINDA_SMALL_NUMBER)
 	{
 		EndPour();
@@ -1113,8 +1126,9 @@ void UUOUUmbrellaComponent::UpdatePouring(float DeltaTime)
 	// Basin 채우기 모드는 실제로 붓는 시간만 사용해서 마지막 부분 프레임에서 과하게 채워지지 않게 합니다.
 	const float EffectivePourDuration = SafePourRate > KINDA_SMALL_NUMBER ? PourAmount / SafePourRate : 0.0f;
 
-	// 저장된 양보다 많이 붓지 않도록 제한한 뒤 실제 저장량을 줄입니다.
-	StoredWaterContainer->RemoveAmount(PourAmount);
+	// 저장된 양보다 많이 소모하지 않도록 제한한 뒤 실제 저장량을 줄입니다.
+	const float ConsumedStoredWater = PourAmount * SafeConsumptionMultiplier;
+	StoredWaterContainer->RemoveAmount(ConsumedStoredWater);
 	const float StoredWaterAfter = GetCurrentStoredWater();
 
 	FVector TraceStart = FVector::ZeroVector;
@@ -1291,6 +1305,43 @@ bool UUOUUmbrellaComponent::TryReceiveWaterAtHit(const FHitResult& HitResult, fl
 	if (HitActor == nullptr)
 	{
 		return false;
+	}
+
+	auto BuildPourInputContext = [this, &HitResult, WaterAmount, PourDuration, &PourDirection]()
+	{
+		FUOUPourInputContext PourContext;
+		PourContext.Volume = WaterAmount;
+		PourContext.Duration = PourDuration;
+		PourContext.WorldDirection = PourDirection;
+		PourContext.WorldLocation = HitResult.ImpactPoint;
+		PourContext.bHasValidWorldLocation = HitResult.bBlockingHit;
+		PourContext.InstigatorActor = GetOwner();
+		return PourContext;
+	};
+
+	if (UUOUPourReceiverComponent* PourReceiver = HitActor->FindComponentByClass<UUOUPourReceiverComponent>())
+	{
+		if (PourReceiver->CanReceivePour())
+		{
+			LastPourTargetName = HitActor->GetName();
+			OutReceiverType = EUOUUmbrellaPourReceiverType::PurePourReceiver;
+			PourReceiver->ReceivePourInput(BuildPourInputContext());
+			return true;
+		}
+	}
+
+	if (AActor* ParentActor = HitActor->GetAttachParentActor())
+	{
+		if (UUOUPourReceiverComponent* ParentPourReceiver = ParentActor->FindComponentByClass<UUOUPourReceiverComponent>())
+		{
+			if (ParentPourReceiver->CanReceivePour())
+			{
+				LastPourTargetName = ParentActor->GetName();
+				OutReceiverType = EUOUUmbrellaPourReceiverType::PurePourReceiver;
+				ParentPourReceiver->ReceivePourInput(BuildPourInputContext());
+				return true;
+			}
+		}
 	}
 
 	if (AUOUUmbrellaWaterTarget* WaterTargetActor = Cast<AUOUUmbrellaWaterTarget>(HitActor))
