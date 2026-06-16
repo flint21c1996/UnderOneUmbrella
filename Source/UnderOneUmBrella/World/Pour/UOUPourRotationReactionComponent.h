@@ -178,6 +178,9 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Pour Rotation")
 	bool IsRotationReactionEnabled() const;
 
+	UFUNCTION(BlueprintCallable, Category = "Pour Rotation", meta = (ToolTip = "현재 이동 대상 위치를 기준으로 회전 기반 이동의 기준 위치를 다시 저장합니다. 플랫폼 시작 위치를 런타임에 바꾼 뒤 호출하면 이후 이동 계산에 반영됩니다."))
+	void RefreshDrivenMovementBaseLocation();
+
 private:
 	bool bHasCachedBaseRotation = false;
 	bool bHasCachedBaseMovementLocation = false;
@@ -188,6 +191,9 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UUOUPourReceiverComponent> BoundPourReceiverComponent = nullptr;
+
+	UPROPERTY(Transient)
+	TObjectPtr<USceneComponent> CachedBaseMovementTargetComponent = nullptr;
 
 	UFUNCTION()
 	void HandlePourReceived(UUOUPourReceiverComponent* Receiver, const FUOUPourInputContext& PourContext);

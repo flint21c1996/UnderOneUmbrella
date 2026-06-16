@@ -15,7 +15,6 @@ void UUOUPourRotationReactionComponent::OnRegister()
 	Super::OnRegister();
 
 	CacheBaseRotationIfNeeded();
-	CacheBaseMovementLocationIfNeeded();
 }
 
 void UUOUPourRotationReactionComponent::BeginPlay()
@@ -23,7 +22,6 @@ void UUOUPourRotationReactionComponent::BeginPlay()
 	Super::BeginPlay();
 
 	CacheBaseRotationIfNeeded();
-	CacheBaseMovementLocationIfNeeded();
 	BindToPourReceiver();
 }
 
@@ -50,6 +48,7 @@ void UUOUPourRotationReactionComponent::ResetRotationReaction(bool bApplyBaseRot
 {
 	bHasCachedBaseRotation = false;
 	bHasCachedBaseMovementLocation = false;
+	CachedBaseMovementTargetComponent = nullptr;
 	CacheBaseRotationIfNeeded();
 	CacheBaseMovementLocationIfNeeded();
 
@@ -70,6 +69,23 @@ void UUOUPourRotationReactionComponent::SetRotationReactionEnabled(bool bEnabled
 bool UUOUPourRotationReactionComponent::IsRotationReactionEnabled() const
 {
 	return bRotationReactionEnabled;
+}
+
+void UUOUPourRotationReactionComponent::RefreshDrivenMovementBaseLocation()
+{
+	USceneComponent* TargetComponent = ResolveMovementTargetComponent();
+	const FVector SafeAxis = ResolveMovementAxis().GetSafeNormal();
+	if (TargetComponent == nullptr || SafeAxis.IsNearlyZero())
+	{
+		bHasCachedBaseMovementLocation = false;
+		CachedBaseMovementTargetComponent = nullptr;
+		return;
+	}
+
+	BaseRelativeMovementLocation = TargetComponent->GetRelativeLocation() - SafeAxis * CurrentMovementDistance;
+	BaseWorldMovementLocation = TargetComponent->GetComponentLocation() - SafeAxis * CurrentMovementDistance;
+	CachedBaseMovementTargetComponent = TargetComponent;
+	bHasCachedBaseMovementLocation = true;
 }
 
 void UUOUPourRotationReactionComponent::HandlePourReceived(UUOUPourReceiverComponent* Receiver, const FUOUPourInputContext& PourContext)
@@ -248,7 +264,7 @@ void UUOUPourRotationReactionComponent::CacheBaseRotationIfNeeded()
 
 void UUOUPourRotationReactionComponent::CacheBaseMovementLocationIfNeeded()
 {
-	if (!bDriveMovementFromRotation || bHasCachedBaseMovementLocation)
+	if (!bDriveMovementFromRotation)
 	{
 		return;
 	}
@@ -259,8 +275,14 @@ void UUOUPourRotationReactionComponent::CacheBaseMovementLocationIfNeeded()
 		return;
 	}
 
+	if (bHasCachedBaseMovementLocation && CachedBaseMovementTargetComponent == TargetComponent)
+	{
+		return;
+	}
+
 	BaseRelativeMovementLocation = TargetComponent->GetRelativeLocation();
 	BaseWorldMovementLocation = TargetComponent->GetComponentLocation();
+	CachedBaseMovementTargetComponent = TargetComponent;
 	bHasCachedBaseMovementLocation = true;
 }
 
