@@ -11,6 +11,8 @@ class AUOUMenuPlayerController;
 class UUOUDialogueBoxWidget;
 class UUOUDialogueSourceComponent;
 class UUOUUISubsystem;
+class UUserWidget;
+class UWidgetComponent;
 
 // C++ entry point for the in-game HUD Blueprint.
 // It forwards gameplay UI events to UMG while keeping the existing settings menu hook.
@@ -54,9 +56,13 @@ public:
 	void BeginDialoguePresentation(AActor* SpeakerActor, UUOUDialogueSourceComponent* DialogueSource);
 	virtual void BeginDialoguePresentation_Implementation(AActor* SpeakerActor, UUOUDialogueSourceComponent* DialogueSource);
 
-	// Blueprint event used to spawn a short speech bubble above an NPC or object.
+	// NPC나 오브젝트 위의 WidgetComponent를 찾아 짧은 말풍선을 표시합니다.
+	UFUNCTION(BlueprintCallable, BlueprintCosmetic, Category = "HUD|Dialogue")
+	void ShowNPCSpeechBubble(AActor* SpeakerActor, FText BubbleText, float Duration);
+
+	// BP에서 추가 연출이 필요할 때 사용하는 선택 진입점입니다. 기본 말풍선 표시는 C++에서 먼저 처리합니다.
 	UFUNCTION(BlueprintImplementableEvent, BlueprintCosmetic, Category = "HUD|Dialogue")
-	void ShowNPCSpeechBubble(AActor* SpeakerActor, const FText& BubbleText, float Duration);
+	void BP_OnNPCSpeechBubbleRequested(AActor* SpeakerActor, const FText& BubbleText, float Duration);
 
 	// Blueprint event used to display one bottom dialogue-box line.
 	UFUNCTION(BlueprintNativeEvent, BlueprintCosmetic, Category = "HUD|Dialogue")
@@ -75,6 +81,7 @@ public:
 private:
 	AUOUMenuPlayerController* GetMenuPlayerController() const;
 	UUOUUISubsystem* GetUISubsystem() const;
+	UWidgetComponent* ResolveSpeechBubbleWidgetComponent(AActor* SpeakerActor) const;
 
 	// WBP_InGameHUD 안에 같은 이름으로 배치하면 자동 연결됩니다.
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional, AllowPrivateAccess = "true"), Category = "HUD|Dialogue")

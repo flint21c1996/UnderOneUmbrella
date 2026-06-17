@@ -1,4 +1,4 @@
-// Copyright Epic Games, Inc. All Rights Reserved.
+﻿// Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "UI/UOUDialogueTriggerComponent.h"
 
@@ -17,11 +17,12 @@
 #include "TimerManager.h"
 #include "UI/UOUDialogueCoverTargetComponent.h"
 #include "UI/UOUDialogueSourceComponent.h"
+#include "UI/UOUSpeechBubbleWidget.h"
 #include "UI/UOUUISubsystem.h"
 
 namespace
 {
-	// WBP_NPCSpeechBubble의 ShowBubble 함수 입력 구조와 맞춘 임시 파라미터입니다.
+	// WBP_NPCSpeechBubble??ShowBubble ?⑥닔 ?낅젰 援ъ“? 留욎텣 ?꾩떆 ?뚮씪誘명꽣?낅땲??
 	struct FUOUDialogueHintBubbleParams
 	{
 		FText BubbleText;
@@ -58,6 +59,7 @@ void UUOUDialogueTriggerComponent::BeginPlay()
 	{
 		ShowCoverDebugMessage(FString::Printf(TEXT("DialogueTrigger Ready: %s"), *GetNameSafe(GetOwner())), FColor::White, 2.0f);
 	}
+
 }
 
 void UUOUDialogueTriggerComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -73,21 +75,30 @@ void UUOUDialogueTriggerComponent::TickComponent(float DeltaTime, ELevelTick Tic
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
-	// 우산 커버 대화는 트리거 안에 들어온 플레이어를 기억해 두고 매 틱마다 상태를 다시 검사합니다.
-	// 플레이어가 먼저 들어온 뒤 우산을 펼쳐도, 조건이 맞는 순간부터 커버 유지 시간이 쌓입니다.
-	// 유지 시간이 RequiredCoverDuration을 넘으면 실제 대화를 시작합니다.
+	// ?곗궛 而ㅻ쾭 ??붾뒗 ?몃━嫄??덉뿉 ?ㅼ뼱???뚮젅?댁뼱瑜?湲곗뼲???먭퀬 留??깅쭏???곹깭瑜??ㅼ떆 寃?ы빀?덈떎.
+	// ?뚮젅?댁뼱媛 癒쇱? ?ㅼ뼱?????곗궛???쇱퀜?? 議곌굔??留욌뒗 ?쒓컙遺??而ㅻ쾭 ?좎? ?쒓컙???볦엯?덈떎.
+	// ?좎? ?쒓컙??RequiredCoverDuration???섏쑝硫??ㅼ젣 ??붾? ?쒖옉?⑸땲??
 	if (!bRequireUmbrellaCoverHold || CurrentInstigatorActor == nullptr)
 	{
 		return;
 	}
 
-	// 디버그 문구에 우산 보유 여부를 보여주기 위해 우산 컴포넌트를 찾습니다.
+	ShowProximityDebugStatus(
+		FString::Printf(
+			TEXT("Proximity: IN | Actor:%s | Hint:%s | OverlapActors:%d | HintStatus:%s"),
+			*GetNameSafe(CurrentInstigatorActor),
+			bHintVisible ? TEXT("Visible") : TEXT("Hidden"),
+			ActiveOverlapCounts.Num(),
+			*LastHintDebugStatus),
+		FColor::Green);
+
+	// ?붾쾭洹?臾멸뎄???곗궛 蹂댁쑀 ?щ?瑜?蹂댁뿬二쇨린 ?꾪빐 ?곗궛 而댄룷?뚰듃瑜?李얠뒿?덈떎.
 	const UUOUUmbrellaComponent* UmbrellaComponent = FindUmbrellaComponent(CurrentInstigatorActor);
 
-	// 플레이어인지, 우산을 가지고 있는지, 우산 상태가 맞는지 같은 기본 조건을 먼저 봅니다.
+	// ?뚮젅?댁뼱?몄?, ?곗궛??媛吏怨??덈뒗吏, ?곗궛 ?곹깭媛 留욌뒗吏 媛숈? 湲곕낯 議곌굔??癒쇱? 遊낅땲??
 	const bool bCanCheckCover = PassesInstigatorRules(CurrentInstigatorActor);
 
-	// 실제 커버 판정입니다. 대화 대상의 커버 타겟 스피어가 플레이어의 대화용 우산 커버 박스와 겹치면 성공입니다.
+	// ?ㅼ젣 而ㅻ쾭 ?먯젙?낅땲?? ?????곸쓽 而ㅻ쾭 ?寃??ㅽ뵾?닿? ?뚮젅?댁뼱????붿슜 ?곗궛 而ㅻ쾭 諛뺤뒪? 寃뱀튂硫??깃났?낅땲??
 	FString CoverDebugDetails;
 	const bool bCovered = bCanCheckCover && IsOwnerCoveredByDialogueCover(CurrentInstigatorActor, &CoverDebugDetails);
 
@@ -156,9 +167,17 @@ bool UUOUDialogueTriggerComponent::TryStartDialogue(AActor* InstigatorActor)
 	}
 
 	UUOUDialogueSourceComponent* Source = ResolveDialogueSource();
-	if (Source == nullptr || !Source->StartDialogue(InstigatorActor))
+	if (Source == nullptr || !Source->CanStartDialogue())
 	{
 		ShowCoverDebugMessage(TEXT("Dialogue Start Failed: source missing or blocked"), FColor::Red, 1.5f);
+		return false;
+	}
+
+	HideInteractionHint();
+	if (!Source->StartDialogue(InstigatorActor))
+	{
+		ShowInteractionHint();
+		ShowCoverDebugMessage(TEXT("Dialogue Start Failed: UI subsystem missing"), FColor::Red, 1.5f);
 		return false;
 	}
 
@@ -174,49 +193,113 @@ void UUOUDialogueTriggerComponent::ShowInteractionHint()
 {
 	if (!bEnableInteractionHint)
 	{
+		LastHintDebugStatus = TEXT("Failed:Disabled");
+		ShowCoverDebugMessage(TEXT("Hint Show Failed: hint disabled"), FColor::Red, 1.5f);
 		return;
 	}
 
-	UUserWidget* UserWidget = GetHintUserWidget();
-	if (UserWidget == nullptr)
+	if (bHintVisible)
 	{
+		LastHintDebugStatus = TEXT("Skipped:AlreadyVisible");
+		ShowCoverDebugMessage(TEXT("Hint Show Skipped: already visible"), FColor::Yellow, 1.0f);
 		return;
+	}
+
+	if (const UUOUUISubsystem* UISubsystem = ResolveUISubsystem())
+	{
+		if (UISubsystem->IsDialoguePlaying())
+		{
+			LastHintDebugStatus = TEXT("Failed:DialoguePlaying");
+			ShowCoverDebugMessage(TEXT("Hint Show Failed: dialogue is playing"), FColor::Red, 1.5f);
+			return;
+		}
 	}
 
 	FText DisplayHintText = HintText;
+	double DisplayDuration = HintDuration > 0.0 ? HintDuration : 3.0;
 	if (const UUOUDialogueSourceComponent* Source = ResolveDialogueSource())
 	{
-		if (Source->IsUsingDialogueTable())
-		{
-			DisplayHintText = Source->GetProximityBubbleText();
-		}
+		// ????뚯뒪媛 ?덈뒗 ??곸? CSV??洹쇱젒 留먰뭾?좊쭔 ?ъ슜?⑸땲??
+		// 媛믪씠 鍮꾩뼱 ?덉쑝硫?湲곕낯 臾쇱쓬?쒕줈 ?섎룎?꾧?吏 ?딄퀬 ?쒖떆?섏? ?딆뒿?덈떎.
+		DisplayHintText = Source->GetProximityBubbleText();
+		DisplayDuration = Source->GetProximityBubbleDuration();
 	}
 
 	if (DisplayHintText.IsEmpty())
 	{
+		LastHintDebugStatus = TEXT("Failed:TextEmpty");
+		ShowCoverDebugMessage(TEXT("Hint Show Failed: text empty"), FColor::Red, 1.5f);
+		return;
+	}
+
+	UWidgetComponent* WidgetComponent = ResolveHintWidgetComponent();
+	if (WidgetComponent == nullptr)
+	{
+		LastHintDebugStatus = TEXT("Failed:WidgetComponentMissing");
+		ShowCoverDebugMessage(TEXT("Hint Show Failed: widget component missing"), FColor::Red, 1.5f);
 		return;
 	}
 
 	SetHintWidgetComponentVisible(true);
-	CallHintWidgetShowFunction(UserWidget, DisplayHintText);
+	WidgetComponent->InitWidget();
+
+	UUserWidget* UserWidget = WidgetComponent->GetUserWidgetObject();
+	if (UserWidget == nullptr)
+	{
+		SetHintWidgetComponentVisible(false);
+		LastHintDebugStatus = FString::Printf(TEXT("Failed:UserWidgetMissing Component:%s"), *GetNameSafe(WidgetComponent));
+		ShowCoverDebugMessage(
+			FString::Printf(TEXT("Hint Show Failed: user widget missing | Component:%s"), *GetNameSafe(WidgetComponent)),
+			FColor::Red,
+			1.5f);
+		return;
+	}
+
+	if (!CallHintWidgetShowFunction(UserWidget, DisplayHintText, DisplayDuration))
+	{
+		SetHintWidgetComponentVisible(false);
+		LastHintDebugStatus = FString::Printf(TEXT("Failed:ShowFunction Widget:%s Function:%s"),
+			*GetNameSafe(UserWidget),
+			*HintShowFunctionName.ToString());
+		ShowCoverDebugMessage(
+			FString::Printf(TEXT("Hint Show Failed: show function failed | Widget:%s | Function:%s"),
+				*GetNameSafe(UserWidget),
+				*HintShowFunctionName.ToString()),
+			FColor::Red,
+			1.5f);
+		return;
+	}
+
+	SetHintWidgetComponentVisible(true);
 	bHintVisible = true;
+	LastHintDebugStatus = FString::Printf(TEXT("Success:%s"), *DisplayHintText.ToString());
+	ShowCoverDebugMessage(
+		FString::Printf(TEXT("Hint Show Success: %s"), *DisplayHintText.ToString()),
+		FColor::Green,
+		1.5f);
 }
 
 void UUOUDialogueTriggerComponent::HideInteractionHint()
 {
 	if (!bEnableInteractionHint)
 	{
+		LastHintDebugStatus = TEXT("HideSkipped:Disabled");
 		return;
 	}
 
 	UUserWidget* UserWidget = GetHintUserWidget();
+	bool bHideHandledByWidget = false;
 	if (UserWidget != nullptr)
 	{
-		CallHintWidgetHideFunction(UserWidget);
+		bHideHandledByWidget = CallHintWidgetHideFunction(UserWidget);
 	}
 
-	SetHintWidgetComponentVisible(false);
+	if (!bHideHandledByWidget)
+	{
+		SetHintWidgetComponentVisible(false);
+	}
 	bHintVisible = false;
+	LastHintDebugStatus = TEXT("Hidden");
 }
 
 UWidgetComponent* UUOUDialogueTriggerComponent::ResolveHintWidgetComponent()
@@ -260,6 +343,11 @@ void UUOUDialogueTriggerComponent::ResetTrigger()
 
 void UUOUDialogueTriggerComponent::HandleBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
+	HandleTrackedActorEnter(OtherActor, OtherComp);
+}
+
+void UUOUDialogueTriggerComponent::HandleTrackedActorEnter(AActor* OtherActor, UPrimitiveComponent* OtherComp)
+{
 	if (!CanTrackOverlapActor(OtherActor))
 	{
 		if (bRequireUmbrellaCoverHold)
@@ -269,25 +357,31 @@ void UUOUDialogueTriggerComponent::HandleBeginOverlap(UPrimitiveComponent* Overl
 		return;
 	}
 
-	// 같은 캐릭터 안의 여러 컴포넌트가 닿아도 액터 기준 첫 진입만 처리합니다.
+	// 媛숈? 罹먮┃???덉쓽 ?щ윭 而댄룷?뚰듃媛 ?우븘???≫꽣 湲곗? 泥?吏꾩엯留?泥섎━?⑸땲??
 	if (!RegisterActorOverlap(OtherActor))
 	{
 		return;
 	}
 
+	ShowCoverDebugMessage(
+		FString::Printf(TEXT("Dialogue Proximity Accepted: %s"), *GetNameSafe(OtherActor)),
+		FColor::Green,
+		2.0f);
+
 	if (bRequireUmbrellaCoverHold)
 	{
 		ShowCoverDebugMessage(FString::Printf(TEXT("Dialogue Trigger Overlap: %s"), *GetNameSafe(OtherActor)), FColor::White, 1.5f);
 
-		// 커버형 대화는 트리거에 들어온 플레이어를 일단 추적합니다.
-		// 그래야 트리거 안에 먼저 들어온 뒤 우산을 펼치는 흐름도 Tick에서 다시 검사할 수 있습니다.
+		// 而ㅻ쾭????붾뒗 ?몃━嫄곗뿉 ?ㅼ뼱???뚮젅?댁뼱瑜??쇰떒 異붿쟻?⑸땲??
+		// 洹몃옒???몃━嫄??덉뿉 癒쇱? ?ㅼ뼱?????곗궛???쇱튂???먮쫫??Tick?먯꽌 ?ㅼ떆 寃?ы븷 ???덉뒿?덈떎.
 		if (CanTrackOverlapActor(OtherActor))
 		{
-			ShowInteractionHint();
 			CurrentInstigatorActor = OtherActor;
 			CurrentCoverHoldTime = 0.0f;
 			bIsCurrentlyCoveredByUmbrella = false;
 			SetComponentTickEnabled(true);
+
+			ShowInteractionHint();
 
 			if (!PassesInstigatorRules(OtherActor))
 			{
@@ -315,7 +409,7 @@ void UUOUDialogueTriggerComponent::HandleEndOverlap(UPrimitiveComponent* Overlap
 		return;
 	}
 
-	// 아직 같은 액터의 다른 컴포넌트가 트리거 안에 남아 있으면 실제 이탈로 보지 않습니다.
+	// ?꾩쭅 媛숈? ?≫꽣???ㅻⅨ 而댄룷?뚰듃媛 ?몃━嫄??덉뿉 ?⑥븘 ?덉쑝硫??ㅼ젣 ?댄깉濡?蹂댁? ?딆뒿?덈떎.
 	if (!UnregisterActorOverlap(OtherActor))
 	{
 		return;
@@ -327,10 +421,12 @@ void UUOUDialogueTriggerComponent::HandleEndOverlap(UPrimitiveComponent* Overlap
 		ClearCoverProgress();
 	}
 
-	if (CanTrackOverlapActor(OtherActor))
-	{
-		HideInteractionHint();
-	}
+	ShowCoverDebugMessage(
+		FString::Printf(TEXT("Dialogue Proximity Exit: %s"), *GetNameSafe(OtherActor)),
+		FColor::Orange,
+		2.0f);
+
+	HideInteractionHint();
 }
 
 UUOUDialogueSourceComponent* UUOUDialogueTriggerComponent::ResolveDialogueSource() const
@@ -392,8 +488,8 @@ bool UUOUDialogueTriggerComponent::CanTrackOverlapActor(AActor* InstigatorActor)
 		return false;
 	}
 
-	// 커버형 대화는 우산을 나중에 펼치는 경우도 허용해야 하므로,
-	// 여기서는 Pawn 같은 최소 추적 조건만 검사하고 우산 상태 검사는 Tick에서 따로 처리합니다.
+	// 而ㅻ쾭????붾뒗 ?곗궛???섏쨷???쇱튂??寃쎌슦???덉슜?댁빞 ?섎?濡?
+	// ?ш린?쒕뒗 Pawn 媛숈? 理쒖냼 異붿쟻 議곌굔留?寃?ы븯怨??곗궛 ?곹깭 寃?щ뒗 Tick?먯꽌 ?곕줈 泥섎━?⑸땲??
 	if (bOnlyPawn && Cast<APawn>(InstigatorActor) == nullptr)
 	{
 		return false;
@@ -401,6 +497,7 @@ bool UUOUDialogueTriggerComponent::CanTrackOverlapActor(AActor* InstigatorActor)
 
 	return true;
 }
+
 
 bool UUOUDialogueTriggerComponent::RegisterActorOverlap(AActor* InstigatorActor)
 {
@@ -413,7 +510,7 @@ bool UUOUDialogueTriggerComponent::RegisterActorOverlap(AActor* InstigatorActor)
 	int32& OverlapCount = ActiveOverlapCounts.FindOrAdd(ActorKey);
 	++OverlapCount;
 
-	// 1이면 이 액터가 처음 들어온 순간입니다.
+	// 1?대㈃ ???≫꽣媛 泥섏쓬 ?ㅼ뼱???쒓컙?낅땲??
 	return OverlapCount == 1;
 }
 
@@ -437,7 +534,7 @@ bool UUOUDialogueTriggerComponent::UnregisterActorOverlap(AActor* InstigatorActo
 		return false;
 	}
 
-	// 0이면 이 액터의 모든 겹침이 끝난 순간입니다.
+	// 0?대㈃ ???≫꽣??紐⑤뱺 寃뱀묠???앸궃 ?쒓컙?낅땲??
 	ActiveOverlapCounts.Remove(ActorKey);
 	return true;
 }
@@ -466,8 +563,8 @@ bool UUOUDialogueTriggerComponent::IsOwnerCoveredByDialogueCover(AActor* Instiga
 		return false;
 	}
 
-	// 대화 커버 판정은 이제 RainBlocker 좌표 계산을 쓰지 않습니다.
-	// NPC 쪽 DialogueCoverTarget 기준점 반경과 플레이어 쪽 UmbrellaCoverVolume 박스가 실제로 닿았는지 확인합니다.
+	// ???而ㅻ쾭 ?먯젙? ?댁젣 RainBlocker 醫뚰몴 怨꾩궛???곗? ?딆뒿?덈떎.
+	// NPC 履?DialogueCoverTarget 湲곗???諛섍꼍怨??뚮젅?댁뼱 履?UmbrellaCoverVolume 諛뺤뒪媛 ?ㅼ젣濡??우븯?붿? ?뺤씤?⑸땲??
 	FString LastDebugDetails;
 	for (const UUOUDialogueCoverTargetComponent* Target : CoverTargets)
 	{
@@ -494,8 +591,8 @@ bool UUOUDialogueTriggerComponent::IsOwnerCoveredByDialogueCover(AActor* Instiga
 			const float RequiredTouchDistance = TargetRadius + TouchTolerance;
 			const float GapToTouch = CoverWorldBox.IsValid ? FMath::Max(0.0f, DistanceToBox - RequiredTouchDistance) : -1.0f;
 
-			// 디버그에 표시하는 Gap 계산과 실제 성공 판정을 반드시 같은 값에서 뽑습니다.
-			// 이전처럼 별도 함수 결과를 섞으면 화면상 Gap 0인데 Touch No가 나와 원인을 헷갈리게 만듭니다.
+			// ?붾쾭洹몄뿉 ?쒖떆?섎뒗 Gap 怨꾩궛怨??ㅼ젣 ?깃났 ?먯젙??諛섎뱶??媛숈? 媛믪뿉??戮묒뒿?덈떎.
+			// ?댁쟾泥섎읆 蹂꾨룄 ?⑥닔 寃곌낵瑜??욎쑝硫??붾㈃??Gap 0?몃뜲 Touch No媛 ?섏? ?먯씤???룰컝由ш쾶 留뚮벊?덈떎.
 			const bool bTouching = CoverWorldBox.IsValid && DistanceToBox <= RequiredTouchDistance;
 
 			LastDebugDetails = FString::Printf(
@@ -694,13 +791,13 @@ void UUOUDialogueTriggerComponent::LockMovementForDialogue(AActor* InstigatorAct
 		return;
 	}
 
-	// 대화 카메라가 NPC와 플레이어 사이로 들어가는 동안에는 이동 입력만 잠급니다.
-	// 룩 입력은 잠그지 않습니다. 카메라 컴포넌트가 대화용 위치로 직접 보간하고 있기 때문입니다.
+	// ???移대찓?쇨? NPC? ?뚮젅?댁뼱 ?ъ씠濡??ㅼ뼱媛???숈븞?먮뒗 ?대룞 ?낅젰留??좉툒?덈떎.
+	// 猷??낅젰? ?좉렇吏 ?딆뒿?덈떎. 移대찓??而댄룷?뚰듃媛 ??붿슜 ?꾩튂濡?吏곸젒 蹂닿컙?섍퀬 ?덇린 ?뚮Ц?낅땲??
 	PlayerController->SetIgnoreMoveInput(true);
 	LockedMovementPlayerController = PlayerController;
 	bDialogueMovementLocked = true;
 
-	// 이미 이동 중이던 속도를 즉시 끊어서 줌 시작 직후 캐릭터가 미끄러지는 느낌을 줄입니다.
+	// ?대? ?대룞 以묒씠???띾룄瑜?利됱떆 ?딆뼱??以??쒖옉 吏곹썑 罹먮┃?곌? 誘몃걚?ъ????먮굦??以꾩엯?덈떎.
 	if (ACharacter* Character = Cast<ACharacter>(InstigatorPawn))
 	{
 		if (UCharacterMovementComponent* MovementComponent = Character->GetCharacterMovement())
@@ -719,7 +816,7 @@ void UUOUDialogueTriggerComponent::UnlockMovementForDialogue()
 
 	if (LockedMovementPlayerController != nullptr)
 	{
-		// LockMovementForDialogue에서 올린 이동 입력 잠금을 정확히 한 번만 되돌립니다.
+		// LockMovementForDialogue?먯꽌 ?щ┛ ?대룞 ?낅젰 ?좉툑???뺥솗????踰덈쭔 ?섎룎由쎈땲??
 		LockedMovementPlayerController->SetIgnoreMoveInput(false);
 		LockedMovementPlayerController = nullptr;
 	}
@@ -750,37 +847,63 @@ void UUOUDialogueTriggerComponent::SetHintWidgetComponentVisible(bool bNewVisibl
 	HintWidgetComponent->SetHiddenInGame(!bNewVisible, true);
 }
 
-void UUOUDialogueTriggerComponent::CallHintWidgetShowFunction(UUserWidget* UserWidget, const FText& DisplayHintText) const
+bool UUOUDialogueTriggerComponent::CallHintWidgetShowFunction(UUserWidget* UserWidget, const FText& DisplayHintText, double DisplayDuration) const
 {
-	if (UserWidget == nullptr || HintShowFunctionName.IsNone())
+	if (UserWidget == nullptr)
 	{
-		return;
+		return false;
+	}
+
+	if (UUOUSpeechBubbleWidget* SpeechBubbleWidget = Cast<UUOUSpeechBubbleWidget>(UserWidget))
+	{
+		SpeechBubbleWidget->ShowBubble(DisplayHintText, DisplayDuration);
+		return true;
+	}
+
+	if (HintShowFunctionName.IsNone())
+	{
+		return false;
 	}
 
 	UFunction* ShowFunction = UserWidget->FindFunction(HintShowFunctionName);
 	if (ShowFunction == nullptr)
 	{
-		return;
+		return false;
 	}
 
 	FUOUDialogueHintBubbleParams Params;
 	Params.BubbleText = DisplayHintText;
-	Params.Duration = HintDuration > 0.0 ? HintDuration : 3.0;
+	Params.Duration = DisplayDuration;
 	UserWidget->ProcessEvent(ShowFunction, &Params);
+	return true;
 }
 
-void UUOUDialogueTriggerComponent::CallHintWidgetHideFunction(UUserWidget* UserWidget) const
+bool UUOUDialogueTriggerComponent::CallHintWidgetHideFunction(UUserWidget* UserWidget) const
 {
-	if (UserWidget == nullptr || HintHideFunctionName.IsNone())
+	if (UserWidget == nullptr)
 	{
-		return;
+		return false;
+	}
+
+	if (UUOUSpeechBubbleWidget* SpeechBubbleWidget = Cast<UUOUSpeechBubbleWidget>(UserWidget))
+	{
+		SpeechBubbleWidget->HideBubble();
+		return true;
+	}
+
+	if (HintHideFunctionName.IsNone())
+	{
+		return false;
 	}
 
 	UFunction* HideFunction = UserWidget->FindFunction(HintHideFunctionName);
 	if (HideFunction != nullptr)
 	{
 		UserWidget->ProcessEvent(HideFunction, nullptr);
+		return true;
 	}
+
+	return false;
 }
 
 UUserWidget* UUOUDialogueTriggerComponent::GetHintUserWidget()
@@ -807,5 +930,16 @@ void UUOUDialogueTriggerComponent::ShowCoverDebugStatus(const FString& Message, 
 	}
 
 	const uint64 DebugKey = static_cast<uint64>(GetUniqueID());
+	GEngine->AddOnScreenDebugMessage(DebugKey, 0.0f, Color, Message);
+}
+
+void UUOUDialogueTriggerComponent::ShowProximityDebugStatus(const FString& Message, const FColor& Color) const
+{
+	if (!bShowUmbrellaCoverDebug || GEngine == nullptr)
+	{
+		return;
+	}
+
+	const uint64 DebugKey = static_cast<uint64>(GetUniqueID()) + 10000;
 	GEngine->AddOnScreenDebugMessage(DebugKey, 0.0f, Color, Message);
 }

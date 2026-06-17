@@ -165,6 +165,7 @@ private:
 	UFUNCTION()
 	void HandleDialogueEnded();
 
+	void HandleTrackedActorEnter(AActor* OtherActor, UPrimitiveComponent* OtherComp);
 	UUOUDialogueSourceComponent* ResolveDialogueSource() const;
 	bool PassesInstigatorRules(AActor* InstigatorActor) const;
 	UUOUUmbrellaComponent* FindUmbrellaComponent(AActor* InstigatorActor) const;
@@ -182,11 +183,12 @@ private:
 	void UnlockMovementForDialogue();
 	void ClearCoverProgress();
 	void SetHintWidgetComponentVisible(bool bNewVisible) const;
-	void CallHintWidgetShowFunction(UUserWidget* UserWidget, const FText& DisplayHintText) const;
-	void CallHintWidgetHideFunction(UUserWidget* UserWidget) const;
+	bool CallHintWidgetShowFunction(UUserWidget* UserWidget, const FText& DisplayHintText, double DisplayDuration) const;
+	bool CallHintWidgetHideFunction(UUserWidget* UserWidget) const;
 	UUserWidget* GetHintUserWidget();
 	void ShowCoverDebugMessage(const FString& Message, const FColor& Color, float Duration = 1.5f) const;
 	void ShowCoverDebugStatus(const FString& Message, const FColor& Color) const;
+	void ShowProximityDebugStatus(const FString& Message, const FColor& Color) const;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UUOUCameraControllerComponent> ActiveDialogueCameraController = nullptr;
@@ -200,6 +202,8 @@ private:
 	TMap<TWeakObjectPtr<AActor>, int32> ActiveOverlapCounts;
 
 	FTimerHandle DialogueFocusEndDelayTimerHandle;
+
+	FString LastHintDebugStatus = TEXT("None");
 
 	bool bDialogueMovementLocked = false;
 };
