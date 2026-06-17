@@ -26,6 +26,7 @@ void UUOUCameraControllerComponent::BeginPlay()
 	Super::BeginPlay();
 
 	CacheCameraComponents();
+	ApplyCameraProjection();
 	InitializeCameraRig();
 }
 
@@ -178,6 +179,19 @@ void UUOUCameraControllerComponent::InitializeCameraRig()
 	TargetCameraOffset = RegularCameraTargetOffset;
 	CameraBoom->TargetArmLength = TargetCameraDistance;
 	CameraBoom->SetWorldRotation(FRotator(CameraPitchAngle, TargetCameraYaw, 0.0f));
+}
+
+void UUOUCameraControllerComponent::ApplyCameraProjection()
+{
+	if (FollowCamera == nullptr)
+	{
+		return;
+	}
+
+	FollowCamera->SetProjectionMode(bUseOrthographicProjection
+		? ECameraProjectionMode::Orthographic
+		: ECameraProjectionMode::Perspective);
+	FollowCamera->SetOrthoWidth(FMath::Max(1.0f, OrthographicWidth));
 }
 
 void UUOUCameraControllerComponent::UpdateSnapCamera(float DeltaSeconds)

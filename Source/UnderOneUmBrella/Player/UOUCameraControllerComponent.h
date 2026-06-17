@@ -86,6 +86,14 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Camera|References")
 	TObjectPtr<UCameraComponent> FollowCamera = nullptr;
 
+	// 임시 테스트용 투영 모드다. 켜면 원근감 없이 오소그래픽으로 화면을 그린다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Camera|Projection")
+	bool bUseOrthographicProjection = true;
+
+	// 오소그래픽 카메라가 한 화면에 보여주는 월드 폭이다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Camera|Projection", meta = (ClampMin = "1.0"))
+	float OrthographicWidth = 1800.0f;
+
 	// 카메라가 내려다보는 기본 피치 각도다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Camera|Snap")
 	float CameraPitchAngle = -45.0f;
@@ -177,6 +185,9 @@ protected:
 
 	// 시작 시점에 기본 각도와 거리를 실제 카메라 릭에 반영한다.
 	void InitializeCameraRig();
+
+	// 디테일 창의 투영 설정을 실제 FollowCamera에 반영한다.
+	void ApplyCameraProjection();
 
 	// 목표 yaw와 거리로 현재 카메라를 부드럽게 갱신한다.
 	void UpdateSnapCamera(float DeltaSeconds);
