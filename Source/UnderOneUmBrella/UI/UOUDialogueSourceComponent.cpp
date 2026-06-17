@@ -95,7 +95,14 @@ int32 UUOUDialogueSourceComponent::GetLineCount() const
 void UUOUDialogueSourceComponent::RefreshDialogueTable()
 {
 	bDialogueTableCacheDirty = true;
+	bProximityBubbleTableCacheDirty = true;
 	EnsureDialogueTableCache();
+}
+
+void UUOUDialogueSourceComponent::RefreshProximityBubbleTable()
+{
+	bProximityBubbleTableCacheDirty = true;
+	EnsureProximityBubbleTableCache();
 }
 
 void UUOUDialogueSourceComponent::SetDialogueState(FName NewDialogueState)
@@ -107,10 +114,17 @@ void UUOUDialogueSourceComponent::SetDialogueState(FName NewDialogueState)
 
 	DialogueState = NewDialogueState;
 	bDialogueTableCacheDirty = true;
+	bProximityBubbleTableCacheDirty = true;
 }
 
 FText UUOUDialogueSourceComponent::GetProximityBubbleText() const
 {
+	if (ShouldUseProximityBubbleTable())
+	{
+		EnsureProximityBubbleTableCache();
+		return CachedProximityBubbleText;
+	}
+
 	if (ShouldUseDialogueTable())
 	{
 		EnsureDialogueTableCache();
@@ -118,6 +132,17 @@ FText UUOUDialogueSourceComponent::GetProximityBubbleText() const
 	}
 
 	return FText::GetEmpty();
+}
+
+float UUOUDialogueSourceComponent::GetProximityBubbleDuration() const
+{
+	if (ShouldUseProximityBubbleTable())
+	{
+		EnsureProximityBubbleTableCache();
+		return CachedProximityBubbleDuration;
+	}
+
+	return 3.0f;
 }
 
 bool UUOUDialogueSourceComponent::IsUsingDialogueTable() const
@@ -263,9 +288,71 @@ void UUOUDialogueSourceComponent::EnsureDialogueTableCache() const
 	}
 }
 
+void UUOUDialogueSourceComponent::EnsureProximityBubbleTableCache() const
+{
+	if (!bProximityBubbleTableCacheDirty)
+	{
+		return;
+	}
+
+	CachedProximityBubbleText = FText::GetEmpty();
+	CachedProximityBubbleDuration = 3.0f;
+	bProximityBubbleTableCacheDirty = false;
+
+	if (!ShouldUseProximityBubbleTable())
+	{
+		return;
+	}
+
+	TArray<FUOUProximityBubbleTableRow*> Rows;
+	ProximityBubbleTable->GetAllRows<FUOUProximityBubbleTableRow>(TEXT("UOUDialogueSourceComponent"), Rows);
+
+	const FName ResolvedActorId = GetResolvedProximityBubbleActorId();
+	const FName ResolvedState = GetResolvedProximityBubbleState();
+
+	TArray<FUOUProximityBubbleTableRow> MatchingRows;
+	for (const FUOUProximityBubbleTableRow* Row : Rows)
+	{
+		if (Row == nullptr)
+		{
+			continue;
+		}
+
+		if (Row->ActorId != ResolvedActorId || Row->DialogueState != ResolvedState)
+		{
+			continue;
+		}
+
+		MatchingRows.Add(*Row);
+	}
+
+	MatchingRows.Sort([](const FUOUProximityBubbleTableRow& Left, const FUOUProximityBubbleTableRow& Right)
+	{
+		return Left.LineOrder < Right.LineOrder;
+	});
+
+	for (const FUOUProximityBubbleTableRow& Row : MatchingRows)
+	{
+		if (!Row.BubbleText.IsEmpty())
+		{
+			CachedProximityBubbleText = Row.BubbleText;
+			CachedProximityBubbleDuration = Row.BubbleDuration;
+			return;
+		}
+	}
+}
+
 bool UUOUDialogueSourceComponent::ShouldUseDialogueTable() const
 {
 	return bUseDialogueTable && DialogueTable != nullptr && !GetResolvedDialogueActorId().IsNone();
+}
+
+bool UUOUDialogueSourceComponent::ShouldUseProximityBubbleTable() const
+{
+	return bUseProximityBubbleTable
+		&& ProximityBubbleTable != nullptr
+		&& !GetResolvedProximityBubbleActorId().IsNone()
+		&& !GetResolvedProximityBubbleState().IsNone();
 }
 
 FName UUOUDialogueSourceComponent::GetResolvedDialogueActorId() const
@@ -277,4 +364,24 @@ FName UUOUDialogueSourceComponent::GetResolvedDialogueActorId() const
 
 	const AActor* OwnerActor = GetOwner();
 	return OwnerActor != nullptr ? OwnerActor->GetFName() : NAME_None;
+}
+
+FName UUOUDialogueSourceComponent::GetResolvedProximityBubbleActorId() const
+{
+	if (!ProximityBubbleActorId.IsNone())
+	{
+		return ProximityBubbleActorId;
+	}
+
+	return GetResolvedDialogueActorId();
+}
+
+FName UUOUDialogueSourceComponent::GetResolvedProximityBubbleState() const
+{
+	if (!ProximityBubbleState.IsNone())
+	{
+		return ProximityBubbleState;
+	}
+
+	return DialogueState;
 }

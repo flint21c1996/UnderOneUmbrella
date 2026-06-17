@@ -117,6 +117,29 @@ struct UNDERONEUMBRELLA_API FUOUDialogueTableRow : public FTableRowBase
 	bool bShowBubbleFirst = true;
 };
 
+// 플레이어가 NPC나 상호작용 대상 근처에 갔을 때 잠깐 보여줄 접근 말풍선 전용 CSV 행입니다.
+// 대화 본문과 분리해서 ActorId와 DialogueState만 맞추면 퍼즐 전후 힌트 문구를 따로 관리할 수 있습니다.
+USTRUCT(BlueprintType)
+struct UNDERONEUMBRELLA_API FUOUProximityBubbleTableRow : public FTableRowBase
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "UI|Proximity Bubble")
+	FName ActorId = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "UI|Proximity Bubble")
+	FName DialogueState = TEXT("Default");
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "UI|Proximity Bubble")
+	int32 LineOrder = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "UI|Proximity Bubble")
+	FText BubbleText;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "UI|Proximity Bubble", meta = (ClampMin = "0.0"))
+	float BubbleDuration = 3.0f;
+};
+
 // Short title-card data for chapter names, place names, or stage introductions.
 USTRUCT(BlueprintType)
 struct UNDERONEUMBRELLA_API FUOUTitleDisplayData

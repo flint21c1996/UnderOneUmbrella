@@ -42,6 +42,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Dialogue|Table")
 	void RefreshDialogueTable();
 
+	// 접근 말풍선 전용 CSV DataTable을 다시 읽습니다.
+	UFUNCTION(BlueprintCallable, Category = "Dialogue|Proximity Bubble")
+	void RefreshProximityBubbleTable();
+
 	// 퍼즐 진행도에 따라 사용할 대화 상태를 바꿉니다.
 	UFUNCTION(BlueprintCallable, Category = "Dialogue|Table")
 	void SetDialogueState(FName NewDialogueState);
@@ -55,6 +59,9 @@ public:
 	// 플레이어가 가까이 왔을 때 띄울 짧은 말풍선입니다. 비어 있으면 표시하지 않아도 됩니다.
 	UFUNCTION(BlueprintPure, Category = "Dialogue|Bubble")
 	FText GetProximityBubbleText() const;
+
+	UFUNCTION(BlueprintPure, Category = "Dialogue|Bubble")
+	float GetProximityBubbleDuration() const;
 
 	const FUOUDialogueLine* GetLine(int32 LineIndex) const;
 	AActor* GetSpeakerActor() const;
@@ -72,6 +79,18 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue|Table", meta = (EditCondition = "bUseDialogueTable"))
 	FName DialogueState = TEXT("Default");
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue|Proximity Bubble")
+	bool bUseProximityBubbleTable = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue|Proximity Bubble", meta = (EditCondition = "bUseProximityBubbleTable"))
+	TObjectPtr<UDataTable> ProximityBubbleTable = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue|Proximity Bubble", meta = (EditCondition = "bUseProximityBubbleTable"))
+	FName ProximityBubbleActorId = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue|Proximity Bubble", meta = (EditCondition = "bUseProximityBubbleTable"))
+	FName ProximityBubbleState = NAME_None;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue")
 	TObjectPtr<UUOUDialogueSequenceData> DialogueSequence = nullptr;
@@ -101,8 +120,12 @@ private:
 	UUOUUISubsystem* GetUISubsystem(AActor* InstigatorActor) const;
 	float GetWorldTimeSeconds() const;
 	void EnsureDialogueTableCache() const;
+	void EnsureProximityBubbleTableCache() const;
 	bool ShouldUseDialogueTable() const;
+	bool ShouldUseProximityBubbleTable() const;
 	FName GetResolvedDialogueActorId() const;
+	FName GetResolvedProximityBubbleActorId() const;
+	FName GetResolvedProximityBubbleState() const;
 
 	float LastStartTime = -1000.0f;
 
@@ -110,4 +133,8 @@ private:
 	mutable FText CachedTableProximityBubbleText;
 	mutable FText CachedTableSpeakerName;
 	mutable bool bDialogueTableCacheDirty = true;
+
+	mutable FText CachedProximityBubbleText;
+	mutable float CachedProximityBubbleDuration = 3.0f;
+	mutable bool bProximityBubbleTableCacheDirty = true;
 };
