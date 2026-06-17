@@ -49,7 +49,13 @@ void UUOUDialogueTriggerComponent::BeginPlay()
 	OnComponentEndOverlap.AddDynamic(this, &UUOUDialogueTriggerComponent::HandleEndOverlap);
 	SetComponentTickEnabled(bRequireUmbrellaCoverHold);
 
-	ResolveHintWidgetComponent();
+	UWidgetComponent* ResolvedHintWidgetComponent = ResolveHintWidgetComponent();
+	if (ResolvedHintWidgetComponent != nullptr)
+	{
+		// 월드 위젯은 첫 표시 순간에 생성하면 NativeConstruct 초기화와 ShowBubble 호출이 겹칠 수 있습니다.
+		// BeginPlay에서 미리 만들어 둔 뒤 숨겨 두면, 첫 접근 때도 말풍선 표시만 안정적으로 실행됩니다.
+		ResolvedHintWidgetComponent->InitWidget();
+	}
 	if (bEnableInteractionHint && bHideHintOnBeginPlay)
 	{
 		HideInteractionHint();
