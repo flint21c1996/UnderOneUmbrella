@@ -152,6 +152,9 @@ protected:
 	// 현재 상호작용 후보가 공용 인터페이스를 구현하면 Push/Pull보다 먼저 실행합니다.
 	bool TryContextInteractable();
 
+	// 대화가 진행 중일 때만 마우스 좌클릭으로 다음 대사를 요청합니다.
+	void HandleDialogueAdvancePressed();
+
 	// 밀고 당기기 잡기 시작 요청을 인터랙터에 넘긴다.
 	void HandlePushPullPressed();
 

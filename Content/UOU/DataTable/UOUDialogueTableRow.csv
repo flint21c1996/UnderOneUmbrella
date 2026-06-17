@@ -1,0 +1,4 @@
+﻿Name,ActorId,DialogueState,LineOrder,LineId,SpeakerName,ProximityBubbleText,BubbleText,DialogueText,Emotion,BubbleDuration,DialogueDuration,bWaitForInput,bShowBubbleFirst
+BoxNPC_Before_00,BoxNPC_01,BeforePuzzle,0,None,상자 씨,?,오잉?,고마워 이제 비를 피할 수 있어,None,1.5,5,TRUE,TRUE
+BoxNPC_Before_01,BoxNPC_01,BeforePuzzle,1,None,상자 씨,,잠깐만,잠깐 이야기해도 될까?,None,1.5,3,TRUE,TRUE
+BoxNPC_After_00,BoxNPC_01,AfterPuzzle,0,None,상자 씨,!,고마워!,이제 길이 열린 것 같아,None,1.5,4,TRUE,TRUE

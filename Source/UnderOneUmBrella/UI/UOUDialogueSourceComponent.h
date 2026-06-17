@@ -9,6 +9,7 @@
 
 class UUOUDialogueSequenceData;
 class UUOUUISubsystem;
+class UDataTable;
 class USceneComponent;
 
 // Component that gives an NPC or world object dialogue content and playback rules.
@@ -37,10 +38,59 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Dialogue")
 	int32 GetLineCount() const;
 
+	// CSV DataTable을 다시 읽어서 현재 ActorId와 DialogueState에 맞는 대사를 캐시합니다.
+	UFUNCTION(BlueprintCallable, Category = "Dialogue|Table")
+	void RefreshDialogueTable();
+
+	// 접근 말풍선 전용 CSV DataTable을 다시 읽습니다.
+	UFUNCTION(BlueprintCallable, Category = "Dialogue|Proximity Bubble")
+	void RefreshProximityBubbleTable();
+
+	// 퍼즐 진행도에 따라 사용할 대화 상태를 바꿉니다.
+	UFUNCTION(BlueprintCallable, Category = "Dialogue|Table")
+	void SetDialogueState(FName NewDialogueState);
+
+	UFUNCTION(BlueprintPure, Category = "Dialogue|Table")
+	FName GetDialogueState() const { return DialogueState; }
+
+	UFUNCTION(BlueprintPure, Category = "Dialogue|Table")
+	bool IsUsingDialogueTable() const;
+
+	// 플레이어가 가까이 왔을 때 띄울 짧은 말풍선입니다. 비어 있으면 표시하지 않아도 됩니다.
+	UFUNCTION(BlueprintPure, Category = "Dialogue|Bubble")
+	FText GetProximityBubbleText() const;
+
+	UFUNCTION(BlueprintPure, Category = "Dialogue|Bubble")
+	float GetProximityBubbleDuration() const;
+
 	const FUOUDialogueLine* GetLine(int32 LineIndex) const;
 	AActor* GetSpeakerActor() const;
 	FText GetSpeakerName() const;
 	void MarkDialogueStarted();
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue|Table")
+	bool bUseDialogueTable = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue|Table", meta = (EditCondition = "bUseDialogueTable"))
+	TObjectPtr<UDataTable> DialogueTable = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue|Table", meta = (EditCondition = "bUseDialogueTable"))
+	FName DialogueActorId = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue|Table", meta = (EditCondition = "bUseDialogueTable"))
+	FName DialogueState = TEXT("Default");
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue|Proximity Bubble")
+	bool bUseProximityBubbleTable = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue|Proximity Bubble", meta = (EditCondition = "bUseProximityBubbleTable"))
+	TObjectPtr<UDataTable> ProximityBubbleTable = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue|Proximity Bubble", meta = (EditCondition = "bUseProximityBubbleTable"))
+	FName ProximityBubbleActorId = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue|Proximity Bubble", meta = (EditCondition = "bUseProximityBubbleTable"))
+	FName ProximityBubbleState = NAME_None;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue")
 	TObjectPtr<UUOUDialogueSequenceData> DialogueSequence = nullptr;
@@ -69,6 +119,22 @@ public:
 private:
 	UUOUUISubsystem* GetUISubsystem(AActor* InstigatorActor) const;
 	float GetWorldTimeSeconds() const;
+	void EnsureDialogueTableCache() const;
+	void EnsureProximityBubbleTableCache() const;
+	bool ShouldUseDialogueTable() const;
+	bool ShouldUseProximityBubbleTable() const;
+	FName GetResolvedDialogueActorId() const;
+	FName GetResolvedProximityBubbleActorId() const;
+	FName GetResolvedProximityBubbleState() const;
 
 	float LastStartTime = -1000.0f;
+
+	mutable TArray<FUOUDialogueLine> CachedTableLines;
+	mutable FText CachedTableProximityBubbleText;
+	mutable FText CachedTableSpeakerName;
+	mutable bool bDialogueTableCacheDirty = true;
+
+	mutable FText CachedProximityBubbleText;
+	mutable float CachedProximityBubbleDuration = 3.0f;
+	mutable bool bProximityBubbleTableCacheDirty = true;
 };
