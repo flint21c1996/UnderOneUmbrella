@@ -22,6 +22,7 @@
 #include "Interaction/UOUInteractable.h"
 #include "Player/UOUCameraControllerComponent.h"
 #include "Player/UOUInteractionComponent.h"
+#include "Player/UOUPlayerInteractionExecutorComponent.h"
 #include "Player/UOUPushPullInteractorComponent.h"
 #include "Player/UOUUmbrellaComponent.h"
 #include "UI/UOUUISubsystem.h"
@@ -102,6 +103,8 @@ AUOUCharacter::AUOUCharacter()
 	FollowCamera->bUsePawnControlRotation = false;
 
 	CameraControllerComponent = CreateDefaultSubobject<UUOUCameraControllerComponent>(TEXT("CameraControllerComponent"));
+	InteractionExecutorComponent = CreateDefaultSubobject<UUOUPlayerInteractionExecutorComponent>(
+		TEXT("InteractionExecutorComponent"));
 
 	UmbrellaAttachPoint = CreateDefaultSubobject<UArrowComponent>(TEXT("UmbrellaAttachPoint"));
 	UmbrellaAttachPoint->SetupAttachment(GetMesh());
@@ -240,6 +243,12 @@ void AUOUCharacter::Move(const FInputActionValue& Value)
 {
 	const FVector2D MovementVector = Value.Get<FVector2D>();
 
+	if (IsPlayerInteractionInputBlocked())
+	{
+		GetCharacterMovement()->StopMovementImmediately();
+		return;
+	}
+
 	if (PushPullInteractorComponent != nullptr)
 	{
 		const float MovementYaw = CameraControllerComponent != nullptr ? CameraControllerComponent->GetMovementYaw() : 0.0f;
@@ -276,6 +285,11 @@ void AUOUCharacter::Look(const FInputActionValue& Value)
 
 void AUOUCharacter::RotateCameraLeft()
 {
+	if (IsPlayerInteractionInputBlocked())
+	{
+		return;
+	}
+
 	if (CameraControllerComponent != nullptr)
 	{
 		CameraControllerComponent->RotateCameraLeft();
@@ -284,6 +298,11 @@ void AUOUCharacter::RotateCameraLeft()
 
 void AUOUCharacter::RotateCameraRight()
 {
+	if (IsPlayerInteractionInputBlocked())
+	{
+		return;
+	}
+
 	if (CameraControllerComponent != nullptr)
 	{
 		CameraControllerComponent->RotateCameraRight();
@@ -292,6 +311,11 @@ void AUOUCharacter::RotateCameraRight()
 
 void AUOUCharacter::ZoomCameraIn()
 {
+	if (IsPlayerInteractionInputBlocked())
+	{
+		return;
+	}
+
 	if (CameraControllerComponent != nullptr)
 	{
 		CameraControllerComponent->ZoomCameraIn();
@@ -300,6 +324,11 @@ void AUOUCharacter::ZoomCameraIn()
 
 void AUOUCharacter::ZoomCameraOut()
 {
+	if (IsPlayerInteractionInputBlocked())
+	{
+		return;
+	}
+
 	if (CameraControllerComponent != nullptr)
 	{
 		CameraControllerComponent->ZoomCameraOut();
@@ -308,6 +337,11 @@ void AUOUCharacter::ZoomCameraOut()
 
 void AUOUCharacter::HandleJumpStarted()
 {
+	if (IsPlayerInteractionInputBlocked())
+	{
+		return;
+	}
+
 	if (PushPullInteractorComponent != nullptr && PushPullInteractorComponent->BlocksJumping())
 	{
 		return;
@@ -328,6 +362,11 @@ void AUOUCharacter::HandleJumpStarted()
 
 void AUOUCharacter::HandleUmbrellaTogglePressed()
 {
+	if (IsPlayerInteractionInputBlocked())
+	{
+		return;
+	}
+
 	if (UUOUUmbrellaComponent* UmbrellaComponent = FindUmbrellaComponent())
 	{
 		UmbrellaComponent->HandleInputPressed(UmbrellaComponent->GetToggleUmbrellaKey());
@@ -336,6 +375,11 @@ void AUOUCharacter::HandleUmbrellaTogglePressed()
 
 void AUOUCharacter::HandleUmbrellaInvertPressed()
 {
+	if (IsPlayerInteractionInputBlocked())
+	{
+		return;
+	}
+
 	if (UUOUUmbrellaComponent* UmbrellaComponent = FindUmbrellaComponent())
 	{
 		UmbrellaComponent->HandleInputPressed(UmbrellaComponent->GetInvertUmbrellaKey());
@@ -344,6 +388,11 @@ void AUOUCharacter::HandleUmbrellaInvertPressed()
 
 void AUOUCharacter::HandleUmbrellaPourPressed()
 {
+	if (IsPlayerInteractionInputBlocked())
+	{
+		return;
+	}
+
 	if (UUOUUmbrellaComponent* UmbrellaComponent = FindUmbrellaComponent())
 	{
 		UmbrellaComponent->HandleInputPressed(UmbrellaComponent->GetPourKey());
@@ -357,6 +406,11 @@ void AUOUCharacter::HandleUmbrellaPourPressed()
 
 void AUOUCharacter::HandleUmbrellaPourReleased()
 {
+	if (IsPlayerInteractionInputBlocked())
+	{
+		return;
+	}
+
 	if (UUOUUmbrellaComponent* UmbrellaComponent = FindUmbrellaComponent())
 	{
 		UmbrellaComponent->HandleInputReleased(UmbrellaComponent->GetPourKey());
@@ -365,6 +419,11 @@ void AUOUCharacter::HandleUmbrellaPourReleased()
 
 void AUOUCharacter::HandleUmbrellaDebugFillPressed()
 {
+	if (IsPlayerInteractionInputBlocked())
+	{
+		return;
+	}
+
 	if (UUOUUmbrellaComponent* UmbrellaComponent = FindUmbrellaComponent())
 	{
 		UmbrellaComponent->HandleInputPressed(UmbrellaComponent->GetDebugFillKey());
@@ -374,6 +433,11 @@ void AUOUCharacter::HandleUmbrellaDebugFillPressed()
 void AUOUCharacter::HandleContextInteractPressed()
 {
 	++ContextInteractPressedCount;
+
+	if (IsPlayerInteractionInputBlocked())
+	{
+		return;
+	}
 
 	if (UUOUUmbrellaComponent* UmbrellaComponent = FindUmbrellaComponent())
 	{
@@ -396,6 +460,11 @@ void AUOUCharacter::HandleContextInteractReleased()
 {
 	++ContextInteractReleasedCount;
 
+	if (IsPlayerInteractionInputBlocked())
+	{
+		return;
+	}
+
 	if (UUOUUmbrellaComponent* UmbrellaComponent = FindUmbrellaComponent())
 	{
 		if (UmbrellaComponent->IsPouring())
@@ -414,6 +483,11 @@ void AUOUCharacter::HandlePushPullPressed()
 {
 	++PushPullPressedCount;
 
+	if (IsPlayerInteractionInputBlocked())
+	{
+		return;
+	}
+
 	if (PushPullInteractorComponent == nullptr)
 	{
 		PushPullInteractorComponent = FindComponentByClass<UUOUPushPullInteractorComponent>();
@@ -429,6 +503,11 @@ void AUOUCharacter::HandlePushPullPressed()
 void AUOUCharacter::HandlePushPullReleased()
 {
 	++PushPullReleasedCount;
+
+	if (IsPlayerInteractionInputBlocked())
+	{
+		return;
+	}
 
 	if (PushPullInteractorComponent == nullptr)
 	{
@@ -508,4 +587,9 @@ void AUOUCharacter::HandleDialogueAdvancePressed()
 UUOUUmbrellaComponent* AUOUCharacter::FindUmbrellaComponent() const
 {
 	return FindComponentByClass<UUOUUmbrellaComponent>();
+}
+
+bool AUOUCharacter::IsPlayerInteractionInputBlocked() const
+{
+	return InteractionExecutorComponent != nullptr && InteractionExecutorComponent->ShouldBlockPlayerInput();
 }

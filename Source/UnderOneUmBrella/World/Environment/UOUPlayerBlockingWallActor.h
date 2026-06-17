@@ -8,6 +8,7 @@
 #include "UOUPlayerBlockingWallActor.generated.h"
 
 class UBoxComponent;
+class UMaterialInstanceDynamic;
 class UMaterialInterface;
 class USceneComponent;
 class UStaticMeshComponent;
@@ -57,9 +58,18 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Player Blocking Wall|Preview")
 	bool bShowPreviewInGame = false;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Player Blocking Wall|Preview", meta = (ToolTip = "켜져 있으면 Puzzle 디버그 월드 드로우가 활성화된 동안 런타임에서도 벽 프리뷰를 표시합니다."))
+	bool bShowPreviewInGameWhenPuzzleDebug = true;
+
 	// 미리보기 메쉬에 사용할 반투명 머티리얼입니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Player Blocking Wall|Preview")
 	TObjectPtr<UMaterialInterface> PreviewMaterial = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Player Blocking Wall|Preview", meta = (ToolTip = "벽이 켜져 있을 때 프리뷰에 적용할 색입니다. Alpha는 투명도 값으로도 사용합니다."))
+	FLinearColor EnabledPreviewColor = FLinearColor(1.0f, 0.12f, 0.08f, 0.45f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Player Blocking Wall|Preview", meta = (ToolTip = "벽이 꺼져 있을 때 프리뷰에 적용할 색입니다. Alpha는 투명도 값으로도 사용합니다."))
+	FLinearColor DisabledPreviewColor = FLinearColor(0.1f, 0.6f, 1.0f, 0.18f);
 
 	// 켜져 있으면 Preview Material 값을 Preview Mesh에 계속 적용합니다.
 	// 끄면 Preview Mesh 컴포넌트에서 머티리얼을 직접 바꿀 수 있습니다.
@@ -92,6 +102,7 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
+	virtual void Tick(float DeltaSeconds) override;
 	virtual void OnConstruction(const FTransform& Transform) override;
 
 	// 현재 활성 상태와 충돌 채널 설정을 BlockingVolume에 적용합니다.
@@ -99,4 +110,14 @@ protected:
 
 	// 미리보기 메쉬를 충돌 박스 크기와 표시 옵션에 맞춥니다.
 	void ApplyPreviewSettings();
+	void ApplyPreviewMaterialSettings();
+
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInstanceDynamic> PreviewMaterialInstance = nullptr;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInterface> PreviewMaterialInstanceSource = nullptr;
+
+	bool bHasAppliedPreviewMaterialState = false;
+	FLinearColor AppliedPreviewColor = FLinearColor::Transparent;
 };

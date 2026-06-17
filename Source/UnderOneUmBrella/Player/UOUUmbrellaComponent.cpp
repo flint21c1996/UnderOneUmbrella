@@ -106,6 +106,7 @@ void UUOUUmbrellaComponent::AcquireUmbrella()
 	}
 
 	bHasUmbrella = true;
+	CurrentDirectionState = EUOUUmbrellaDirectionState::Normal;
 	SetState(EUOUUmbrellaState::Closed);
 
 	if (StoredWaterContainer != nullptr)
@@ -133,6 +134,7 @@ void UUOUUmbrellaComponent::RemoveUmbrella()
 	}
 
 	bHasUmbrella = false;
+	CurrentDirectionState = EUOUUmbrellaDirectionState::Normal;
 	SetState(EUOUUmbrellaState::Closed);
 
 	if (StoredWaterContainer != nullptr)
@@ -157,7 +159,7 @@ void UUOUUmbrellaComponent::OpenUmbrella()
 		return;
 	}
 
-	SetState(EUOUUmbrellaState::Open);
+	SetState(GetOpenStateForCurrentDirection());
 }
 
 // 우산을 닫아서 이동이나 잡기 동작에 쓰기 쉬운 상태로 전환합니다.
@@ -179,6 +181,7 @@ void UUOUUmbrellaComponent::TurnUmbrellaUpsideDown()
 		return;
 	}
 
+	CurrentDirectionState = EUOUUmbrellaDirectionState::Reversed;
 	SetState(EUOUUmbrellaState::UpsideDown);
 }
 
@@ -206,7 +209,7 @@ void UUOUUmbrellaComponent::EndPour()
 		return;
 	}
 
-	SetState(EUOUUmbrellaState::UpsideDown);
+	SetState(GetOpenStateForCurrentDirection());
 }
 
 // 비나 다른 시스템에서 전달받은 물 양을 우산 저장 컨테이너에 더합니다.
@@ -257,28 +260,30 @@ void UUOUUmbrellaComponent::ToggleOpenState()
 		OpenUmbrella();
 		break;
 	case EUOUUmbrellaState::Open:
-		CloseUmbrella();
-		break;
 	case EUOUUmbrellaState::UpsideDown:
 	case EUOUUmbrellaState::Pouring:
-		OpenUmbrella();
+		CloseUmbrella();
 		break;
 	}
 }
 
-// 뒤집힌 상태는 닫힘으로 되돌리고, 그 외 상태에서는 뒤집힌 상태로 진입합니다.
+// 우산 손잡이 방향만 전환하고, 펼친 상태라면 방향에 맞는 기존 상태로 다시 계산합니다.
 void UUOUUmbrellaComponent::ToggleInvertState()
 {
+	CurrentDirectionState = CurrentDirectionState == EUOUUmbrellaDirectionState::Normal
+		? EUOUUmbrellaDirectionState::Reversed
+		: EUOUUmbrellaDirectionState::Normal;
+
 	switch (CurrentState)
 	{
+	case EUOUUmbrellaState::Closed:
+		RefreshVisuals();
+		OnUmbrellaStateChanged.Broadcast(CurrentState, bHasUmbrella);
+		break;
+	case EUOUUmbrellaState::Open:
 	case EUOUUmbrellaState::UpsideDown:
-		CloseUmbrella();
-		break;
 	case EUOUUmbrellaState::Pouring:
-		EndPour();
-		break;
-	default:
-		TurnUmbrellaUpsideDown();
+		SetState(GetOpenStateForCurrentDirection());
 		break;
 	}
 }
@@ -366,6 +371,16 @@ bool UUOUUmbrellaComponent::IsPouring() const
 	return bHasUmbrella && CurrentState == EUOUUmbrellaState::Pouring;
 }
 
+bool UUOUUmbrellaComponent::IsNormalDirection() const
+{
+	return bHasUmbrella && CurrentDirectionState == EUOUUmbrellaDirectionState::Normal;
+}
+
+bool UUOUUmbrellaComponent::IsReversedDirection() const
+{
+	return bHasUmbrella && CurrentDirectionState == EUOUUmbrellaDirectionState::Reversed;
+}
+
 // 우산이 뒤집혔거나 물을 붓는 중이면 점프를 막아 플레이 감각을 안정시킵니다.
 bool UUOUUmbrellaComponent::BlocksJumping() const
 {
@@ -437,11 +452,28 @@ float UUOUUmbrellaComponent::GetCurrentPlayerRainAmount() const
 	return RainReceiver != nullptr ? RainReceiver->CurrentExposure : 0.0f;
 }
 
+EUOUUmbrellaState UUOUUmbrellaComponent::GetOpenStateForCurrentDirection() const
+{
+	return CurrentDirectionState == EUOUUmbrellaDirectionState::Reversed
+		? EUOUUmbrellaState::UpsideDown
+		: EUOUUmbrellaState::Open;
+}
+
 // 우산 상태 변경을 한 곳으로 모아 물 버림, 비주얼 갱신, 이벤트 호출 순서를 고정합니다.
 void UUOUUmbrellaComponent::SetState(EUOUUmbrellaState NewState)
 {
 	const EUOUUmbrellaState PreviousState = CurrentState;
 	const EUOUUmbrellaState ResolvedState = bHasUmbrella ? NewState : EUOUUmbrellaState::Closed;
+
+	if (ResolvedState == EUOUUmbrellaState::Open)
+	{
+		CurrentDirectionState = EUOUUmbrellaDirectionState::Normal;
+	}
+	else if (ResolvedState == EUOUUmbrellaState::UpsideDown || ResolvedState == EUOUUmbrellaState::Pouring)
+	{
+		CurrentDirectionState = EUOUUmbrellaDirectionState::Reversed;
+	}
+
 	if (PreviousState == ResolvedState)
 	{
 		// 같은 상태여도 에디터 세팅 변경 뒤 비주얼을 다시 맞출 수 있게 갱신은 수행합니다.

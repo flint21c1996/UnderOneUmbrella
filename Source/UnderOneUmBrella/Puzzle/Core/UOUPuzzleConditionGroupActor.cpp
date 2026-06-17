@@ -5,6 +5,7 @@
 #include "Components/SceneComponent.h"
 #include "Debug/UOUPuzzleDebugProviderComponent.h"
 #include "Puzzle/Core/UOUPuzzleConditionSourceComponent.h"
+#include "Puzzle/Core/UOUPuzzleResultCompletionState.h"
 #include "Puzzle/Core/UOUPuzzleResultReceiver.h"
 
 AUOUPuzzleConditionGroupActor::AUOUPuzzleConditionGroupActor()
@@ -150,6 +151,11 @@ void AUOUPuzzleConditionGroupActor::DispatchResultBindings(bool bSatisfied)
 	{
 		if (bSatisfied)
 		{
+			if (ShouldSkipSatisfiedAction(Binding))
+			{
+				continue;
+			}
+
 			if (Binding.bRunSatisfiedActionOnlyOnce && Binding.bHasRunSatisfiedAction)
 			{
 				continue;
@@ -162,8 +168,42 @@ void AUOUPuzzleConditionGroupActor::DispatchResultBindings(bool bSatisfied)
 			continue;
 		}
 
+		if (ShouldSkipUnsatisfiedAction(Binding))
+		{
+			continue;
+		}
+
 		ExecuteResultAction(Binding.TargetActor.Get(), Binding.UnsatisfiedAction);
 	}
+}
+
+bool AUOUPuzzleConditionGroupActor::ShouldSkipSatisfiedAction(const FOUUPuzzleResultBinding& Binding) const
+{
+	return Binding.bIgnoreSatisfiedActionAfterResultCompleted
+		&& IsResultActionCompleted(Binding.TargetActor.Get(), Binding.SatisfiedAction);
+}
+
+bool AUOUPuzzleConditionGroupActor::ShouldSkipUnsatisfiedAction(const FOUUPuzzleResultBinding& Binding) const
+{
+	return Binding.bIgnoreUnsatisfiedActionAfterResultCompleted
+		&& IsResultActionCompleted(Binding.TargetActor.Get(), Binding.SatisfiedAction);
+}
+
+bool AUOUPuzzleConditionGroupActor::IsResultActionCompleted(
+	AActor* TargetActor,
+	EOUUPuzzleResultAction Action) const
+{
+	if (TargetActor == nullptr || Action == EOUUPuzzleResultAction::None)
+	{
+		return false;
+	}
+
+	if (!TargetActor->GetClass()->ImplementsInterface(UUOUPuzzleResultCompletionState::StaticClass()))
+	{
+		return false;
+	}
+
+	return IUOUPuzzleResultCompletionState::Execute_IsPuzzleResultCompleted(TargetActor, Action);
 }
 
 bool AUOUPuzzleConditionGroupActor::ExecuteResultAction(AActor* TargetActor, EOUUPuzzleResultAction Action) const

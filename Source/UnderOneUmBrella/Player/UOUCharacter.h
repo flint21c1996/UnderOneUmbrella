@@ -12,6 +12,7 @@ class UCameraComponent;
 class UInputAction;
 class UInputMappingContext;
 class UUOUPushPullInteractorComponent;
+class UUOUPlayerInteractionExecutorComponent;
 class USceneComponent;
 class USpringArmComponent;
 class UUOUCameraControllerComponent;
@@ -91,6 +92,10 @@ class AUOUCharacter : public ACharacter
 	UPROPERTY(Transient, VisibleInstanceOnly, BlueprintReadOnly, Category = Gameplay, meta = (AllowPrivateAccess = "true"))
 	UUOUPushPullInteractorComponent* PushPullInteractorComponent;
 
+	// 상호작용 대상이 요청한 플레이어 연출을 공통으로 실행하는 컴포넌트입니다.
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Gameplay, meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UUOUPlayerInteractionExecutorComponent> InteractionExecutorComponent = nullptr;
+
 public:
 	// 기본 이동 세팅과 공용 컴포넌트 구성을 초기화한다.
 	AUOUCharacter();
@@ -164,12 +169,14 @@ protected:
 
 	// 현재 캐릭터에 붙어 있는 우산 컴포넌트를 편하게 찾는다.
 	UUOUUmbrellaComponent* FindUmbrellaComponent() const;
+	bool IsPlayerInteractionInputBlocked() const;
 
 public:
 	FORCEINLINE class USpringArmComponent* GetCameraBoom() const { return CameraBoom; }
 	FORCEINLINE class UCameraComponent* GetFollowCamera() const { return FollowCamera; }
 	FORCEINLINE class UUOUCameraControllerComponent* GetCameraControllerComponent() const { return CameraControllerComponent; }
 	FORCEINLINE class UUOUPushPullInteractorComponent* GetPushPullInteractorComponent() const { return PushPullInteractorComponent; }
+	FORCEINLINE class UUOUPlayerInteractionExecutorComponent* GetInteractionExecutorComponent() const { return InteractionExecutorComponent; }
 	FORCEINLINE int32 GetContextInteractPressedCount() const { return ContextInteractPressedCount; }
 	FORCEINLINE int32 GetContextInteractReleasedCount() const { return ContextInteractReleasedCount; }
 	FORCEINLINE int32 GetPushPullPressedCount() const { return PushPullPressedCount; }

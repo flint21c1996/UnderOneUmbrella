@@ -28,6 +28,15 @@ enum class EUOUUmbrellaState : uint8
 	Pouring
 };
 
+// 우산 손잡이 방향을 나타내는 독립 상태입니다.
+// 펼침/접힘 상태와 분리해서 갈고리 같은 역방향 상호작용 조건에 사용합니다.
+UENUM(BlueprintType)
+enum class EUOUUmbrellaDirectionState : uint8
+{
+	Normal,
+	Reversed
+};
+
 // 우산에서 부은 물이 실제로 전달된 대상의 종류입니다.
 // 디버그 텍스트와 라인트레이스 결과 확인에 사용합니다.
 UENUM(BlueprintType)
@@ -76,11 +85,11 @@ public:
 
 	// 닫힘과 펼침을 전환하는 기본 키입니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Input")
-	FKey ToggleUmbrellaKey = EKeys::F;
+	FKey ToggleUmbrellaKey = EKeys::LeftMouseButton;
 
 	// 우산을 뒤집거나 닫힘으로 되돌리는 기본 키입니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Input")
-	FKey InvertUmbrellaKey = EKeys::G;
+	FKey InvertUmbrellaKey = EKeys::R;
 
 	// 뒤집힌 우산에 담긴 물을 붓기 시작하고 멈추는 기본 키입니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Input")
@@ -254,6 +263,10 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Umbrella|Runtime")
 	EUOUUmbrellaState CurrentState = EUOUUmbrellaState::Closed;
 
+	// 현재 우산 손잡이가 정방향인지 역방향인지 나타냅니다.
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Umbrella|Runtime")
+	EUOUUmbrellaDirectionState CurrentDirectionState = EUOUUmbrellaDirectionState::Normal;
+
 	// 마지막 물 붓기 라인트레이스가 맞춘 컴포넌트 이름입니다.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Umbrella|Runtime")
 	FString LastPourHitName = TEXT("None");
@@ -389,6 +402,14 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Umbrella")
 	bool IsPouring() const;
 
+	// 우산 손잡이가 정방향인지 확인합니다.
+	UFUNCTION(BlueprintPure, Category = "Umbrella")
+	bool IsNormalDirection() const;
+
+	// 우산 손잡이가 역방향인지 확인합니다.
+	UFUNCTION(BlueprintPure, Category = "Umbrella")
+	bool IsReversedDirection() const;
+
 	// 우산 상태 때문에 점프가 막혀야 하는지 확인합니다.
 	UFUNCTION(BlueprintPure, Category = "Umbrella")
 	bool BlocksJumping() const;
@@ -432,6 +453,9 @@ public:
 protected:
 	// 우산 상태를 안전하게 바꾸고 비주얼과 이벤트를 함께 갱신합니다.
 	void SetState(EUOUUmbrellaState NewState);
+
+	// 현재 방향으로 우산을 펼쳤을 때 외부에 노출할 기존 상태를 계산합니다.
+	EUOUUmbrellaState GetOpenStateForCurrentDirection() const;
 
 	// 현재 상태와 보유 여부에 맞게 우산 비주얼 표시를 맞춥니다.
 	void RefreshVisuals();
