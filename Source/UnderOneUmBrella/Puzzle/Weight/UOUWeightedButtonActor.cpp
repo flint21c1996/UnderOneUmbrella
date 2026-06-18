@@ -11,7 +11,8 @@
 
 AUOUWeightedButtonActor::AUOUWeightedButtonActor()
 {
-	PrimaryActorTick.bCanEverTick = false;
+	PrimaryActorTick.bCanEverTick = true;
+	PrimaryActorTick.TickGroup = TG_PostUpdateWork;
 
 	RootScene = CreateDefaultSubobject<USceneComponent>(TEXT("RootScene"));
 	SetRootComponent(RootScene);
@@ -46,6 +47,10 @@ AUOUWeightedButtonActor::AUOUWeightedButtonActor()
 	PressedPoint->SetupAttachment(RootScene);
 	PressedPoint->SetRelativeLocation(FVector(0.0f, 0.0f, 2.0f));
 
+	ResultSinkPoint = CreateDefaultSubobject<USceneComponent>(TEXT("ResultSinkPoint"));
+	ResultSinkPoint->SetupAttachment(RootScene);
+	ResultSinkPoint->SetRelativeLocation(FVector(0.0f, 0.0f, -60.0f));
+
 	WeightSensorComponent = CreateDefaultSubobject<UUOUWeightSensorComponent>(TEXT("WeightSensorComponent"));
 	WeightSensorComponent->bAutoFindSensorVolume = true;
 	WeightSensorComponent->SensorVolume = WeightSensorVolume;
@@ -57,4 +62,61 @@ AUOUWeightedButtonActor::AUOUWeightedButtonActor()
 	WeightedButtonComponent->ButtonVisual = ButtonVisual;
 	WeightedButtonComponent->ReleasedPoint = ReleasedPoint;
 	WeightedButtonComponent->PressedPoint = PressedPoint;
+}
+
+void AUOUWeightedButtonActor::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+
+	MoveResultSinkVisual(DeltaSeconds);
+}
+
+void AUOUWeightedButtonActor::ApplyPuzzleResult_Implementation(EOUUPuzzleResultAction Action)
+{
+	switch (Action)
+	{
+	case EOUUPuzzleResultAction::Activate:
+		bResultSinkActive = true;
+		break;
+	case EOUUPuzzleResultAction::Deactivate:
+		bResultSinkActive = false;
+		break;
+	case EOUUPuzzleResultAction::Toggle:
+		bResultSinkActive = !bResultSinkActive;
+		break;
+	case EOUUPuzzleResultAction::Pause:
+	case EOUUPuzzleResultAction::Resume:
+	case EOUUPuzzleResultAction::None:
+	default:
+		break;
+	}
+
+	RefreshButtonMotionTickState();
+}
+
+void AUOUWeightedButtonActor::MoveResultSinkVisual(float DeltaSeconds)
+{
+	if (!bEnableResultSinkMotion || !bResultSinkActive || ButtonVisual == nullptr || ResultSinkPoint == nullptr)
+	{
+		return;
+	}
+
+	const FVector NextLocation = FMath::VInterpConstantTo(
+		ButtonVisual->GetComponentLocation(),
+		ResultSinkPoint->GetComponentLocation(),
+		DeltaSeconds,
+		FMath::Max(0.0f, ResultSinkMoveSpeed));
+
+	ButtonVisual->SetWorldLocation(NextLocation);
+}
+
+void AUOUWeightedButtonActor::RefreshButtonMotionTickState() const
+{
+	if (WeightedButtonComponent == nullptr || !bPausePressMotionWhileSinking)
+	{
+		return;
+	}
+
+	// 침하 연출 중에는 WeightedButtonComponent가 ButtonVisual을 PressedPoint로 다시 끌어당기지 않게 합니다.
+	WeightedButtonComponent->SetComponentTickEnabled(!bResultSinkActive);
 }
