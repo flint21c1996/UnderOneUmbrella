@@ -135,4 +135,18 @@ void AUOUPuzzleMoverActor::MoveTarget(float DeltaSeconds)
 		FMath::Max(0.0f, MoveSpeed));
 
 	MovingTarget->SetWorldLocation(NextLocation);
+
+	if (bApplyPointScale)
+	{
+		// 위치와 별개로 목표 포인트의 월드 스케일도 따라가게 해서
+		// ActivePoint, InactivePoint에서 크기 변화까지 연출할 수 있게 합니다.
+		const FVector CurrentScale = MovingTarget->GetComponentScale();
+		const FVector NextScale = FMath::VInterpTo(
+			CurrentScale,
+			TargetPoint->GetComponentScale(),
+			DeltaSeconds,
+			FMath::Max(0.0f, ScaleSpeed));
+
+		MovingTarget->SetWorldScale3D(NextScale);
+	}
 }
