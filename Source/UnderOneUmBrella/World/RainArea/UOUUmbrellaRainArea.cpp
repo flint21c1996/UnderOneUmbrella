@@ -16,6 +16,17 @@
 #include "World/Environment/UOUEnvironmentVisualComponent.h"
 #include "World/WaterTarget/UOUWaterBasinTargetComponent.h"
 
+namespace
+{
+	constexpr float MaxRainAreaFlowSpeed = 3000.0f;
+
+	float NormalizeRainAreaFlowSpeed(float FlowSpeed, EUOURainAreaFlowDirection FlowDirection)
+	{
+		const float SpeedMagnitude = FMath::Clamp(FMath::Abs(FlowSpeed), 0.0f, MaxRainAreaFlowSpeed);
+		return FlowDirection == EUOURainAreaFlowDirection::Upward ? SpeedMagnitude : -SpeedMagnitude;
+	}
+}
+
 AUOUUmbrellaRainArea::AUOUUmbrellaRainArea()
 {
 	PrimaryActorTick.bCanEverTick = true;
@@ -77,6 +88,7 @@ void AUOUUmbrellaRainArea::BeginPlay()
 	RainVisualIntensity = FMath::Clamp(RainVisualIntensity, 0.0f, 1.0f);
 	RainSpawnRate = FMath::Max(0.0f, RainSpawnRate);
 	GroundSplashIntensityMultiplier = FMath::Max(0.0f, GroundSplashIntensityMultiplier);
+	RainFallSpeed = NormalizeRainAreaFlowSpeed(RainFallSpeed, FlowDirection);
 	if (RainVisual != nullptr)
 	{
 		RainVisual->SetEffectComponents(PrimaryRainEffect, SecondaryRainEffect);
@@ -93,7 +105,7 @@ void AUOUUmbrellaRainArea::OnConstruction(const FTransform& Transform)
 	RainVisualIntensity = FMath::Clamp(RainVisualIntensity, 0.0f, 1.0f);
 	RainSpawnRate = FMath::Max(0.0f, RainSpawnRate);
 	GroundSplashIntensityMultiplier = FMath::Max(0.0f, GroundSplashIntensityMultiplier);
-	RainFallSpeed = FMath::Clamp(RainFallSpeed, -3000.0f, 0.0f);
+	RainFallSpeed = NormalizeRainAreaFlowSpeed(RainFallSpeed, FlowDirection);
 	if (RainVisual != nullptr)
 	{
 		RainVisual->SetEffectComponents(PrimaryRainEffect, SecondaryRainEffect);
@@ -118,6 +130,7 @@ void AUOUUmbrellaRainArea::PostEditChangeProperty(FPropertyChangedEvent& Propert
 	RainVisualIntensity = FMath::Clamp(RainVisualIntensity, 0.0f, 1.0f);
 	RainSpawnRate = FMath::Max(0.0f, RainSpawnRate);
 	GroundSplashIntensityMultiplier = FMath::Max(0.0f, GroundSplashIntensityMultiplier);
+	RainFallSpeed = NormalizeRainAreaFlowSpeed(RainFallSpeed, FlowDirection);
 	if (RainVisual != nullptr)
 	{
 		RainVisual->SetEffectComponents(PrimaryRainEffect, SecondaryRainEffect);
@@ -158,6 +171,9 @@ void AUOUUmbrellaRainArea::Tick(float DeltaSeconds)
 	FVector RainBlockerWorldCenter = FVector::ZeroVector;
 	FRotator RainBlockerWorldRotation = FRotator::ZeroRotator;
 	FVector RainBlockerHalfExtent = FVector::ZeroVector;
+	bool bHasVisualRainBlocker = false;
+	FVector VisualRainBlockerWorldCenter = FVector::ZeroVector;
+	FVector VisualRainBlockerHalfExtent = FVector::ZeroVector;
 
 	for (AActor* OverlappingActor : OverlappingActors)
 	{
@@ -176,8 +192,18 @@ void AUOUUmbrellaRainArea::Tick(float DeltaSeconds)
 			FVector CandidateBlockerWorldCenter = FVector::ZeroVector;
 			FRotator CandidateBlockerWorldRotation = FRotator::ZeroRotator;
 			FVector CandidateBlockerHalfExtent = FVector::ZeroVector;
-			if (UmbrellaComponent->IsBlockingRain()
+			const bool bBlocksGameplayRain = UmbrellaComponent->IsBlockingRain();
+			const bool bBlocksRainVisual = bBlocksGameplayRain || UmbrellaComponent->IsUpsideDown();
+			if (bBlocksRainVisual
 				&& UmbrellaComponent->TryGetRainBlockerVolumeData(CandidateBlockerWorldCenter, CandidateBlockerWorldRotation, CandidateBlockerHalfExtent)
+				&& CandidateBlockerHalfExtent.SizeSquared() > VisualRainBlockerHalfExtent.SizeSquared())
+			{
+				bHasVisualRainBlocker = true;
+				VisualRainBlockerWorldCenter = CandidateBlockerWorldCenter;
+				VisualRainBlockerHalfExtent = CandidateBlockerHalfExtent;
+			}
+
+			if (bBlocksGameplayRain
 				&& CandidateBlockerHalfExtent.SizeSquared() > RainBlockerHalfExtent.SizeSquared())
 			{
 				bHasRainBlocker = true;
@@ -196,10 +222,10 @@ void AUOUUmbrellaRainArea::Tick(float DeltaSeconds)
 		RainBlockerHalfExtent);
 
 	ApplyEnvironmentVisualRainBlocker(
-		bHasRainBlocker,
-		RainBlockerWorldCenter,
-		RainBlockerHalfExtent,
-		bHasRainBlocker ? RainVisualIntensity : 0.0f);
+		bHasVisualRainBlocker,
+		VisualRainBlockerWorldCenter,
+		VisualRainBlockerHalfExtent,
+		bHasVisualRainBlocker ? RainVisualIntensity : 0.0f);
 }
 
 void AUOUUmbrellaRainArea::ApplyEnvironmentVisualEffectSystems()
@@ -247,8 +273,13 @@ void AUOUUmbrellaRainArea::ApplyEnvironmentVisualGeometry()
 	const FVector BoxExtent = RainVolume->GetScaledBoxExtent();
 	const FVector VolumeCenter = RainVolume->GetComponentLocation();
 	const FVector VolumeUp = RainVolume->GetUpVector();
-	const FVector RainSpawnPlaneWorldPosition = VolumeCenter + VolumeUp * BoxExtent.Z;
-	const FVector GroundSplashWorldPosition = VolumeCenter - VolumeUp * (BoxExtent.Z - GroundSplashHeightOffset);
+	const bool bFlowUpward = FlowDirection == EUOURainAreaFlowDirection::Upward;
+	const FVector RainSpawnPlaneWorldPosition = bFlowUpward
+		? VolumeCenter - VolumeUp * BoxExtent.Z
+		: VolumeCenter + VolumeUp * BoxExtent.Z;
+	const FVector GroundSplashWorldPosition = bFlowUpward
+		? VolumeCenter + VolumeUp * (BoxExtent.Z - GroundSplashHeightOffset)
+		: VolumeCenter - VolumeUp * (BoxExtent.Z - GroundSplashHeightOffset);
 
 	RainVisual->SetWorldLocationAndRotation(VolumeCenter, RainVolume->GetComponentRotation());
 
@@ -279,6 +310,7 @@ void AUOUUmbrellaRainArea::ApplyEnvironmentVisualState()
 	const float PrimaryIntensity = FMath::Clamp(RainVisualIntensity, 0.0f, 1.0f);
 	const float SecondaryIntensity = FMath::Clamp(RainVisualIntensity * GroundSplashIntensityMultiplier, 0.0f, 1.0f);
 
+	RainFallSpeed = NormalizeRainAreaFlowSpeed(RainFallSpeed, FlowDirection);
 	RainVisual->SetRainSpawnRate(RainSpawnRate);
 	RainVisual->SetRainFallSpeed(RainFallSpeed);
 	RainVisual->SetVisualIntensities(PrimaryIntensity, SecondaryIntensity);
@@ -355,7 +387,9 @@ void AUOUUmbrellaRainArea::ApplyRainToWaterBasinTargets(float DeltaSeconds, bool
 		InputContext.Volume = RainAmount;
 		InputContext.Duration = RainAmount;
 		InputContext.Source = EUOUWaterBasinInputSource::Rain;
-		InputContext.WorldDirection = -RainVolume->GetUpVector();
+		InputContext.WorldDirection = FlowDirection == EUOURainAreaFlowDirection::Upward
+			? RainVolume->GetUpVector()
+			: -RainVolume->GetUpVector();
 		InputContext.WorldLocation = TargetOwner->GetActorLocation();
 		InputContext.InstigatorActor = const_cast<AUOUUmbrellaRainArea*>(this);
 		InputContext.bApplyToConnectedGroup = true;
@@ -476,8 +510,13 @@ void AUOUUmbrellaRainArea::DrawRainVisualDebug() const
 	const FVector VolumeCenter = RainVolume->GetComponentLocation();
 	const FQuat VolumeRotation = RainVolume->GetComponentQuat();
 	const FVector VolumeUp = RainVolume->GetUpVector();
-	const FVector RainSpawnPlaneWorldPosition = VolumeCenter + VolumeUp * BoxExtent.Z;
-	const FVector GroundSplashWorldPosition = VolumeCenter - VolumeUp * (BoxExtent.Z - GroundSplashHeightOffset);
+	const bool bFlowUpward = FlowDirection == EUOURainAreaFlowDirection::Upward;
+	const FVector RainSpawnPlaneWorldPosition = bFlowUpward
+		? VolumeCenter - VolumeUp * BoxExtent.Z
+		: VolumeCenter + VolumeUp * BoxExtent.Z;
+	const FVector GroundSplashWorldPosition = bFlowUpward
+		? VolumeCenter + VolumeUp * (BoxExtent.Z - GroundSplashHeightOffset)
+		: VolumeCenter - VolumeUp * (BoxExtent.Z - GroundSplashHeightOffset);
 	const FVector VisualAreaHalfExtent(BoxExtent.X, BoxExtent.Y, 2.0f);
 	const float Thickness = FMath::Max(0.0f, RainVisualDebugThickness);
 	const float LifeTime = 0.0f;

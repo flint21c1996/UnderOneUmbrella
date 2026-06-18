@@ -413,10 +413,15 @@ bool UUOUUmbrellaComponent::TryGetRainBlockerVolumeData(FVector& OutWorldCenter,
 		return false;
 	}
 
-	const USceneComponent* BlockerComponent = OpenVisual;
+	const bool bUseUpsideDownBlocker = CurrentState == EUOUUmbrellaState::UpsideDown;
+	const USceneComponent* BlockerComponent = bUseUpsideDownBlocker ? UpsideDownVisual : OpenVisual;
 	if (BlockerComponent == nullptr)
 	{
 		BlockerComponent = RuntimeHeldVisual;
+	}
+	if (BlockerComponent == nullptr && bUseUpsideDownBlocker)
+	{
+		BlockerComponent = OpenVisual;
 	}
 	if (BlockerComponent == nullptr)
 	{
