@@ -15,6 +15,7 @@
 #include "Engine/LocalPlayer.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/Controller.h"
+#include "GameFramework/PlayerController.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "InputActionValue.h"
 #include "InputCoreTypes.h"
@@ -24,6 +25,7 @@
 #include "Player/UOUPlayerInteractionExecutorComponent.h"
 #include "Player/UOUPushPullInteractorComponent.h"
 #include "Player/UOUUmbrellaComponent.h"
+#include "UI/UOUUISubsystem.h"
 
 DEFINE_LOG_CATEGORY(LogTemplateCharacter);
 
@@ -209,6 +211,7 @@ void AUOUCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompon
 	PlayerInputComponent->BindKey(EKeys::E, IE_Pressed, this, &AUOUCharacter::RotateCameraRight);
 	PlayerInputComponent->BindKey(EKeys::MouseScrollUp, IE_Pressed, this, &AUOUCharacter::ZoomCameraIn);
 	PlayerInputComponent->BindKey(EKeys::MouseScrollDown, IE_Pressed, this, &AUOUCharacter::ZoomCameraOut);
+	PlayerInputComponent->BindKey(EKeys::LeftMouseButton, IE_Pressed, this, &AUOUCharacter::HandleDialogueAdvancePressed);
 
 	if (UUOUUmbrellaComponent* UmbrellaComponent = FindUmbrellaComponent())
 	{
@@ -563,6 +566,22 @@ bool AUOUCharacter::TryContextInteractable()
 	}
 
 	return false;
+}
+
+void AUOUCharacter::HandleDialogueAdvancePressed()
+{
+	APlayerController* PlayerController = Cast<APlayerController>(Controller);
+	if (PlayerController == nullptr)
+	{
+		return;
+	}
+
+	ULocalPlayer* LocalPlayer = PlayerController->GetLocalPlayer();
+	UUOUUISubsystem* UISubsystem = LocalPlayer != nullptr ? LocalPlayer->GetSubsystem<UUOUUISubsystem>() : nullptr;
+	if (UISubsystem != nullptr && UISubsystem->IsDialoguePlaying())
+	{
+		UISubsystem->AdvanceDialogue();
+	}
 }
 
 UUOUUmbrellaComponent* AUOUCharacter::FindUmbrellaComponent() const

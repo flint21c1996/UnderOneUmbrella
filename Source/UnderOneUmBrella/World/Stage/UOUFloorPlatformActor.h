@@ -80,11 +80,11 @@ public:
 	TObjectPtr<UStaticMeshComponent> PlatformMesh = nullptr;
 
 	// 플랫폼 이동 시 같이 데려갈 액터를 찾는 감지 박스입니다.
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Floor Platform|Carry")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Floor Platform|Components")
 	TObjectPtr<UBoxComponent> CarryDetectionBox = nullptr;
 
 	// 플랫폼 위 액터 운반과 물리 상태 복구를 담당하는 컴포넌트입니다.
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Floor Platform|Carry")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Floor Platform|Components")
 	TObjectPtr<UUOUFloorPlatformCarryComponent> CarryComponent = nullptr;
 
 	// 순차 목표 마커 선택과 반복 이동 인덱스를 담당하는 컴포넌트입니다.
@@ -98,6 +98,10 @@ public:
 	// 이 플랫폼이 어떤 층에 속하는지 구분하기 위한 값입니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform")
 	int32 FloorIndex = 4;
+
+	// 지정하면 이 플랫폼의 이동 결과를 기준 플랫폼의 현재 Transform에 상대적으로 합성합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Movement Base", meta = (DisplayName = "Movement Base Platform"))
+	TObjectPtr<AUOUFloorPlatformActor> MovementBasePlatform = nullptr;
 
 	// 플랫폼이 처음 출발해야 하는 위치입니다.
 	// 에디터에서 이동 테스트를 하더라도 이 값이 있으면 시작점이 덮어써지지 않습니다.
@@ -186,6 +190,18 @@ public:
 	// 에디터에서 플랫폼 시작점과 목표 지점을 잇는 이동 경로 선을 보여줄지 정합니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Preview", meta = (DisplayName = "Show Move Path Preview"))
 	bool bShowMovePreviewPath = true;
+
+	// 런타임에서 현재 플랫폼이 어떤 마커를 향해 이동 중인지 월드 디버그로 표시합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Debug", meta = (DisplayName = "Draw Runtime Move Debug"))
+	bool bDrawRuntimeMoveDebug = false;
+
+	// 0이면 매 프레임 갱신용으로 한 프레임만 표시하고, 값이 있으면 해당 시간만큼 디버그 선을 유지합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Debug", meta = (ClampMin = "0.0", DisplayName = "Runtime Debug Draw Duration"))
+	float RuntimeDebugDrawDuration = 0.0f;
+
+	// 디버그 텍스트와 마커가 플랫폼과 겹치지 않도록 위로 올리는 거리입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Debug", meta = (DisplayName = "Runtime Debug Draw Offset"))
+	FVector RuntimeDebugDrawOffset = FVector(0.0f, 0.0f, 160.0f);
 
 	// 목표 위치에 도착한 뒤 플레이어와 다른 오브젝트가 이 플랫폼과 충돌하지 않게 할지 정합니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Rules")
@@ -296,6 +312,33 @@ protected:
 	// 현재 이동 구간의 시작과 목표를 기준으로 실제 플랫폼 트랜스폼을 계산합니다.
 	FTransform BuildActivePlatformTransformAtAlpha(float Alpha) const;
 
+	// 유효한 기준 플랫폼을 반환합니다. 자기 자신이나 사라진 Actor는 기준으로 사용하지 않습니다.
+	AUOUFloorPlatformActor* GetMovementBasePlatformActor() const;
+
+	// 기준 플랫폼의 참조 Transform과 현재 상대 Transform을 갱신합니다.
+	void RefreshMovementBaseReferenceTransform();
+
+	// 현재 월드 Transform을 기준 플랫폼 현재 Transform 기준 상대값으로 다시 저장합니다.
+	void RefreshCurrentMovementBaseRelativeTransform();
+
+	// 기준 플랫폼이 움직였을 때 저장된 상대 Transform으로 현재 플랫폼 월드 Transform을 다시 합성합니다.
+	void ApplyMovementBaseIdleTransform();
+
+	// 월드 Transform을 기준 플랫폼 상대 Transform으로 변환합니다.
+	FTransform ConvertWorldToMovementBaseRelativeTransform(const FTransform& WorldTransform, bool bUseReferenceTransform) const;
+
+	// 기준 플랫폼의 현재 Transform과 상대 Transform을 합성해 월드 Transform을 만듭니다.
+	FTransform ConvertMovementBaseRelativeToWorldTransform(const FTransform& RelativeTransform) const;
+
+	// 배치된 마커/시작 Transform을 현재 기준 플랫폼 위치에 맞춘 월드 Transform으로 해석합니다.
+	FTransform ResolveAuthoredWorldTransformForMovementBase(const FTransform& AuthoredWorldTransform) const;
+
+	// 실제 이동 목표를 기준 플랫폼 상대 Transform으로 해석합니다.
+	FTransform ResolveMoveTargetRelativeTransform(const FTransform& TargetWorldTransform, const AUOUFloorPlatformTargetActor* TargetMarker) const;
+
+	// 실제 이동 목표를 현재 기준 플랫폼 위치에 맞춘 월드 Transform으로 해석합니다.
+	FTransform ResolveMoveTargetWorldTransform(const FTransform& TargetWorldTransform, const AUOUFloorPlatformTargetActor* TargetMarker) const;
+
 	// 두 트랜스폼 사이를 선택된 경로 모드와 회전 보간으로 계산합니다.
 	FTransform BuildTransformBetween(const FTransform& FromTransform, const FTransform& ToTransform, float Alpha) const;
 
@@ -341,6 +384,9 @@ protected:
 	// 에디터에서 이동 경로와 목표 위치 미리보기를 갱신합니다.
 	void UpdateEditorPreviewVisuals();
 
+	// 런타임에서 현재 이동 목표, 다음 목표, 전체 step 마커를 디버그 드로우로 표시합니다.
+	void DrawRuntimeMoveDebug() const;
+
 	// 이동 곡선이 있으면 곡선 값을 사용하고 없으면 기본 알파를 그대로 사용합니다.
 	float ResolveMoveAlpha(float RawAlpha) const;
 
@@ -372,6 +418,26 @@ private:
 	// 현재 진행 중인 이동 구간의 실제 목표 트랜스폼입니다.
 	UPROPERTY(Transient)
 	FTransform MoveTargetTransform = FTransform::Identity;
+
+	// 기준 플랫폼이 있을 때 현재 월드 위치를 기준 플랫폼 현재 Transform 기준 상대값으로 저장합니다.
+	UPROPERTY(Transient)
+	FTransform CurrentMovementBaseRelativeTransform = FTransform::Identity;
+
+	// 기준 플랫폼이 있을 때 현재 이동 구간의 시작 상대 Transform입니다.
+	UPROPERTY(Transient)
+	FTransform MoveStartMovementBaseRelativeTransform = FTransform::Identity;
+
+	// 기준 플랫폼이 있을 때 현재 이동 구간의 목표 상대 Transform입니다.
+	UPROPERTY(Transient)
+	FTransform MoveTargetMovementBaseRelativeTransform = FTransform::Identity;
+
+	// 마커와 시작 위치를 해석할 때 사용하는 기준 플랫폼의 참조 Transform입니다.
+	UPROPERTY(Transient)
+	FTransform MovementBaseReferenceTransform = FTransform::Identity;
+
+	// 기준 플랫폼 참조 Transform을 한 번이라도 잡았는지 기록합니다.
+	UPROPERTY(Transient)
+	bool bHasMovementBaseReferenceTransform = false;
 
 	// 현재 이동 구간에서 사용할 회전 방식입니다.
 	UPROPERTY(Transient)

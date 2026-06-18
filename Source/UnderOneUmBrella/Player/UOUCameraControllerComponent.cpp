@@ -26,6 +26,7 @@ void UUOUCameraControllerComponent::BeginPlay()
 	Super::BeginPlay();
 
 	CacheCameraComponents();
+	ApplyCameraProjection();
 	InitializeCameraRig();
 }
 
@@ -39,7 +40,14 @@ void UUOUCameraControllerComponent::TickComponent(float DeltaTime, ELevelTick Ti
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
-	UpdateSnapCamera(DeltaTime);
+	if (bDialogueFocusActive)
+	{
+		UpdateDialogueCamera(DeltaTime);
+	}
+	else
+	{
+		UpdateSnapCamera(DeltaTime);
+	}
 	UpdateCameraOcclusion();
 }
 
@@ -71,6 +79,54 @@ float UUOUCameraControllerComponent::GetMovementYaw() const
 float UUOUCameraControllerComponent::GetCurrentCameraDistance() const
 {
 	return CameraBoom != nullptr ? CameraBoom->TargetArmLength : 0.0f;
+}
+
+void UUOUCameraControllerComponent::StartDialogueFocus(AActor* SpeakerActor)
+{
+	if (SpeakerActor == nullptr || CameraBoom == nullptr || FollowCamera == nullptr)
+	{
+		return;
+	}
+
+	if (!bDialogueFocusActive)
+	{
+		SavedTargetCameraYaw = TargetCameraYaw;
+		SavedTargetCameraDistance = TargetCameraDistance;
+		RegularCameraTargetOffset = CameraBoom->TargetOffset;
+		TargetCameraOffset = RegularCameraTargetOffset;
+	}
+
+	DialogueSpeakerActor = SpeakerActor;
+	bDialogueFocusActive = true;
+
+	const FVector OwnerLocation = GetOwnerDialogueLocation();
+	const FVector SpeakerLocation = GetSpeakerDialogueLocation();
+	FVector PairDirection = SpeakerLocation - OwnerLocation;
+	PairDirection.Z = 0.0f;
+	if (!PairDirection.Normalize())
+	{
+		PairDirection = GetOwner() != nullptr ? GetOwner()->GetActorForwardVector() : FVector::ForwardVector;
+		PairDirection.Z = 0.0f;
+		PairDirection.Normalize();
+	}
+
+	const FVector PairRight = FVector::CrossProduct(FVector::UpVector, PairDirection).GetSafeNormal();
+	const float CurrentSide = FVector::DotProduct(FollowCamera->GetComponentLocation() - OwnerLocation, PairRight);
+	DialogueSideSign = bKeepCurrentDialogueCameraSide && CurrentSide < 0.0f ? -1.0f : 1.0f;
+}
+
+void UUOUCameraControllerComponent::EndDialogueFocus()
+{
+	if (!bDialogueFocusActive)
+	{
+		return;
+	}
+
+	bDialogueFocusActive = false;
+	DialogueSpeakerActor = nullptr;
+	TargetCameraYaw = SavedTargetCameraYaw;
+	TargetCameraDistance = SavedTargetCameraDistance;
+	TargetCameraOffset = RegularCameraTargetOffset;
 }
 
 void UUOUCameraControllerComponent::CacheCameraComponents()
@@ -119,8 +175,23 @@ void UUOUCameraControllerComponent::InitializeCameraRig()
 
 	TargetCameraYaw = CameraBoom->GetComponentRotation().Yaw;
 	TargetCameraDistance = FMath::Clamp(CameraBoom->TargetArmLength, MinCameraDistance, MaxCameraDistance);
+	RegularCameraTargetOffset = CameraBoom->TargetOffset;
+	TargetCameraOffset = RegularCameraTargetOffset;
 	CameraBoom->TargetArmLength = TargetCameraDistance;
 	CameraBoom->SetWorldRotation(FRotator(CameraPitchAngle, TargetCameraYaw, 0.0f));
+}
+
+void UUOUCameraControllerComponent::ApplyCameraProjection()
+{
+	if (FollowCamera == nullptr)
+	{
+		return;
+	}
+
+	FollowCamera->SetProjectionMode(bUseOrthographicProjection
+		? ECameraProjectionMode::Orthographic
+		: ECameraProjectionMode::Perspective);
+	FollowCamera->SetOrthoWidth(FMath::Max(1.0f, OrthographicWidth));
 }
 
 void UUOUCameraControllerComponent::UpdateSnapCamera(float DeltaSeconds)
@@ -137,6 +208,52 @@ void UUOUCameraControllerComponent::UpdateSnapCamera(float DeltaSeconds)
 
 	const float NextDistance = FMath::FInterpTo(CameraBoom->TargetArmLength, TargetCameraDistance, DeltaSeconds, CameraZoomInterpSpeed);
 	CameraBoom->TargetArmLength = NextDistance;
+
+	CameraBoom->TargetOffset = FMath::VInterpTo(CameraBoom->TargetOffset, TargetCameraOffset, DeltaSeconds, CameraRotationInterpSpeed);
+}
+
+void UUOUCameraControllerComponent::UpdateDialogueCamera(float DeltaSeconds)
+{
+	if (CameraBoom == nullptr || DialogueSpeakerActor == nullptr)
+	{
+		EndDialogueFocus();
+		return;
+	}
+
+	AActor* Owner = GetOwner();
+	if (Owner == nullptr)
+	{
+		EndDialogueFocus();
+		return;
+	}
+
+	const FVector OwnerLocation = GetOwnerDialogueLocation();
+	const FVector SpeakerLocation = GetSpeakerDialogueLocation();
+	const FVector FocusGroundLocation = FMath::Lerp(OwnerLocation, SpeakerLocation, DialogueFocusBiasToSpeaker);
+	const FVector FocusLocation = FocusGroundLocation + FVector(0.0f, 0.0f, DialogueLookAtHeight);
+
+	FVector PairDirection = SpeakerLocation - OwnerLocation;
+	PairDirection.Z = 0.0f;
+	if (!PairDirection.Normalize())
+	{
+		PairDirection = Owner->GetActorForwardVector();
+		PairDirection.Z = 0.0f;
+		PairDirection.Normalize();
+	}
+
+	const FVector PairRight = FVector::CrossProduct(FVector::UpVector, PairDirection).GetSafeNormal();
+	const FVector CameraBackDirection = (-PairDirection).RotateAngleAxis(DialogueOrbitAngleDegrees * DialogueSideSign, FVector::UpVector).GetSafeNormal();
+	const FVector DesiredCameraLocation = FocusLocation
+		+ CameraBackDirection * DialogueCameraDistance
+		+ PairRight * DialogueShoulderOffset * DialogueSideSign
+		+ FVector(0.0f, 0.0f, DialogueCameraHeightOffset);
+	const FRotator DesiredRotation = (FocusLocation - DesiredCameraLocation).Rotation();
+	const float DesiredDistance = FVector::Distance(FocusLocation, DesiredCameraLocation);
+
+	TargetCameraOffset = FocusLocation - Owner->GetActorLocation();
+	CameraBoom->TargetOffset = FMath::VInterpTo(CameraBoom->TargetOffset, TargetCameraOffset, DeltaSeconds, DialogueCameraInterpSpeed);
+	CameraBoom->SetWorldRotation(FMath::RInterpTo(CameraBoom->GetComponentRotation(), DesiredRotation, DeltaSeconds, DialogueCameraInterpSpeed));
+	CameraBoom->TargetArmLength = FMath::FInterpTo(CameraBoom->TargetArmLength, DesiredDistance, DeltaSeconds, DialogueCameraInterpSpeed);
 }
 
 void UUOUCameraControllerComponent::UpdateCameraOcclusion()
@@ -270,4 +387,15 @@ void UUOUCameraControllerComponent::RestoreAllOccludedMeshes()
 	{
 		RestoreOcclusionFromMesh(MeshComponent);
 	}
+}
+
+FVector UUOUCameraControllerComponent::GetOwnerDialogueLocation() const
+{
+	const AActor* Owner = GetOwner();
+	return Owner != nullptr ? Owner->GetActorLocation() : FVector::ZeroVector;
+}
+
+FVector UUOUCameraControllerComponent::GetSpeakerDialogueLocation() const
+{
+	return DialogueSpeakerActor != nullptr ? DialogueSpeakerActor->GetActorLocation() : GetOwnerDialogueLocation();
 }
