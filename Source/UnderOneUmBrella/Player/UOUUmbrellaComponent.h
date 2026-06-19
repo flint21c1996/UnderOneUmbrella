@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Animation/AnimationAsset.h"
 #include "Components/ActorComponent.h"
 #include "Engine/EngineTypes.h"
 #include "InputCoreTypes.h"
@@ -11,6 +12,7 @@
 class UArrowComponent;
 class UMaterialInterface;
 class USceneComponent;
+class USkeletalMeshComponent;
 class UStaticMesh;
 class UStaticMeshComponent;
 class UUOURainReceiverComponent;
@@ -35,6 +37,16 @@ enum class EUOUUmbrellaDirectionState : uint8
 {
 	Normal,
 	Reversed
+};
+
+// 우산을 손에 들고 있을 때 비주얼과 부착 위치를 고르는 파생 상태입니다.
+UENUM(BlueprintType)
+enum class EUOUUmbrellaVisualState : uint8
+{
+	Closed,
+	Open,
+	ClosedReversed,
+	OpenReversed
 };
 
 // 우산에서 부은 물이 실제로 전달된 대상의 종류입니다.
@@ -156,6 +168,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|References")
 	TObjectPtr<UStaticMeshComponent> UpsideDownVisual = nullptr;
 
+	// 리그가 있는 우산을 손에 들 때 사용하는 스켈레탈 메쉬 컴포넌트입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|References")
+	TObjectPtr<USkeletalMeshComponent> SkeletalHeldVisual = nullptr;
+
 	// 픽업한 우산 메쉬를 런타임에 복사해서 플레이어 손에 보여주는 컴포넌트입니다.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Umbrella|References")
 	TObjectPtr<UStaticMeshComponent> RuntimeHeldVisual = nullptr;
@@ -182,7 +198,51 @@ public:
 
 	// 월드에 놓인 픽업 메쉬의 상대 스케일을 손에 든 비주얼에도 반영할지 정합니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Visual")
-	bool bUsePickupMeshRelativeScale = true;
+	bool bUsePickupMeshRelativeScale = false;
+
+	// 스켈레탈 우산 비주얼을 캐릭터 메쉬의 소켓/본에 직접 붙일지 정합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Skeletal Visual")
+	bool bAttachSkeletalVisualToOwnerMeshSocket = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Skeletal Visual")
+	FName ClosedSkeletalVisualSocketName = TEXT("Socket_Hand_L");
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Skeletal Visual")
+	FName OpenSkeletalVisualSocketName = TEXT("Socket_Hand_L");
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Skeletal Visual")
+	FName ClosedReversedSkeletalVisualSocketName = TEXT("Socket_Hand_L");
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Skeletal Visual")
+	FName OpenReversedSkeletalVisualSocketName = TEXT("Socket_Spine");
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Skeletal Visual")
+	FTransform ClosedSkeletalVisualOffset = FTransform(FRotator::ZeroRotator, FVector::ZeroVector, FVector(0.01f));
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Skeletal Visual")
+	FTransform OpenSkeletalVisualOffset = FTransform(FRotator::ZeroRotator, FVector::ZeroVector, FVector(0.01f));
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Skeletal Visual")
+	FTransform ClosedReversedSkeletalVisualOffset = FTransform(FRotator::ZeroRotator, FVector::ZeroVector, FVector(0.01f));
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Skeletal Visual")
+	FTransform OpenReversedSkeletalVisualOffset = FTransform(FRotator::ZeroRotator, FVector::ZeroVector, FVector(0.01f));
+
+	// 별도 AnimBP 없이 에셋을 직접 재생할 때만 켭니다. AnimBP를 쓰면 꺼둡니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Skeletal Visual")
+	bool bPlaySkeletalVisualAnimationsDirectly = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Skeletal Visual", meta = (EditCondition = "bPlaySkeletalVisualAnimationsDirectly"))
+	TObjectPtr<UAnimationAsset> ClosedSkeletalVisualAnimation = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Skeletal Visual", meta = (EditCondition = "bPlaySkeletalVisualAnimationsDirectly"))
+	TObjectPtr<UAnimationAsset> OpenSkeletalVisualAnimation = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Skeletal Visual", meta = (EditCondition = "bPlaySkeletalVisualAnimationsDirectly"))
+	TObjectPtr<UAnimationAsset> ClosedReversedSkeletalVisualAnimation = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Skeletal Visual", meta = (EditCondition = "bPlaySkeletalVisualAnimationsDirectly"))
+	TObjectPtr<UAnimationAsset> OpenReversedSkeletalVisualAnimation = nullptr;
 
 	// 화면 디버그 표시 여부는 이제 Debug Controller의 Player HUD가 결정합니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, AdvancedDisplay, Category = "Umbrella|Debug", meta = (ToolTip = "이 값은 더 이상 화면 디버그 표시 여부를 결정하지 않습니다. Debug Controller의 Player HUD 옵션을 사용합니다."))
@@ -271,6 +331,14 @@ public:
 	// 현재 우산 손잡이가 정방향인지 역방향인지 나타냅니다.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Umbrella|Runtime")
 	EUOUUmbrellaDirectionState CurrentDirectionState = EUOUUmbrellaDirectionState::Normal;
+
+	// 현재 상태와 방향에서 파생된 우산 비주얼 상태입니다.
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Umbrella|Runtime")
+	EUOUUmbrellaVisualState CurrentVisualState = EUOUUmbrellaVisualState::Closed;
+
+	// 훅 몽타주처럼 닫힌 우산을 손잡이 반대 방향으로 잡아야 하는 연출 전용 오버라이드입니다.
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Umbrella|Runtime")
+	bool bUseClosedReversedVisualOverride = false;
 
 	// 마지막 물 붓기 라인트레이스가 맞춘 컴포넌트 이름입니다.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Umbrella|Runtime")
@@ -415,6 +483,14 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Umbrella")
 	bool IsReversedDirection() const;
 
+	// 현재 우산 비주얼 상태를 반환합니다.
+	UFUNCTION(BlueprintPure, Category = "Umbrella")
+	EUOUUmbrellaVisualState GetCurrentVisualState() const;
+
+	// 훅 몽타주 등 닫힌 우산을 반대 방향으로 잡는 연출에서만 잠시 켭니다.
+	UFUNCTION(BlueprintCallable, Category = "Umbrella")
+	void SetClosedReversedVisualOverride(bool bEnable);
+
 	// 우산 상태 때문에 점프가 막혀야 하는지 확인합니다.
 	UFUNCTION(BlueprintPure, Category = "Umbrella")
 	bool BlocksJumping() const;
@@ -464,6 +540,20 @@ protected:
 
 	// 현재 상태와 보유 여부에 맞게 우산 비주얼 표시를 맞춥니다.
 	void RefreshVisuals();
+
+	EUOUUmbrellaVisualState ResolveVisualState() const;
+
+	void RefreshSkeletalVisual();
+
+	bool IsSkeletalHeldVisualAvailable() const;
+
+	void HideStaticHeldVisuals();
+
+	FName GetSkeletalVisualSocketName(EUOUUmbrellaVisualState VisualState) const;
+
+	FTransform GetSkeletalVisualOffset(EUOUUmbrellaVisualState VisualState) const;
+
+	UAnimationAsset* GetSkeletalVisualAnimation(EUOUUmbrellaVisualState VisualState) const;
 
 	// 우산 관련 오디오 이벤트를 플레이어 위치에서 재생합니다.
 	void PlayUmbrellaAudioEvent(FName AudioEventId) const;
@@ -535,4 +625,10 @@ protected:
 	void SpillStoredWater();
 
 	FTransform RuntimeHeldVisualBaseRelativeTransform = FTransform::Identity;
+
+	UPROPERTY(Transient)
+	bool bHasAppliedSkeletalVisualAnimation = false;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UAnimationAsset> LastAppliedSkeletalVisualAnimation = nullptr;
 };

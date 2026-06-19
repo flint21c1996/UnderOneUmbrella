@@ -14,6 +14,7 @@ class UInputMappingContext;
 class UUOUPushPullInteractorComponent;
 class UUOUPlayerInteractionExecutorComponent;
 class USceneComponent;
+class USkeletalMeshComponent;
 class USpringArmComponent;
 class UUOUCameraControllerComponent;
 class UUOUUmbrellaComponent;
@@ -79,6 +80,10 @@ class AUOUCharacter : public ACharacter
 	// 손에 든 우산 메시를 조금 더 세밀하게 보정하는 앵커다.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Gameplay, meta = (AllowPrivateAccess = "true"))
 	UArrowComponent* UmbrellaHeldVisualAnchor;
+
+	// 리그가 있는 우산 비주얼을 표시하는 전용 스켈레탈 메쉬 컴포넌트입니다.
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Gameplay, meta = (AllowPrivateAccess = "true"))
+	USkeletalMeshComponent* UmbrellaSkeletalVisual;
 
 	// 물 붓기 시작점과 방향을 정하는 기준점이다.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Gameplay, meta = (AllowPrivateAccess = "true"))
