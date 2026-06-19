@@ -26,9 +26,9 @@ void AUOUTitlePlayerController::BeginPlay()
 	Super::BeginPlay();
 
 	// 타이틀 메뉴는 PlayerController가 직접 생성해서 맵 자체는 비어 있는 상태로 유지합니다.
-	if (TestLevel.IsNull())
+	if (nextLevel.IsNull())
 	{
-		TestLevel = TSoftObjectPtr<UWorld>(FSoftObjectPath(DefaultTestLevelPath));
+		nextLevel = TSoftObjectPtr<UWorld>(FSoftObjectPath(DefaultTestLevelPath));
 		UE_LOG(LogTemp, Warning, TEXT("Title test level was not configured. Falling back to %s."), DefaultTestLevelPath);
 	}
 
@@ -80,13 +80,13 @@ void AUOUTitlePlayerController::SetupInputComponent()
 void AUOUTitlePlayerController::StartGame()
 {
 	// 맵 전환 중에 버튼이 다시 눌려도 OpenLevel을 한 번만 요청합니다.
-	if (bIsOpeningLevel || TestLevel.IsNull())
+	if (bIsOpeningLevel || nextLevel.IsNull())
 	{
 		return;
 	}
 
 	bIsOpeningLevel = true;
-	UGameplayStatics::OpenLevelBySoftObjectPtr(this, TestLevel);
+	UGameplayStatics::OpenLevelBySoftObjectPtr(this, nextLevel);
 }
 
 void AUOUTitlePlayerController::QuitGame()

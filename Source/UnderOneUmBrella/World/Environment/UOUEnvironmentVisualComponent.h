@@ -175,6 +175,7 @@ protected:
 	void ApplyNiagaraParameters();
 	void RefreshNiagaraActivation();
 	void DrawRainBlockerNiagaraDebug(const UNiagaraComponent* Effect, const FVector& BlockerWorldCenter, const FVector& BlockerHalfExtent) const;
+	bool CanApplyNiagaraState() const;
 	UNiagaraComponent* GetPrimaryEffectComponent() const;
 	UNiagaraComponent* GetSecondaryEffectComponent() const;
 };
