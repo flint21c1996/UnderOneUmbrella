@@ -17,7 +17,7 @@ namespace
 		TObjectPtr<UNiagaraSystem>& LastAppliedSystem,
 		bool bForceStoredSystem)
 	{
-		if (NiagaraComponent == nullptr)
+		if (NiagaraComponent == nullptr || !NiagaraComponent->IsRegistered())
 		{
 			return;
 		}
@@ -71,24 +71,6 @@ void UUOUEnvironmentVisualComponent::SetEffectComponents(UNiagaraComponent* NewP
 {
 	PrimaryEffect = NewPrimaryEffect;
 	SecondaryEffect = NewSecondaryEffect;
-
-	UNiagaraComponent* ActivePrimaryEffect = GetPrimaryEffectComponent();
-	UNiagaraComponent* ActiveSecondaryEffect = GetSecondaryEffectComponent();
-
-	if (ActivePrimaryEffect != nullptr)
-	{
-		ActivePrimaryEffect->SetAutoActivate(false);
-	}
-
-	if (ActiveSecondaryEffect != nullptr)
-	{
-		ActiveSecondaryEffect->SetAutoActivate(false);
-	}
-
-	ApplyVisualEffectSettings();
-	ApplyVisualEffectTransforms();
-	ApplyNiagaraParameters();
-	RefreshNiagaraActivation();
 }
 
 void UUOUEnvironmentVisualComponent::SetEffectSystems(UNiagaraSystem* NewPrimarySystem, UNiagaraSystem* NewSecondarySystem)
@@ -219,17 +201,29 @@ UNiagaraComponent* UUOUEnvironmentVisualComponent::GetSecondaryEffectComponent()
 
 void UUOUEnvironmentVisualComponent::ApplyVisualEffectSettings(bool bForcePrimarySystem, bool bForceSecondarySystem)
 {
+	if (!CanApplyNiagaraState())
+	{
+		return;
+	}
+
 	ApplyEnvironmentVisualComponentNiagaraSystemSelection(GetPrimaryEffectComponent(), PrimarySystem, LastAppliedPrimarySystem, bForcePrimarySystem);
 	ApplyEnvironmentVisualComponentNiagaraSystemSelection(GetSecondaryEffectComponent(), SecondarySystem, LastAppliedSecondarySystem, bForceSecondarySystem);
 }
 
 void UUOUEnvironmentVisualComponent::RefreshNiagaraActivation()
 {
+	if (!CanApplyNiagaraState())
+	{
+		return;
+	}
+
 	const UWorld* World = GetWorld();
 	const bool bIsGameWorld = World != nullptr && World->IsGameWorld();
 	const bool bShouldAllowVisuals = bEnableVisuals && (bIsGameWorld || bEnableEditorPreview);
 	UNiagaraComponent* ActivePrimaryEffect = GetPrimaryEffectComponent();
 	UNiagaraComponent* ActiveSecondaryEffect = GetSecondaryEffectComponent();
+	ActivePrimaryEffect = ActivePrimaryEffect != nullptr && ActivePrimaryEffect->IsRegistered() ? ActivePrimaryEffect : nullptr;
+	ActiveSecondaryEffect = ActiveSecondaryEffect != nullptr && ActiveSecondaryEffect->IsRegistered() ? ActiveSecondaryEffect : nullptr;
 
 	const bool bShouldShowPrimary = bShouldAllowVisuals
 		&& ActivePrimaryEffect != nullptr
@@ -276,8 +270,15 @@ void UUOUEnvironmentVisualComponent::RefreshNiagaraActivation()
 
 void UUOUEnvironmentVisualComponent::ApplyNiagaraParameters()
 {
+	if (!CanApplyNiagaraState())
+	{
+		return;
+	}
+
 	UNiagaraComponent* ActivePrimaryEffect = GetPrimaryEffectComponent();
 	UNiagaraComponent* ActiveSecondaryEffect = GetSecondaryEffectComponent();
+	ActivePrimaryEffect = ActivePrimaryEffect != nullptr && ActivePrimaryEffect->IsRegistered() ? ActivePrimaryEffect : nullptr;
+	ActiveSecondaryEffect = ActiveSecondaryEffect != nullptr && ActiveSecondaryEffect->IsRegistered() ? ActiveSecondaryEffect : nullptr;
 
 	if (ActivePrimaryEffect != nullptr && !PrimaryAreaSizeParameterName.IsNone())
 	{
@@ -384,8 +385,15 @@ void UUOUEnvironmentVisualComponent::ApplyNiagaraParameters()
 
 void UUOUEnvironmentVisualComponent::ApplyVisualEffectTransforms()
 {
+	if (!CanApplyNiagaraState())
+	{
+		return;
+	}
+
 	UNiagaraComponent* ActivePrimaryEffect = GetPrimaryEffectComponent();
 	UNiagaraComponent* ActiveSecondaryEffect = GetSecondaryEffectComponent();
+	ActivePrimaryEffect = ActivePrimaryEffect != nullptr && ActivePrimaryEffect->IsRegistered() ? ActivePrimaryEffect : nullptr;
+	ActiveSecondaryEffect = ActiveSecondaryEffect != nullptr && ActiveSecondaryEffect->IsRegistered() ? ActiveSecondaryEffect : nullptr;
 
 	if (ActivePrimaryEffect != nullptr)
 	{
@@ -398,6 +406,11 @@ void UUOUEnvironmentVisualComponent::ApplyVisualEffectTransforms()
 		ActiveSecondaryEffect->SetRelativeLocation(CachedSecondaryLocalPosition);
 		ActiveSecondaryEffect->SetRelativeRotation(CachedEffectLocalRotation);
 	}
+}
+
+bool UUOUEnvironmentVisualComponent::CanApplyNiagaraState() const
+{
+	return IsRegistered() && !HasAnyFlags(RF_ClassDefaultObject | RF_ArchetypeObject);
 }
 
 void UUOUEnvironmentVisualComponent::DrawRainBlockerNiagaraDebug(const UNiagaraComponent* Effect, const FVector& BlockerWorldCenter, const FVector& BlockerHalfExtent) const
