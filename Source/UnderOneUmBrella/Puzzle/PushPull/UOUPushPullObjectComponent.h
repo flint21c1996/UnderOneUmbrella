@@ -34,6 +34,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Puzzle|PushPull", meta = (ClampMin = "0.0"))
 	float MaxHorizontalSpeed = 250.0f;
 
+	// 끄면 물담기/무게 기능은 유지하되 Push/Pull 잡기와 이동만 비활성화합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Puzzle|PushPull")
+	bool bEnablePushPullMovement = true;
+
 	// 현재 이 오브젝트가 잡혀 있는지 저장합니다.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Puzzle|Runtime")
 	bool bIsGrabbed = false;
@@ -49,6 +53,13 @@ public:
 	// 현재 잡고 있는 상태를 종료하고 제약을 원래대로 돌립니다.
 	UFUNCTION(BlueprintCallable, Category = "Puzzle|PushPull")
 	void EndGrab(AActor* Interactor);
+
+	// 런타임에서 Push/Pull 이동 허용 여부를 바꿉니다. 꺼지는 순간 잡기 상태도 정리합니다.
+	UFUNCTION(BlueprintCallable, Category = "Puzzle|PushPull")
+	void SetPushPullMovementEnabled(bool bEnabled);
+
+	UFUNCTION(BlueprintPure, Category = "Puzzle|PushPull")
+	bool IsPushPullMovementEnabled() const { return bEnablePushPullMovement; }
 
 	// 수평 속도를 적용하면서 최대 속도를 넘지 않도록 정리합니다.
 	UFUNCTION(BlueprintCallable, Category = "Puzzle|PushPull")

@@ -22,7 +22,7 @@ void UUOUPushPullObjectComponent::BeginPlay()
 
 bool UUOUPushPullObjectComponent::CanGrab(AActor* Interactor) const
 {
-	if (Interactor == nullptr || TargetPrimitive == nullptr || !TargetPrimitive->IsSimulatingPhysics())
+	if (!bEnablePushPullMovement || Interactor == nullptr || TargetPrimitive == nullptr || !TargetPrimitive->IsSimulatingPhysics())
 	{
 		return false;
 	}
@@ -56,9 +56,27 @@ void UUOUPushPullObjectComponent::EndGrab(AActor* Interactor)
 	ApplyGrabStateConstraints(false);
 }
 
+void UUOUPushPullObjectComponent::SetPushPullMovementEnabled(bool bEnabled)
+{
+	if (bEnablePushPullMovement == bEnabled)
+	{
+		return;
+	}
+
+	bEnablePushPullMovement = bEnabled;
+
+	if (!bEnablePushPullMovement)
+	{
+		CurrentGrabber = nullptr;
+		bIsGrabbed = false;
+		StopHorizontalMotion();
+		ApplyGrabStateConstraints(false);
+	}
+}
+
 FVector UUOUPushPullObjectComponent::SetHorizontalVelocity(FVector HorizontalVelocity)
 {
-	if (!bIsGrabbed || TargetPrimitive == nullptr)
+	if (!bEnablePushPullMovement || !bIsGrabbed || TargetPrimitive == nullptr)
 	{
 		return FVector::ZeroVector;
 	}

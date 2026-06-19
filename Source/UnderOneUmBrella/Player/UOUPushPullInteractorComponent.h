@@ -8,6 +8,7 @@
 
 class AUOUCharacter;
 class UUOUInteractionComponent;
+class UUOUCrankComponent;
 class UUOUPushPullObjectComponent;
 class UUOUUmbrellaComponent;
 
@@ -68,13 +69,19 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "PushPull|Runtime")
 	TObjectPtr<UUOUPushPullObjectComponent> CurrentCandidateObject = nullptr;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "PushPull|Runtime")
+	TObjectPtr<UUOUCrankComponent> CurrentCandidateCrank = nullptr;
+
 	// 실제로 잡고 있는 오브젝트다.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "PushPull|Runtime")
 	TObjectPtr<UUOUPushPullObjectComponent> GrabbedObject = nullptr;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "PushPull|Runtime")
+	TObjectPtr<UUOUCrankComponent> GrabbedCrank = nullptr;
+
 	// 지금 잡고 있는 오브젝트가 있는지 빠르게 확인한다.
 	UFUNCTION(BlueprintPure, Category = "PushPull")
-	bool IsGrabbing() const { return GrabbedObject != nullptr; }
+	bool IsGrabbing() const { return GrabbedObject != nullptr || GrabbedCrank != nullptr; }
 
 	// 잡고 있는 동안에는 점프를 막기 위해 쓰는 헬퍼다.
 	UFUNCTION(BlueprintPure, Category = "PushPull")
@@ -96,9 +103,15 @@ public:
 	UFUNCTION(BlueprintPure, Category = "PushPull|Debug")
 	UUOUPushPullObjectComponent* GetCurrentCandidateObject() const { return CurrentCandidateObject; }
 
+	UFUNCTION(BlueprintPure, Category = "PushPull|Debug")
+	UUOUCrankComponent* GetCurrentCandidateCrank() const { return CurrentCandidateCrank; }
+
 	// 통합 플레이어 디버그 HUD에서 실제 잡은 대상을 읽기 위한 접근자입니다.
 	UFUNCTION(BlueprintPure, Category = "PushPull|Debug")
 	UUOUPushPullObjectComponent* GetGrabbedObject() const { return GrabbedObject; }
+
+	UFUNCTION(BlueprintPure, Category = "PushPull|Debug")
+	UUOUCrankComponent* GetGrabbedCrank() const { return GrabbedCrank; }
 
 	// 통합 플레이어 디버그 HUD에서 grab 입력 유지 상태를 읽기 위한 접근자입니다.
 	UFUNCTION(BlueprintPure, Category = "PushPull|Debug")
@@ -192,9 +205,11 @@ protected:
 
 	// 주변 오브젝트 중 가장 적합한 밀고 당기기 후보를 찾는다.
 	UUOUPushPullObjectComponent* FindBestCandidate() const;
+	UUOUCrankComponent* FindBestCrankCandidate() const;
 
 	// 후보 탐색의 중심 위치를 계산한다.
 	FVector GetDetectionOriginLocation() const;
+	FVector GetGrabbedReferenceLocation() const;
 
 	// 플레이어 방향과 가장 잘 맞는 축을 고르기 위한 보조 함수다.
 	static void CheckBetterAxis(const FVector& Axis, const FVector& ToPlayer, FVector& BestAxis, float& BestDot);

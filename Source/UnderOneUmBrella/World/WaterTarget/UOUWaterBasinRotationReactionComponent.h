@@ -16,6 +16,7 @@ enum class EUOUWaterBasinRotationReactionMode : uint8
 	IncrementalOnIncrease UMETA(DisplayName = "증가 시 누적 회전", ToolTip = "물 값이 증가한 만큼 회전을 누적합니다. 이미 가득 찬 상태의 물 입력은 선택적으로 증가 시도로 처리할 수 있습니다."),
 	AbsoluteByValue UMETA(DisplayName = "값 기준 절대 회전", ToolTip = "현재 물 값을 회전 각도에 직접 매핑합니다. 물이 배수되면 회전도 되돌아갑니다."),
 	IncrementalOnWaterInput UMETA(DisplayName = "물 입력 시 누적 회전", ToolTip = "실제 수위가 변하지 않아도 물 입력량만큼 회전을 누적합니다."),
+	StepOnAccumulatedWaterInput UMETA(DisplayName = "누적 입력 단계 회전", ToolTip = "물 입력량을 누적하다가 기준량에 도달하면 정해진 각도만큼 한 단계 회전합니다."),
 	IncrementalOnWaterChange UMETA(DisplayName = "물 증감 시 누적 회전", ToolTip = "물 값이 증가하거나 감소할 때 회전을 누적합니다. 배수 방향은 별도로 설정할 수 있습니다.")
 };
 
@@ -77,7 +78,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Rotation", meta = (ToolTip = "회전축입니다. 상대 회전에서는 대상의 로컬 축으로, 월드 회전에서는 월드 축으로 해석합니다."))
 	FVector RotationAxis = FVector(0.0f, 0.0f, 1.0f);
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Rotation", meta = (EditCondition = "RotationMode != EUOUWaterBasinRotationReactionMode::IncrementalOnWaterInput", EditConditionHides, ToolTip = "물 값 1 단위당 회전할 각도입니다. 채움 비율 기준에서는 1.0이 가득 찬 상태를 의미합니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Rotation", meta = (EditCondition = "RotationMode != EUOUWaterBasinRotationReactionMode::IncrementalOnWaterInput && RotationMode != EUOUWaterBasinRotationReactionMode::StepOnAccumulatedWaterInput", EditConditionHides, ToolTip = "물 값 1 단위당 회전할 각도입니다. 채움 비율 기준에서는 1.0이 가득 찬 상태를 의미합니다."))
 	float DegreesPerValueUnit = 90.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Rotation", meta = (EditCondition = "RotationMode == EUOUWaterBasinRotationReactionMode::IncrementalOnIncrease || RotationMode == EUOUWaterBasinRotationReactionMode::IncrementalOnWaterChange", EditConditionHides, ToolTip = "켜져 있으면 대상 또는 연결 그룹이 이미 가득 찬 상태에서 들어온 물 입력도 값 증가 시도로 보고 회전합니다. 꺼두면 실제 물 값이 변할 때만 회전합니다."))
@@ -89,31 +90,43 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Rotation", meta = (EditCondition = "RotationMode == EUOUWaterBasinRotationReactionMode::IncrementalOnWaterInput", EditConditionHides, ToolTip = "물 입력 부피 1 단위당 회전할 각도입니다."))
 	float DegreesPerInputVolume = 90.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Input Side", meta = (EditCondition = "RotationMode == EUOUWaterBasinRotationReactionMode::IncrementalOnWaterInput", EditConditionHides, ToolTip = "플레이어 물 붓기 입력의 회전 부호 결정 방식입니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Input Step", meta = (ClampMin = "0.0", EditCondition = "RotationMode == EUOUWaterBasinRotationReactionMode::StepOnAccumulatedWaterInput", EditConditionHides, ToolTip = "이만큼의 물 입력량이 누적되면 한 단계 회전합니다."))
+	float InputVolumePerStep = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Input Step", meta = (EditCondition = "RotationMode == EUOUWaterBasinRotationReactionMode::StepOnAccumulatedWaterInput", EditConditionHides, ToolTip = "누적 입력량이 기준량에 도달했을 때 한 단계마다 회전할 각도입니다."))
+	float DegreesPerInputStep = 90.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Input Step", meta = (EditCondition = "RotationMode == EUOUWaterBasinRotationReactionMode::StepOnAccumulatedWaterInput", EditConditionHides, ToolTip = "켜져 있으면 기준량을 넘긴 남은 입력량을 다음 단계 누적량으로 남깁니다. 꺼져 있으면 한 단계 회전 후 누적량을 0으로 비웁니다."))
+	bool bCarryInputStepRemainder = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Input Step", meta = (ClampMin = "1", EditCondition = "RotationMode == EUOUWaterBasinRotationReactionMode::StepOnAccumulatedWaterInput", EditConditionHides, ToolTip = "한 번의 물 입력 이벤트에서 처리할 수 있는 최대 단계 수입니다. 너무 큰 입력으로 한 프레임에 과도하게 회전하는 것을 막습니다."))
+	int32 MaxInputStepsPerWaterInput = 4;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Input Side", meta = (EditCondition = "RotationMode == EUOUWaterBasinRotationReactionMode::IncrementalOnWaterInput || RotationMode == EUOUWaterBasinRotationReactionMode::StepOnAccumulatedWaterInput", EditConditionHides, ToolTip = "플레이어 물 붓기 입력의 회전 부호 결정 방식입니다."))
 	EUOUWaterBasinRotationInputSidePolicy PlayerPourInputSidePolicy = EUOUWaterBasinRotationInputSidePolicy::ByInputSide;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Input Side", meta = (EditCondition = "RotationMode == EUOUWaterBasinRotationReactionMode::IncrementalOnWaterInput", EditConditionHides, ToolTip = "비 입력의 회전 부호 결정 방식입니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Input Side", meta = (EditCondition = "RotationMode == EUOUWaterBasinRotationReactionMode::IncrementalOnWaterInput || RotationMode == EUOUWaterBasinRotationReactionMode::StepOnAccumulatedWaterInput", EditConditionHides, ToolTip = "비 입력의 회전 부호 결정 방식입니다."))
 	EUOUWaterBasinRotationInputSidePolicy RainInputSidePolicy = EUOUWaterBasinRotationInputSidePolicy::FixedPositive;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Input Side", meta = (EditCondition = "RotationMode == EUOUWaterBasinRotationReactionMode::IncrementalOnWaterInput", EditConditionHides, ToolTip = "스크립트 또는 알 수 없는 입력의 회전 부호 결정 방식입니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Input Side", meta = (EditCondition = "RotationMode == EUOUWaterBasinRotationReactionMode::IncrementalOnWaterInput || RotationMode == EUOUWaterBasinRotationReactionMode::StepOnAccumulatedWaterInput", EditConditionHides, ToolTip = "스크립트 또는 알 수 없는 입력의 회전 부호 결정 방식입니다."))
 	EUOUWaterBasinRotationInputSidePolicy ScriptInputSidePolicy = EUOUWaterBasinRotationInputSidePolicy::FixedPositive;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Input Side", meta = (EditCondition = "RotationMode == EUOUWaterBasinRotationReactionMode::IncrementalOnWaterInput && (PlayerPourInputSidePolicy == EUOUWaterBasinRotationInputSidePolicy::ByInputSide || RainInputSidePolicy == EUOUWaterBasinRotationInputSidePolicy::ByInputSide || ScriptInputSidePolicy == EUOUWaterBasinRotationInputSidePolicy::ByInputSide)", EditConditionHides, ToolTip = "물 입력 위치가 왼쪽인지 오른쪽인지 판단할 중심입니다. 비어 있으면 이름으로 찾고, 그래도 없으면 회전 대상을 사용합니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Input Side", meta = (EditCondition = "(RotationMode == EUOUWaterBasinRotationReactionMode::IncrementalOnWaterInput || RotationMode == EUOUWaterBasinRotationReactionMode::StepOnAccumulatedWaterInput) && (PlayerPourInputSidePolicy == EUOUWaterBasinRotationInputSidePolicy::ByInputSide || RainInputSidePolicy == EUOUWaterBasinRotationInputSidePolicy::ByInputSide || ScriptInputSidePolicy == EUOUWaterBasinRotationInputSidePolicy::ByInputSide)", EditConditionHides, ToolTip = "물 입력 위치가 왼쪽인지 오른쪽인지 판단할 중심입니다. 비어 있으면 이름으로 찾고, 그래도 없으면 회전 대상을 사용합니다."))
 	TObjectPtr<USceneComponent> InputSideCenterComponent = nullptr;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Input Side", meta = (EditCondition = "RotationMode == EUOUWaterBasinRotationReactionMode::IncrementalOnWaterInput && (PlayerPourInputSidePolicy == EUOUWaterBasinRotationInputSidePolicy::ByInputSide || RainInputSidePolicy == EUOUWaterBasinRotationInputSidePolicy::ByInputSide || ScriptInputSidePolicy == EUOUWaterBasinRotationInputSidePolicy::ByInputSide)", EditConditionHides, ToolTip = "직접 지정한 중심 컴포넌트가 비어 있을 때 왼쪽/오른쪽 판단 중심으로 사용할 컴포넌트 이름 또는 태그입니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Input Side", meta = (EditCondition = "(RotationMode == EUOUWaterBasinRotationReactionMode::IncrementalOnWaterInput || RotationMode == EUOUWaterBasinRotationReactionMode::StepOnAccumulatedWaterInput) && (PlayerPourInputSidePolicy == EUOUWaterBasinRotationInputSidePolicy::ByInputSide || RainInputSidePolicy == EUOUWaterBasinRotationInputSidePolicy::ByInputSide || ScriptInputSidePolicy == EUOUWaterBasinRotationInputSidePolicy::ByInputSide)", EditConditionHides, ToolTip = "직접 지정한 중심 컴포넌트가 비어 있을 때 왼쪽/오른쪽 판단 중심으로 사용할 컴포넌트 이름 또는 태그입니다."))
 	FName InputSideCenterComponentName = NAME_None;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Input Side", meta = (EditCondition = "RotationMode == EUOUWaterBasinRotationReactionMode::IncrementalOnWaterInput && (PlayerPourInputSidePolicy == EUOUWaterBasinRotationInputSidePolicy::ByInputSide || RainInputSidePolicy == EUOUWaterBasinRotationInputSidePolicy::ByInputSide || ScriptInputSidePolicy == EUOUWaterBasinRotationInputSidePolicy::ByInputSide)", EditConditionHides, ToolTip = "왼쪽과 오른쪽을 판단할 전방 기준입니다. 비어 있으면 이름으로 찾고, 그래도 없으면 입력 좌우 중심을 사용합니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Input Side", meta = (EditCondition = "(RotationMode == EUOUWaterBasinRotationReactionMode::IncrementalOnWaterInput || RotationMode == EUOUWaterBasinRotationReactionMode::StepOnAccumulatedWaterInput) && (PlayerPourInputSidePolicy == EUOUWaterBasinRotationInputSidePolicy::ByInputSide || RainInputSidePolicy == EUOUWaterBasinRotationInputSidePolicy::ByInputSide || ScriptInputSidePolicy == EUOUWaterBasinRotationInputSidePolicy::ByInputSide)", EditConditionHides, ToolTip = "왼쪽과 오른쪽을 판단할 전방 기준입니다. 비어 있으면 이름으로 찾고, 그래도 없으면 입력 좌우 중심을 사용합니다."))
 	TObjectPtr<USceneComponent> InputSideForwardReferenceComponent = nullptr;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Input Side", meta = (EditCondition = "RotationMode == EUOUWaterBasinRotationReactionMode::IncrementalOnWaterInput && (PlayerPourInputSidePolicy == EUOUWaterBasinRotationInputSidePolicy::ByInputSide || RainInputSidePolicy == EUOUWaterBasinRotationInputSidePolicy::ByInputSide || ScriptInputSidePolicy == EUOUWaterBasinRotationInputSidePolicy::ByInputSide)", EditConditionHides, ToolTip = "직접 지정한 전방 기준 컴포넌트가 비어 있을 때 사용할 컴포넌트 이름 또는 태그입니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Input Side", meta = (EditCondition = "(RotationMode == EUOUWaterBasinRotationReactionMode::IncrementalOnWaterInput || RotationMode == EUOUWaterBasinRotationReactionMode::StepOnAccumulatedWaterInput) && (PlayerPourInputSidePolicy == EUOUWaterBasinRotationInputSidePolicy::ByInputSide || RainInputSidePolicy == EUOUWaterBasinRotationInputSidePolicy::ByInputSide || ScriptInputSidePolicy == EUOUWaterBasinRotationInputSidePolicy::ByInputSide)", EditConditionHides, ToolTip = "직접 지정한 전방 기준 컴포넌트가 비어 있을 때 사용할 컴포넌트 이름 또는 태그입니다."))
 	FName InputSideForwardReferenceComponentName = NAME_None;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Input Side", meta = (ClampMin = "0.0", EditCondition = "RotationMode == EUOUWaterBasinRotationReactionMode::IncrementalOnWaterInput && (PlayerPourInputSidePolicy == EUOUWaterBasinRotationInputSidePolicy::ByInputSide || RainInputSidePolicy == EUOUWaterBasinRotationInputSidePolicy::ByInputSide || ScriptInputSidePolicy == EUOUWaterBasinRotationInputSidePolicy::ByInputSide)", EditConditionHides, ToolTip = "왼쪽/오른쪽 판정값이 이 값보다 작으면 중심선에 가까운 애매한 입력으로 보고 회전하지 않습니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Input Side", meta = (ClampMin = "0.0", EditCondition = "(RotationMode == EUOUWaterBasinRotationReactionMode::IncrementalOnWaterInput || RotationMode == EUOUWaterBasinRotationReactionMode::StepOnAccumulatedWaterInput) && (PlayerPourInputSidePolicy == EUOUWaterBasinRotationInputSidePolicy::ByInputSide || RainInputSidePolicy == EUOUWaterBasinRotationInputSidePolicy::ByInputSide || ScriptInputSidePolicy == EUOUWaterBasinRotationInputSidePolicy::ByInputSide)", EditConditionHides, ToolTip = "왼쪽/오른쪽 판정값이 이 값보다 작으면 중심선에 가까운 애매한 입력으로 보고 회전하지 않습니다."))
 	float InputSideDeadZone = 0.05f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Input Side", meta = (EditCondition = "RotationMode == EUOUWaterBasinRotationReactionMode::IncrementalOnWaterInput && (PlayerPourInputSidePolicy == EUOUWaterBasinRotationInputSidePolicy::ByInputSide || RainInputSidePolicy == EUOUWaterBasinRotationInputSidePolicy::ByInputSide || ScriptInputSidePolicy == EUOUWaterBasinRotationInputSidePolicy::ByInputSide)", EditConditionHides, ToolTip = "켜져 있으면 기준 오른쪽의 물 입력이 양수 방향으로 회전합니다. 꺼져 있으면 오른쪽 입력이 음수 방향으로 회전합니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Input Side", meta = (EditCondition = "(RotationMode == EUOUWaterBasinRotationReactionMode::IncrementalOnWaterInput || RotationMode == EUOUWaterBasinRotationReactionMode::StepOnAccumulatedWaterInput) && (PlayerPourInputSidePolicy == EUOUWaterBasinRotationInputSidePolicy::ByInputSide || RainInputSidePolicy == EUOUWaterBasinRotationInputSidePolicy::ByInputSide || ScriptInputSidePolicy == EUOUWaterBasinRotationInputSidePolicy::ByInputSide)", EditConditionHides, ToolTip = "켜져 있으면 기준 오른쪽의 물 입력이 양수 방향으로 회전합니다. 꺼져 있으면 오른쪽 입력이 음수 방향으로 회전합니다."))
 	bool bRightSideInputRotatesPositive = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Rotation", meta = (ToolTip = "켜져 있으면 목표 각도를 향해 고정 속도로 회전합니다. 꺼져 있으면 즉시 적용합니다."))
@@ -145,6 +158,12 @@ public:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Water Basin Rotation Reaction|Runtime")
 	float CurrentAppliedAngleDegrees = 0.0f;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Water Basin Rotation Reaction|Runtime")
+	float AccumulatedInputStepVolume = 0.0f;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Water Basin Rotation Reaction|Runtime")
+	int32 CurrentInputStepIndex = 0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Rotation Reaction|Debug", meta = (ToolTip = "왼쪽/오른쪽 판단 중심, 전방 기준, 회전축, 마지막 물 입력, 계산된 회전 부호를 그립니다."))
 	bool bDrawInputSideDebug = false;
