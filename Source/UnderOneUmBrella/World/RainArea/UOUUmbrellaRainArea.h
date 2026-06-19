@@ -14,6 +14,13 @@ class USceneComponent;
 class UStaticMeshComponent;
 class UUOUEnvironmentVisualComponent;
 
+UENUM(BlueprintType)
+enum class EUOURainAreaFlowDirection : uint8
+{
+	Downward UMETA(DisplayName = "Downward"),
+	Upward UMETA(DisplayName = "Upward")
+};
+
 // 이 클래스는 우산 플레이어가 들어가면 시간당 비 노출과 물 받기를 적용하는 테스트용 비 영역을 담당한다.
 UCLASS(meta=(DisplayName="UOU Umbrella Rain Area"))
 class AUOUUmbrellaRainArea : public AActor
@@ -83,6 +90,9 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Water Basin", meta = (ToolTip = "RainVolume 안의 WaterBasinTarget에 비 입력을 전달할지 여부입니다. 런타임에는 SetWaterBasinRainFillEnabled로 변경할 수 있습니다."))
 	bool bEnableWaterBasinRainFill = false;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Falling", meta = (DisplayName = "Flow Direction", DisplayPriority = "0", ToolTip = "Downward는 기존처럼 위에서 아래로 떨어지고, Upward는 같은 영역/Blocker 흐름을 사용하면서 아래에서 위로 뿜어집니다."))
+	EUOURainAreaFlowDirection FlowDirection = EUOURainAreaFlowDirection::Downward;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Falling", meta = (DisplayName = "Rain System", DisplayPriority = "1", ToolTip = "비 내림 표현에 사용할 Niagara System입니다."))
 	TObjectPtr<UNiagaraSystem> RainEffectSystem = nullptr;
 
@@ -105,7 +115,7 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Falling", meta = (DisplayName = "Rate", ClampMin = "0.0", UIMin = "0.0", UIMax = "6000.0", EditCondition = "bEnableRainVisuals", DisplayPriority = "12", ToolTip = "비 Niagara가 초당 생성할 기본 파티클 수입니다. 최종 Spawn Rate는 RainSpawnRate와 RainVisualIntensity를 곱한 값입니다."))
 	float RainSpawnRate = 2400.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Falling", meta = (DisplayName = "Speed", ClampMin = "-3000.0", ClampMax = "0.0", UIMin = "-3000.0", UIMax = "0.0", EditCondition = "bEnableRainVisuals", DisplayPriority = "13", ToolTip = "비 파티클의 Z 낙하 속도입니다. 아래로 떨어지는 값을 Niagara에 직접 전달하므로 보통 음수로 설정합니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Falling", meta = (DisplayName = "Speed", ClampMin = "-3000.0", ClampMax = "3000.0", UIMin = "-3000.0", UIMax = "3000.0", EditCondition = "bEnableRainVisuals", DisplayPriority = "13", ToolTip = "Niagara에 전달할 수직 속도입니다. Downward는 음수로, Upward는 양수로 자동 보정됩니다."))
 	float RainFallSpeed = -900.0f;
 
 	UPROPERTY()
@@ -134,9 +144,9 @@ protected:
 	void ApplyEnvironmentVisualRainBlocker(bool bIsBlocking, const FVector& BlockerWorldCenter, const FVector& BlockerHalfExtent, float BlockerIntensity);
 	// RainVolume 안에 있는 WaterBasinTarget에 기존 물 입력 규칙으로 비를 전달합니다.
 	void ApplyRainToWaterBasinTargets(float DeltaSeconds, bool bHasRainBlocker, const FVector& RainBlockerWorldCenter, const FRotator& RainBlockerWorldRotation, const FVector& RainBlockerHalfExtent) const;
-	// 대상 Actor의 bounds 중심이 RainVolume 안에 있는지 확인합니다.
-	bool IsActorInsideRainVolume(const AActor* Actor) const;
-	// 대상 Actor의 bounds 중심이 우산 차단 영역 아래에 있는지 확인합니다.
+	// 대상 Actor의 bounds가 RainVolume과 겹치는지 확인합니다.
+	bool DoesActorBoundsOverlapRainVolume(const AActor* Actor) const;
+	// 대상 Actor의 bounds가 우산 차단 영역 아래에 걸치는지 확인합니다.
 	bool IsActorBlockedByRainBlocker(const AActor* Actor, const FVector& BlockerWorldCenter, const FRotator& BlockerWorldRotation, const FVector& BlockerHalfExtent) const;
 	// 비주얼 디버그 박스를 그려서 환경 연동 범위를 확인합니다.
 	void DrawRainVisualDebug() const;

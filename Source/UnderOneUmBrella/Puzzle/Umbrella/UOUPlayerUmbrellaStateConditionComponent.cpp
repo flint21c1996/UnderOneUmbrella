@@ -223,6 +223,10 @@ bool UUOUPlayerUmbrellaStateConditionComponent::DoesCurrentUmbrellaStateMatch() 
 		return CachedUmbrellaComponent->IsClosed();
 
 	case EUOUUmbrellaState::Open:
+		if (RequiredUmbrellaDirection == EUOUUmbrellaDirectionRequirement::Reversed)
+		{
+			return CachedUmbrellaComponent->IsUpsideDown();
+		}
 		return CachedUmbrellaComponent->IsOpen();
 
 	case EUOUUmbrellaState::UpsideDown:
