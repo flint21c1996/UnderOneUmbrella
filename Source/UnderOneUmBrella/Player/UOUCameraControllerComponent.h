@@ -138,6 +138,10 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Camera|Dialogue", meta = (ClampMin = "0.0"))
 	float DialogueCameraDistance = 360.0f;
 
+	// 대화 연출 중 카메라 거리를 바꿀지 정합니다. 끄면 현재 줌 거리를 유지합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Camera|Dialogue")
+	bool bAdjustDistanceDuringDialogue = false;
+
 	// 대화 카메라가 바라보는 기준점 높이입니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Camera|Dialogue")
 	float DialogueLookAtHeight = 80.0f;

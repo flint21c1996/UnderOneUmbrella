@@ -253,7 +253,10 @@ void UUOUCameraControllerComponent::UpdateDialogueCamera(float DeltaSeconds)
 	TargetCameraOffset = FocusLocation - Owner->GetActorLocation();
 	CameraBoom->TargetOffset = FMath::VInterpTo(CameraBoom->TargetOffset, TargetCameraOffset, DeltaSeconds, DialogueCameraInterpSpeed);
 	CameraBoom->SetWorldRotation(FMath::RInterpTo(CameraBoom->GetComponentRotation(), DesiredRotation, DeltaSeconds, DialogueCameraInterpSpeed));
-	CameraBoom->TargetArmLength = FMath::FInterpTo(CameraBoom->TargetArmLength, DesiredDistance, DeltaSeconds, DialogueCameraInterpSpeed);
+	if (bAdjustDistanceDuringDialogue)
+	{
+		CameraBoom->TargetArmLength = FMath::FInterpTo(CameraBoom->TargetArmLength, DesiredDistance, DeltaSeconds, DialogueCameraInterpSpeed);
+	}
 }
 
 void UUOUCameraControllerComponent::UpdateCameraOcclusion()
