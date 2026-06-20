@@ -4,9 +4,11 @@
 
 #include "Components/SceneComponent.h"
 #include "Debug/UOUPuzzleDebugProviderComponent.h"
+#include "Engine/World.h"
 #include "Puzzle/Core/UOUPuzzleConditionSourceComponent.h"
 #include "Puzzle/Core/UOUPuzzleResultCompletionState.h"
 #include "Puzzle/Core/UOUPuzzleResultReceiver.h"
+#include "TimerManager.h"
 
 AUOUPuzzleConditionGroupActor::AUOUPuzzleConditionGroupActor()
 {
@@ -161,7 +163,10 @@ void AUOUPuzzleConditionGroupActor::DispatchResultBindings(bool bSatisfied)
 				continue;
 			}
 
-			if (ExecuteResultAction(Binding.TargetActor.Get(), Binding.SatisfiedAction))
+			if (DispatchOrScheduleResultAction(
+				Binding.TargetActor.Get(),
+				Binding.SatisfiedAction,
+				Binding.SatisfiedDelaySeconds))
 			{
 				Binding.bHasRunSatisfiedAction = true;
 			}
@@ -173,7 +178,10 @@ void AUOUPuzzleConditionGroupActor::DispatchResultBindings(bool bSatisfied)
 			continue;
 		}
 
-		ExecuteResultAction(Binding.TargetActor.Get(), Binding.UnsatisfiedAction);
+		DispatchOrScheduleResultAction(
+			Binding.TargetActor.Get(),
+			Binding.UnsatisfiedAction,
+			Binding.UnsatisfiedDelaySeconds);
 	}
 }
 
@@ -221,5 +229,61 @@ bool AUOUPuzzleConditionGroupActor::ExecuteResultAction(AActor* TargetActor, EOU
 	// 결과 액터가 구현한 공통 인터페이스 진입점을 호출합니다.
 	// 내부에서 어떤 동작을 할지는 각 액터가 ApplyPuzzleResult로 재정의합니다.
 	IUOUPuzzleResultReceiver::Execute_ApplyPuzzleResult(TargetActor, Action);
+	return true;
+}
+
+bool AUOUPuzzleConditionGroupActor::DispatchOrScheduleResultAction(
+	AActor* TargetActor,
+	EOUUPuzzleResultAction Action,
+	float DelaySeconds)
+{
+	if (TargetActor == nullptr || Action == EOUUPuzzleResultAction::None)
+	{
+		return false;
+	}
+
+	if (!TargetActor->GetClass()->ImplementsInterface(UUOUPuzzleResultReceiver::StaticClass()))
+	{
+		return false;
+	}
+
+	const float SafeDelaySeconds = FMath::Max(0.0f, DelaySeconds);
+	if (SafeDelaySeconds <= 0.0f)
+	{
+		return ExecuteResultAction(TargetActor, Action);
+	}
+
+	UWorld* World = GetWorld();
+	if (World == nullptr)
+	{
+		return ExecuteResultAction(TargetActor, Action);
+	}
+
+	// 조건 결과를 바로 실행하지 않고, 지정된 시간 뒤 같은 TargetActor에 같은 액션을 전달합니다.
+	// 대상이 그 사이 사라지면 약한 참조가 무효가 되어 아무 것도 실행하지 않습니다.
+	const TWeakObjectPtr<AActor> WeakTargetActor(TargetActor);
+	FTimerHandle DelayTimerHandle;
+	World->GetTimerManager().SetTimer(
+		DelayTimerHandle,
+		FTimerDelegate::CreateWeakLambda(
+			this,
+			[WeakTargetActor, Action]()
+			{
+				AActor* ResolvedTargetActor = WeakTargetActor.Get();
+				if (ResolvedTargetActor == nullptr)
+				{
+					return;
+				}
+
+				if (!ResolvedTargetActor->GetClass()->ImplementsInterface(UUOUPuzzleResultReceiver::StaticClass()))
+				{
+					return;
+				}
+
+				IUOUPuzzleResultReceiver::Execute_ApplyPuzzleResult(ResolvedTargetActor, Action);
+			}),
+		SafeDelaySeconds,
+		false);
+
 	return true;
 }
