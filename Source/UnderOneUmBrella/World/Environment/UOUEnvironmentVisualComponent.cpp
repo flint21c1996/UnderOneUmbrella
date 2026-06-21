@@ -60,6 +60,16 @@ namespace
 			FMath::Max(AbsScale.Y, UE_KINDA_SMALL_NUMBER),
 			FMath::Max(AbsScale.Z, UE_KINDA_SMALL_NUMBER));
 	}
+	bool IsEnvironmentVisualComponentTemplateObject(const UActorComponent* Component)
+	{
+		if (Component == nullptr)
+		{
+			return true;
+		}
+
+		const AActor* Owner = Component->GetOwner();
+		return Component->IsTemplate() || (Owner != nullptr && Owner->IsTemplate());
+	}
 }
 
 UUOUEnvironmentVisualComponent::UUOUEnvironmentVisualComponent()
@@ -276,6 +286,13 @@ void UUOUEnvironmentVisualComponent::RefreshNiagaraActivation()
 
 void UUOUEnvironmentVisualComponent::ApplyNiagaraParameters()
 {
+	// Skip Niagara parameter writes on CDO/default subobjects.
+	// Packaged builds can assert here while constructing RainArea class defaults before real instances exist.
+	if (IsEnvironmentVisualComponentTemplateObject(this))
+	{
+		return;
+	}
+
 	UNiagaraComponent* ActivePrimaryEffect = GetPrimaryEffectComponent();
 	UNiagaraComponent* ActiveSecondaryEffect = GetSecondaryEffectComponent();
 
