@@ -151,13 +151,13 @@ bool UUOUDialogueTriggerComponent::TryStartDialogue(AActor* InstigatorActor)
 {
 	if (bTriggerOnce && bHasTriggered)
 	{
-		ShowCoverDebugMessage(TEXT("Dialogue Start Failed: already triggered"), FColor::Red, 1.5f);
+		ShowProximityDebugStatus(TEXT("Dialogue Start Blocked: already triggered"), FColor::Yellow);
 		return false;
 	}
 
 	if (!PassesInstigatorRules(InstigatorActor))
 	{
-		ShowCoverDebugMessage(TEXT("Dialogue Start Failed: rule check failed"), FColor::Red, 1.5f);
+		ShowProximityDebugStatus(TEXT("Dialogue Start Blocked: rule check failed"), FColor::Yellow);
 		return false;
 	}
 
@@ -200,14 +200,12 @@ void UUOUDialogueTriggerComponent::ShowInteractionHint()
 	if (!bEnableInteractionHint)
 	{
 		LastHintDebugStatus = TEXT("Failed:Disabled");
-		ShowCoverDebugMessage(TEXT("Hint Show Failed: hint disabled"), FColor::Red, 1.5f);
 		return;
 	}
 
 	if (bHintVisible)
 	{
 		LastHintDebugStatus = TEXT("Skipped:AlreadyVisible");
-		ShowCoverDebugMessage(TEXT("Hint Show Skipped: already visible"), FColor::Yellow, 1.0f);
 		return;
 	}
 
@@ -216,7 +214,6 @@ void UUOUDialogueTriggerComponent::ShowInteractionHint()
 		if (UISubsystem->IsDialoguePlaying())
 		{
 			LastHintDebugStatus = TEXT("Failed:DialoguePlaying");
-			ShowCoverDebugMessage(TEXT("Hint Show Failed: dialogue is playing"), FColor::Red, 1.5f);
 			return;
 		}
 	}
@@ -234,7 +231,6 @@ void UUOUDialogueTriggerComponent::ShowInteractionHint()
 	if (DisplayHintText.IsEmpty())
 	{
 		LastHintDebugStatus = TEXT("Failed:TextEmpty");
-		ShowCoverDebugMessage(TEXT("Hint Show Failed: text empty"), FColor::Red, 1.5f);
 		return;
 	}
 
@@ -369,10 +365,10 @@ void UUOUDialogueTriggerComponent::HandleTrackedActorEnter(AActor* OtherActor, U
 		return;
 	}
 
-	ShowCoverDebugMessage(
+	// 플랫폼 이동 중에는 트리거 겹침이 반복될 수 있으므로 근접 진입은 고정 상태 줄에서만 보여줍니다.
+	ShowProximityDebugStatus(
 		FString::Printf(TEXT("Dialogue Proximity Accepted: %s"), *GetNameSafe(OtherActor)),
-		FColor::Green,
-		2.0f);
+		FColor::Green);
 
 	if (bRequireUmbrellaCoverHold)
 	{
@@ -427,10 +423,9 @@ void UUOUDialogueTriggerComponent::HandleEndOverlap(UPrimitiveComponent* Overlap
 		ClearCoverProgress();
 	}
 
-	ShowCoverDebugMessage(
+	ShowProximityDebugStatus(
 		FString::Printf(TEXT("Dialogue Proximity Exit: %s"), *GetNameSafe(OtherActor)),
-		FColor::Orange,
-		2.0f);
+		FColor::Orange);
 
 	HideInteractionHint();
 }

@@ -7,6 +7,33 @@
 #include "TimerManager.h"
 #include "UI/UOUDialogueSourceComponent.h"
 
+namespace
+{
+	FText NormalizeDialogueDisplayText(const FText& SourceText)
+	{
+		if (SourceText.IsEmpty())
+		{
+			return SourceText;
+		}
+
+		// 인라인 대사나 데이터 에셋에서도 \n을 적으면 실제 줄바꿈으로 보이게 맞춥니다.
+		FString DisplayString = SourceText.ToString();
+		DisplayString.ReplaceInline(TEXT("\\r\\n"), TEXT("\n"), ESearchCase::CaseSensitive);
+		DisplayString.ReplaceInline(TEXT("\\n"), TEXT("\n"), ESearchCase::CaseSensitive);
+		DisplayString.ReplaceInline(TEXT("\\t"), TEXT("\t"), ESearchCase::CaseSensitive);
+
+		return FText::FromString(DisplayString);
+	}
+
+	FUOUDialogueLine NormalizeDialogueLineForDisplay(const FUOUDialogueLine& SourceLine)
+	{
+		FUOUDialogueLine DisplayLine = SourceLine;
+		DisplayLine.BubbleText = NormalizeDialogueDisplayText(SourceLine.BubbleText);
+		DisplayLine.DialogueText = NormalizeDialogueDisplayText(SourceLine.DialogueText);
+		return DisplayLine;
+	}
+}
+
 void UUOUUISubsystem::RegisterHUD(UUOUInGameHUDWidget* InHUDWidget)
 {
 	if (InHUDWidget == nullptr)
@@ -134,7 +161,7 @@ void UUOUUISubsystem::AdvanceDialogue()
 		return;
 	}
 
-	FUOUDialogueLine DisplayLine = *NextLine;
+	FUOUDialogueLine DisplayLine = NormalizeDialogueLineForDisplay(*NextLine);
 	if (DisplayLine.SpeakerName.IsEmpty())
 	{
 		DisplayLine.SpeakerName = ActiveDialogueSource->GetSpeakerName();
@@ -271,24 +298,26 @@ void UUOUUISubsystem::BroadcastCurrentDialogueLine(const FUOUDialogueLine& Line)
 
 void UUOUUISubsystem::BroadcastDialogueBubble(const FUOUDialogueLine& Line)
 {
+	const FUOUDialogueLine DisplayLine = NormalizeDialogueLineForDisplay(Line);
 	AActor* SpeakerActor = ActiveDialogueSource.IsValid() ? ActiveDialogueSource->GetSpeakerActor() : nullptr;
-	if (!Line.BubbleText.IsEmpty())
+	if (ActiveDialogueSource.IsValid() && ActiveDialogueSource->IsDialogueBubbleEnabled() && !DisplayLine.BubbleText.IsEmpty())
 	{
-		OnDialogueBubbleRequested.Broadcast(SpeakerActor, Line.BubbleText, Line.BubbleDuration);
+		OnDialogueBubbleRequested.Broadcast(SpeakerActor, DisplayLine.BubbleText, DisplayLine.BubbleDuration);
 		if (RegisteredHUDWidget.IsValid())
 		{
-			RegisteredHUDWidget->ShowNPCSpeechBubble(SpeakerActor, Line.BubbleText, Line.BubbleDuration);
+			RegisteredHUDWidget->ShowNPCSpeechBubble(SpeakerActor, DisplayLine.BubbleText, DisplayLine.BubbleDuration);
 		}
 	}
 }
 
 void UUOUUISubsystem::BroadcastDialogueBoxLine(const FUOUDialogueLine& Line)
 {
+	const FUOUDialogueLine DisplayLine = NormalizeDialogueLineForDisplay(Line);
 	AActor* SpeakerActor = ActiveDialogueSource.IsValid() ? ActiveDialogueSource->GetSpeakerActor() : nullptr;
-	OnDialogueLineStarted.Broadcast(SpeakerActor, Line);
+	OnDialogueLineStarted.Broadcast(SpeakerActor, DisplayLine);
 	if (RegisteredHUDWidget.IsValid())
 	{
-		RegisteredHUDWidget->ShowDialogueLine(SpeakerActor, Line);
+		RegisteredHUDWidget->ShowDialogueLine(SpeakerActor, DisplayLine);
 	}
 }
 
