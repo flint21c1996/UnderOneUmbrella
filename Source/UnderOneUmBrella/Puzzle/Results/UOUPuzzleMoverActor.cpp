@@ -136,6 +136,19 @@ void AUOUPuzzleMoverActor::MoveTarget(float DeltaSeconds)
 
 	MovingTarget->SetWorldLocation(NextLocation);
 
+	if (bApplyPointRotation)
+	{
+		// ActivePoint, InactivePoint의 회전을 목표 회전으로 보고 부드럽게 따라갑니다.
+		const FRotator CurrentRotation = MovingTarget->GetComponentRotation();
+		const FRotator NextRotation = FMath::RInterpConstantTo(
+			CurrentRotation,
+			TargetPoint->GetComponentRotation(),
+			DeltaSeconds,
+			FMath::Max(0.0f, RotationSpeed));
+
+		MovingTarget->SetWorldRotation(NextRotation);
+	}
+
 	if (bApplyPointScale)
 	{
 		// 위치와 별개로 목표 포인트의 월드 스케일도 따라가게 해서

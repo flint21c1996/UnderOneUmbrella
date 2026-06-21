@@ -2,6 +2,7 @@
 
 #include "Puzzle/Core/UOUPuzzleConditionGroupActor.h"
 
+#include "Components/ActorComponent.h"
 #include "Components/SceneComponent.h"
 #include "Debug/UOUPuzzleDebugProviderComponent.h"
 #include "Engine/World.h"
@@ -9,6 +10,66 @@
 #include "Puzzle/Core/UOUPuzzleResultCompletionState.h"
 #include "Puzzle/Core/UOUPuzzleResultReceiver.h"
 #include "TimerManager.h"
+
+namespace
+{
+	bool HasPuzzleResultReceiver(AActor* TargetActor)
+	{
+		if (TargetActor == nullptr)
+		{
+			return false;
+		}
+
+		if (TargetActor->GetClass()->ImplementsInterface(UUOUPuzzleResultReceiver::StaticClass()))
+		{
+			return true;
+		}
+
+		TArray<UActorComponent*> Components;
+		TargetActor->GetComponents(Components);
+		for (UActorComponent* Component : Components)
+		{
+			if (Component != nullptr
+				&& Component->GetClass()->ImplementsInterface(UUOUPuzzleResultReceiver::StaticClass()))
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	bool ExecutePuzzleResultReceiver(AActor* TargetActor, EOUUPuzzleResultAction Action)
+	{
+		if (TargetActor == nullptr || Action == EOUUPuzzleResultAction::None)
+		{
+			return false;
+		}
+
+		bool bHandled = false;
+		if (TargetActor->GetClass()->ImplementsInterface(UUOUPuzzleResultReceiver::StaticClass()))
+		{
+			IUOUPuzzleResultReceiver::Execute_ApplyPuzzleResult(TargetActor, Action);
+			bHandled = true;
+		}
+
+		TArray<UActorComponent*> Components;
+		TargetActor->GetComponents(Components);
+		for (UActorComponent* Component : Components)
+		{
+			if (Component == nullptr
+				|| !Component->GetClass()->ImplementsInterface(UUOUPuzzleResultReceiver::StaticClass()))
+			{
+				continue;
+			}
+
+			IUOUPuzzleResultReceiver::Execute_ApplyPuzzleResult(Component, Action);
+			bHandled = true;
+		}
+
+		return bHandled;
+	}
+}
 
 AUOUPuzzleConditionGroupActor::AUOUPuzzleConditionGroupActor()
 {
@@ -221,14 +282,14 @@ bool AUOUPuzzleConditionGroupActor::ExecuteResultAction(AActor* TargetActor, EOU
 		return false;
 	}
 
-	if (!TargetActor->GetClass()->ImplementsInterface(UUOUPuzzleResultReceiver::StaticClass()))
+	if (!HasPuzzleResultReceiver(TargetActor))
 	{
 		return false;
 	}
 
 	// 결과 액터가 구현한 공통 인터페이스 진입점을 호출합니다.
 	// 내부에서 어떤 동작을 할지는 각 액터가 ApplyPuzzleResult로 재정의합니다.
-	IUOUPuzzleResultReceiver::Execute_ApplyPuzzleResult(TargetActor, Action);
+	ExecutePuzzleResultReceiver(TargetActor, Action);
 	return true;
 }
 
@@ -242,7 +303,7 @@ bool AUOUPuzzleConditionGroupActor::DispatchOrScheduleResultAction(
 		return false;
 	}
 
-	if (!TargetActor->GetClass()->ImplementsInterface(UUOUPuzzleResultReceiver::StaticClass()))
+	if (!HasPuzzleResultReceiver(TargetActor))
 	{
 		return false;
 	}
@@ -275,12 +336,12 @@ bool AUOUPuzzleConditionGroupActor::DispatchOrScheduleResultAction(
 					return;
 				}
 
-				if (!ResolvedTargetActor->GetClass()->ImplementsInterface(UUOUPuzzleResultReceiver::StaticClass()))
+				if (!HasPuzzleResultReceiver(ResolvedTargetActor))
 				{
 					return;
 				}
 
-				IUOUPuzzleResultReceiver::Execute_ApplyPuzzleResult(ResolvedTargetActor, Action);
+				ExecutePuzzleResultReceiver(ResolvedTargetActor, Action);
 			}),
 		SafeDelaySeconds,
 		false);

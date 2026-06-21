@@ -51,6 +51,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Puzzle|Movement", meta = (ClampMin = "0.0"))
 	float ScaleSpeed = 4.0f;
 
+	// 켜져 있으면 MovingTarget이 ActivePoint, InactivePoint의 회전도 따라갑니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Puzzle|Movement")
+	bool bApplyPointRotation = true;
+
+	// MovingTarget이 목표 포인트 회전으로 변하는 속도입니다. 초당 회전 각도로 처리됩니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Puzzle|Movement", meta = (ClampMin = "0.0"))
+	float RotationSpeed = 180.0f;
+
 	// 현재 활성 상태인지 저장하는 런타임 값입니다.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Puzzle|Runtime")
 	bool bActivated = false;
