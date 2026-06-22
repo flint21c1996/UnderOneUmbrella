@@ -21,6 +21,8 @@ class AUOUPushPullBlockActor : public AActor
 public:
 	AUOUPushPullBlockActor();
 
+	virtual void BeginPlay() override;
+
 	// 상자의 실제 외형과 물리 충돌을 담당하는 메쉬입니다.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "PushPull")
 	TObjectPtr<UStaticMeshComponent> BlockVisual = nullptr;
@@ -36,4 +38,8 @@ public:
 	// 상자 안에 저장된 물 양을 관리하는 물 컨테이너 컴포넌트입니다.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Water")
 	TObjectPtr<UUOUWaterContainerComponent> WaterContainerComponent = nullptr;
+
+protected:
+	// 단차 반응을 위해 X/Y 회전은 허용하고, 방향 틀어짐을 막기 위해 Z 회전만 잠급니다.
+	void ApplyBlockRotationLocks(bool bRecreatePhysicsState);
 };

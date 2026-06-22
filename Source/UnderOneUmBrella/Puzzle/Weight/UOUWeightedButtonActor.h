@@ -28,6 +28,8 @@ public:
 
 protected:
 	// 버튼 비주얼이 침하 위치로 이동하는 연출을 매 프레임 갱신합니다.
+	virtual void OnConstruction(const FTransform& Transform) override;
+	virtual void PostInitializeComponents() override;
 	virtual void Tick(float DeltaSeconds) override;
 
 	// 버튼 액터 전체의 기준 루트입니다.
@@ -41,6 +43,12 @@ protected:
 	// 실제 화면에 보이는 버튼 메쉬입니다.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Puzzle")
 	TObjectPtr<UStaticMeshComponent> ButtonVisual = nullptr;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Puzzle")
+	TObjectPtr<USceneComponent> ButtonMotionRoot = nullptr;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Puzzle")
+	TObjectPtr<UBoxComponent> ButtonSurfaceCollision = nullptr;
 
 	// 버튼이 눌리지 않았을 때 ButtonVisual이 돌아갈 기준 위치입니다.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Puzzle")
@@ -79,6 +87,10 @@ protected:
 	bool bResultSinkActive = false;
 
 private:
+	void ConfigureButtonCollisionLayout() const;
+	void ConfigureButtonCollision() const;
+	void ConfigureBlockingCollision(UBoxComponent* CollisionComponent) const;
+
 	// 침하 상태에 따라 ButtonVisual을 ResultSinkPoint 쪽으로 보간 이동합니다.
 	void MoveResultSinkVisual(float DeltaSeconds);
 

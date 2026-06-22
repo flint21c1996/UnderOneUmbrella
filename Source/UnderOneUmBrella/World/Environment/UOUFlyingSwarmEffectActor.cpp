@@ -363,9 +363,10 @@ void AUOUFlyingSwarmEffectActor::ApplyNiagaraParameters()
 	const FTransform TargetTransform = GetCurrentTargetTransform();
 	const FVector SourceForward = GetSafeTransformAxis(StartTransform, EAxis::X, GetActorForwardVector());
 	const FVector SourceRight = GetSafeTransformAxis(StartTransform, EAxis::Y, GetActorRightVector());
-	const FVector TargetForward = GetSafeTransformAxis(TargetTransform, EAxis::X, FVector::ForwardVector);
-	const FVector TargetRight = GetSafeTransformAxis(TargetTransform, EAxis::Y, FVector::RightVector);
-	const FVector TargetUp = GetSafeTransformAxis(TargetTransform, EAxis::Z, FVector::UpVector);
+	FVector TargetForward = FVector::ForwardVector;
+	FVector TargetRight = FVector::RightVector;
+	FVector TargetUp = FVector::UpVector;
+	ResolveTargetOrbitAxes(TargetTransform, TargetForward, TargetRight, TargetUp);
 	const float FlightAlpha = GetFlightAlpha();
 	const float WrapAlpha = GetWrapAlpha();
 
@@ -561,9 +562,7 @@ FUOUPaperPlaneSwarmMotionInput AUOUFlyingSwarmEffectActor::BuildMotionInput(floa
 	MotionInput.GlideSideAmount = FMath::Max(0.0f, GlideSideAmount);
 	MotionInput.GlideOvershootAmount = FMath::Max(0.0f, GlideOvershootAmount);
 	MotionInput.FarReachAlpha = FMath::Clamp(FarReachAlpha, 0.05f, 0.95f);
-	MotionInput.TargetForward = GetSafeTransformAxis(TargetTransform, EAxis::X, FVector::ForwardVector);
-	MotionInput.TargetRight = GetSafeTransformAxis(TargetTransform, EAxis::Y, FVector::RightVector);
-	MotionInput.TargetUp = GetSafeTransformAxis(TargetTransform, EAxis::Z, FVector::UpVector);
+	ResolveTargetOrbitAxes(TargetTransform, MotionInput.TargetForward, MotionInput.TargetRight, MotionInput.TargetUp);
 	MotionInput.DeltaTime = FMath::Max(DeltaSeconds, 0.0001f);
 	return MotionInput;
 }
@@ -690,9 +689,10 @@ void AUOUFlyingSwarmEffectActor::DrawRuntimeDebug() const
 	const FTransform TargetTransform = GetCurrentTargetTransform();
 	const FVector SourceLocation = SourceTransform.GetLocation();
 	const FVector TargetLocation = TargetTransform.GetLocation();
-	const FVector TargetForward = GetSafeTransformAxis(TargetTransform, EAxis::X, FVector::ForwardVector);
-	const FVector TargetRight = GetSafeTransformAxis(TargetTransform, EAxis::Y, FVector::RightVector);
-	const FVector TargetUp = GetSafeTransformAxis(TargetTransform, EAxis::Z, FVector::UpVector);
+	FVector TargetForward = FVector::ForwardVector;
+	FVector TargetRight = FVector::RightVector;
+	FVector TargetUp = FVector::UpVector;
+	ResolveTargetOrbitAxes(TargetTransform, TargetForward, TargetRight, TargetUp);
 	const float Thickness = FMath::Max(0.0f, RuntimeDebugThickness);
 
 	DrawDebugSphere(GetWorld(), SourceLocation, 24.0f, 12, FColor::Cyan, false, 0.0f, 0, Thickness);
@@ -1055,16 +1055,20 @@ FTransform AUOUFlyingSwarmEffectActor::GetCurrentTargetTransform() const
 FTransform AUOUFlyingSwarmEffectActor::ResolveSourceTransform() const
 {
 	const AActor* ResolvedSourceActor = IsValid(SourceActor) ? SourceActor.Get() : this;
-	return ResolveReferenceTransform(ResolvedSourceActor, SourceSocketName, SourceLocalOffset);
+	return ResolveReferenceTransform(ResolvedSourceActor, SourceSocketName, SourceLocalOffset, true);
 }
 
 FTransform AUOUFlyingSwarmEffectActor::ResolveTargetTransform() const
 {
 	const AActor* ResolvedTargetActor = ResolveTargetActor();
-	return ResolveReferenceTransform(ResolvedTargetActor != nullptr ? ResolvedTargetActor : this, TargetSocketName, TargetLocalOffset);
+	return ResolveReferenceTransform(ResolvedTargetActor != nullptr ? ResolvedTargetActor : this, TargetSocketName, TargetLocalOffset, bUseTargetScaleForOffset);
 }
 
-FTransform AUOUFlyingSwarmEffectActor::ResolveReferenceTransform(const AActor* ReferenceActor, FName SocketName, const FVector& LocalOffset) const
+FTransform AUOUFlyingSwarmEffectActor::ResolveReferenceTransform(
+	const AActor* ReferenceActor,
+	FName SocketName,
+	const FVector& LocalOffset,
+	bool bUseReferenceScaleForOffset) const
 {
 	if (!IsValid(ReferenceActor))
 	{
@@ -1078,7 +1082,10 @@ FTransform AUOUFlyingSwarmEffectActor::ResolveReferenceTransform(const AActor* R
 		ReferenceTransform = ReferenceRootComponent->GetSocketTransform(SocketName, RTS_World);
 	}
 
-	ReferenceTransform.SetLocation(ReferenceTransform.TransformPosition(LocalOffset));
+	const FVector OffsetLocation = bUseReferenceScaleForOffset
+		? ReferenceTransform.TransformPosition(LocalOffset)
+		: ReferenceTransform.GetLocation() + ReferenceTransform.GetRotation().RotateVector(LocalOffset);
+	ReferenceTransform.SetLocation(OffsetLocation);
 	return ReferenceTransform;
 }
 
@@ -1103,6 +1110,25 @@ AActor* AUOUFlyingSwarmEffectActor::ResolveTargetActor() const
 	const APlayerController* PlayerController = World->GetFirstPlayerController();
 	APawn* PlayerPawn = PlayerController != nullptr ? PlayerController->GetPawn() : nullptr;
 	return PlayerPawn != nullptr ? static_cast<AActor*>(PlayerPawn) : const_cast<AUOUFlyingSwarmEffectActor*>(this);
+}
+
+void AUOUFlyingSwarmEffectActor::ResolveTargetOrbitAxes(
+	const FTransform& TargetTransform,
+	FVector& OutForward,
+	FVector& OutRight,
+	FVector& OutUp) const
+{
+	if (bUseTargetRotationForOrbit)
+	{
+		OutForward = GetSafeTransformAxis(TargetTransform, EAxis::X, FVector::ForwardVector);
+		OutRight = GetSafeTransformAxis(TargetTransform, EAxis::Y, FVector::RightVector);
+		OutUp = GetSafeTransformAxis(TargetTransform, EAxis::Z, FVector::UpVector);
+		return;
+	}
+
+	OutForward = FVector::ForwardVector;
+	OutRight = FVector::RightVector;
+	OutUp = FVector::UpVector;
 }
 
 FVector AUOUFlyingSwarmEffectActor::GetSafeTransformAxis(const FTransform& Transform, EAxis::Type Axis, const FVector& Fallback)
