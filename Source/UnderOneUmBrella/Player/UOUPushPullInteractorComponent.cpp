@@ -35,6 +35,10 @@ void UUOUPushPullInteractorComponent::BeginPlay()
 
 	CandidateSearchRadius = FMath::Max(0.0f, CandidateSearchRadius);
 	ReleaseDistanceBuffer = FMath::Max(0.0f, ReleaseDistanceBuffer);
+	PushPullWalkSpeed = FMath::Max(0.0f, PushPullWalkSpeed);
+	GrabDistanceCorrectionStrength = FMath::Max(0.0f, GrabDistanceCorrectionStrength);
+	MaxGrabDistanceCorrectionSpeed = FMath::Max(0.0f, MaxGrabDistanceCorrectionSpeed);
+	GrabDistanceCorrectionDeadZone = FMath::Max(0.0f, GrabDistanceCorrectionDeadZone);
 	ResolveOwnerReferences();
 }
 
@@ -56,7 +60,7 @@ void UUOUPushPullInteractorComponent::TickComponent(float DeltaTime, ELevelTick 
 			const float MaxWalkSpeed = OwnerCharacter->GetCharacterMovement() != nullptr
 				? OwnerCharacter->GetCharacterMovement()->MaxWalkSpeed
 				: 0.0f;
-			GrabbedObject->SetHorizontalVelocity(GrabbedMoveAxis * CurrentAxisInput * MaxWalkSpeed);
+			GrabbedObject->SetHorizontalVelocity(BuildGrabbedObjectVelocity(MaxWalkSpeed));
 			ApplyGrabbedRotation();
 		}
 	}
@@ -211,13 +215,9 @@ void UUOUPushPullInteractorComponent::TryBeginGrab()
 		GrabbedMoveAxis = MoveAxis;
 		CurrentAxisInput = 0.0f;
 		LastFailureReason = TEXT("Crank Grabbed");
+		ClearGrabbedReferenceDistance();
 
-		if (UCharacterMovementComponent* CharacterMovement = OwnerCharacter->GetCharacterMovement())
-		{
-			bCachedOrientRotationToMovement = CharacterMovement->bOrientRotationToMovement;
-			CharacterMovement->bOrientRotationToMovement = false;
-			CharacterMovement->StopMovementImmediately();
-		}
+		ApplyGrabbedCharacterMovementSettings(false);
 
 		ApplyGrabbedRotation();
 		return;
@@ -240,23 +240,16 @@ void UUOUPushPullInteractorComponent::TryBeginGrab()
 	GrabbedMoveAxis = MoveAxis;
 	CurrentAxisInput = 0.0f;
 	LastFailureReason = TEXT("Grabbed");
+	CacheGrabbedReferenceDistance();
 
-	if (UCharacterMovementComponent* CharacterMovement = OwnerCharacter->GetCharacterMovement())
-	{
-		bCachedOrientRotationToMovement = CharacterMovement->bOrientRotationToMovement;
-		CharacterMovement->bOrientRotationToMovement = false;
-		CharacterMovement->StopMovementImmediately();
-	}
+	ApplyGrabbedCharacterMovementSettings(true);
 
 	ApplyGrabbedRotation();
 }
 
 void UUOUPushPullInteractorComponent::EndGrab()
 {
-	if (OwnerCharacter != nullptr && OwnerCharacter->GetCharacterMovement() != nullptr)
-	{
-		OwnerCharacter->GetCharacterMovement()->bOrientRotationToMovement = bCachedOrientRotationToMovement;
-	}
+	RestoreGrabbedCharacterMovementSettings();
 
 	if (GrabbedObject != nullptr)
 	{
@@ -271,10 +264,132 @@ void UUOUPushPullInteractorComponent::EndGrab()
 	GrabbedCrank = nullptr;
 	GrabbedMoveAxis = FVector::ZeroVector;
 	CurrentAxisInput = 0.0f;
+	ClearGrabbedReferenceDistance();
 	if (bGrabInputHeld)
 	{
 		LastFailureReason = TEXT("Grab Ended");
 	}
+}
+
+void UUOUPushPullInteractorComponent::ApplyGrabbedCharacterMovementSettings(bool bLimitWalkSpeed)
+{
+	if (OwnerCharacter == nullptr)
+	{
+		return;
+	}
+
+	UCharacterMovementComponent* CharacterMovement = OwnerCharacter->GetCharacterMovement();
+	if (CharacterMovement == nullptr)
+	{
+		return;
+	}
+
+	if (!bHasCachedCharacterMovementSettings)
+	{
+		bCachedOrientRotationToMovement = CharacterMovement->bOrientRotationToMovement;
+		CachedMaxWalkSpeed = CharacterMovement->MaxWalkSpeed;
+		bHasCachedCharacterMovementSettings = true;
+	}
+
+	CharacterMovement->bOrientRotationToMovement = false;
+	if (bLimitWalkSpeed)
+	{
+		CharacterMovement->MaxWalkSpeed = FMath::Min(CachedMaxWalkSpeed, PushPullWalkSpeed);
+	}
+	CharacterMovement->StopMovementImmediately();
+}
+
+void UUOUPushPullInteractorComponent::RestoreGrabbedCharacterMovementSettings()
+{
+	if (!bHasCachedCharacterMovementSettings)
+	{
+		return;
+	}
+
+	if (OwnerCharacter != nullptr)
+	{
+		if (UCharacterMovementComponent* CharacterMovement = OwnerCharacter->GetCharacterMovement())
+		{
+			CharacterMovement->bOrientRotationToMovement = bCachedOrientRotationToMovement;
+			CharacterMovement->MaxWalkSpeed = CachedMaxWalkSpeed;
+		}
+	}
+
+	CachedMaxWalkSpeed = 0.0f;
+	bHasCachedCharacterMovementSettings = false;
+}
+
+void UUOUPushPullInteractorComponent::CacheGrabbedReferenceDistance()
+{
+	bHasGrabbedReferenceDistance = false;
+	GrabbedReferenceDistance2D = 0.0f;
+
+	if (OwnerCharacter == nullptr || GrabbedObject == nullptr || GrabbedMoveAxis.IsNearlyZero())
+	{
+		return;
+	}
+
+	FVector HorizontalAxis = GrabbedMoveAxis;
+	HorizontalAxis.Z = 0.0f;
+	if (HorizontalAxis.IsNearlyZero())
+	{
+		return;
+	}
+
+	HorizontalAxis.Normalize();
+
+	FVector ToPlayer = OwnerCharacter->GetActorLocation() - GrabbedObject->GetGrabReferenceLocation();
+	ToPlayer.Z = 0.0f;
+
+	GrabbedReferenceDistance2D = FVector::DotProduct(ToPlayer, HorizontalAxis);
+	bHasGrabbedReferenceDistance = true;
+}
+
+void UUOUPushPullInteractorComponent::ClearGrabbedReferenceDistance()
+{
+	GrabbedReferenceDistance2D = 0.0f;
+	bHasGrabbedReferenceDistance = false;
+}
+
+FVector UUOUPushPullInteractorComponent::BuildGrabbedObjectVelocity(float BaseMoveSpeed) const
+{
+	FVector HorizontalAxis = GrabbedMoveAxis;
+	HorizontalAxis.Z = 0.0f;
+	if (HorizontalAxis.IsNearlyZero())
+	{
+		return FVector::ZeroVector;
+	}
+
+	HorizontalAxis.Normalize();
+	FVector DesiredVelocity = HorizontalAxis * CurrentAxisInput * FMath::Max(0.0f, BaseMoveSpeed);
+
+	if (!bUseGrabDistanceCorrection
+		|| !bHasGrabbedReferenceDistance
+		|| GrabDistanceCorrectionStrength <= 0.0f
+		|| MaxGrabDistanceCorrectionSpeed <= 0.0f
+		|| OwnerCharacter == nullptr
+		|| GrabbedObject == nullptr)
+	{
+		return DesiredVelocity;
+	}
+
+	FVector ToPlayer = OwnerCharacter->GetActorLocation() - GrabbedObject->GetGrabReferenceLocation();
+	ToPlayer.Z = 0.0f;
+
+	const float CurrentDistance = FVector::DotProduct(ToPlayer, HorizontalAxis);
+	const float DistanceError = CurrentDistance - GrabbedReferenceDistance2D;
+	if (FMath::Abs(DistanceError) <= GrabDistanceCorrectionDeadZone)
+	{
+		return DesiredVelocity;
+	}
+
+	const float CorrectionError = DistanceError - FMath::Sign(DistanceError) * GrabDistanceCorrectionDeadZone;
+	const float CorrectionSpeed = FMath::Clamp(
+		CorrectionError * GrabDistanceCorrectionStrength,
+		-MaxGrabDistanceCorrectionSpeed,
+		MaxGrabDistanceCorrectionSpeed);
+
+	return DesiredVelocity + HorizontalAxis * CorrectionSpeed;
 }
 
 void UUOUPushPullInteractorComponent::ApplyGrabbedRotation() const

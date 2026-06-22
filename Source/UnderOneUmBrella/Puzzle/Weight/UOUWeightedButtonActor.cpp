@@ -9,6 +9,12 @@
 #include "Puzzle/Weight/UOUWeightSensorComponent.h"
 #include "UObject/ConstructorHelpers.h"
 
+namespace UOUWeightedButtonActorPrivate
+{
+	constexpr float ButtonHalfExtentXY = 75.0f;
+	constexpr float ButtonHalfHeight = 10.0f;
+}
+
 AUOUWeightedButtonActor::AUOUWeightedButtonActor()
 {
 	PrimaryActorTick.bCanEverTick = true;
@@ -22,15 +28,20 @@ AUOUWeightedButtonActor::AUOUWeightedButtonActor()
 	WeightSensorVolume->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 	WeightSensorVolume->SetCollisionResponseToAllChannels(ECR_Ignore);
 	WeightSensorVolume->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
+	WeightSensorVolume->SetCollisionResponseToChannel(ECC_PhysicsBody, ECR_Overlap);
+	WeightSensorVolume->SetCollisionResponseToChannel(ECC_GameTraceChannel1, ECR_Overlap);
 	WeightSensorVolume->SetGenerateOverlapEvents(true);
 	WeightSensorVolume->SetBoxExtent(FVector(80.0f, 80.0f, 30.0f));
 	WeightSensorVolume->SetRelativeLocation(FVector(0.0f, 0.0f, 30.0f));
 
+	ButtonMotionRoot = CreateDefaultSubobject<USceneComponent>(TEXT("ButtonMotionRoot"));
+	ButtonMotionRoot->SetupAttachment(RootScene);
+	ButtonMotionRoot->SetRelativeLocation(FVector(0.0f, 0.0f, 10.0f));
+
 	ButtonVisual = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("ButtonVisual"));
-	ButtonVisual->SetupAttachment(RootScene);
-	ButtonVisual->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+	ButtonVisual->SetupAttachment(ButtonMotionRoot);
+	ButtonVisual->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	ButtonVisual->SetGenerateOverlapEvents(false);
-	ButtonVisual->SetRelativeLocation(FVector(0.0f, 0.0f, 10.0f));
 
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeMeshFinder(TEXT("/Game/LevelPrototyping/Meshes/SM_Cube.SM_Cube"));
 	if (CubeMeshFinder.Succeeded())
@@ -38,6 +49,17 @@ AUOUWeightedButtonActor::AUOUWeightedButtonActor()
 		ButtonVisual->SetStaticMesh(CubeMeshFinder.Object);
 		ButtonVisual->SetRelativeScale3D(FVector(1.5f, 1.5f, 0.2f));
 	}
+
+	ButtonSurfaceCollision = CreateDefaultSubobject<UBoxComponent>(TEXT("ButtonSurfaceCollision"));
+	ButtonSurfaceCollision->SetupAttachment(ButtonMotionRoot);
+	ButtonSurfaceCollision->SetBoxExtent(FVector(
+		UOUWeightedButtonActorPrivate::ButtonHalfExtentXY,
+		UOUWeightedButtonActorPrivate::ButtonHalfExtentXY,
+		UOUWeightedButtonActorPrivate::ButtonHalfHeight));
+	ButtonSurfaceCollision->SetRelativeLocation(FVector::ZeroVector);
+
+	ConfigureButtonCollisionLayout();
+	ConfigureButtonCollision();
 
 	ReleasedPoint = CreateDefaultSubobject<USceneComponent>(TEXT("ReleasedPoint"));
 	ReleasedPoint->SetupAttachment(RootScene);
@@ -59,9 +81,30 @@ AUOUWeightedButtonActor::AUOUWeightedButtonActor()
 	WeightedButtonComponent->bAutoFindSensor = true;
 	WeightedButtonComponent->Sensor = WeightSensorComponent;
 	WeightedButtonComponent->bAutoFindMotionReferences = true;
-	WeightedButtonComponent->ButtonVisual = ButtonVisual;
+	WeightedButtonComponent->ButtonVisual = ButtonMotionRoot;
 	WeightedButtonComponent->ReleasedPoint = ReleasedPoint;
 	WeightedButtonComponent->PressedPoint = PressedPoint;
+}
+
+void AUOUWeightedButtonActor::OnConstruction(const FTransform& Transform)
+{
+	Super::OnConstruction(Transform);
+
+	ConfigureButtonCollisionLayout();
+	ConfigureButtonCollision();
+}
+
+void AUOUWeightedButtonActor::PostInitializeComponents()
+{
+	Super::PostInitializeComponents();
+
+	if (WeightedButtonComponent != nullptr && ButtonMotionRoot != nullptr)
+	{
+		WeightedButtonComponent->ButtonVisual = ButtonMotionRoot;
+	}
+
+	ConfigureButtonCollisionLayout();
+	ConfigureButtonCollision();
 }
 
 void AUOUWeightedButtonActor::Tick(float DeltaSeconds)
@@ -94,20 +137,76 @@ void AUOUWeightedButtonActor::ApplyPuzzleResult_Implementation(EOUUPuzzleResultA
 	RefreshButtonMotionTickState();
 }
 
+void AUOUWeightedButtonActor::ConfigureButtonCollisionLayout() const
+{
+	if (ButtonSurfaceCollision != nullptr)
+	{
+		ButtonSurfaceCollision->SetBoxExtent(FVector(
+			UOUWeightedButtonActorPrivate::ButtonHalfExtentXY,
+			UOUWeightedButtonActorPrivate::ButtonHalfExtentXY,
+			UOUWeightedButtonActorPrivate::ButtonHalfHeight));
+		ButtonSurfaceCollision->SetRelativeLocation(FVector::ZeroVector);
+		ButtonSurfaceCollision->SetRelativeRotation(FRotator::ZeroRotator);
+	}
+}
+
+void AUOUWeightedButtonActor::ConfigureButtonCollision() const
+{
+	if (WeightSensorVolume != nullptr)
+	{
+		WeightSensorVolume->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+		WeightSensorVolume->SetCollisionResponseToAllChannels(ECR_Ignore);
+		WeightSensorVolume->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
+		WeightSensorVolume->SetCollisionResponseToChannel(ECC_WorldDynamic, ECR_Overlap);
+		WeightSensorVolume->SetCollisionResponseToChannel(ECC_PhysicsBody, ECR_Overlap);
+		WeightSensorVolume->SetCollisionResponseToChannel(ECC_GameTraceChannel1, ECR_Overlap);
+		WeightSensorVolume->SetGenerateOverlapEvents(true);
+	}
+
+	if (ButtonVisual != nullptr)
+	{
+		ButtonVisual->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		ButtonVisual->SetGenerateOverlapEvents(false);
+	}
+
+	ConfigureBlockingCollision(ButtonSurfaceCollision);
+}
+
+void AUOUWeightedButtonActor::ConfigureBlockingCollision(UBoxComponent* CollisionComponent) const
+{
+	if (CollisionComponent == nullptr)
+	{
+		return;
+	}
+
+	CollisionComponent->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+	CollisionComponent->SetCollisionObjectType(ECC_WorldStatic);
+	CollisionComponent->SetCollisionResponseToAllChannels(ECR_Ignore);
+	CollisionComponent->SetCollisionResponseToChannel(ECC_Pawn, ECR_Block);
+	CollisionComponent->SetCollisionResponseToChannel(ECC_WorldDynamic, ECR_Block);
+	CollisionComponent->SetCollisionResponseToChannel(ECC_PhysicsBody, ECR_Block);
+	CollisionComponent->SetCollisionResponseToChannel(ECC_GameTraceChannel1, ECR_Block);
+	CollisionComponent->SetGenerateOverlapEvents(false);
+	CollisionComponent->SetHiddenInGame(true);
+	CollisionComponent->CanCharacterStepUpOn = ECB_Yes;
+	CollisionComponent->SetCanEverAffectNavigation(false);
+}
+
 void AUOUWeightedButtonActor::MoveResultSinkVisual(float DeltaSeconds)
 {
-	if (!bEnableResultSinkMotion || !bResultSinkActive || ButtonVisual == nullptr || ResultSinkPoint == nullptr)
+	USceneComponent* MovingButton = ButtonMotionRoot != nullptr ? ButtonMotionRoot : ButtonVisual;
+	if (!bEnableResultSinkMotion || !bResultSinkActive || MovingButton == nullptr || ResultSinkPoint == nullptr)
 	{
 		return;
 	}
 
 	const FVector NextLocation = FMath::VInterpConstantTo(
-		ButtonVisual->GetComponentLocation(),
+		MovingButton->GetComponentLocation(),
 		ResultSinkPoint->GetComponentLocation(),
 		DeltaSeconds,
 		FMath::Max(0.0f, ResultSinkMoveSpeed));
 
-	ButtonVisual->SetWorldLocation(NextLocation);
+	MovingButton->SetWorldLocation(NextLocation);
 }
 
 void AUOUWeightedButtonActor::RefreshButtonMotionTickState() const

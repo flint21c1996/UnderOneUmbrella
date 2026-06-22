@@ -41,6 +41,21 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PushPull|Rules", meta = (ClampMin = "0.0"))
 	float ReleaseDistanceBuffer = 60.0f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PushPull|Movement", meta = (ClampMin = "0.0", ToolTip = "상자를 잡고 옮기는 동안 플레이어 최대 이동 속도입니다. 기존 속도가 더 낮으면 기존 속도를 유지합니다."))
+	float PushPullWalkSpeed = 250.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PushPull|Movement", meta = (ToolTip = "잡은 순간의 플레이어-상자 수평 기준거리를 유지하도록 상자 속도를 보정합니다. Z축은 보정하지 않습니다."))
+	bool bUseGrabDistanceCorrection = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PushPull|Movement", meta = (ClampMin = "0.0", ToolTip = "기준거리 오차를 상자 보정 속도로 바꾸는 계수입니다. 값이 클수록 거리 차이를 빠르게 줄입니다."))
+	float GrabDistanceCorrectionStrength = 6.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PushPull|Movement", meta = (ClampMin = "0.0", ToolTip = "기준거리 보정으로 추가하거나 줄일 수 있는 최대 수평 속도입니다."))
+	float MaxGrabDistanceCorrectionSpeed = 100.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PushPull|Movement", meta = (ClampMin = "0.0", ToolTip = "이 거리 이하의 기준거리 오차는 보정하지 않습니다."))
+	float GrabDistanceCorrectionDeadZone = 5.0f;
+
 	// 후보를 찾을 때 플레이어 주변을 얼마나 넓게 볼지 정한다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PushPull|Detection", meta = (ClampMin = "0.0"))
 	float CandidateSearchRadius = 90.0f;
@@ -166,6 +181,18 @@ protected:
 	UPROPERTY(Transient)
 	bool bCachedOrientRotationToMovement = true;
 
+	UPROPERTY(Transient)
+	float CachedMaxWalkSpeed = 0.0f;
+
+	UPROPERTY(Transient)
+	bool bHasCachedCharacterMovementSettings = false;
+
+	UPROPERTY(Transient)
+	float GrabbedReferenceDistance2D = 0.0f;
+
+	UPROPERTY(Transient)
+	bool bHasGrabbedReferenceDistance = false;
+
 	// 가장 최근 실패 이유를 화면 디버그로 보여주기 위한 문자열이다.
 	UPROPERTY(Transient)
 	FString LastFailureReason = TEXT("None");
@@ -184,6 +211,12 @@ protected:
 
 	// 잡기 상태를 정리하고 원래 이동 설정을 복구한다.
 	void EndGrab();
+
+	void ApplyGrabbedCharacterMovementSettings(bool bLimitWalkSpeed);
+	void RestoreGrabbedCharacterMovementSettings();
+	void CacheGrabbedReferenceDistance();
+	void ClearGrabbedReferenceDistance();
+	FVector BuildGrabbedObjectVelocity(float BaseMoveSpeed) const;
 
 	// 잡은 동안 캐릭터 방향을 블럭 축에 맞게 보정한다.
 	void ApplyGrabbedRotation() const;
