@@ -136,6 +136,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue|Control")
 	bool bLockMovementDuringDialogueFocus = true;
 
+	// 켜져 있으면 대화 카메라가 켜져 있는 동안 카메라 가림 처리를 함께 켭니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue|Control")
+	bool bEnableCameraOcclusionDuringDialogueFocus = true;
+
 	// 대화 UI가 닫힌 뒤 카메라가 원래 시점으로 돌아가기 전 기다리는 시간입니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue|Control", meta = (ClampMin = "0.0"))
 	float DialogueFocusEndDelay = 0.5f;
@@ -206,4 +210,6 @@ private:
 	FString LastHintDebugStatus = TEXT("None");
 
 	bool bDialogueMovementLocked = false;
+	bool bSavedCameraOcclusionEnabled = false;
+	bool bHasSavedCameraOcclusionEnabled = false;
 };

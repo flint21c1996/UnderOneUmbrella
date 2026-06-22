@@ -16,6 +16,9 @@ struct FOccludedMeshState
 {
 	// 투명 처리 전 원래 머티리얼 배열을 그대로 기억해둔다.
 	TArray<TObjectPtr<UMaterialInterface>> OriginalMaterials;
+
+	// 투명 처리 전 표시 상태를 기억해둔다.
+	bool bWasVisible = true;
 };
 
 // 8방향 스냅 카메라와 줌, 가림 처리를 한 번에 관리하는 카메라 전용 컴포넌트다.
@@ -63,6 +66,12 @@ public:
 
 	// 통합 플레이어 디버그 HUD에서 현재 가림 처리 중인 메시 수를 확인합니다.
 	int32 GetOccludedMeshCount() const { return OccludedMeshStates.Num(); }
+
+	UFUNCTION(BlueprintCallable, Category = "Camera|Occlusion")
+	void SetCameraOcclusionEnabled(bool bNewEnabled);
+
+	UFUNCTION(BlueprintPure, Category = "Camera|Occlusion")
+	bool IsCameraOcclusionEnabled() const { return bCameraOcclusionEnabled; }
 
 	UFUNCTION(BlueprintCallable, Category = "Camera|Dialogue")
 	void StartDialogueFocus(AActor* SpeakerActor);
@@ -125,6 +134,14 @@ protected:
 	// 가림 메시를 탐지할 때 쓰는 구체 반경이다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Camera|Occlusion", meta = (ClampMin = "0.0"))
 	float OcclusionProbeRadius = 12.0f;
+
+	// 카메라와 플레이어 사이 가림 처리를 사용할지 정한다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Camera|Occlusion")
+	bool bCameraOcclusionEnabled = false;
+
+	// 한 번에 투명 처리할 최대 메시 수입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Camera|Occlusion", meta = (ClampMin = "1"))
+	int32 MaxOccludedMeshCount = 4;
 
 	// 플레이어 중심보다 약간 위를 가림 탐지 기준으로 보정한다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Camera|Occlusion")
