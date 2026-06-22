@@ -34,7 +34,7 @@ private:
 
 	// Start 버튼을 눌렀을 때 넘어갈 임시 플레이 맵입니다.
 	UPROPERTY(EditDefaultsOnly, Config, Category = "Title")
-	TSoftObjectPtr<UWorld> TestLevel;
+	TSoftObjectPtr<UWorld> nextLevel;
 
 	// 타이틀 화면에 띄울 WBP_TitleMenu 클래스입니다.
 	UPROPERTY(EditDefaultsOnly, Config, Category = "Title")

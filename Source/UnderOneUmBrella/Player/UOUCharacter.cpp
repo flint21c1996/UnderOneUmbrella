@@ -8,6 +8,7 @@
 #include "Components/CapsuleComponent.h"
 #include "Components/PrimitiveComponent.h"
 #include "Components/SceneComponent.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "Debug/UOUDebugSubsystem.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
@@ -119,6 +120,13 @@ AUOUCharacter::AUOUCharacter()
 	UmbrellaHeldVisualAnchor->SetRelativeRotation(FRotator::ZeroRotator);
 	UmbrellaHeldVisualAnchor->ArrowSize = 0.6f;
 	UmbrellaHeldVisualAnchor->ArrowColor = FColor::Cyan;
+
+	UmbrellaSkeletalVisual = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("UmbrellaSkeletalVisual"));
+	UmbrellaSkeletalVisual->SetupAttachment(GetMesh());
+	UmbrellaSkeletalVisual->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	UmbrellaSkeletalVisual->SetGenerateOverlapEvents(false);
+	UmbrellaSkeletalVisual->SetCastShadow(false);
+	UmbrellaSkeletalVisual->SetVisibility(false, true);
 
 	PourOrigin = CreateDefaultSubobject<UArrowComponent>(TEXT("PourOrigin"));
 	PourOrigin->SetupAttachment(UmbrellaHeldVisualAnchor);

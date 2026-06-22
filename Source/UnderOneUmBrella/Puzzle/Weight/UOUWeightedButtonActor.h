@@ -52,10 +52,17 @@ public:
 	void ToggleResultSink();
 
 protected:
+	// 에디터와 런타임에서 버튼 충돌 배치를 최신 설정으로 맞춥니다.
+	virtual void OnConstruction(const FTransform& Transform) override;
+
+	// 버튼 누름 컴포넌트가 실제로 움직일 루트를 참조하도록 연결합니다.
+	virtual void PostInitializeComponents() override;
+
 	// 시작 시 표면 추적 기준 위치를 잡고 버튼 이동을 준비합니다.
 	virtual void BeginPlay() override;
 
 	// 버튼 비주얼 침하와 표면 추적 이동을 매 프레임 갱신합니다.
+	// 버튼 비주얼이 침하 위치로 이동하는 연출을 매 프레임 갱신합니다.
 	virtual void Tick(float DeltaSeconds) override;
 
 	// 버튼 액터 전체의 기준 루트입니다.
@@ -69,6 +76,12 @@ protected:
 	// 실제 화면에 보이는 버튼 메쉬입니다.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Puzzle")
 	TObjectPtr<UStaticMeshComponent> ButtonVisual = nullptr;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Puzzle")
+	TObjectPtr<USceneComponent> ButtonMotionRoot = nullptr;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Puzzle")
+	TObjectPtr<UBoxComponent> ButtonSurfaceCollision = nullptr;
 
 	// 버튼이 눌리지 않았을 때 ButtonVisual이 돌아갈 기준 위치입니다.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Puzzle")
@@ -135,6 +148,10 @@ protected:
 	bool bSurfaceFollowOffsetCaptured = false;
 
 private:
+	void ConfigureButtonCollisionLayout() const;
+	void ConfigureButtonCollision() const;
+	void ConfigureBlockingCollision(UBoxComponent* CollisionComponent) const;
+
 	// 침하 상태에 따라 ButtonVisual을 ResultSinkPoint 쪽으로 보간 이동합니다.
 	void MoveResultSinkVisual(float DeltaSeconds);
 

@@ -271,6 +271,8 @@ void UUOUWaterBasinRotationReactionComponent::ResetRotationReaction(bool bResetO
 
 	TargetAngleDegrees = 0.0f;
 	CurrentAppliedAngleDegrees = 0.0f;
+	AccumulatedInputStepVolume = 0.0f;
+	CurrentInputStepIndex = 0;
 	if (bApplyBaseRotation)
 	{
 		ApplyRotationAngle(CurrentAppliedAngleDegrees);
@@ -327,7 +329,8 @@ void UUOUWaterBasinRotationReactionComponent::OnWaterBasinReactionStateUpdated_I
 	}
 
 	const float CurrentValue = Context.CurrentValue;
-	if (RotationMode == EUOUWaterBasinRotationReactionMode::IncrementalOnWaterInput)
+	if (RotationMode == EUOUWaterBasinRotationReactionMode::IncrementalOnWaterInput
+		|| RotationMode == EUOUWaterBasinRotationReactionMode::StepOnAccumulatedWaterInput)
 	{
 		LastObservedValue = CurrentValue;
 		bHasObservedValue = true;
@@ -383,6 +386,7 @@ void UUOUWaterBasinRotationReactionComponent::OnWaterBasinReactionStateUpdated_I
 void UUOUWaterBasinRotationReactionComponent::HandleWaterInputReceived(UUOUWaterBasinTargetComponent* Target, const FUOUWaterBasinInputContext& InputContext)
 {
 	const bool bRotateByEveryWaterInput = RotationMode == EUOUWaterBasinRotationReactionMode::IncrementalOnWaterInput;
+	const bool bRotateByAccumulatedWaterInputStep = RotationMode == EUOUWaterBasinRotationReactionMode::StepOnAccumulatedWaterInput;
 	const bool bCanRotateByFullWaterInput = RotationMode == EUOUWaterBasinRotationReactionMode::IncrementalOnIncrease
 		|| RotationMode == EUOUWaterBasinRotationReactionMode::IncrementalOnWaterChange;
 	const bool bRotateByFullWaterInput = bCanRotateByFullWaterInput && bRotateOnFullWaterInput;
@@ -391,7 +395,7 @@ void UUOUWaterBasinRotationReactionComponent::HandleWaterInputReceived(UUOUWater
 		return;
 	}
 
-	if ((!bRotateByEveryWaterInput && !bRotateByFullWaterInput)
+	if ((!bRotateByEveryWaterInput && !bRotateByAccumulatedWaterInputStep && !bRotateByFullWaterInput)
 		|| Target == nullptr
 		|| InputContext.Volume <= 0.0f)
 	{
@@ -425,6 +429,33 @@ void UUOUWaterBasinRotationReactionComponent::HandleWaterInputReceived(UUOUWater
 	CacheInputSideDebug(InputContext, RotationSign);
 	if (FMath::IsNearlyZero(RotationSign))
 	{
+		return;
+	}
+
+	if (bRotateByAccumulatedWaterInputStep)
+	{
+		const float SafeInputVolumePerStep = FMath::Max(InputVolumePerStep, KINDA_SMALL_NUMBER);
+		const int32 SafeMaxStepsPerInput = FMath::Max(MaxInputStepsPerWaterInput, 1);
+		AccumulatedInputStepVolume += InputContext.Volume * RotationSign;
+
+		int32 AppliedStepCount = 0;
+		while (AppliedStepCount < SafeMaxStepsPerInput
+			&& FMath::Abs(AccumulatedInputStepVolume) >= SafeInputVolumePerStep)
+		{
+			const float StepSign = AccumulatedInputStepVolume > 0.0f ? 1.0f : -1.0f;
+			SetTargetRotationAngle(TargetAngleDegrees + (DegreesPerInputStep * StepSign));
+			CurrentInputStepIndex += StepSign > 0.0f ? 1 : -1;
+			++AppliedStepCount;
+
+			if (!bCarryInputStepRemainder)
+			{
+				AccumulatedInputStepVolume = 0.0f;
+				break;
+			}
+
+			AccumulatedInputStepVolume -= SafeInputVolumePerStep * StepSign;
+		}
+
 		return;
 	}
 
@@ -854,13 +885,21 @@ void UUOUWaterBasinRotationReactionComponent::DrawInputSideDebug() const
 
 	if (bDrawInputSideDebugLabel)
 	{
+		const FString StepDebugText = RotationMode == EUOUWaterBasinRotationReactionMode::StepOnAccumulatedWaterInput
+			? FString::Printf(
+				TEXT("\n누적 입력: %.2f / %.2f\n단계: %d"),
+				AccumulatedInputStepVolume,
+				FMath::Max(InputVolumePerStep, 0.0f),
+				CurrentInputStepIndex)
+			: FString();
 		const FString DebugText = FString::Printf(
-			TEXT("물 입력\n출처: %s\n부피: %.2f\n좌우: %s %.2f\n부호: %.0f"),
+			TEXT("물 입력\n출처: %s\n부피: %.2f\n좌우: %s %.2f\n부호: %.0f%s"),
 			GetInputSourceDebugName(LastInputSideDebugSource),
 			LastInputSideDebugVolume,
 			SideName,
 			SideValue,
-			LastInputSideDebugRotationSign);
+			LastInputSideDebugRotationSign,
+			*StepDebugText);
 		DrawDebugString(
 			World,
 			InputLocation + FVector(0.0f, 0.0f, SphereRadius * 2.0f),

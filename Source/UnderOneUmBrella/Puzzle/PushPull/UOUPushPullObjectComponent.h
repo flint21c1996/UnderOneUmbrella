@@ -32,7 +32,40 @@ public:
 
 	// 수평 방향 최대 이동 속도입니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Puzzle|PushPull", meta = (ClampMin = "0.0"))
-	float MaxHorizontalSpeed = 250.0f;
+	float MaxHorizontalSpeed = 300.0f;
+
+	// 낮은 단차에 닿았을 때 수직 속도를 보조해 물리 상자가 턱을 넘을 수 있게 합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Puzzle|PushPull|Step", meta = (ToolTip = "켜져 있으면 Push/Pull 이동 중 낮은 단차를 감지해 상자가 살짝 올라가도록 수직 속도를 보조합니다."))
+	bool bEnableLowStepAssist = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Puzzle|PushPull|Step", meta = (ClampMin = "0.0", ToolTip = "이 높이 이하의 단차만 이동 가능한 낮은 단차로 봅니다."))
+	float MaxStepAssistHeight = 45.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Puzzle|PushPull|Step", meta = (ClampMin = "0.0", ToolTip = "상자 전방에서 단차를 찾기 위해 추가로 확인하는 거리입니다."))
+	float StepAssistProbeDistance = 20.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Puzzle|PushPull|Step", meta = (ClampMin = "0.0", ToolTip = "낮은 단차를 넘을 때 적용할 최대 수직 보조 속도입니다."))
+	float StepAssistLiftSpeed = 240.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Puzzle|PushPull|Step", meta = (ClampMin = "0.0", ToolTip = "이 수평 속도보다 느리면 단차 보조를 적용하지 않습니다."))
+	float StepAssistMinHorizontalSpeed = 20.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Puzzle|PushPull|Rotation", meta = (ToolTip = "켜져 있으면 Push/Pull 중 박스의 Pitch/Roll/Yaw 회전을 잠그고 Pitch/Roll을 0으로 안정화합니다. 낮은 단차는 Step Assist로 넘습니다."))
+	bool bLockRotationWhileGrabbed = true;
+
+	// 잡고 이동하는 동안 회전이 과하게 튀지 않도록 각속도를 제한합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Puzzle|PushPull|Rotation", meta = (ToolTip = "켜져 있으면 Push/Pull 중 X/Y 회전 각속도를 제한하고 Z 회전 각속도는 제거합니다."))
+	bool bClampGrabbedAngularVelocity = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Puzzle|PushPull|Rotation", meta = (ClampMin = "0.0", ToolTip = "Push/Pull 중 적용할 각감쇠입니다. 값이 클수록 회전이 빠르게 안정됩니다."))
+	float GrabbedAngularDamping = 45.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Puzzle|PushPull|Rotation", meta = (ClampMin = "0.0", ToolTip = "Push/Pull 중 허용할 최대 X/Y 각속도입니다. 0이면 각속도 제한을 끕니다."))
+	float MaxGrabbedAngularSpeedDegrees = 90.0f;
+
+	// 끄면 물담기/무게 기능은 유지하되 Push/Pull 잡기와 이동만 비활성화합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Puzzle|PushPull")
+	bool bEnablePushPullMovement = true;
 
 	// 현재 이 오브젝트가 잡혀 있는지 저장합니다.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Puzzle|Runtime")
@@ -49,6 +82,13 @@ public:
 	// 현재 잡고 있는 상태를 종료하고 제약을 원래대로 돌립니다.
 	UFUNCTION(BlueprintCallable, Category = "Puzzle|PushPull")
 	void EndGrab(AActor* Interactor);
+
+	// 런타임에서 Push/Pull 이동 허용 여부를 바꿉니다. 꺼지는 순간 잡기 상태도 정리합니다.
+	UFUNCTION(BlueprintCallable, Category = "Puzzle|PushPull")
+	void SetPushPullMovementEnabled(bool bEnabled);
+
+	UFUNCTION(BlueprintPure, Category = "Puzzle|PushPull")
+	bool IsPushPullMovementEnabled() const { return bEnablePushPullMovement; }
 
 	// 수평 속도를 적용하면서 최대 속도를 넘지 않도록 정리합니다.
 	UFUNCTION(BlueprintCallable, Category = "Puzzle|PushPull")
@@ -75,6 +115,21 @@ protected:
 	UPROPERTY(Transient)
 	bool bBaseLockYTranslation = false;
 
+	UPROPERTY(Transient)
+	bool bBaseLockXRotation = false;
+
+	UPROPERTY(Transient)
+	bool bBaseLockYRotation = false;
+
+	UPROPERTY(Transient)
+	bool bBaseLockZRotation = false;
+
+	UPROPERTY(Transient)
+	float BaseLinearDamping = 0.0f;
+
+	UPROPERTY(Transient)
+	float BaseAngularDamping = 0.0f;
+
 	// 제어할 프리미티브를 자동 탐색하거나 직접 참조를 확인합니다.
 	void ResolveTargetPrimitive();
 
@@ -83,6 +138,12 @@ protected:
 
 	// 잡힘 상태에 맞춰 수평 이동 가능 여부를 바꿉니다.
 	void ApplyGrabStateConstraints(bool bCanMoveHorizontally);
+
+	bool ApplyLowStepAssist(const FVector& HorizontalVelocity) const;
+	bool TryFindLowStepAhead(const FVector& MoveDirection, float& OutStepHeight) const;
+	bool TraceLowStepAtProbeLocation(const FVector& ProbeLocation, float CurrentBottomZ, float& OutStepHeight) const;
+	void StabilizeGrabbedRotation() const;
+	void ClampGrabbedAngularVelocity() const;
 
 	// 놓을 때 남아 있는 수평 속도를 정리합니다.
 	void StopHorizontalMotion();

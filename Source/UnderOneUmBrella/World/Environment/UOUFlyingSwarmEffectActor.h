@@ -398,6 +398,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Paper Plane Swarm|Target", meta = (ToolTip = "활성화 중 TargetActor 위치를 계속 따라갈지 정합니다. 끄면 Activate 시점의 목표 위치를 유지합니다."))
 	bool bFollowTarget = true;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Paper Plane Swarm|Target", meta = (ToolTip = "켜면 TargetActor의 회전을 궤도 기준축으로 사용합니다. 끄면 목표 위치만 따라가고 궤도는 월드 축 기준으로 유지합니다."))
+	bool bUseTargetRotationForOrbit = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Paper Plane Swarm|Target", meta = (ToolTip = "켜면 TargetLocalOffset 계산에 TargetActor의 스케일을 반영합니다. 끄면 대상 스케일이 바뀌어도 오프셋 거리는 유지됩니다."))
+	bool bUseTargetScaleForOffset = false;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Paper Plane Swarm|Shape", meta = (ClampMin = "0", ToolTip = "Niagara가 생성할 종이비행기 수입니다. Niagara의 Spawn Burst Count에 이 값을 연결합니다."))
 	int32 PlaneCount = 50;
 
@@ -639,8 +645,9 @@ private:
 
 	FTransform ResolveSourceTransform() const;
 	FTransform ResolveTargetTransform() const;
-	FTransform ResolveReferenceTransform(const AActor* ReferenceActor, FName SocketName, const FVector& LocalOffset) const;
+	FTransform ResolveReferenceTransform(const AActor* ReferenceActor, FName SocketName, const FVector& LocalOffset, bool bUseReferenceScaleForOffset) const;
 	AActor* ResolveTargetActor() const;
+	void ResolveTargetOrbitAxes(const FTransform& TargetTransform, FVector& OutForward, FVector& OutRight, FVector& OutUp) const;
 
 	static FVector GetSafeTransformAxis(const FTransform& Transform, EAxis::Type Axis, const FVector& Fallback);
 };

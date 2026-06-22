@@ -8,6 +8,7 @@
 
 class AUOUCharacter;
 class UUOUInteractionComponent;
+class UUOUCrankComponent;
 class UUOUPushPullObjectComponent;
 class UUOUUmbrellaComponent;
 
@@ -40,6 +41,21 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PushPull|Rules", meta = (ClampMin = "0.0"))
 	float ReleaseDistanceBuffer = 60.0f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PushPull|Movement", meta = (ClampMin = "0.0", ToolTip = "상자를 잡고 옮기는 동안 플레이어 최대 이동 속도입니다. 기존 속도가 더 낮으면 기존 속도를 유지합니다."))
+	float PushPullWalkSpeed = 250.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PushPull|Movement", meta = (ToolTip = "잡은 순간의 플레이어-상자 수평 기준거리를 유지하도록 상자 속도를 보정합니다. Z축은 보정하지 않습니다."))
+	bool bUseGrabDistanceCorrection = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PushPull|Movement", meta = (ClampMin = "0.0", ToolTip = "기준거리 오차를 상자 보정 속도로 바꾸는 계수입니다. 값이 클수록 거리 차이를 빠르게 줄입니다."))
+	float GrabDistanceCorrectionStrength = 6.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PushPull|Movement", meta = (ClampMin = "0.0", ToolTip = "기준거리 보정으로 추가하거나 줄일 수 있는 최대 수평 속도입니다."))
+	float MaxGrabDistanceCorrectionSpeed = 100.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PushPull|Movement", meta = (ClampMin = "0.0", ToolTip = "이 거리 이하의 기준거리 오차는 보정하지 않습니다."))
+	float GrabDistanceCorrectionDeadZone = 5.0f;
+
 	// 후보를 찾을 때 플레이어 주변을 얼마나 넓게 볼지 정한다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PushPull|Detection", meta = (ClampMin = "0.0"))
 	float CandidateSearchRadius = 90.0f;
@@ -68,13 +84,19 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "PushPull|Runtime")
 	TObjectPtr<UUOUPushPullObjectComponent> CurrentCandidateObject = nullptr;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "PushPull|Runtime")
+	TObjectPtr<UUOUCrankComponent> CurrentCandidateCrank = nullptr;
+
 	// 실제로 잡고 있는 오브젝트다.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "PushPull|Runtime")
 	TObjectPtr<UUOUPushPullObjectComponent> GrabbedObject = nullptr;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "PushPull|Runtime")
+	TObjectPtr<UUOUCrankComponent> GrabbedCrank = nullptr;
+
 	// 지금 잡고 있는 오브젝트가 있는지 빠르게 확인한다.
 	UFUNCTION(BlueprintPure, Category = "PushPull")
-	bool IsGrabbing() const { return GrabbedObject != nullptr; }
+	bool IsGrabbing() const { return GrabbedObject != nullptr || GrabbedCrank != nullptr; }
 
 	// 잡고 있는 동안에는 점프를 막기 위해 쓰는 헬퍼다.
 	UFUNCTION(BlueprintPure, Category = "PushPull")
@@ -96,9 +118,15 @@ public:
 	UFUNCTION(BlueprintPure, Category = "PushPull|Debug")
 	UUOUPushPullObjectComponent* GetCurrentCandidateObject() const { return CurrentCandidateObject; }
 
+	UFUNCTION(BlueprintPure, Category = "PushPull|Debug")
+	UUOUCrankComponent* GetCurrentCandidateCrank() const { return CurrentCandidateCrank; }
+
 	// 통합 플레이어 디버그 HUD에서 실제 잡은 대상을 읽기 위한 접근자입니다.
 	UFUNCTION(BlueprintPure, Category = "PushPull|Debug")
 	UUOUPushPullObjectComponent* GetGrabbedObject() const { return GrabbedObject; }
+
+	UFUNCTION(BlueprintPure, Category = "PushPull|Debug")
+	UUOUCrankComponent* GetGrabbedCrank() const { return GrabbedCrank; }
 
 	// 통합 플레이어 디버그 HUD에서 grab 입력 유지 상태를 읽기 위한 접근자입니다.
 	UFUNCTION(BlueprintPure, Category = "PushPull|Debug")
@@ -153,6 +181,18 @@ protected:
 	UPROPERTY(Transient)
 	bool bCachedOrientRotationToMovement = true;
 
+	UPROPERTY(Transient)
+	float CachedMaxWalkSpeed = 0.0f;
+
+	UPROPERTY(Transient)
+	bool bHasCachedCharacterMovementSettings = false;
+
+	UPROPERTY(Transient)
+	float GrabbedReferenceDistance2D = 0.0f;
+
+	UPROPERTY(Transient)
+	bool bHasGrabbedReferenceDistance = false;
+
 	// 가장 최근 실패 이유를 화면 디버그로 보여주기 위한 문자열이다.
 	UPROPERTY(Transient)
 	FString LastFailureReason = TEXT("None");
@@ -171,6 +211,12 @@ protected:
 
 	// 잡기 상태를 정리하고 원래 이동 설정을 복구한다.
 	void EndGrab();
+
+	void ApplyGrabbedCharacterMovementSettings(bool bLimitWalkSpeed);
+	void RestoreGrabbedCharacterMovementSettings();
+	void CacheGrabbedReferenceDistance();
+	void ClearGrabbedReferenceDistance();
+	FVector BuildGrabbedObjectVelocity(float BaseMoveSpeed) const;
 
 	// 잡은 동안 캐릭터 방향을 블럭 축에 맞게 보정한다.
 	void ApplyGrabbedRotation() const;
@@ -192,9 +238,11 @@ protected:
 
 	// 주변 오브젝트 중 가장 적합한 밀고 당기기 후보를 찾는다.
 	UUOUPushPullObjectComponent* FindBestCandidate() const;
+	UUOUCrankComponent* FindBestCrankCandidate() const;
 
 	// 후보 탐색의 중심 위치를 계산한다.
 	FVector GetDetectionOriginLocation() const;
+	FVector GetGrabbedReferenceLocation() const;
 
 	// 플레이어 방향과 가장 잘 맞는 축을 고르기 위한 보조 함수다.
 	static void CheckBetterAxis(const FVector& Axis, const FVector& ToPlayer, FVector& BestAxis, float& BestDot);
