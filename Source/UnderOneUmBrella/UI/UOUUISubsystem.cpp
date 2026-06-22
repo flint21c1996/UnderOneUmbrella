@@ -9,7 +9,7 @@
 
 namespace
 {
-	FText NormalizeDialogueDisplayText(const FText& SourceText)
+	FText NormalizeUIDialogueDisplayText(const FText& SourceText)
 	{
 		if (SourceText.IsEmpty())
 		{
@@ -28,8 +28,8 @@ namespace
 	FUOUDialogueLine NormalizeDialogueLineForDisplay(const FUOUDialogueLine& SourceLine)
 	{
 		FUOUDialogueLine DisplayLine = SourceLine;
-		DisplayLine.BubbleText = NormalizeDialogueDisplayText(SourceLine.BubbleText);
-		DisplayLine.DialogueText = NormalizeDialogueDisplayText(SourceLine.DialogueText);
+		DisplayLine.BubbleText = NormalizeUIDialogueDisplayText(SourceLine.BubbleText);
+		DisplayLine.DialogueText = NormalizeUIDialogueDisplayText(SourceLine.DialogueText);
 		return DisplayLine;
 	}
 }
