@@ -16,8 +16,15 @@ class UNDERONEUMBRELLA_API UUOUUmbrellaCoverVolumeComponent : public UBoxCompone
 public:
 	UUOUUmbrellaCoverVolumeComponent();
 
+protected:
+	virtual void OnRegister() override;
+
+public:
 	// 대화 커버 판정에 사용할 수 있는 상태인지 확인합니다.
-	// 에디터에서 컴포넌트를 꺼두거나 충돌을 꺼두면 커버 판정에서 제외됩니다.
+	// 실제 충돌 이벤트가 아니라 컴포넌트 bounds를 직접 비교하므로 등록/활성 상태만 확인합니다.
 	UFUNCTION(BlueprintPure, Category = "Umbrella|Dialogue Cover")
 	bool CanUseForDialogueCover() const;
+
+private:
+	void ApplyDialogueCoverCollisionSettings();
 };
