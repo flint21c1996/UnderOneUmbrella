@@ -28,6 +28,10 @@ struct FOUUPuzzleResultBinding
 	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Puzzle")
 	EOUUPuzzleResultAction SatisfiedAction = EOUUPuzzleResultAction::Activate;
 
+	// 조건이 만족된 뒤 결과 액션을 몇 초 늦게 실행할지 정합니다.
+	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Puzzle", meta = (ClampMin = "0.0", DisplayName = "Satisfied Delay Seconds"))
+	float SatisfiedDelaySeconds = 0.0f;
+
 	// 조건 만족 결과를 한 번만 보낼지 정합니다.
 	// 버튼을 다시 눌러도 같은 결과 액터가 다음 단계로 또 진행되지 않게 막을 때 사용합니다.
 	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Puzzle")
@@ -40,6 +44,10 @@ struct FOUUPuzzleResultBinding
 	// 조건이 해제되었을 때 대상 액터에 전달할 액션입니다.
 	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Puzzle")
 	EOUUPuzzleResultAction UnsatisfiedAction = EOUUPuzzleResultAction::Deactivate;
+
+	// 조건이 풀린 뒤 결과 액션을 몇 초 늦게 실행할지 정합니다.
+	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Puzzle", meta = (ClampMin = "0.0", DisplayName = "Unsatisfied Delay Seconds"))
+	float UnsatisfiedDelaySeconds = 0.0f;
 
 	// 켜져 있으면 만족 결과 액션이 완료된 뒤에는 불만족 액션을 보내지 않습니다.
 	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Puzzle")
@@ -153,6 +161,7 @@ protected:
 	void DispatchResultBindings(bool bSatisfied);
 
 	// 개별 결과 액터 하나에 액션을 전달합니다.
+	bool DispatchOrScheduleResultAction(AActor* TargetActor, EOUUPuzzleResultAction Action, float DelaySeconds);
 	bool ExecuteResultAction(AActor* TargetActor, EOUUPuzzleResultAction Action) const;
 	bool ShouldSkipSatisfiedAction(const FOUUPuzzleResultBinding& Binding) const;
 	bool ShouldSkipUnsatisfiedAction(const FOUUPuzzleResultBinding& Binding) const;

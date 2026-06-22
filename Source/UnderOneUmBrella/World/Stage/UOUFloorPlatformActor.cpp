@@ -241,6 +241,10 @@ void AUOUFloorPlatformActor::ResetPlatform()
 	MoveElapsedTime = 0.0f;
 	PendingSequentialMoveCount = 0;
 	ActiveMoveTargetMarker = nullptr;
+	ActiveMoveTargetIndex = INDEX_NONE;
+	LastArrivedMoveStepIndex = INDEX_NONE;
+	SetPuzzleResultCompletionState(EOUUPuzzleResultAction::Activate, false);
+	SetPuzzleResultCompletionState(EOUUPuzzleResultAction::Deactivate, true);
 	ResetRuntimeStepIndex();
 	if (StepComponent != nullptr)
 	{
@@ -301,6 +305,10 @@ void AUOUFloorPlatformActor::SnapToTarget()
 	MoveElapsedTime = MoveDuration;
 	PendingSequentialMoveCount = 0;
 	ActiveMoveTargetMarker = nullptr;
+	ActiveMoveTargetIndex = INDEX_NONE;
+	LastArrivedMoveStepIndex = SnapTargetIndex;
+	SetPuzzleResultCompletionState(EOUUPuzzleResultAction::Activate, true);
+	SetPuzzleResultCompletionState(EOUUPuzzleResultAction::Deactivate, false);
 	if (StepComponent != nullptr)
 	{
 		StepComponent->ClearReturnToStartRequest();
@@ -440,6 +448,21 @@ bool AUOUFloorPlatformActor::IsAtTarget() const
 	return bIsAtTarget;
 }
 
+int32 AUOUFloorPlatformActor::GetLastArrivedMoveStepIndex() const
+{
+	return LastArrivedMoveStepIndex;
+}
+
+bool AUOUFloorPlatformActor::IsAtMoveStepIndex(int32 StepIndex, bool bRequireNotMoving) const
+{
+	if (StepIndex == INDEX_NONE || LastArrivedMoveStepIndex != StepIndex)
+	{
+		return false;
+	}
+
+	return !bRequireNotMoving || !bIsMoving;
+}
+
 void AUOUFloorPlatformActor::ApplyPuzzleResult_Implementation(EOUUPuzzleResultAction Action)
 {
 	// 퍼즐 결과는 플랫폼 기준에서 필요한 동작으로만 해석합니다.
@@ -471,6 +494,61 @@ void AUOUFloorPlatformActor::ApplyPuzzleResult_Implementation(EOUUPuzzleResultAc
 	default:
 		break;
 	}
+}
+
+bool AUOUFloorPlatformActor::IsPuzzleResultCompleted_Implementation(EOUUPuzzleResultAction Action) const
+{
+	switch (Action)
+	{
+	case EOUUPuzzleResultAction::Activate:
+		return bActivateResultCompleted;
+	case EOUUPuzzleResultAction::Deactivate:
+		return bDeactivateResultCompleted;
+	case EOUUPuzzleResultAction::Toggle:
+		return bActivateResultCompleted || bDeactivateResultCompleted;
+	case EOUUPuzzleResultAction::None:
+	case EOUUPuzzleResultAction::Pause:
+	case EOUUPuzzleResultAction::Resume:
+	default:
+		return false;
+	}
+}
+
+FOnUOUPuzzleResultCompletionStateChangedNativeSignature*
+AUOUFloorPlatformActor::GetPuzzleResultCompletionStateChangedEvent()
+{
+	return &OnPuzzleResultCompletionStateChanged;
+}
+
+void AUOUFloorPlatformActor::SetPuzzleResultCompletionState(
+	EOUUPuzzleResultAction Action,
+	bool bNewCompleted)
+{
+	bool* TargetState = nullptr;
+
+	switch (Action)
+	{
+	case EOUUPuzzleResultAction::Activate:
+		TargetState = &bActivateResultCompleted;
+		break;
+	case EOUUPuzzleResultAction::Deactivate:
+		TargetState = &bDeactivateResultCompleted;
+		break;
+	case EOUUPuzzleResultAction::None:
+	case EOUUPuzzleResultAction::Pause:
+	case EOUUPuzzleResultAction::Resume:
+	case EOUUPuzzleResultAction::Toggle:
+	default:
+		return;
+	}
+
+	if (*TargetState == bNewCompleted)
+	{
+		return;
+	}
+
+	*TargetState = bNewCompleted;
+	OnPuzzleResultCompletionStateChanged.Broadcast(Action, bNewCompleted);
 }
 
 #if WITH_EDITOR
@@ -518,10 +596,14 @@ void AUOUFloorPlatformActor::FinishMoveToTarget()
 	const bool bShouldContinueFromArrivedMarker = ActiveMoveTargetMarker != nullptr
 		&& ActiveMoveTargetMarker->bContinueToNextStepOnArrival;
 	ActiveMoveTargetMarker = nullptr;
+	LastArrivedMoveStepIndex = ActiveMoveTargetIndex;
+	ActiveMoveTargetIndex = INDEX_NONE;
 
 	bIsMoving = false;
 	bIsAtTarget = true;
 	MoveElapsedTime = MoveDuration;
+	SetPuzzleResultCompletionState(EOUUPuzzleResultAction::Activate, true);
+	SetPuzzleResultCompletionState(EOUUPuzzleResultAction::Deactivate, false);
 
 #if WITH_EDITOR
 	bIsApplyingEditorTransform = true;
@@ -620,7 +702,10 @@ void AUOUFloorPlatformActor::AdvanceSequentialTargetIndex()
 		RuntimeSequentialTargetIndex);
 }
 
-bool AUOUFloorPlatformActor::BeginMoveToTransform(const FTransform& InTargetTransform, AUOUFloorPlatformTargetActor* TargetMarker)
+bool AUOUFloorPlatformActor::BeginMoveToTransform(
+	const FTransform& InTargetTransform,
+	AUOUFloorPlatformTargetActor* TargetMarker,
+	int32 TargetStepIndex)
 {
 	if (bIsMoving)
 	{
@@ -629,6 +714,7 @@ bool AUOUFloorPlatformActor::BeginMoveToTransform(const FTransform& InTargetTran
 
 	CacheActiveMoveSettings(TargetMarker);
 	ActiveMoveTargetMarker = TargetMarker;
+	ActiveMoveTargetIndex = TargetStepIndex;
 
 	RefreshCurrentMovementBaseRelativeTransform();
 	MoveStartTransform = GetActorTransform();
@@ -639,6 +725,8 @@ bool AUOUFloorPlatformActor::BeginMoveToTransform(const FTransform& InTargetTran
 	bIsMoving = true;
 	bIsAtTarget = false;
 	MoveElapsedTime = 0.0f;
+	SetPuzzleResultCompletionState(EOUUPuzzleResultAction::Activate, false);
+	SetPuzzleResultCompletionState(EOUUPuzzleResultAction::Deactivate, false);
 	ApplyTargetCollisionState();
 	if (CarryComponent != nullptr)
 	{
@@ -675,6 +763,9 @@ bool AUOUFloorPlatformActor::TryStartQueuedSequentialMove()
 	if (GetActorTransform().Equals(ResolveMoveTargetWorldTransform(NextTargetTransform, NextTargetMarker)))
 	{
 		PendingSequentialMoveCount = 0;
+		LastArrivedMoveStepIndex = NextTargetIndex;
+		SetPuzzleResultCompletionState(EOUUPuzzleResultAction::Activate, true);
+		OnMoveFinished.Broadcast(this);
 		return false;
 	}
 
@@ -685,7 +776,7 @@ bool AUOUFloorPlatformActor::TryStartQueuedSequentialMove()
 	}
 
 	--PendingSequentialMoveCount;
-	return BeginMoveToTransform(NextTargetTransform, NextTargetMarker);
+	return BeginMoveToTransform(NextTargetTransform, NextTargetMarker, NextTargetIndex);
 }
 
 FTransform AUOUFloorPlatformActor::BuildActivePlatformTransformAtAlpha(float Alpha) const

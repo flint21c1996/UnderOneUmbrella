@@ -209,6 +209,12 @@ void UUOUCameraControllerComponent::UpdateSnapCamera(float DeltaSeconds)
 	const float NextDistance = FMath::FInterpTo(CameraBoom->TargetArmLength, TargetCameraDistance, DeltaSeconds, CameraZoomInterpSpeed);
 	CameraBoom->TargetArmLength = NextDistance;
 
+	if (FollowCamera != nullptr && FollowCamera->ProjectionMode == ECameraProjectionMode::Orthographic)
+	{
+		const float NextOrthoWidth = FMath::FInterpTo(FollowCamera->OrthoWidth, OrthographicWidth, DeltaSeconds, CameraZoomInterpSpeed);
+		FollowCamera->SetOrthoWidth(FMath::Max(1.0f, NextOrthoWidth));
+	}
+
 	CameraBoom->TargetOffset = FMath::VInterpTo(CameraBoom->TargetOffset, TargetCameraOffset, DeltaSeconds, CameraRotationInterpSpeed);
 }
 
@@ -253,7 +259,16 @@ void UUOUCameraControllerComponent::UpdateDialogueCamera(float DeltaSeconds)
 	TargetCameraOffset = FocusLocation - Owner->GetActorLocation();
 	CameraBoom->TargetOffset = FMath::VInterpTo(CameraBoom->TargetOffset, TargetCameraOffset, DeltaSeconds, DialogueCameraInterpSpeed);
 	CameraBoom->SetWorldRotation(FMath::RInterpTo(CameraBoom->GetComponentRotation(), DesiredRotation, DeltaSeconds, DialogueCameraInterpSpeed));
-	CameraBoom->TargetArmLength = FMath::FInterpTo(CameraBoom->TargetArmLength, DesiredDistance, DeltaSeconds, DialogueCameraInterpSpeed);
+	if (bAdjustDistanceDuringDialogue)
+	{
+		CameraBoom->TargetArmLength = FMath::FInterpTo(CameraBoom->TargetArmLength, DesiredDistance, DeltaSeconds, DialogueCameraInterpSpeed);
+	}
+
+	if (bAdjustOrthoWidthDuringDialogue && FollowCamera != nullptr && FollowCamera->ProjectionMode == ECameraProjectionMode::Orthographic)
+	{
+		const float NextOrthoWidth = FMath::FInterpTo(FollowCamera->OrthoWidth, DialogueOrthographicWidth, DeltaSeconds, DialogueCameraInterpSpeed);
+		FollowCamera->SetOrthoWidth(FMath::Max(1.0f, NextOrthoWidth));
+	}
 }
 
 void UUOUCameraControllerComponent::UpdateCameraOcclusion()

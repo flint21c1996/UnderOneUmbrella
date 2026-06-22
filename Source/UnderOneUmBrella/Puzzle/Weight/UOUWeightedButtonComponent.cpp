@@ -11,12 +11,17 @@
 UUOUWeightedButtonComponent::UUOUWeightedButtonComponent()
 {
 	PrimaryComponentTick.bCanEverTick = true;
+	PrimaryComponentTick.bStartWithTickEnabled = true;
 	PrimaryComponentTick.TickGroup = TG_PostPhysics;
+	SetAutoActivate(true);
 }
 
 void UUOUWeightedButtonComponent::BeginPlay()
 {
 	Super::BeginPlay();
+
+	Activate(true);
+	SetComponentTickEnabled(true);
 
 	PressWeight = FMath::Max(0.0f, PressWeight);
 	ReleaseWeight = FMath::Clamp(ReleaseWeight, 0.0f, PressWeight);
@@ -44,6 +49,10 @@ float UUOUWeightedButtonComponent::GetPuzzleWeight() const
 TArray<FString> UUOUWeightedButtonComponent::GetPuzzleDebugInfo_Implementation() const
 {
 	const int32 OverlapCount = Sensor != nullptr ? Sensor->OverlappingActorCount : 0;
+	const USceneComponent* TargetPoint = bIsSatisfied ? PressedPoint : ReleasedPoint;
+	const float VisualRelativeZ = ButtonVisual != nullptr ? ButtonVisual->GetRelativeLocation().Z : 0.0f;
+	const float TargetRelativeZ = TargetPoint != nullptr ? TargetPoint->GetRelativeLocation().Z : 0.0f;
+
 	return {
 		FString::Printf(
 			TEXT("Weighted Button: %s"),
@@ -53,7 +62,16 @@ TArray<FString> UUOUWeightedButtonComponent::GetPuzzleDebugInfo_Implementation()
 			CurrentWeight,
 			PressWeight,
 			ReleaseWeight),
-		FString::Printf(TEXT("Sensor Overlaps: %d"), OverlapCount)
+		FString::Printf(TEXT("Sensor Overlaps: %d"), OverlapCount),
+		FString::Printf(
+			TEXT("Motion: Tick %s / Active %s / Speed %.1f / %s -> %s / RelZ %.1f -> %.1f"),
+			IsComponentTickEnabled() ? TEXT("On") : TEXT("Off"),
+			IsActive() ? TEXT("On") : TEXT("Off"),
+			MoveSpeed,
+			*GetNameSafe(ButtonVisual),
+			*GetNameSafe(TargetPoint),
+			VisualRelativeZ,
+			TargetRelativeZ)
 	};
 }
 
@@ -78,24 +96,78 @@ void UUOUWeightedButtonComponent::ResolveReferences()
 		return;
 	}
 
+	auto IsOwnedComponent = [Owner](const UActorComponent* Component) -> bool
+	{
+		return Component != nullptr && Component->GetOwner() == Owner;
+	};
+
+	auto IsUsableMotionComponent = [Owner, &IsOwnedComponent](const USceneComponent* Component) -> bool
+	{
+		if (!IsOwnedComponent(Component))
+		{
+			return false;
+		}
+
+		// 컴포넌트 이름이 비어 있는 수동 참조는 RootScene으로 풀릴 수 있습니다.
+		// 루트는 버튼 표면이나 눌림 지점이 아니므로 자동 탐색 대상으로 넘깁니다.
+		return Component != Owner->GetRootComponent();
+	};
+
+	auto ResolveMotionComponent = [Owner, &IsUsableMotionComponent](const FComponentReference& Reference) -> USceneComponent*
+	{
+		USceneComponent* ResolvedComponent = Cast<USceneComponent>(Reference.GetComponent(Owner));
+		return IsUsableMotionComponent(ResolvedComponent) ? ResolvedComponent : nullptr;
+	};
+
+	// BP 상속이나 복제 과정에서 CDO/템플릿 컴포넌트 포인터가 남아 있으면 실제 월드 인스턴스가 움직이지 않습니다.
+	// 그래서 BeginPlay마다 현재 Owner가 가진 컴포넌트인지 먼저 확인하고, 아니면 이름 기반 자동 탐색으로 다시 잡습니다.
+	if (!IsOwnedComponent(Sensor))
+	{
+		Sensor = nullptr;
+	}
+
+	if (!IsUsableMotionComponent(ButtonVisual))
+	{
+		ButtonVisual = nullptr;
+	}
+
+	if (!IsUsableMotionComponent(ReleasedPoint))
+	{
+		ReleasedPoint = nullptr;
+	}
+
+	if (!IsUsableMotionComponent(PressedPoint))
+	{
+		PressedPoint = nullptr;
+	}
+
 	if (UActorComponent* SensorComponent = SensorReference.GetComponent(Owner))
 	{
 		Sensor = Cast<UUOUWeightSensorComponent>(SensorComponent);
 	}
 
-	if (UActorComponent* ButtonVisualComponent = ButtonVisualReference.GetComponent(Owner))
+	ButtonVisual = ResolveMotionComponent(ButtonVisualReference);
+	ReleasedPoint = ResolveMotionComponent(ReleasedPointReference);
+	PressedPoint = ResolveMotionComponent(PressedPointReference);
+
+	if (!IsOwnedComponent(Sensor))
 	{
-		ButtonVisual = Cast<USceneComponent>(ButtonVisualComponent);
+		Sensor = nullptr;
 	}
 
-	if (UActorComponent* ReleasedPointComponent = ReleasedPointReference.GetComponent(Owner))
+	if (!IsUsableMotionComponent(ButtonVisual))
 	{
-		ReleasedPoint = Cast<USceneComponent>(ReleasedPointComponent);
+		ButtonVisual = nullptr;
 	}
 
-	if (UActorComponent* PressedPointComponent = PressedPointReference.GetComponent(Owner))
+	if (!IsUsableMotionComponent(ReleasedPoint))
 	{
-		PressedPoint = Cast<USceneComponent>(PressedPointComponent);
+		ReleasedPoint = nullptr;
+	}
+
+	if (!IsUsableMotionComponent(PressedPoint))
+	{
+		PressedPoint = nullptr;
 	}
 
 	if (bAutoFindSensor && Sensor == nullptr)
@@ -136,7 +208,7 @@ void UUOUWeightedButtonComponent::ResolveReferences()
 		}
 	}
 
-	if (ButtonVisual == nullptr)
+	if (ButtonVisual == nullptr && !bAutoFindMotionReferences)
 	{
 		ButtonVisual = Owner->GetRootComponent();
 	}
@@ -171,10 +243,19 @@ void UUOUWeightedButtonComponent::MoveButtonVisual(float DeltaTime)
 		return;
 	}
 
-	const FVector CurrentLocation = ButtonVisual->GetComponentLocation();
-	const FVector TargetLocation = TargetPoint->GetComponentLocation();
-	const FVector NextLocation = FMath::VInterpConstantTo(CurrentLocation, TargetLocation, DeltaTime, MoveSpeed);
-	ButtonVisual->SetWorldLocation(NextLocation);
+	const USceneComponent* AttachParent = ButtonVisual->GetAttachParent();
+	const FTransform ParentTransform = AttachParent != nullptr
+		? AttachParent->GetComponentTransform()
+		: FTransform::Identity;
+	const FVector CurrentRelativeLocation = ButtonVisual->GetRelativeLocation();
+	const FVector TargetRelativeLocation = ParentTransform.InverseTransformPosition(TargetPoint->GetComponentLocation());
+	const FVector NextRelativeLocation = FMath::VInterpConstantTo(
+		CurrentRelativeLocation,
+		TargetRelativeLocation,
+		DeltaTime,
+		MoveSpeed);
+
+	ButtonVisual->SetRelativeLocation(NextRelativeLocation, false, nullptr, ETeleportType::TeleportPhysics);
 }
 
 void UUOUWeightedButtonComponent::SnapVisualToCurrentState()
@@ -187,7 +268,12 @@ void UUOUWeightedButtonComponent::SnapVisualToCurrentState()
 	USceneComponent* TargetPoint = bIsSatisfied ? PressedPoint : ReleasedPoint;
 	if (TargetPoint != nullptr)
 	{
-		ButtonVisual->SetWorldLocation(TargetPoint->GetComponentLocation());
+		const USceneComponent* AttachParent = ButtonVisual->GetAttachParent();
+		const FTransform ParentTransform = AttachParent != nullptr
+			? AttachParent->GetComponentTransform()
+			: FTransform::Identity;
+		const FVector TargetRelativeLocation = ParentTransform.InverseTransformPosition(TargetPoint->GetComponentLocation());
+		ButtonVisual->SetRelativeLocation(TargetRelativeLocation, false, nullptr, ETeleportType::TeleportPhysics);
 	}
 }
 

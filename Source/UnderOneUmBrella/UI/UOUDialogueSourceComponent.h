@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "Puzzle/Core/UOUPuzzleResultReceiver.h"
 #include "UI/UOUUITypes.h"
 #include "UOUDialogueSourceComponent.generated.h"
 
@@ -15,7 +16,7 @@ class USceneComponent;
 // Component that gives an NPC or world object dialogue content and playback rules.
 // Designers can set bubble anchors, speaker name, repeat rules, and inline or DataAsset lines.
 UCLASS(ClassGroup=(UI), meta=(BlueprintSpawnableComponent, DisplayName="UOU Dialogue Source"))
-class UNDERONEUMBRELLA_API UUOUDialogueSourceComponent : public UActorComponent
+class UNDERONEUMBRELLA_API UUOUDialogueSourceComponent : public UActorComponent, public IUOUPuzzleResultReceiver
 {
 	GENERATED_BODY()
 
@@ -63,6 +64,28 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Dialogue|Bubble")
 	float GetProximityBubbleDuration() const;
 
+	// 근처 접근 말풍선을 표시할 수 있는지 반환합니다.
+	UFUNCTION(BlueprintPure, Category = "Dialogue|Bubble")
+	bool IsProximityBubbleEnabled() const { return bEnableProximityBubble; }
+
+	// 대화 진행 중 말풍선을 표시할 수 있는지 반환합니다.
+	UFUNCTION(BlueprintPure, Category = "Dialogue|Bubble")
+	bool IsDialogueBubbleEnabled() const { return bEnableDialogueBubble; }
+
+	// 근처 접근 말풍선 표시 여부를 바꿉니다.
+	UFUNCTION(BlueprintCallable, Category = "Dialogue|Bubble")
+	void SetProximityBubbleEnabled(bool bNewEnabled);
+
+	// 대화 진행 중 말풍선 표시 여부를 바꿉니다.
+	UFUNCTION(BlueprintCallable, Category = "Dialogue|Bubble")
+	void SetDialogueBubbleEnabled(bool bNewEnabled);
+
+	// 근처 말풍선과 대화 중 말풍선을 한 번에 켜거나 끕니다.
+	UFUNCTION(BlueprintCallable, Category = "Dialogue|Bubble")
+	void SetSpeechBubbleEnabled(bool bNewEnabled);
+
+	virtual void ApplyPuzzleResult_Implementation(EOUUPuzzleResultAction Action) override;
+
 	const FUOUDialogueLine* GetLine(int32 LineIndex) const;
 	AActor* GetSpeakerActor() const;
 	FText GetSpeakerName() const;
@@ -106,6 +129,14 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue|Bubble")
 	FName BubbleAnchorComponentName = NAME_None;
+
+	// 플레이어가 가까이 왔을 때 뜨는 물음표, 느낌표 같은 접근 말풍선을 사용할지 정합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue|Bubble")
+	bool bEnableProximityBubble = true;
+
+	// 대화가 진행되는 동안 각 대사에 설정된 말풍선을 사용할지 정합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue|Bubble")
+	bool bEnableDialogueBubble = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue|Rules")
 	bool bCanReplay = true;
