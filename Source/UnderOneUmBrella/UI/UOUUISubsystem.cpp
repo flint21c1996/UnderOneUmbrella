@@ -240,6 +240,7 @@ FUOUUmbrellaHUDState UUOUUISubsystem::BuildUmbrellaHUDState() const
 
 	State.bHasUmbrella = BoundUmbrellaComponent->HasUmbrella();
 	State.UmbrellaState = BoundUmbrellaComponent->CurrentState;
+	State.UmbrellaVisualState = BoundUmbrellaComponent->GetCurrentVisualState();
 	State.StoredWater = BoundUmbrellaComponent->GetCurrentStoredWater();
 	State.PlayerRainAmount = BoundUmbrellaComponent->GetCurrentPlayerRainAmount();
 	State.bBlockingRain = BoundUmbrellaComponent->IsBlockingRain() || LastRainBlockedAmount > 0.0f;
@@ -265,6 +266,7 @@ void UUOUUISubsystem::BroadcastUmbrellaHUDState()
 
 	if (RegisteredHUDWidget.IsValid())
 	{
+		RegisteredHUDWidget->ApplyUmbrellaHUDState(State);
 		RegisteredHUDWidget->HandleUmbrellaHUDStateChanged(State);
 	}
 }
