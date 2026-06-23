@@ -697,16 +697,6 @@ UUOUCameraControllerComponent* UUOUDialogueTriggerComponent::FindCameraControlle
 	return InstigatorActor->FindComponentByClass<UUOUCameraControllerComponent>();
 }
 
-UUOUPlayerInteractionExecutorComponent* UUOUDialogueTriggerComponent::FindPlayerInteractionExecutorComponent(AActor* InstigatorActor) const
-{
-	if (InstigatorActor == nullptr)
-	{
-		return nullptr;
-	}
-
-	return InstigatorActor->FindComponentByClass<UUOUPlayerInteractionExecutorComponent>();
-}
-
 void UUOUDialogueTriggerComponent::StartDialogueCameraFocus(AActor* InstigatorActor, AActor* SpeakerActor)
 {
 	if (UWorld* World = GetWorld())
@@ -784,7 +774,8 @@ void UUOUDialogueTriggerComponent::LockMovementForDialogue(AActor* InstigatorAct
 		return;
 	}
 
-	UUOUPlayerInteractionExecutorComponent* InputExecutor = FindPlayerInteractionExecutorComponent(InstigatorActor);
+	UUOUPlayerInteractionExecutorComponent* InputExecutor =
+		UUOUPlayerInteractionExecutorComponent::FindLocalPlayerExecutor(this);
 	if (InputExecutor == nullptr)
 	{
 		return;

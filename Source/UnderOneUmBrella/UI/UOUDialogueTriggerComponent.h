@@ -178,7 +178,6 @@ private:
 	void ResolveUmbrellaCoverVolumes(AActor* InstigatorActor, TArray<UUOUUmbrellaCoverVolumeComponent*>& OutCoverVolumes) const;
 	UUOUUISubsystem* ResolveUISubsystem() const;
 	UUOUCameraControllerComponent* FindCameraControllerComponent(AActor* InstigatorActor) const;
-	UUOUPlayerInteractionExecutorComponent* FindPlayerInteractionExecutorComponent(AActor* InstigatorActor) const;
 	void StartDialogueCameraFocus(AActor* InstigatorActor, AActor* SpeakerActor);
 	void StopDialogueCameraFocus();
 	void LockMovementForDialogue(AActor* InstigatorActor);
