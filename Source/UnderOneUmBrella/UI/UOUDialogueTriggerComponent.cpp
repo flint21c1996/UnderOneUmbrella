@@ -8,10 +8,9 @@
 #include "Engine/LocalPlayer.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
-#include "GameFramework/Character.h"
-#include "GameFramework/CharacterMovementComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Player/UOUCameraControllerComponent.h"
+#include "Player/UOUPlayerInteractionExecutorComponent.h"
 #include "Player/UOUUmbrellaComponent.h"
 #include "Player/UOUUmbrellaCoverVolumeComponent.h"
 #include "TimerManager.h"
@@ -698,6 +697,16 @@ UUOUCameraControllerComponent* UUOUDialogueTriggerComponent::FindCameraControlle
 	return InstigatorActor->FindComponentByClass<UUOUCameraControllerComponent>();
 }
 
+UUOUPlayerInteractionExecutorComponent* UUOUDialogueTriggerComponent::FindPlayerInteractionExecutorComponent(AActor* InstigatorActor) const
+{
+	if (InstigatorActor == nullptr)
+	{
+		return nullptr;
+	}
+
+	return InstigatorActor->FindComponentByClass<UUOUPlayerInteractionExecutorComponent>();
+}
+
 void UUOUDialogueTriggerComponent::StartDialogueCameraFocus(AActor* InstigatorActor, AActor* SpeakerActor)
 {
 	if (UWorld* World = GetWorld())
@@ -775,37 +784,15 @@ void UUOUDialogueTriggerComponent::LockMovementForDialogue(AActor* InstigatorAct
 		return;
 	}
 
-	APawn* InstigatorPawn = Cast<APawn>(InstigatorActor);
-	if (InstigatorPawn == nullptr)
+	UUOUPlayerInteractionExecutorComponent* InputExecutor = FindPlayerInteractionExecutorComponent(InstigatorActor);
+	if (InputExecutor == nullptr)
 	{
 		return;
 	}
 
-	APlayerController* PlayerController = Cast<APlayerController>(InstigatorPawn->GetController());
-	if (PlayerController == nullptr)
-	{
-		PlayerController = UGameplayStatics::GetPlayerController(this, 0);
-	}
-
-	if (PlayerController == nullptr)
-	{
-		return;
-	}
-
-	// ???移대찓?쇨? NPC? ?뚮젅?댁뼱 ?ъ씠濡??ㅼ뼱媛???숈븞?먮뒗 ?대룞 ?낅젰留??좉툒?덈떎.
-	// 猷??낅젰? ?좉렇吏 ?딆뒿?덈떎. 移대찓??而댄룷?뚰듃媛 ??붿슜 ?꾩튂濡?吏곸젒 蹂닿컙?섍퀬 ?덇린 ?뚮Ц?낅땲??
-	PlayerController->SetIgnoreMoveInput(true);
-	LockedMovementPlayerController = PlayerController;
+	InputExecutor->RequestPlayerInputBlock(this, true);
+	LockedInputExecutorComponent = InputExecutor;
 	bDialogueMovementLocked = true;
-
-	// ?대? ?대룞 以묒씠???띾룄瑜?利됱떆 ?딆뼱??以??쒖옉 吏곹썑 罹먮┃?곌? 誘몃걚?ъ????먮굦??以꾩엯?덈떎.
-	if (ACharacter* Character = Cast<ACharacter>(InstigatorPawn))
-	{
-		if (UCharacterMovementComponent* MovementComponent = Character->GetCharacterMovement())
-		{
-			MovementComponent->StopMovementImmediately();
-		}
-	}
 }
 
 void UUOUDialogueTriggerComponent::UnlockMovementForDialogue()
@@ -815,11 +802,10 @@ void UUOUDialogueTriggerComponent::UnlockMovementForDialogue()
 		return;
 	}
 
-	if (LockedMovementPlayerController != nullptr)
+	if (LockedInputExecutorComponent != nullptr)
 	{
-		// LockMovementForDialogue?먯꽌 ?щ┛ ?대룞 ?낅젰 ?좉툑???뺥솗????踰덈쭔 ?섎룎由쎈땲??
-		LockedMovementPlayerController->SetIgnoreMoveInput(false);
-		LockedMovementPlayerController = nullptr;
+		LockedInputExecutorComponent->ReleasePlayerInputBlock(this);
+		LockedInputExecutorComponent = nullptr;
 	}
 
 	bDialogueMovementLocked = false;

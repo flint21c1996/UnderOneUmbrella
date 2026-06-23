@@ -14,6 +14,7 @@ class UUOUDialogueCoverTargetComponent;
 class UUOUUmbrellaComponent;
 class UUOUUmbrellaCoverVolumeComponent;
 class UUOUCameraControllerComponent;
+class UUOUPlayerInteractionExecutorComponent;
 class UUOUUISubsystem;
 class AActor;
 class APlayerController;
@@ -177,6 +178,7 @@ private:
 	void ResolveUmbrellaCoverVolumes(AActor* InstigatorActor, TArray<UUOUUmbrellaCoverVolumeComponent*>& OutCoverVolumes) const;
 	UUOUUISubsystem* ResolveUISubsystem() const;
 	UUOUCameraControllerComponent* FindCameraControllerComponent(AActor* InstigatorActor) const;
+	UUOUPlayerInteractionExecutorComponent* FindPlayerInteractionExecutorComponent(AActor* InstigatorActor) const;
 	void StartDialogueCameraFocus(AActor* InstigatorActor, AActor* SpeakerActor);
 	void StopDialogueCameraFocus();
 	void LockMovementForDialogue(AActor* InstigatorActor);
@@ -197,7 +199,7 @@ private:
 	TObjectPtr<UUOUUISubsystem> BoundUISubsystem = nullptr;
 
 	UPROPERTY(Transient)
-	TObjectPtr<APlayerController> LockedMovementPlayerController = nullptr;
+	TObjectPtr<UUOUPlayerInteractionExecutorComponent> LockedInputExecutorComponent = nullptr;
 
 	TMap<TWeakObjectPtr<AActor>, int32> ActiveOverlapCounts;
 
