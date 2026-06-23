@@ -64,7 +64,26 @@ namespace
 			FMath::Max(AbsScale.Z, UE_KINDA_SMALL_NUMBER));
 	}
 
-	const FNiagaraVariableWithOffset* FindEnvironmentVisualComponentNiagaraParameter(const UNiagaraComponent* Effect, FName ParameterName)
+	// Niagara의 User Parameter는 에셋 쪽에서는 User.RainAreaSize처럼 보일 수 있지만,
+	// SetVariable 계열 함수에는 RainAreaSize처럼 User.를 뺀 이름을 넘기는 쪽이 안전합니다.
+	FName NormalizeEnvironmentVisualComponentNiagaraParameterName(FName ParameterName)
+	{
+		if (ParameterName.IsNone())
+		{
+			return NAME_None;
+		}
+
+		FString ParameterNameString = ParameterName.ToString();
+		if (ParameterNameString.StartsWith(TEXT("User.")))
+		{
+			ParameterNameString.RightChopInline(5);
+			return FName(*ParameterNameString);
+		}
+
+		return ParameterName;
+	}
+
+	const FNiagaraVariableWithOffset* FindEnvironmentVisualComponentNiagaraParameterByName(const UNiagaraComponent* Effect, FName ParameterName)
 	{
 		if (Effect == nullptr || ParameterName.IsNone())
 		{
@@ -86,6 +105,22 @@ namespace
 		return NiagaraSystem->GetExposedParameters().FindParameterVariable(QueryParameter, true);
 	}
 
+	const FNiagaraVariableWithOffset* FindEnvironmentVisualComponentNiagaraParameter(const UNiagaraComponent* Effect, FName ParameterName)
+	{
+		if (const FNiagaraVariableWithOffset* ExistingParameter = FindEnvironmentVisualComponentNiagaraParameterByName(Effect, ParameterName))
+		{
+			return ExistingParameter;
+		}
+
+		const FName NormalizedParameterName = NormalizeEnvironmentVisualComponentNiagaraParameterName(ParameterName);
+		if (NormalizedParameterName != ParameterName)
+		{
+			return FindEnvironmentVisualComponentNiagaraParameterByName(Effect, NormalizedParameterName);
+		}
+
+		return nullptr;
+	}
+
 	bool CanSetEnvironmentVisualComponentNiagaraParameter(const UNiagaraComponent* Effect, FName ParameterName, const FNiagaraTypeDefinition& ExpectedType)
 	{
 		const FNiagaraVariableWithOffset* ExistingParameter = FindEnvironmentVisualComponentNiagaraParameter(Effect, ParameterName);
@@ -99,16 +134,17 @@ namespace
 			return;
 		}
 
+		const FName RuntimeParameterName = NormalizeEnvironmentVisualComponentNiagaraParameterName(ParameterName);
 		const FNiagaraVariableWithOffset* ExistingParameter = FindEnvironmentVisualComponentNiagaraParameter(Effect, ParameterName);
 		if (ExistingParameter == nullptr || ExistingParameter->GetType() == FNiagaraTypeDefinition::GetVec2Def())
 		{
-			Effect->SetVariableVec2(ParameterName, AreaSize);
+			Effect->SetVariableVec2(RuntimeParameterName, AreaSize);
 			return;
 		}
 
 		if (ExistingParameter->GetType() == FNiagaraTypeDefinition::GetVec3Def())
 		{
-			Effect->SetVariableVec3(ParameterName, FVector(AreaSize.X, AreaSize.Y, 0.0));
+			Effect->SetVariableVec3(RuntimeParameterName, FVector(AreaSize.X, AreaSize.Y, 0.0));
 		}
 	}
 
@@ -117,7 +153,7 @@ namespace
 		if (Effect != nullptr && !ParameterName.IsNone()
 			&& CanSetEnvironmentVisualComponentNiagaraParameter(Effect, ParameterName, FNiagaraTypeDefinition::GetVec3Def()))
 		{
-			Effect->SetVariableVec3(ParameterName, Value);
+			Effect->SetVariableVec3(NormalizeEnvironmentVisualComponentNiagaraParameterName(ParameterName), Value);
 		}
 	}
 
@@ -126,7 +162,7 @@ namespace
 		if (Effect != nullptr && !ParameterName.IsNone()
 			&& CanSetEnvironmentVisualComponentNiagaraParameter(Effect, ParameterName, FNiagaraTypeDefinition::GetFloatDef()))
 		{
-			Effect->SetVariableFloat(ParameterName, Value);
+			Effect->SetVariableFloat(NormalizeEnvironmentVisualComponentNiagaraParameterName(ParameterName), Value);
 		}
 	}
 
@@ -135,7 +171,7 @@ namespace
 		if (Effect != nullptr && !ParameterName.IsNone()
 			&& CanSetEnvironmentVisualComponentNiagaraParameter(Effect, ParameterName, FNiagaraTypeDefinition::GetBoolDef()))
 		{
-			Effect->SetVariableBool(ParameterName, bValue);
+			Effect->SetVariableBool(NormalizeEnvironmentVisualComponentNiagaraParameterName(ParameterName), bValue);
 		}
 	}
 
