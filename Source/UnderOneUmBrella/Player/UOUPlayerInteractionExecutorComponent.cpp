@@ -6,6 +6,8 @@
 #include "Animation/AnimMontage.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "GameFramework/PlayerController.h"
+#include "Kismet/GameplayStatics.h"
 
 UUOUPlayerInteractionExecutorComponent::UUOUPlayerInteractionExecutorComponent()
 {
@@ -157,6 +159,20 @@ bool UUOUPlayerInteractionExecutorComponent::IsPlayerInputBlockedBy(UObject* Blo
 	const TWeakObjectPtr<UObject> SourceKey(BlockSource);
 	const int32* RequestCount = InputBlockRequestCounts.Find(SourceKey);
 	return RequestCount != nullptr && *RequestCount > 0;
+}
+
+UUOUPlayerInteractionExecutorComponent* UUOUPlayerInteractionExecutorComponent::FindLocalPlayerExecutor(
+	const UObject* WorldContextObject,
+	int32 PlayerIndex)
+{
+	if (WorldContextObject == nullptr)
+	{
+		return nullptr;
+	}
+
+	const APlayerController* PlayerController = UGameplayStatics::GetPlayerController(WorldContextObject, PlayerIndex);
+	const APawn* PlayerPawn = PlayerController != nullptr ? PlayerController->GetPawn() : nullptr;
+	return PlayerPawn != nullptr ? PlayerPawn->FindComponentByClass<UUOUPlayerInteractionExecutorComponent>() : nullptr;
 }
 
 void UUOUPlayerInteractionExecutorComponent::FinishActiveInteraction(bool bInterrupted)

@@ -59,6 +59,11 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Interaction|Player")
 	bool IsPlayerInputBlockedBy(UObject* BlockSource) const;
 
+	UFUNCTION(BlueprintCallable, Category = "Interaction|Player", meta = (WorldContext = "WorldContextObject"))
+	static UUOUPlayerInteractionExecutorComponent* FindLocalPlayerExecutor(
+		const UObject* WorldContextObject,
+		int32 PlayerIndex = 0);
+
 protected:
 	void FinishActiveInteraction(bool bInterrupted);
 	void ClearMontageDelegate();
