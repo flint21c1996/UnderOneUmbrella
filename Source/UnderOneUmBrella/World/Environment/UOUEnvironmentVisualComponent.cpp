@@ -7,6 +7,9 @@
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
 #include "NiagaraComponent.h"
+#include "NiagaraParameterStore.h"
+#include "NiagaraSystem.h"
+#include "NiagaraTypes.h"
 #include "UObject/UnrealType.h"
 
 namespace
@@ -60,6 +63,82 @@ namespace
 			FMath::Max(AbsScale.Y, UE_KINDA_SMALL_NUMBER),
 			FMath::Max(AbsScale.Z, UE_KINDA_SMALL_NUMBER));
 	}
+
+	const FNiagaraVariableWithOffset* FindEnvironmentVisualComponentNiagaraParameter(const UNiagaraComponent* Effect, FName ParameterName)
+	{
+		if (Effect == nullptr || ParameterName.IsNone())
+		{
+			return nullptr;
+		}
+
+		const FNiagaraVariable QueryParameter(FNiagaraTypeDefinition::GetVec4Def(), ParameterName);
+		if (const FNiagaraVariableWithOffset* OverrideParameter = Effect->GetOverrideParameters().FindParameterVariable(QueryParameter, true))
+		{
+			return OverrideParameter;
+		}
+
+		const UNiagaraSystem* NiagaraSystem = Effect->GetAsset();
+		if (NiagaraSystem == nullptr)
+		{
+			return nullptr;
+		}
+
+		return NiagaraSystem->GetExposedParameters().FindParameterVariable(QueryParameter, true);
+	}
+
+	bool CanSetEnvironmentVisualComponentNiagaraParameter(const UNiagaraComponent* Effect, FName ParameterName, const FNiagaraTypeDefinition& ExpectedType)
+	{
+		const FNiagaraVariableWithOffset* ExistingParameter = FindEnvironmentVisualComponentNiagaraParameter(Effect, ParameterName);
+		return ExistingParameter == nullptr || ExistingParameter->GetType() == ExpectedType;
+	}
+
+	void SetEnvironmentVisualComponentNiagaraAreaSize(UNiagaraComponent* Effect, FName ParameterName, const FVector2D& AreaSize)
+	{
+		if (Effect == nullptr || ParameterName.IsNone())
+		{
+			return;
+		}
+
+		const FNiagaraVariableWithOffset* ExistingParameter = FindEnvironmentVisualComponentNiagaraParameter(Effect, ParameterName);
+		if (ExistingParameter == nullptr || ExistingParameter->GetType() == FNiagaraTypeDefinition::GetVec2Def())
+		{
+			Effect->SetVariableVec2(ParameterName, AreaSize);
+			return;
+		}
+
+		if (ExistingParameter->GetType() == FNiagaraTypeDefinition::GetVec3Def())
+		{
+			Effect->SetVariableVec3(ParameterName, FVector(AreaSize.X, AreaSize.Y, 0.0));
+		}
+	}
+
+	void SetEnvironmentVisualComponentNiagaraVec3(UNiagaraComponent* Effect, FName ParameterName, const FVector& Value)
+	{
+		if (Effect != nullptr && !ParameterName.IsNone()
+			&& CanSetEnvironmentVisualComponentNiagaraParameter(Effect, ParameterName, FNiagaraTypeDefinition::GetVec3Def()))
+		{
+			Effect->SetVariableVec3(ParameterName, Value);
+		}
+	}
+
+	void SetEnvironmentVisualComponentNiagaraFloat(UNiagaraComponent* Effect, FName ParameterName, float Value)
+	{
+		if (Effect != nullptr && !ParameterName.IsNone()
+			&& CanSetEnvironmentVisualComponentNiagaraParameter(Effect, ParameterName, FNiagaraTypeDefinition::GetFloatDef()))
+		{
+			Effect->SetVariableFloat(ParameterName, Value);
+		}
+	}
+
+	void SetEnvironmentVisualComponentNiagaraBool(UNiagaraComponent* Effect, FName ParameterName, bool bValue)
+	{
+		if (Effect != nullptr && !ParameterName.IsNone()
+			&& CanSetEnvironmentVisualComponentNiagaraParameter(Effect, ParameterName, FNiagaraTypeDefinition::GetBoolDef()))
+		{
+			Effect->SetVariableBool(ParameterName, bValue);
+		}
+	}
+
 }
 
 UUOUEnvironmentVisualComponent::UUOUEnvironmentVisualComponent()
@@ -184,7 +263,7 @@ void UUOUEnvironmentVisualComponent::PostEditChangeProperty(FPropertyChangedEven
 	ApplyVisualEffectTransforms();
 	ApplyNiagaraParameters();
 
-	// ¸¶¿ì½º µå·¡±×¸¦ ³¡³Â°Å³ª ´Ü¼ø ¼öÄ¡ ÀÔ·Â ¿Ï·á ½Ã¿¡¸¸ ¾ÈÀüÇÏ°Ô ÀÌÆåÆ® »óÅÂ¸¦ °»½ÅÇÕ´Ï´Ù.
+	// ë§ˆìš°ìŠ¤ ë“œëž˜ê·¸ë¥¼ ëëƒˆê±°ë‚˜ ë‹¨ìˆœ ìˆ˜ì¹˜ ìž…ë ¥ ì™„ë£Œ ì‹œì—ë§Œ ì•ˆì „í•˜ê²Œ ì´íŽ™íŠ¸ ìƒíƒœë¥¼ ê°±ì‹ í•©ë‹ˆë‹¤.
 	RefreshNiagaraActivation();
 }
 #endif
@@ -286,7 +365,7 @@ void UUOUEnvironmentVisualComponent::ApplyNiagaraParameters()
 		const FVector2D EffectLocalAreaSize(
 			CachedAreaSize.X / EffectScale.X,
 			CachedAreaSize.Y / EffectScale.Y);
-		ActivePrimaryEffect->SetVariableVec2(PrimaryAreaSizeParameterName, EffectLocalAreaSize);
+		SetEnvironmentVisualComponentNiagaraAreaSize(ActivePrimaryEffect, PrimaryAreaSizeParameterName, EffectLocalAreaSize);
 	}
 
 	if (ActivePrimaryEffect != nullptr && !RainKillVolumeCenterParameterName.IsNone())
@@ -294,7 +373,7 @@ void UUOUEnvironmentVisualComponent::ApplyNiagaraParameters()
 		const FVector KillVolumeWorldCenter = GetComponentTransform().TransformPosition(CachedRainKillVolumeLocalCenter);
 		const FVector KillVolumeEffectLocalCenter = ActivePrimaryEffect->GetComponentTransform().InverseTransformPosition(KillVolumeWorldCenter);
 
-		ActivePrimaryEffect->SetVariableVec3(RainKillVolumeCenterParameterName, KillVolumeEffectLocalCenter);
+		SetEnvironmentVisualComponentNiagaraVec3(ActivePrimaryEffect, RainKillVolumeCenterParameterName, KillVolumeEffectLocalCenter);
 	}
 
 	if (ActivePrimaryEffect != nullptr && !RainKillVolumeSizeParameterName.IsNone())
@@ -304,23 +383,12 @@ void UUOUEnvironmentVisualComponent::ApplyNiagaraParameters()
 			CachedRainKillVolumeSize.X / EffectScale.X,
 			CachedRainKillVolumeSize.Y / EffectScale.Y,
 			CachedRainKillVolumeSize.Z / EffectScale.Z);
-		ActivePrimaryEffect->SetVariableVec3(RainKillVolumeSizeParameterName, EffectLocalKillVolumeSize);
+		SetEnvironmentVisualComponentNiagaraVec3(ActivePrimaryEffect, RainKillVolumeSizeParameterName, EffectLocalKillVolumeSize);
 	}
 
-	if (ActivePrimaryEffect != nullptr && !PrimaryIntensityParameterName.IsNone())
-	{
-		ActivePrimaryEffect->SetVariableFloat(PrimaryIntensityParameterName, CachedPrimaryIntensity);
-	}
-
-	if (ActivePrimaryEffect != nullptr && !RainSpawnRateParameterName.IsNone())
-	{
-		ActivePrimaryEffect->SetVariableFloat(RainSpawnRateParameterName, CachedRainSpawnRate * CachedPrimaryIntensity);
-	}
-
-	if (ActivePrimaryEffect != nullptr && !RainFallSpeedParameterName.IsNone())
-	{
-		ActivePrimaryEffect->SetVariableFloat(RainFallSpeedParameterName, CachedRainFallSpeed);
-	}
+	SetEnvironmentVisualComponentNiagaraFloat(ActivePrimaryEffect, PrimaryIntensityParameterName, CachedPrimaryIntensity);
+	SetEnvironmentVisualComponentNiagaraFloat(ActivePrimaryEffect, RainSpawnRateParameterName, CachedRainSpawnRate * CachedPrimaryIntensity);
+	SetEnvironmentVisualComponentNiagaraFloat(ActivePrimaryEffect, RainFallSpeedParameterName, CachedRainFallSpeed);
 
 	if (ActiveSecondaryEffect != nullptr && !SecondaryAreaSizeParameterName.IsNone())
 	{
@@ -328,13 +396,10 @@ void UUOUEnvironmentVisualComponent::ApplyNiagaraParameters()
 		const FVector2D EffectLocalAreaSize(
 			CachedAreaSize.X / EffectScale.X,
 			CachedAreaSize.Y / EffectScale.Y);
-		ActiveSecondaryEffect->SetVariableVec2(SecondaryAreaSizeParameterName, EffectLocalAreaSize);
+		SetEnvironmentVisualComponentNiagaraAreaSize(ActiveSecondaryEffect, SecondaryAreaSizeParameterName, EffectLocalAreaSize);
 	}
 
-	if (ActiveSecondaryEffect != nullptr && !SecondaryIntensityParameterName.IsNone())
-	{
-		ActiveSecondaryEffect->SetVariableFloat(SecondaryIntensityParameterName, CachedSecondaryIntensity);
-	}
+	SetEnvironmentVisualComponentNiagaraFloat(ActiveSecondaryEffect, SecondaryIntensityParameterName, CachedSecondaryIntensity);
 
 	auto ApplyRainBlockerParameters = [this](UNiagaraComponent* Effect)
 		{
@@ -356,25 +421,10 @@ void UUOUEnvironmentVisualComponent::ApplyNiagaraParameters()
 					CachedRainBlockerHalfExtent.Z / EffectScale.Z)
 				: FVector::ZeroVector;
 
-			if (!RainBlockerActiveParameterName.IsNone())
-			{
-				Effect->SetVariableBool(RainBlockerActiveParameterName, bCachedRainBlockerActive);
-			}
-
-			if (!RainBlockerLocalPositionParameterName.IsNone())
-			{
-				Effect->SetVariableVec3(RainBlockerLocalPositionParameterName, EffectLocalBlockerPosition);
-			}
-
-			if (!RainBlockerHalfExtentParameterName.IsNone())
-			{
-				Effect->SetVariableVec3(RainBlockerHalfExtentParameterName, EffectLocalHalfExtent);
-			}
-
-			if (!RainBlockerIntensityParameterName.IsNone())
-			{
-				Effect->SetVariableFloat(RainBlockerIntensityParameterName, CachedRainBlockerIntensity);
-			}
+			SetEnvironmentVisualComponentNiagaraBool(Effect, RainBlockerActiveParameterName, bCachedRainBlockerActive);
+			SetEnvironmentVisualComponentNiagaraVec3(Effect, RainBlockerLocalPositionParameterName, EffectLocalBlockerPosition);
+			SetEnvironmentVisualComponentNiagaraVec3(Effect, RainBlockerHalfExtentParameterName, EffectLocalHalfExtent);
+			SetEnvironmentVisualComponentNiagaraFloat(Effect, RainBlockerIntensityParameterName, CachedRainBlockerIntensity);
 
 			DrawRainBlockerNiagaraDebug(Effect, BlockerWorldPosition, CachedRainBlockerHalfExtent);
 		};
