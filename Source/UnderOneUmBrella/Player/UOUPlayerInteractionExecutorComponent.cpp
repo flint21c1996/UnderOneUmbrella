@@ -15,6 +15,7 @@ UUOUPlayerInteractionExecutorComponent::UUOUPlayerInteractionExecutorComponent()
 void UUOUPlayerInteractionExecutorComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	ClearMontageDelegate();
+	InputBlockRequestCounts.Empty();
 	Super::EndPlay(EndPlayReason);
 }
 
@@ -34,10 +35,7 @@ bool UUOUPlayerInteractionExecutorComponent::TryStartInteraction(
 	ACharacter* OwnerCharacter = Cast<ACharacter>(GetOwner());
 	if (InteractionRequest.bStopMovementOnStart && OwnerCharacter != nullptr)
 	{
-		if (UCharacterMovementComponent* MovementComponent = OwnerCharacter->GetCharacterMovement())
-		{
-			MovementComponent->StopMovementImmediately();
-		}
+		StopOwnerMovementImmediately();
 	}
 
 	if (!InteractionRequest.HasPlayerMontage())
@@ -108,7 +106,57 @@ bool UUOUPlayerInteractionExecutorComponent::IsInteractionActiveFor(UObject* Int
 
 bool UUOUPlayerInteractionExecutorComponent::ShouldBlockPlayerInput() const
 {
-	return bInteractionActive && bBlockInputWhileActive;
+	return (bInteractionActive && bBlockInputWhileActive) || HasExternalPlayerInputBlock();
+}
+
+void UUOUPlayerInteractionExecutorComponent::RequestPlayerInputBlock(UObject* BlockSource, bool bStopMovementImmediately)
+{
+	if (BlockSource == nullptr)
+	{
+		return;
+	}
+
+	const TWeakObjectPtr<UObject> SourceKey(BlockSource);
+	int32& RequestCount = InputBlockRequestCounts.FindOrAdd(SourceKey);
+	++RequestCount;
+
+	if (bStopMovementImmediately)
+	{
+		StopOwnerMovementImmediately();
+	}
+}
+
+void UUOUPlayerInteractionExecutorComponent::ReleasePlayerInputBlock(UObject* BlockSource)
+{
+	if (BlockSource == nullptr)
+	{
+		return;
+	}
+
+	const TWeakObjectPtr<UObject> SourceKey(BlockSource);
+	int32* RequestCount = InputBlockRequestCounts.Find(SourceKey);
+	if (RequestCount == nullptr)
+	{
+		return;
+	}
+
+	--(*RequestCount);
+	if (*RequestCount <= 0)
+	{
+		InputBlockRequestCounts.Remove(SourceKey);
+	}
+}
+
+bool UUOUPlayerInteractionExecutorComponent::IsPlayerInputBlockedBy(UObject* BlockSource) const
+{
+	if (BlockSource == nullptr)
+	{
+		return false;
+	}
+
+	const TWeakObjectPtr<UObject> SourceKey(BlockSource);
+	const int32* RequestCount = InputBlockRequestCounts.Find(SourceKey);
+	return RequestCount != nullptr && *RequestCount > 0;
 }
 
 void UUOUPlayerInteractionExecutorComponent::FinishActiveInteraction(bool bInterrupted)
@@ -135,6 +183,33 @@ void UUOUPlayerInteractionExecutorComponent::ClearMontageDelegate()
 
 	FOnMontageEnded EmptyDelegate;
 	AnimInstance->Montage_SetEndDelegate(EmptyDelegate, ActiveMontage);
+}
+
+void UUOUPlayerInteractionExecutorComponent::StopOwnerMovementImmediately() const
+{
+	const ACharacter* OwnerCharacter = Cast<ACharacter>(GetOwner());
+	if (OwnerCharacter == nullptr)
+	{
+		return;
+	}
+
+	if (UCharacterMovementComponent* MovementComponent = OwnerCharacter->GetCharacterMovement())
+	{
+		MovementComponent->StopMovementImmediately();
+	}
+}
+
+bool UUOUPlayerInteractionExecutorComponent::HasExternalPlayerInputBlock() const
+{
+	for (const TPair<TWeakObjectPtr<UObject>, int32>& RequestPair : InputBlockRequestCounts)
+	{
+		if (RequestPair.Key.IsValid() && RequestPair.Value > 0)
+		{
+			return true;
+		}
+	}
+
+	return false;
 }
 
 void UUOUPlayerInteractionExecutorComponent::HandleInteractionMontageEnded(

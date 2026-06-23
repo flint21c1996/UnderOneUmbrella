@@ -50,9 +50,20 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Interaction|Player")
 	bool ShouldBlockPlayerInput() const;
 
+	UFUNCTION(BlueprintCallable, Category = "Interaction|Player")
+	void RequestPlayerInputBlock(UObject* BlockSource, bool bStopMovementImmediately = true);
+
+	UFUNCTION(BlueprintCallable, Category = "Interaction|Player")
+	void ReleasePlayerInputBlock(UObject* BlockSource);
+
+	UFUNCTION(BlueprintPure, Category = "Interaction|Player")
+	bool IsPlayerInputBlockedBy(UObject* BlockSource) const;
+
 protected:
 	void FinishActiveInteraction(bool bInterrupted);
 	void ClearMontageDelegate();
+	void StopOwnerMovementImmediately() const;
+	bool HasExternalPlayerInputBlock() const;
 
 	void HandleInteractionMontageEnded(UAnimMontage* Montage, bool bInterrupted);
 
@@ -61,4 +72,6 @@ protected:
 
 	UPROPERTY(Transient)
 	TWeakObjectPtr<UAnimInstance> ActiveAnimInstance;
+
+	TMap<TWeakObjectPtr<UObject>, int32> InputBlockRequestCounts;
 };
