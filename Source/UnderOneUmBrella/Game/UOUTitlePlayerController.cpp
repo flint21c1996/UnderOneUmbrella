@@ -3,9 +3,10 @@
 #include "UOUTitlePlayerController.h"
 
 #include "Blueprint/UserWidget.h"
+#include "Engine/GameInstance.h"
 #include "Engine/World.h"
+#include "Game/UOULevelTransitionSubsystem.h"
 #include "InputCoreTypes.h"
-#include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "UObject/SoftObjectPath.h"
 
@@ -85,8 +86,16 @@ void AUOUTitlePlayerController::StartGame()
 		return;
 	}
 
-	bIsOpeningLevel = true;
-	UGameplayStatics::OpenLevelBySoftObjectPtr(this, nextLevel);
+	UGameInstance* GameInstance = GetGameInstance();
+	UUOULevelTransitionSubsystem* TransitionSubsystem = GameInstance != nullptr
+		? GameInstance->GetSubsystem<UUOULevelTransitionSubsystem>()
+		: nullptr;
+	if (TransitionSubsystem == nullptr)
+	{
+		return;
+	}
+
+	bIsOpeningLevel = TransitionSubsystem->RequestLevelTransition(nextLevel, FUOULevelTransitionSettings());
 }
 
 void AUOUTitlePlayerController::QuitGame()
