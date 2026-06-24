@@ -14,6 +14,7 @@ class UUOUDialogueCoverTargetComponent;
 class UUOUUmbrellaComponent;
 class UUOUUmbrellaCoverVolumeComponent;
 class UUOUCameraControllerComponent;
+class UUOUPlayerInteractionExecutorComponent;
 class UUOUUISubsystem;
 class AActor;
 class APlayerController;
@@ -201,7 +202,7 @@ private:
 	TObjectPtr<UUOUUISubsystem> BoundUISubsystem = nullptr;
 
 	UPROPERTY(Transient)
-	TObjectPtr<APlayerController> LockedMovementPlayerController = nullptr;
+	TObjectPtr<UUOUPlayerInteractionExecutorComponent> LockedInputExecutorComponent = nullptr;
 
 	TMap<TWeakObjectPtr<AActor>, int32> ActiveOverlapCounts;
 
