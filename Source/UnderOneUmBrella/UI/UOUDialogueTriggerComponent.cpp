@@ -713,6 +713,17 @@ void UUOUDialogueTriggerComponent::StartDialogueCameraFocus(AActor* InstigatorAc
 	LockMovementForDialogue(InstigatorActor);
 
 	ActiveDialogueCameraController = CameraController;
+	if (!bHasSavedCameraOcclusionEnabled)
+	{
+		bSavedCameraOcclusionEnabled = ActiveDialogueCameraController->IsCameraOcclusionEnabled();
+		bHasSavedCameraOcclusionEnabled = true;
+	}
+
+	if (bEnableCameraOcclusionDuringDialogueFocus)
+	{
+		ActiveDialogueCameraController->SetCameraOcclusionEnabled(true);
+	}
+
 	ActiveDialogueCameraController->StartDialogueFocus(SpeakerActor);
 
 	if (UUOUUISubsystem* UISubsystem = ResolveUISubsystem())
@@ -739,8 +750,15 @@ void UUOUDialogueTriggerComponent::StopDialogueCameraFocus()
 	if (ActiveDialogueCameraController != nullptr)
 	{
 		ActiveDialogueCameraController->EndDialogueFocus();
+		if (bHasSavedCameraOcclusionEnabled)
+		{
+			ActiveDialogueCameraController->SetCameraOcclusionEnabled(bSavedCameraOcclusionEnabled);
+		}
 		ActiveDialogueCameraController = nullptr;
 	}
+
+	bSavedCameraOcclusionEnabled = false;
+	bHasSavedCameraOcclusionEnabled = false;
 
 	UnlockMovementForDialogue();
 }
