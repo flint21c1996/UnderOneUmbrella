@@ -503,6 +503,10 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Umbrella")
 	bool TryGetRainBlockerVolumeData(FVector& OutWorldCenter, FRotator& OutWorldRotation, FVector& OutHalfExtent) const;
 
+	// Gameplay rain blocker uses the owning player transform instead of the umbrella visual transform.
+	UFUNCTION(BlueprintPure, Category = "Umbrella")
+	bool TryGetGameplayRainBlockerVolumeData(FVector& OutWorldCenter, FRotator& OutWorldRotation, FVector& OutHalfExtent) const;
+
 	// 우산에 현재 저장된 물 양을 반환합니다.
 	UFUNCTION(BlueprintPure, Category = "Umbrella")
 	float GetCurrentStoredWater() const;

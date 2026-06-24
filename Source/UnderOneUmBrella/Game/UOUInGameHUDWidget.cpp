@@ -17,6 +17,7 @@
 #include "GameFramework/Pawn.h"
 #include "Player/UOUUmbrellaComponent.h"
 #include "UI/UOUDialogueBoxWidget.h"
+#include "UI/UOUUmbrellaStatusWidget.h"
 #include "UI/UOUSpeechBubbleWidget.h"
 #include "UI/UOUUISubsystem.h"
 
@@ -200,11 +201,24 @@ void UUOUInGameHUDWidget::SetDialogueBoxWidget(UUOUDialogueBoxWidget* InDialogue
 	DialogueBoxWidget = InDialogueBoxWidget;
 }
 
+void UUOUInGameHUDWidget::SetUmbrellaStatusWidget(UUOUUmbrellaStatusWidget* InUmbrellaStatusWidget)
+{
+	UmbrellaStatusWidget = InUmbrellaStatusWidget;
+}
+
 void UUOUInGameHUDWidget::ShowTitle(const FUOUTitleDisplayData& TitleData)
 {
 	if (UUOUUISubsystem* UISubsystem = GetUISubsystem())
 	{
 		UISubsystem->ShowTitle(TitleData);
+	}
+}
+
+void UUOUInGameHUDWidget::ApplyUmbrellaHUDState(const FUOUUmbrellaHUDState& State)
+{
+	if (UUOUUmbrellaStatusWidget* ResolvedUmbrellaStatusWidget = ResolveUmbrellaStatusWidget())
+	{
+		ResolvedUmbrellaStatusWidget->ApplyUmbrellaHUDState(State);
 	}
 }
 
@@ -282,6 +296,40 @@ UUOUUISubsystem* UUOUInGameHUDWidget::GetUISubsystem() const
 {
 	ULocalPlayer* OwningLocalPlayer = GetOwningLocalPlayer();
 	return OwningLocalPlayer != nullptr ? OwningLocalPlayer->GetSubsystem<UUOUUISubsystem>() : nullptr;
+}
+
+UUOUUmbrellaStatusWidget* UUOUInGameHUDWidget::ResolveUmbrellaStatusWidget()
+{
+	if (UmbrellaStatusWidget != nullptr)
+	{
+		return UmbrellaStatusWidget;
+	}
+
+	if (WidgetTree == nullptr)
+	{
+		return nullptr;
+	}
+
+	if (UWidget* NamedWidget = WidgetTree->FindWidget(FName(TEXT("UmbrellaStatusWidget"))))
+	{
+		UmbrellaStatusWidget = Cast<UUOUUmbrellaStatusWidget>(NamedWidget);
+		if (UmbrellaStatusWidget != nullptr)
+		{
+			return UmbrellaStatusWidget;
+		}
+	}
+
+	UUOUUmbrellaStatusWidget* FirstUmbrellaStatusWidget = nullptr;
+	WidgetTree->ForEachWidget([&FirstUmbrellaStatusWidget](UWidget* Widget)
+	{
+		if (FirstUmbrellaStatusWidget == nullptr)
+		{
+			FirstUmbrellaStatusWidget = Cast<UUOUUmbrellaStatusWidget>(Widget);
+		}
+	});
+
+	UmbrellaStatusWidget = FirstUmbrellaStatusWidget;
+	return UmbrellaStatusWidget;
 }
 
 UWidgetComponent* UUOUInGameHUDWidget::ResolveSpeechBubbleWidgetComponent(AActor* SpeakerActor) const

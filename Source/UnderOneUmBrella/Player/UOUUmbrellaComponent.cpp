@@ -477,6 +477,35 @@ bool UUOUUmbrellaComponent::TryGetRainBlockerVolumeData(FVector& OutWorldCenter,
 	return false;
 }
 
+bool UUOUUmbrellaComponent::TryGetGameplayRainBlockerVolumeData(FVector& OutWorldCenter, FRotator& OutWorldRotation, FVector& OutHalfExtent) const
+{
+	OutWorldCenter = FVector::ZeroVector;
+	OutWorldRotation = FRotator::ZeroRotator;
+	OutHalfExtent = FVector::ZeroVector;
+
+	const FVector SafeHalfExtent(
+		FMath::Max(0.0f, RainBlockerVolumeHalfExtent.X),
+		FMath::Max(0.0f, RainBlockerVolumeHalfExtent.Y),
+		FMath::Max(0.0f, RainBlockerVolumeHalfExtent.Z));
+
+	if (SafeHalfExtent.IsNearlyZero())
+	{
+		return false;
+	}
+
+	const AActor* Owner = GetOwner();
+	if (Owner == nullptr)
+	{
+		return false;
+	}
+
+	const FTransform OwnerTransform = Owner->GetActorTransform();
+	OutWorldCenter = OwnerTransform.TransformPosition(RainBlockerLocalOffset);
+	OutWorldRotation = OwnerTransform.Rotator();
+	OutHalfExtent = SafeHalfExtent;
+	return true;
+}
+
 float UUOUUmbrellaComponent::GetCurrentStoredWater() const
 {
 	return StoredWaterContainer != nullptr ? StoredWaterContainer->CurrentAmount : 0.0f;
@@ -1079,7 +1108,7 @@ void UUOUUmbrellaComponent::DrawRainBlockerDebug() const
 	FVector BlockerWorldCenter = FVector::ZeroVector;
 	FRotator BlockerWorldRotation = FRotator::ZeroRotator;
 	FVector BlockerHalfExtent = FVector::ZeroVector;
-	if (!TryGetRainBlockerVolumeData(BlockerWorldCenter, BlockerWorldRotation, BlockerHalfExtent))
+	if (!TryGetGameplayRainBlockerVolumeData(BlockerWorldCenter, BlockerWorldRotation, BlockerHalfExtent))
 	{
 		// 비를 막는 상태가 아니면 그릴 기준 데이터가 없으므로 바로 종료합니다.
 		return;
@@ -1089,7 +1118,7 @@ void UUOUUmbrellaComponent::DrawRainBlockerDebug() const
 	const float LifeTime = 0.0f;
 	const bool bIsActiveBlocker = IsBlockingRain();
 	const FColor PlayerDebugColor = bIsActiveBlocker
-		? UUOUDebugSubsystem::GetDebugCategoryColor(this, EUOUDebugCategory::Player, FColor::Cyan)
+		? FColor::Cyan
 		: FColor(90, 90, 90);
 
 	DrawDebugSphere(
@@ -1128,7 +1157,7 @@ void UUOUUmbrellaComponent::DrawRainBlockerDebug() const
 		World,
 		BlockerWorldCenter + BlockerWorldRotation.Quaternion().GetAxisZ() * (BlockerHalfExtent.Z + 18.0f),
 		FString::Printf(
-			TEXT("RainBlocker %s Half %.1f %.1f %.1f Offset %.1f %.1f %.1f"),
+			TEXT("Gameplay RainBlocker %s Half %.1f %.1f %.1f Offset %.1f %.1f %.1f"),
 			bIsActiveBlocker ? TEXT("Active") : TEXT("Inactive"),
 			BlockerHalfExtent.X,
 			BlockerHalfExtent.Y,
