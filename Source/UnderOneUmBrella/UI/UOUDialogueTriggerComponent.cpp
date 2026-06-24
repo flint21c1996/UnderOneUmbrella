@@ -8,10 +8,9 @@
 #include "Engine/LocalPlayer.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
-#include "GameFramework/Character.h"
-#include "GameFramework/CharacterMovementComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Player/UOUCameraControllerComponent.h"
+#include "Player/UOUPlayerInteractionExecutorComponent.h"
 #include "Player/UOUUmbrellaComponent.h"
 #include "Player/UOUUmbrellaCoverVolumeComponent.h"
 #include "TimerManager.h"
@@ -151,13 +150,13 @@ bool UUOUDialogueTriggerComponent::TryStartDialogue(AActor* InstigatorActor)
 {
 	if (bTriggerOnce && bHasTriggered)
 	{
-		ShowCoverDebugMessage(TEXT("Dialogue Start Failed: already triggered"), FColor::Red, 1.5f);
+		ShowProximityDebugStatus(TEXT("Dialogue Start Blocked: already triggered"), FColor::Yellow);
 		return false;
 	}
 
 	if (!PassesInstigatorRules(InstigatorActor))
 	{
-		ShowCoverDebugMessage(TEXT("Dialogue Start Failed: rule check failed"), FColor::Red, 1.5f);
+		ShowProximityDebugStatus(TEXT("Dialogue Start Blocked: rule check failed"), FColor::Yellow);
 		return false;
 	}
 
@@ -200,14 +199,12 @@ void UUOUDialogueTriggerComponent::ShowInteractionHint()
 	if (!bEnableInteractionHint)
 	{
 		LastHintDebugStatus = TEXT("Failed:Disabled");
-		ShowCoverDebugMessage(TEXT("Hint Show Failed: hint disabled"), FColor::Red, 1.5f);
 		return;
 	}
 
 	if (bHintVisible)
 	{
 		LastHintDebugStatus = TEXT("Skipped:AlreadyVisible");
-		ShowCoverDebugMessage(TEXT("Hint Show Skipped: already visible"), FColor::Yellow, 1.0f);
 		return;
 	}
 
@@ -216,7 +213,6 @@ void UUOUDialogueTriggerComponent::ShowInteractionHint()
 		if (UISubsystem->IsDialoguePlaying())
 		{
 			LastHintDebugStatus = TEXT("Failed:DialoguePlaying");
-			ShowCoverDebugMessage(TEXT("Hint Show Failed: dialogue is playing"), FColor::Red, 1.5f);
 			return;
 		}
 	}
@@ -234,7 +230,6 @@ void UUOUDialogueTriggerComponent::ShowInteractionHint()
 	if (DisplayHintText.IsEmpty())
 	{
 		LastHintDebugStatus = TEXT("Failed:TextEmpty");
-		ShowCoverDebugMessage(TEXT("Hint Show Failed: text empty"), FColor::Red, 1.5f);
 		return;
 	}
 
@@ -369,10 +364,10 @@ void UUOUDialogueTriggerComponent::HandleTrackedActorEnter(AActor* OtherActor, U
 		return;
 	}
 
-	ShowCoverDebugMessage(
+	// 플랫폼 이동 중에는 트리거 겹침이 반복될 수 있으므로 근접 진입은 고정 상태 줄에서만 보여줍니다.
+	ShowProximityDebugStatus(
 		FString::Printf(TEXT("Dialogue Proximity Accepted: %s"), *GetNameSafe(OtherActor)),
-		FColor::Green,
-		2.0f);
+		FColor::Green);
 
 	if (bRequireUmbrellaCoverHold)
 	{
@@ -427,10 +422,9 @@ void UUOUDialogueTriggerComponent::HandleEndOverlap(UPrimitiveComponent* Overlap
 		ClearCoverProgress();
 	}
 
-	ShowCoverDebugMessage(
+	ShowProximityDebugStatus(
 		FString::Printf(TEXT("Dialogue Proximity Exit: %s"), *GetNameSafe(OtherActor)),
-		FColor::Orange,
-		2.0f);
+		FColor::Orange);
 
 	HideInteractionHint();
 }
@@ -719,6 +713,17 @@ void UUOUDialogueTriggerComponent::StartDialogueCameraFocus(AActor* InstigatorAc
 	LockMovementForDialogue(InstigatorActor);
 
 	ActiveDialogueCameraController = CameraController;
+	if (!bHasSavedCameraOcclusionEnabled)
+	{
+		bSavedCameraOcclusionEnabled = ActiveDialogueCameraController->IsCameraOcclusionEnabled();
+		bHasSavedCameraOcclusionEnabled = true;
+	}
+
+	if (bEnableCameraOcclusionDuringDialogueFocus)
+	{
+		ActiveDialogueCameraController->SetCameraOcclusionEnabled(true);
+	}
+
 	ActiveDialogueCameraController->StartDialogueFocus(SpeakerActor);
 
 	if (UUOUUISubsystem* UISubsystem = ResolveUISubsystem())
@@ -745,8 +750,15 @@ void UUOUDialogueTriggerComponent::StopDialogueCameraFocus()
 	if (ActiveDialogueCameraController != nullptr)
 	{
 		ActiveDialogueCameraController->EndDialogueFocus();
+		if (bHasSavedCameraOcclusionEnabled)
+		{
+			ActiveDialogueCameraController->SetCameraOcclusionEnabled(bSavedCameraOcclusionEnabled);
+		}
 		ActiveDialogueCameraController = nullptr;
 	}
+
+	bSavedCameraOcclusionEnabled = false;
+	bHasSavedCameraOcclusionEnabled = false;
 
 	UnlockMovementForDialogue();
 }
@@ -780,37 +792,16 @@ void UUOUDialogueTriggerComponent::LockMovementForDialogue(AActor* InstigatorAct
 		return;
 	}
 
-	APawn* InstigatorPawn = Cast<APawn>(InstigatorActor);
-	if (InstigatorPawn == nullptr)
+	UUOUPlayerInteractionExecutorComponent* InputExecutor =
+		UUOUPlayerInteractionExecutorComponent::FindLocalPlayerExecutor(this);
+	if (InputExecutor == nullptr)
 	{
 		return;
 	}
 
-	APlayerController* PlayerController = Cast<APlayerController>(InstigatorPawn->GetController());
-	if (PlayerController == nullptr)
-	{
-		PlayerController = UGameplayStatics::GetPlayerController(this, 0);
-	}
-
-	if (PlayerController == nullptr)
-	{
-		return;
-	}
-
-	// ???移대찓?쇨? NPC? ?뚮젅?댁뼱 ?ъ씠濡??ㅼ뼱媛???숈븞?먮뒗 ?대룞 ?낅젰留??좉툒?덈떎.
-	// 猷??낅젰? ?좉렇吏 ?딆뒿?덈떎. 移대찓??而댄룷?뚰듃媛 ??붿슜 ?꾩튂濡?吏곸젒 蹂닿컙?섍퀬 ?덇린 ?뚮Ц?낅땲??
-	PlayerController->SetIgnoreMoveInput(true);
-	LockedMovementPlayerController = PlayerController;
+	InputExecutor->RequestPlayerInputBlock(this, true);
+	LockedInputExecutorComponent = InputExecutor;
 	bDialogueMovementLocked = true;
-
-	// ?대? ?대룞 以묒씠???띾룄瑜?利됱떆 ?딆뼱??以??쒖옉 吏곹썑 罹먮┃?곌? 誘몃걚?ъ????먮굦??以꾩엯?덈떎.
-	if (ACharacter* Character = Cast<ACharacter>(InstigatorPawn))
-	{
-		if (UCharacterMovementComponent* MovementComponent = Character->GetCharacterMovement())
-		{
-			MovementComponent->StopMovementImmediately();
-		}
-	}
 }
 
 void UUOUDialogueTriggerComponent::UnlockMovementForDialogue()
@@ -820,11 +811,10 @@ void UUOUDialogueTriggerComponent::UnlockMovementForDialogue()
 		return;
 	}
 
-	if (LockedMovementPlayerController != nullptr)
+	if (LockedInputExecutorComponent != nullptr)
 	{
-		// LockMovementForDialogue?먯꽌 ?щ┛ ?대룞 ?낅젰 ?좉툑???뺥솗????踰덈쭔 ?섎룎由쎈땲??
-		LockedMovementPlayerController->SetIgnoreMoveInput(false);
-		LockedMovementPlayerController = nullptr;
+		LockedInputExecutorComponent->ReleasePlayerInputBlock(this);
+		LockedInputExecutorComponent = nullptr;
 	}
 
 	bDialogueMovementLocked = false;

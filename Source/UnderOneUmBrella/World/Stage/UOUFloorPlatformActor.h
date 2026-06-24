@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "Puzzle/Core/UOUPuzzleResultCompletionState.h"
 #include "Puzzle/Core/UOUPuzzleResultReceiver.h"
 #include "UOUFloorPlatformActor.generated.h"
 
@@ -12,12 +13,22 @@ class UBoxComponent;
 class USceneComponent;
 class USplineComponent;
 class UStaticMeshComponent;
+class APawn;
 class UUOUFloorPlatformCarryComponent;
 class UUOUFloorPlatformStepComponent;
+class UUOUPlayerInteractionExecutorComponent;
 class AUOUFloorPlatformActor;
 class AUOUFloorPlatformTargetActor;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FUOUFloorPlatformMoveFinishedSignature, AUOUFloorPlatformActor*, Platform);
+
+UENUM(BlueprintType)
+enum class EUOUFloorPlatformInputBlockPolicy : uint8
+{
+	Never,
+	WhenPlayerOnPlatform,
+	Always
+};
 
 // 플랫폼 이동 시간을 어떤 감속과 가속 곡선으로 보정할지 정합니다.
 UENUM(BlueprintType)
@@ -61,7 +72,7 @@ enum class EUOUFloorPlatformHingeEdge : uint8
 // 층 기반 스테이지에서 한 층의 플랫폼 이동을 담당하는 액터입니다.
 // 퍼즐 결과를 받으면 시작 위치와 목표 위치 사이를 이동하고 완료 상태를 외부에 알립니다.
 UCLASS(meta=(DisplayName="UOU Floor Platform Actor"))
-class AUOUFloorPlatformActor : public AActor, public IUOUPuzzleResultReceiver
+class AUOUFloorPlatformActor : public AActor, public IUOUPuzzleResultReceiver, public IUOUPuzzleResultCompletionState
 {
 	GENERATED_BODY()
 
@@ -211,6 +222,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Rules", meta = (EditCondition = "!bUseSequentialTargetMarkers", EditConditionHides, DisplayName = "Start At Target Single Target Only"))
 	bool bStartAtTarget = false;
 
+	// 플랫폼 이동 결과가 진행되는 동안 플레이어 조작을 어떤 조건으로 막을지 정합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Control")
+	EUOUFloorPlatformInputBlockPolicy InputBlockPolicyDuringMove = EUOUFloorPlatformInputBlockPolicy::WhenPlayerOnPlatform;
+
 	// 에디터에서 이동 기준점을 현재 액터 위치로 다시 잡을 때 사용합니다.
 	UFUNCTION(BlueprintCallable, CallInEditor, Category = "Floor Platform|Editor")
 	void CaptureCurrentAsStart();
@@ -252,12 +267,26 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Floor Platform|Runtime")
 	bool IsAtTarget() const;
 
+	// 마지막으로 도착 완료한 MoveStep 배열 인덱스를 반환합니다.
+	// 아직 어떤 MoveStep에도 도착하지 않았다면 INDEX_NONE을 반환합니다.
+	UFUNCTION(BlueprintPure, Category = "Floor Platform|Runtime")
+	int32 GetLastArrivedMoveStepIndex() const;
+
+	// 지정한 MoveStep에 도착해 있는지 확인합니다.
+	// bRequireNotMoving이 켜져 있으면 이동이 완전히 끝난 상태일 때만 true가 됩니다.
+	UFUNCTION(BlueprintPure, Category = "Floor Platform|Runtime")
+	bool IsAtMoveStepIndex(int32 StepIndex, bool bRequireNotMoving) const;
+
 	// 플랫폼 목표 이동이 끝났을 때 호출되는 이벤트입니다.
 	UPROPERTY(BlueprintAssignable, Category = "Floor Platform|Events")
 	FUOUFloorPlatformMoveFinishedSignature OnMoveFinished;
 
 	// 퍼즐 조건 그룹에서 받은 결과 액션을 플랫폼 이동 명령으로 변환합니다.
 	virtual void ApplyPuzzleResult_Implementation(EOUUPuzzleResultAction Action) override;
+
+	// 플랫폼 이동 결과가 끝났는지 다른 조건 그룹이 물어볼 때 사용하는 완료 상태입니다.
+	virtual bool IsPuzzleResultCompleted_Implementation(EOUUPuzzleResultAction Action) const override;
+	virtual FOnUOUPuzzleResultCompletionStateChangedNativeSignature* GetPuzzleResultCompletionStateChangedEvent() override;
 
 protected:
 	virtual void PostLoad() override;
@@ -301,13 +330,21 @@ protected:
 	void AdvanceSequentialTargetIndex();
 
 	// 현재 위치에서 지정한 목표 트랜스폼까지 이동을 시작합니다.
-	bool BeginMoveToTransform(const FTransform& InTargetTransform, AUOUFloorPlatformTargetActor* TargetMarker);
+	bool BeginMoveToTransform(
+		const FTransform& InTargetTransform,
+		AUOUFloorPlatformTargetActor* TargetMarker,
+		int32 TargetStepIndex);
 
 	// 요청된 스텝 수만큼 이동을 예약하고, 멈춰 있다면 즉시 첫 이동을 시작합니다.
 	void RequestSequentialMoveSteps(int32 StepCount);
 
 	// 예약된 이동 스텝이 남아 있으면 다음 마커 이동을 하나 시작합니다.
 	bool TryStartQueuedSequentialMove();
+
+	void RequestPlayerInputBlockForMove();
+	void ReleasePlayerInputBlockForMove();
+	bool ShouldBlockPlayerInputForMove(const APawn* PlayerPawn) const;
+	bool IsPlayerOnPlatformForInputBlock(const APawn* PlayerPawn) const;
 
 	// 현재 이동 구간의 시작과 목표를 기준으로 실제 플랫폼 트랜스폼을 계산합니다.
 	FTransform BuildActivePlatformTransformAtAlpha(float Alpha) const;
@@ -390,6 +427,9 @@ protected:
 	// 이동 곡선이 있으면 곡선 값을 사용하고 없으면 기본 알파를 그대로 사용합니다.
 	float ResolveMoveAlpha(float RawAlpha) const;
 
+	// 퍼즐 결과 완료 상태를 바꾸고, 이를 기다리는 조건 컴포넌트에 변경을 알립니다.
+	void SetPuzzleResultCompletionState(EOUUPuzzleResultAction Action, bool bNewCompleted);
+
 private:
 	// 이동을 시작한 순간부터 누적된 시간입니다.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Floor Platform|Runtime", meta = (AllowPrivateAccess = "true"))
@@ -402,6 +442,18 @@ private:
 	// 현재 플랫폼이 목표 위치에 도착한 상태인지 저장합니다.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Floor Platform|Runtime", meta = (AllowPrivateAccess = "true"))
 	bool bIsAtTarget = false;
+
+	// Activate 결과 이동이 끝났는지 저장합니다. 두 번째 ConditionGroup의 완료 조건이 이 값을 읽습니다.
+	bool bActivateResultCompleted = false;
+
+	// Deactivate 결과 리셋이 끝났는지 저장합니다. 리셋 완료를 다른 퍼즐 조건으로 쓸 때 사용합니다.
+	bool bDeactivateResultCompleted = false;
+
+	// 완료 상태가 바뀔 때 완료 조건 컴포넌트가 Tick 없이 다시 평가하도록 알려주는 네이티브 이벤트입니다.
+	FOnUOUPuzzleResultCompletionStateChangedNativeSignature OnPuzzleResultCompletionStateChanged;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UUOUPlayerInteractionExecutorComponent> LockedInputExecutorComponent = nullptr;
 
 	// 플랫폼이 이동을 시작하는 기준 트랜스폼입니다.
 	UPROPERTY(Transient)
@@ -455,6 +507,15 @@ private:
 	// 도착 후 자동으로 다음 스텝을 이어갈지 같은 마커별 규칙을 확인하는 데 사용합니다.
 	UPROPERTY(Transient)
 	TObjectPtr<AUOUFloorPlatformTargetActor> ActiveMoveTargetMarker = nullptr;
+
+	// 현재 이동이 끝났을 때 도착했다고 기록할 MoveStep 배열 인덱스입니다.
+	UPROPERTY(Transient)
+	int32 ActiveMoveTargetIndex = INDEX_NONE;
+
+	// 마지막으로 이동 완료 처리된 MoveStep 배열 인덱스입니다.
+	// 다음 MoveStep으로 진행 조건을 걸 때 조건 컴포넌트가 이 값을 읽습니다.
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Floor Platform|Runtime", meta = (AllowPrivateAccess = "true"))
+	int32 LastArrivedMoveStepIndex = INDEX_NONE;
 
 	// 시작 위치가 한 번이라도 기록되었는지 확인하는 값입니다.
 	UPROPERTY(Transient)

@@ -50,6 +50,9 @@ struct FUOUPaperPlaneSwarmParticleRandom
 	float RandomSpeed = 1.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Paper Plane Swarm|Particle")
+	float OrbitSpeedRandom = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Paper Plane Swarm|Particle")
 	float RandomRadius = 0.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Paper Plane Swarm|Particle")
@@ -114,6 +117,12 @@ struct FUOUPaperPlaneSwarmRandomRanges
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Paper Plane Swarm|Random")
 	float RandomSpeedMax = 1.05f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Paper Plane Swarm|Random")
+	float OrbitSpeedRandomMin = 0.55f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Paper Plane Swarm|Random")
+	float OrbitSpeedRandomMax = 1.45f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Paper Plane Swarm|Random")
 	float RandomRadiusMin = -80.0f;
@@ -213,6 +222,9 @@ struct FUOUPaperPlaneSwarmMotionInput
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Paper Plane Swarm|Motion")
 	float WrapHeight = 250.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Paper Plane Swarm|Motion")
+	float MinOrbitHeight = 0.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Paper Plane Swarm|Motion")
 	float OrbitSpeed = 3.14159f;
@@ -362,6 +374,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Paper Plane Swarm|Effect", meta = (EditCondition = "RenderMode == EUOUPaperPlaneSwarmRenderMode::CodeDrivenMesh", ClampMin = "0.001", ToolTip = "C++ 렌더링 모드에서 종이비행기 인스턴스에 곱할 기본 스케일입니다."))
 	FVector PaperPlaneMeshScale = FVector(1.0f);
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Paper Plane Swarm|Scale", meta = (ClampMin = "0.001", ToolTip = "각 종이비행기에 적용할 무작위 크기 배율의 최소값입니다."))
+	float PlaneScaleRandomMin = 0.8f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Paper Plane Swarm|Scale", meta = (ClampMin = "0.001", ToolTip = "각 종이비행기에 적용할 무작위 크기 배율의 최대값입니다."))
+	float PlaneScaleRandomMax = 1.2f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Paper Plane Swarm|Effect", meta = (DisplayName = "Swarm System", ToolTip = "종이비행기 군집 연출에 사용할 Niagara System입니다. 비워두면 SwarmEffect 컴포넌트에 직접 지정된 System을 사용합니다."))
 	TObjectPtr<UNiagaraSystem> SwarmEffectSystem = nullptr;
 
@@ -413,8 +431,17 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Paper Plane Swarm|Shape", meta = (ClampMin = "0.0", ToolTip = "목표 주변 궤도의 세로 흔들림 높이입니다."))
 	float WrapHeight = 250.0f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Paper Plane Swarm|Shape", meta = (ClampMin = "0.0", ToolTip = "목표 위치 기준으로 궤도 비행이 내려갈 수 있는 최소 높이입니다. 0이면 목표 위치보다 아래로 내려가지 않습니다."))
+	float MinOrbitHeight = 0.0f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Paper Plane Swarm|Shape", meta = (ClampMin = "0.0", ToolTip = "목표 주변 궤도 회전 속도입니다."))
 	float OrbitSpeed = 3.14159f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Paper Plane Swarm|Shape", meta = (ClampMin = "0.001", ToolTip = "각 종이비행기의 공전 속도에 곱할 무작위 배율의 최소값입니다."))
+	float OrbitSpeedRandomMin = 0.55f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Paper Plane Swarm|Shape", meta = (ClampMin = "0.001", ToolTip = "각 종이비행기의 공전 속도에 곱할 무작위 배율의 최대값입니다."))
+	float OrbitSpeedRandomMax = 1.45f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Paper Plane Swarm|Shape", meta = (ClampMin = "0.0", ToolTip = "비행 경로 좌우 흔들림 강도입니다."))
 	float WobbleRightAmount = 25.0f;
@@ -498,13 +525,28 @@ public:
 	FName WrapHeightParameterName = TEXT("WrapHeight");
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Paper Plane Swarm|Niagara Parameters")
+	FName MinOrbitHeightParameterName = TEXT("MinOrbitHeight");
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Paper Plane Swarm|Niagara Parameters")
 	FName OrbitSpeedParameterName = TEXT("OrbitSpeed");
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Paper Plane Swarm|Niagara Parameters")
+	FName OrbitSpeedRandomMinParameterName = TEXT("OrbitSpeedRandomMin");
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Paper Plane Swarm|Niagara Parameters")
+	FName OrbitSpeedRandomMaxParameterName = TEXT("OrbitSpeedRandomMax");
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Paper Plane Swarm|Niagara Parameters")
 	FName WobbleRightAmountParameterName = TEXT("WobbleRightAmount");
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Paper Plane Swarm|Niagara Parameters")
 	FName WobbleUpAmountParameterName = TEXT("WobbleUpAmount");
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Paper Plane Swarm|Niagara Parameters")
+	FName PlaneScaleRandomMinParameterName = TEXT("PlaneScaleRandomMin");
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Paper Plane Swarm|Niagara Parameters")
+	FName PlaneScaleRandomMaxParameterName = TEXT("PlaneScaleRandomMax");
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Paper Plane Swarm|Niagara Parameters")
 	FName FlightPatternCountParameterName = TEXT("FlightPatternCount");

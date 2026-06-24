@@ -5,6 +5,7 @@
 #include "Components/BoxComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Puzzle/Results/UOUPuzzleMoverActor.h"
 #include "Puzzle/Weight/UOUWeightedButtonComponent.h"
 #include "Puzzle/Weight/UOUWeightSensorComponent.h"
 #include "UObject/ConstructorHelpers.h"
@@ -21,9 +22,11 @@ AUOUWeightedButtonActor::AUOUWeightedButtonActor()
 	PrimaryActorTick.TickGroup = TG_PostUpdateWork;
 
 	RootScene = CreateDefaultSubobject<USceneComponent>(TEXT("RootScene"));
+	RootScene->SetMobility(EComponentMobility::Movable);
 	SetRootComponent(RootScene);
 
 	WeightSensorVolume = CreateDefaultSubobject<UBoxComponent>(TEXT("WeightSensorVolume"));
+	WeightSensorVolume->SetMobility(EComponentMobility::Movable);
 	WeightSensorVolume->SetupAttachment(RootScene);
 	WeightSensorVolume->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 	WeightSensorVolume->SetCollisionResponseToAllChannels(ECR_Ignore);
@@ -39,6 +42,7 @@ AUOUWeightedButtonActor::AUOUWeightedButtonActor()
 	ButtonMotionRoot->SetRelativeLocation(FVector(0.0f, 0.0f, 10.0f));
 
 	ButtonVisual = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("ButtonVisual"));
+	ButtonVisual->SetMobility(EComponentMobility::Movable);
 	ButtonVisual->SetupAttachment(ButtonMotionRoot);
 	ButtonVisual->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	ButtonVisual->SetGenerateOverlapEvents(false);
@@ -62,14 +66,17 @@ AUOUWeightedButtonActor::AUOUWeightedButtonActor()
 	ConfigureButtonCollision();
 
 	ReleasedPoint = CreateDefaultSubobject<USceneComponent>(TEXT("ReleasedPoint"));
+	ReleasedPoint->SetMobility(EComponentMobility::Movable);
 	ReleasedPoint->SetupAttachment(RootScene);
 	ReleasedPoint->SetRelativeLocation(FVector(0.0f, 0.0f, 10.0f));
 
 	PressedPoint = CreateDefaultSubobject<USceneComponent>(TEXT("PressedPoint"));
+	PressedPoint->SetMobility(EComponentMobility::Movable);
 	PressedPoint->SetupAttachment(RootScene);
 	PressedPoint->SetRelativeLocation(FVector(0.0f, 0.0f, 2.0f));
 
 	ResultSinkPoint = CreateDefaultSubobject<USceneComponent>(TEXT("ResultSinkPoint"));
+	ResultSinkPoint->SetMobility(EComponentMobility::Movable);
 	ResultSinkPoint->SetupAttachment(RootScene);
 	ResultSinkPoint->SetRelativeLocation(FVector(0.0f, 0.0f, -60.0f));
 
@@ -107,11 +114,81 @@ void AUOUWeightedButtonActor::PostInitializeComponents()
 	ConfigureButtonCollision();
 }
 
+void AUOUWeightedButtonActor::BeginPlay()
+{
+	Super::BeginPlay();
+
+	if (ButtonMotionRoot != nullptr)
+	{
+		ButtonMotionRoot->SetMobility(EComponentMobility::Movable);
+	}
+
+	if (ButtonVisual != nullptr)
+	{
+		ButtonVisual->SetMobility(EComponentMobility::Movable);
+		ButtonVisual->SetSimulatePhysics(false);
+	}
+
+	if (!bEnableResultSinkMotion)
+	{
+		bResultSinkActive = false;
+	}
+
+	RefreshButtonMotionTickState();
+
+	if (bFollowSurfaceTarget && bCaptureSurfaceOffsetOnBeginPlay)
+	{
+		CaptureSurfaceOffsetFromCurrentLocation();
+	}
+
+	ConfigureButtonCollisionLayout();
+	ConfigureButtonCollision();
+}
+
 void AUOUWeightedButtonActor::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 
+	UpdateSurfaceFollow(DeltaSeconds);
 	MoveResultSinkVisual(DeltaSeconds);
+}
+
+void AUOUWeightedButtonActor::CaptureCurrentSurfaceOffset()
+{
+	CaptureSurfaceOffsetFromCurrentLocation();
+}
+
+void AUOUWeightedButtonActor::SetResultSinkEnabled(bool bNewEnabled)
+{
+	bEnableResultSinkMotion = bNewEnabled;
+
+	if (!bEnableResultSinkMotion)
+	{
+		bResultSinkActive = false;
+	}
+
+	RefreshButtonMotionTickState();
+}
+
+void AUOUWeightedButtonActor::SetResultSinkActive(bool bNewActive)
+{
+	bResultSinkActive = bEnableResultSinkMotion && bNewActive;
+	RefreshButtonMotionTickState();
+}
+
+void AUOUWeightedButtonActor::ActivateResultSink()
+{
+	SetResultSinkActive(true);
+}
+
+void AUOUWeightedButtonActor::DeactivateResultSink()
+{
+	SetResultSinkActive(false);
+}
+
+void AUOUWeightedButtonActor::ToggleResultSink()
+{
+	SetResultSinkActive(!bResultSinkActive);
 }
 
 void AUOUWeightedButtonActor::ApplyPuzzleResult_Implementation(EOUUPuzzleResultAction Action)
@@ -119,13 +196,13 @@ void AUOUWeightedButtonActor::ApplyPuzzleResult_Implementation(EOUUPuzzleResultA
 	switch (Action)
 	{
 	case EOUUPuzzleResultAction::Activate:
-		bResultSinkActive = true;
+		ActivateResultSink();
 		break;
 	case EOUUPuzzleResultAction::Deactivate:
-		bResultSinkActive = false;
+		DeactivateResultSink();
 		break;
 	case EOUUPuzzleResultAction::Toggle:
-		bResultSinkActive = !bResultSinkActive;
+		ToggleResultSink();
 		break;
 	case EOUUPuzzleResultAction::Pause:
 	case EOUUPuzzleResultAction::Resume:
@@ -217,5 +294,89 @@ void AUOUWeightedButtonActor::RefreshButtonMotionTickState() const
 	}
 
 	// 침하 연출 중에는 WeightedButtonComponent가 ButtonVisual을 PressedPoint로 다시 끌어당기지 않게 합니다.
-	WeightedButtonComponent->SetComponentTickEnabled(!bResultSinkActive);
+	const bool bShouldPausePressMotion = bEnableResultSinkMotion && bResultSinkActive;
+	WeightedButtonComponent->SetComponentTickEnabled(!bShouldPausePressMotion);
+}
+
+USceneComponent* AUOUWeightedButtonActor::ResolveSurfaceTargetComponent() const
+{
+	if (SurfaceTargetActor == nullptr)
+	{
+		return nullptr;
+	}
+
+	if (const AUOUPuzzleMoverActor* MoverActor = Cast<AUOUPuzzleMoverActor>(SurfaceTargetActor))
+	{
+		if (SurfaceTargetComponentName.IsNone() || SurfaceTargetComponentName == TEXT("MovingTarget"))
+		{
+			return MoverActor->MovingTarget.Get();
+		}
+	}
+
+	TArray<USceneComponent*> SceneComponents;
+	SurfaceTargetActor->GetComponents<USceneComponent>(SceneComponents);
+
+	for (USceneComponent* SceneComponent : SceneComponents)
+	{
+		if (SceneComponent != nullptr && SceneComponent->GetFName() == SurfaceTargetComponentName)
+		{
+			return SceneComponent;
+		}
+	}
+
+	return SurfaceTargetActor->GetRootComponent();
+}
+
+void AUOUWeightedButtonActor::CaptureSurfaceOffsetFromCurrentLocation()
+{
+	const USceneComponent* SurfaceComponent = ResolveSurfaceTargetComponent();
+	if (SurfaceComponent == nullptr)
+	{
+		bSurfaceFollowOffsetCaptured = false;
+		return;
+	}
+
+	// 현재 버튼 월드 위치를 표면 대상의 로컬 좌표로 저장해 둡니다.
+	// 이후 대상이 이동하거나 스케일이 변해도 이 로컬 좌표를 다시 월드 위치로 바꿔 따라갑니다.
+	SurfaceLocalOffset = SurfaceComponent->GetComponentTransform().InverseTransformPosition(GetActorLocation());
+	bSurfaceFollowOffsetCaptured = true;
+}
+
+void AUOUWeightedButtonActor::UpdateSurfaceFollow(float DeltaSeconds)
+{
+	if (!bFollowSurfaceTarget)
+	{
+		return;
+	}
+
+	if (!bSurfaceFollowOffsetCaptured && bCaptureSurfaceOffsetOnBeginPlay)
+	{
+		CaptureSurfaceOffsetFromCurrentLocation();
+	}
+
+	if (!bSurfaceFollowOffsetCaptured)
+	{
+		return;
+	}
+
+	const USceneComponent* SurfaceComponent = ResolveSurfaceTargetComponent();
+	if (SurfaceComponent == nullptr)
+	{
+		return;
+	}
+
+	const FVector TargetLocation = SurfaceComponent->GetComponentTransform().TransformPosition(SurfaceLocalOffset);
+	if (SurfaceFollowSpeed <= 0.0f)
+	{
+		SetActorLocation(TargetLocation);
+		return;
+	}
+
+	const FVector NextLocation = FMath::VInterpConstantTo(
+		GetActorLocation(),
+		TargetLocation,
+		DeltaSeconds,
+		SurfaceFollowSpeed);
+
+	SetActorLocation(NextLocation);
 }

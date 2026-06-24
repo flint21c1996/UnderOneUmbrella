@@ -81,6 +81,20 @@ float UUOUCameraControllerComponent::GetCurrentCameraDistance() const
 	return CameraBoom != nullptr ? CameraBoom->TargetArmLength : 0.0f;
 }
 
+void UUOUCameraControllerComponent::SetCameraOcclusionEnabled(bool bNewEnabled)
+{
+	if (bCameraOcclusionEnabled == bNewEnabled)
+	{
+		return;
+	}
+
+	bCameraOcclusionEnabled = bNewEnabled;
+	if (!bCameraOcclusionEnabled)
+	{
+		RestoreAllOccludedMeshes();
+	}
+}
+
 void UUOUCameraControllerComponent::StartDialogueFocus(AActor* SpeakerActor)
 {
 	if (SpeakerActor == nullptr || CameraBoom == nullptr || FollowCamera == nullptr)
@@ -209,6 +223,12 @@ void UUOUCameraControllerComponent::UpdateSnapCamera(float DeltaSeconds)
 	const float NextDistance = FMath::FInterpTo(CameraBoom->TargetArmLength, TargetCameraDistance, DeltaSeconds, CameraZoomInterpSpeed);
 	CameraBoom->TargetArmLength = NextDistance;
 
+	if (FollowCamera != nullptr && FollowCamera->ProjectionMode == ECameraProjectionMode::Orthographic)
+	{
+		const float NextOrthoWidth = FMath::FInterpTo(FollowCamera->OrthoWidth, OrthographicWidth, DeltaSeconds, CameraZoomInterpSpeed);
+		FollowCamera->SetOrthoWidth(FMath::Max(1.0f, NextOrthoWidth));
+	}
+
 	CameraBoom->TargetOffset = FMath::VInterpTo(CameraBoom->TargetOffset, TargetCameraOffset, DeltaSeconds, CameraRotationInterpSpeed);
 }
 
@@ -253,13 +273,32 @@ void UUOUCameraControllerComponent::UpdateDialogueCamera(float DeltaSeconds)
 	TargetCameraOffset = FocusLocation - Owner->GetActorLocation();
 	CameraBoom->TargetOffset = FMath::VInterpTo(CameraBoom->TargetOffset, TargetCameraOffset, DeltaSeconds, DialogueCameraInterpSpeed);
 	CameraBoom->SetWorldRotation(FMath::RInterpTo(CameraBoom->GetComponentRotation(), DesiredRotation, DeltaSeconds, DialogueCameraInterpSpeed));
-	CameraBoom->TargetArmLength = FMath::FInterpTo(CameraBoom->TargetArmLength, DesiredDistance, DeltaSeconds, DialogueCameraInterpSpeed);
+	if (bAdjustDistanceDuringDialogue)
+	{
+		CameraBoom->TargetArmLength = FMath::FInterpTo(CameraBoom->TargetArmLength, DesiredDistance, DeltaSeconds, DialogueCameraInterpSpeed);
+	}
+
+	if (bAdjustOrthoWidthDuringDialogue && FollowCamera != nullptr && FollowCamera->ProjectionMode == ECameraProjectionMode::Orthographic)
+	{
+		const float NextOrthoWidth = FMath::FInterpTo(FollowCamera->OrthoWidth, DialogueOrthographicWidth, DeltaSeconds, DialogueCameraInterpSpeed);
+		FollowCamera->SetOrthoWidth(FMath::Max(1.0f, NextOrthoWidth));
+	}
 }
 
 void UUOUCameraControllerComponent::UpdateCameraOcclusion()
 {
+	if (!bCameraOcclusionEnabled)
+	{
+		if (OccludedMeshStates.Num() > 0)
+		{
+			RestoreAllOccludedMeshes();
+		}
+		return;
+	}
+
 	if (FollowCamera == nullptr)
 	{
+		RestoreAllOccludedMeshes();
 		return;
 	}
 
@@ -267,6 +306,7 @@ void UUOUCameraControllerComponent::UpdateCameraOcclusion()
 	UWorld* World = GetWorld();
 	if (Owner == nullptr || World == nullptr)
 	{
+		RestoreAllOccludedMeshes();
 		return;
 	}
 
@@ -276,20 +316,32 @@ void UUOUCameraControllerComponent::UpdateCameraOcclusion()
 	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(CameraOcclusionTrace), false, Owner);
 	QueryParams.AddIgnoredActor(Owner);
 
-	TArray<FHitResult> HitResults;
-	const bool bHitAnything = World->SweepMultiByChannel(
-		HitResults,
-		TraceStart,
-		TraceEnd,
-		FQuat::Identity,
-		ECC_Visibility,
-		FCollisionShape::MakeSphere(OcclusionProbeRadius),
-		QueryParams);
-
 	TSet<TObjectPtr<UMeshComponent>> DesiredOccludedMeshes;
+	const int32 OccluderLimit = FMath::Max(1, MaxOccludedMeshCount);
 
-	if (bHitAnything)
+	for (int32 SweepIndex = 0; SweepIndex < OccluderLimit; ++SweepIndex)
 	{
+		TArray<FHitResult> HitResults;
+		const bool bHitAnything = World->SweepMultiByChannel(
+			HitResults,
+			TraceStart,
+			TraceEnd,
+			FQuat::Identity,
+			ECC_Visibility,
+			FCollisionShape::MakeSphere(OcclusionProbeRadius),
+			QueryParams);
+
+		if (!bHitAnything)
+		{
+			break;
+		}
+
+		HitResults.Sort([](const FHitResult& Left, const FHitResult& Right)
+		{
+			return Left.Distance < Right.Distance;
+		});
+
+		bool bAddedMeshThisSweep = false;
 		for (const FHitResult& HitResult : HitResults)
 		{
 			UMeshComponent* MeshComponent = Cast<UMeshComponent>(HitResult.GetComponent());
@@ -303,7 +355,24 @@ void UUOUCameraControllerComponent::UpdateCameraOcclusion()
 				continue;
 			}
 
+			if (DesiredOccludedMeshes.Contains(MeshComponent))
+			{
+				continue;
+			}
+
 			DesiredOccludedMeshes.Add(MeshComponent);
+			QueryParams.AddIgnoredComponent(MeshComponent);
+			bAddedMeshThisSweep = true;
+
+			if (DesiredOccludedMeshes.Num() >= OccluderLimit)
+			{
+				break;
+			}
+		}
+
+		if (!bAddedMeshThisSweep || DesiredOccludedMeshes.Num() >= OccluderLimit)
+		{
+			break;
 		}
 	}
 
@@ -337,6 +406,7 @@ void UUOUCameraControllerComponent::ApplyOcclusionToMesh(UMeshComponent* MeshCom
 	FOccludedMeshState NewState;
 	const int32 MaterialCount = MeshComponent->GetNumMaterials();
 	NewState.OriginalMaterials.Reserve(MaterialCount);
+	NewState.bWasVisible = MeshComponent->IsVisible();
 
 	for (int32 MaterialIndex = 0; MaterialIndex < MaterialCount; ++MaterialIndex)
 	{
@@ -374,7 +444,7 @@ void UUOUCameraControllerComponent::RestoreOcclusionFromMesh(UMeshComponent* Mes
 		MeshComponent->SetMaterial(MaterialIndex, State->OriginalMaterials[MaterialIndex]);
 	}
 
-	MeshComponent->SetVisibility(true, true);
+	MeshComponent->SetVisibility(State->bWasVisible, true);
 	OccludedMeshStates.Remove(MeshComponent);
 }
 

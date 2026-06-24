@@ -9,6 +9,26 @@
 #include "UI/UOUDialogueSequenceData.h"
 #include "UI/UOUUISubsystem.h"
 
+namespace
+{
+	FText NormalizeDialogueDisplayText(const FText& SourceText)
+	{
+		if (SourceText.IsEmpty())
+		{
+			return SourceText;
+		}
+
+		// 데이터 테이블에서는 실제 줄바꿈 대신 \n처럼 적는 편이 안전해서,
+		// 화면에 넘기기 전에 사람이 적은 이스케이프 문자를 실제 표시 문자로 바꿉니다.
+		FString DisplayString = SourceText.ToString();
+		DisplayString.ReplaceInline(TEXT("\\r\\n"), TEXT("\n"), ESearchCase::CaseSensitive);
+		DisplayString.ReplaceInline(TEXT("\\n"), TEXT("\n"), ESearchCase::CaseSensitive);
+		DisplayString.ReplaceInline(TEXT("\\t"), TEXT("\t"), ESearchCase::CaseSensitive);
+
+		return FText::FromString(DisplayString);
+	}
+}
+
 UUOUDialogueSourceComponent::UUOUDialogueSourceComponent()
 {
 	PrimaryComponentTick.bCanEverTick = false;
@@ -119,6 +139,11 @@ void UUOUDialogueSourceComponent::SetDialogueState(FName NewDialogueState)
 
 FText UUOUDialogueSourceComponent::GetProximityBubbleText() const
 {
+	if (!bEnableProximityBubble)
+	{
+		return FText::GetEmpty();
+	}
+
 	if (ShouldUseProximityBubbleTable())
 	{
 		EnsureProximityBubbleTableCache();
@@ -136,6 +161,11 @@ FText UUOUDialogueSourceComponent::GetProximityBubbleText() const
 
 float UUOUDialogueSourceComponent::GetProximityBubbleDuration() const
 {
+	if (!bEnableProximityBubble)
+	{
+		return 0.0f;
+	}
+
 	if (ShouldUseProximityBubbleTable())
 	{
 		EnsureProximityBubbleTableCache();
@@ -143,6 +173,43 @@ float UUOUDialogueSourceComponent::GetProximityBubbleDuration() const
 	}
 
 	return 3.0f;
+}
+
+void UUOUDialogueSourceComponent::SetProximityBubbleEnabled(bool bNewEnabled)
+{
+	bEnableProximityBubble = bNewEnabled;
+}
+
+void UUOUDialogueSourceComponent::SetDialogueBubbleEnabled(bool bNewEnabled)
+{
+	bEnableDialogueBubble = bNewEnabled;
+}
+
+void UUOUDialogueSourceComponent::SetSpeechBubbleEnabled(bool bNewEnabled)
+{
+	SetProximityBubbleEnabled(bNewEnabled);
+	SetDialogueBubbleEnabled(bNewEnabled);
+}
+
+void UUOUDialogueSourceComponent::ApplyPuzzleResult_Implementation(EOUUPuzzleResultAction Action)
+{
+	switch (Action)
+	{
+	case EOUUPuzzleResultAction::Activate:
+	case EOUUPuzzleResultAction::Resume:
+		SetSpeechBubbleEnabled(false);
+		break;
+	case EOUUPuzzleResultAction::Deactivate:
+	case EOUUPuzzleResultAction::Pause:
+		SetSpeechBubbleEnabled(true);
+		break;
+	case EOUUPuzzleResultAction::Toggle:
+		SetSpeechBubbleEnabled(!bEnableProximityBubble || !bEnableDialogueBubble);
+		break;
+	case EOUUPuzzleResultAction::None:
+	default:
+		break;
+	}
 }
 
 bool UUOUDialogueSourceComponent::IsUsingDialogueTable() const
@@ -266,7 +333,7 @@ void UUOUDialogueSourceComponent::EnsureDialogueTableCache() const
 	{
 		if (CachedTableProximityBubbleText.IsEmpty() && !Row.ProximityBubbleText.IsEmpty())
 		{
-			CachedTableProximityBubbleText = Row.ProximityBubbleText;
+			CachedTableProximityBubbleText = NormalizeDialogueDisplayText(Row.ProximityBubbleText);
 		}
 
 		if (CachedTableSpeakerName.IsEmpty() && !Row.SpeakerName.IsEmpty())
@@ -277,8 +344,8 @@ void UUOUDialogueSourceComponent::EnsureDialogueTableCache() const
 		FUOUDialogueLine Line;
 		Line.LineId = Row.LineId;
 		Line.SpeakerName = Row.SpeakerName;
-		Line.BubbleText = Row.BubbleText;
-		Line.DialogueText = Row.DialogueText;
+		Line.BubbleText = NormalizeDialogueDisplayText(Row.BubbleText);
+		Line.DialogueText = NormalizeDialogueDisplayText(Row.DialogueText);
 		Line.Emotion = Row.Emotion;
 		Line.BubbleDuration = Row.BubbleDuration;
 		Line.DialogueDuration = Row.DialogueDuration;
@@ -335,7 +402,7 @@ void UUOUDialogueSourceComponent::EnsureProximityBubbleTableCache() const
 	{
 		if (!Row.BubbleText.IsEmpty())
 		{
-			CachedProximityBubbleText = Row.BubbleText;
+			CachedProximityBubbleText = NormalizeDialogueDisplayText(Row.BubbleText);
 			CachedProximityBubbleDuration = Row.BubbleDuration;
 			return;
 		}

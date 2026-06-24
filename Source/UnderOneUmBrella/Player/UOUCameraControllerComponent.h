@@ -16,6 +16,9 @@ struct FOccludedMeshState
 {
 	// 투명 처리 전 원래 머티리얼 배열을 그대로 기억해둔다.
 	TArray<TObjectPtr<UMaterialInterface>> OriginalMaterials;
+
+	// 투명 처리 전 표시 상태를 기억해둔다.
+	bool bWasVisible = true;
 };
 
 // 8방향 스냅 카메라와 줌, 가림 처리를 한 번에 관리하는 카메라 전용 컴포넌트다.
@@ -63,6 +66,12 @@ public:
 
 	// 통합 플레이어 디버그 HUD에서 현재 가림 처리 중인 메시 수를 확인합니다.
 	int32 GetOccludedMeshCount() const { return OccludedMeshStates.Num(); }
+
+	UFUNCTION(BlueprintCallable, Category = "Camera|Occlusion")
+	void SetCameraOcclusionEnabled(bool bNewEnabled);
+
+	UFUNCTION(BlueprintPure, Category = "Camera|Occlusion")
+	bool IsCameraOcclusionEnabled() const { return bCameraOcclusionEnabled; }
 
 	UFUNCTION(BlueprintCallable, Category = "Camera|Dialogue")
 	void StartDialogueFocus(AActor* SpeakerActor);
@@ -126,6 +135,14 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Camera|Occlusion", meta = (ClampMin = "0.0"))
 	float OcclusionProbeRadius = 12.0f;
 
+	// 카메라와 플레이어 사이 가림 처리를 사용할지 정한다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Camera|Occlusion")
+	bool bCameraOcclusionEnabled = false;
+
+	// 한 번에 투명 처리할 최대 메시 수입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Camera|Occlusion", meta = (ClampMin = "1"))
+	int32 MaxOccludedMeshCount = 4;
+
 	// 플레이어 중심보다 약간 위를 가림 탐지 기준으로 보정한다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Camera|Occlusion")
 	FVector OcclusionTargetOffset = FVector(0.0f, 0.0f, 60.0f);
@@ -137,6 +154,18 @@ protected:
 	// 플레이어와 NPC 사이를 비추는 대화용 카메라 거리입니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Camera|Dialogue", meta = (ClampMin = "0.0"))
 	float DialogueCameraDistance = 360.0f;
+
+	// 대화 연출 중 카메라 거리를 바꿀지 정합니다. 끄면 현재 줌 거리를 유지합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Camera|Dialogue")
+	bool bAdjustDistanceDuringDialogue = false;
+
+	// 직교 카메라 대화 연출 중 화면 폭을 따로 줄일지 정합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Camera|Dialogue")
+	bool bAdjustOrthoWidthDuringDialogue = false;
+
+	// 직교 카메라 대화 연출 중 사용할 화면 폭입니다. 값이 작을수록 더 가까이 보입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Camera|Dialogue", meta = (ClampMin = "1.0"))
+	float DialogueOrthographicWidth = 1300.0f;
 
 	// 대화 카메라가 바라보는 기준점 높이입니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Camera|Dialogue")
