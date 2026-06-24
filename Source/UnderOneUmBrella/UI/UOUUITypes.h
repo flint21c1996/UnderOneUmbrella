@@ -20,6 +20,9 @@ struct UNDERONEUMBRELLA_API FUOUUmbrellaHUDState
 	EUOUUmbrellaState UmbrellaState = EUOUUmbrellaState::Closed;
 
 	UPROPERTY(BlueprintReadOnly, Category = "UI|Umbrella")
+	EUOUUmbrellaVisualState UmbrellaVisualState = EUOUUmbrellaVisualState::Closed;
+
+	UPROPERTY(BlueprintReadOnly, Category = "UI|Umbrella")
 	float StoredWater = 0.0f;
 
 	UPROPERTY(BlueprintReadOnly, Category = "UI|Umbrella")

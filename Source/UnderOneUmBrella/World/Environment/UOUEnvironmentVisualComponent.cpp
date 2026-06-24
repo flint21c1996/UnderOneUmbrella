@@ -2,8 +2,6 @@
 
 #include "World/Environment/UOUEnvironmentVisualComponent.h"
 
-#include "Debug/UOUDebugSubsystem.h"
-#include "DrawDebugHelpers.h"
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
 #include "NiagaraComponent.h"
@@ -376,7 +374,6 @@ void UUOUEnvironmentVisualComponent::ApplyNiagaraParameters()
 				Effect->SetVariableFloat(RainBlockerIntensityParameterName, CachedRainBlockerIntensity);
 			}
 
-			DrawRainBlockerNiagaraDebug(Effect, BlockerWorldPosition, CachedRainBlockerHalfExtent);
 		};
 
 	ApplyRainBlockerParameters(ActivePrimaryEffect);
@@ -413,40 +410,3 @@ bool UUOUEnvironmentVisualComponent::CanApplyNiagaraState() const
 	return IsRegistered() && !HasAnyFlags(RF_ClassDefaultObject | RF_ArchetypeObject);
 }
 
-void UUOUEnvironmentVisualComponent::DrawRainBlockerNiagaraDebug(const UNiagaraComponent* Effect, const FVector& BlockerWorldCenter, const FVector& BlockerHalfExtent) const
-{
-	if (!bDrawRainBlockerNiagaraDebug
-		|| !bCachedRainBlockerActive
-		|| !UUOUDebugSubsystem::IsDebugWorldDrawEnabled(this, EUOUDebugCategory::VFX)
-		|| Effect == nullptr
-		|| GetWorld() == nullptr
-		|| BlockerHalfExtent.IsNearlyZero())
-	{
-		return;
-	}
-
-	const float CenterRadius = FMath::Max(6.0f, RainBlockerNiagaraDebugThickness * 2.0f);
-	const FColor VFXDebugColor = UUOUDebugSubsystem::GetDebugCategoryColor(this, EUOUDebugCategory::VFX, FColor::Magenta);
-
-	DrawDebugBox(
-		GetWorld(),
-		BlockerWorldCenter,
-		BlockerHalfExtent,
-		Effect->GetComponentQuat(),
-		VFXDebugColor,
-		false,
-		0.0f,
-		0,
-		RainBlockerNiagaraDebugThickness);
-
-	DrawDebugSphere(
-		GetWorld(),
-		BlockerWorldCenter,
-		CenterRadius,
-		8,
-		VFXDebugColor,
-		false,
-		0.0f,
-		0,
-		RainBlockerNiagaraDebugThickness);
-}

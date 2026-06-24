@@ -6,6 +6,9 @@
 #include "Animation/AnimMontage.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "GameFramework/Pawn.h"
+#include "GameFramework/PlayerController.h"
+#include "Kismet/GameplayStatics.h"
 
 UUOUPlayerInteractionExecutorComponent::UUOUPlayerInteractionExecutorComponent()
 {
@@ -15,6 +18,7 @@ UUOUPlayerInteractionExecutorComponent::UUOUPlayerInteractionExecutorComponent()
 void UUOUPlayerInteractionExecutorComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	ClearMontageDelegate();
+	InputBlockRequestCounts.Empty();
 	Super::EndPlay(EndPlayReason);
 }
 
@@ -34,10 +38,7 @@ bool UUOUPlayerInteractionExecutorComponent::TryStartInteraction(
 	ACharacter* OwnerCharacter = Cast<ACharacter>(GetOwner());
 	if (InteractionRequest.bStopMovementOnStart && OwnerCharacter != nullptr)
 	{
-		if (UCharacterMovementComponent* MovementComponent = OwnerCharacter->GetCharacterMovement())
-		{
-			MovementComponent->StopMovementImmediately();
-		}
+		StopOwnerMovementImmediately();
 	}
 
 	if (!InteractionRequest.HasPlayerMontage())
@@ -108,7 +109,71 @@ bool UUOUPlayerInteractionExecutorComponent::IsInteractionActiveFor(UObject* Int
 
 bool UUOUPlayerInteractionExecutorComponent::ShouldBlockPlayerInput() const
 {
-	return bInteractionActive && bBlockInputWhileActive;
+	return (bInteractionActive && bBlockInputWhileActive) || HasExternalPlayerInputBlock();
+}
+
+void UUOUPlayerInteractionExecutorComponent::RequestPlayerInputBlock(UObject* BlockSource, bool bStopMovementImmediately)
+{
+	if (BlockSource == nullptr)
+	{
+		return;
+	}
+
+	const TWeakObjectPtr<UObject> SourceKey(BlockSource);
+	int32& RequestCount = InputBlockRequestCounts.FindOrAdd(SourceKey);
+	++RequestCount;
+
+	if (bStopMovementImmediately)
+	{
+		StopOwnerMovementImmediately();
+	}
+}
+
+void UUOUPlayerInteractionExecutorComponent::ReleasePlayerInputBlock(UObject* BlockSource)
+{
+	if (BlockSource == nullptr)
+	{
+		return;
+	}
+
+	const TWeakObjectPtr<UObject> SourceKey(BlockSource);
+	int32* RequestCount = InputBlockRequestCounts.Find(SourceKey);
+	if (RequestCount == nullptr)
+	{
+		return;
+	}
+
+	--(*RequestCount);
+	if (*RequestCount <= 0)
+	{
+		InputBlockRequestCounts.Remove(SourceKey);
+	}
+}
+
+bool UUOUPlayerInteractionExecutorComponent::IsPlayerInputBlockedBy(UObject* BlockSource) const
+{
+	if (BlockSource == nullptr)
+	{
+		return false;
+	}
+
+	const TWeakObjectPtr<UObject> SourceKey(BlockSource);
+	const int32* RequestCount = InputBlockRequestCounts.Find(SourceKey);
+	return RequestCount != nullptr && *RequestCount > 0;
+}
+
+UUOUPlayerInteractionExecutorComponent* UUOUPlayerInteractionExecutorComponent::FindLocalPlayerExecutor(
+	const UObject* WorldContextObject,
+	int32 PlayerIndex)
+{
+	if (WorldContextObject == nullptr)
+	{
+		return nullptr;
+	}
+
+	const APlayerController* PlayerController = UGameplayStatics::GetPlayerController(WorldContextObject, PlayerIndex);
+	const APawn* PlayerPawn = PlayerController != nullptr ? PlayerController->GetPawn() : nullptr;
+	return PlayerPawn != nullptr ? PlayerPawn->FindComponentByClass<UUOUPlayerInteractionExecutorComponent>() : nullptr;
 }
 
 void UUOUPlayerInteractionExecutorComponent::FinishActiveInteraction(bool bInterrupted)
@@ -135,6 +200,33 @@ void UUOUPlayerInteractionExecutorComponent::ClearMontageDelegate()
 
 	FOnMontageEnded EmptyDelegate;
 	AnimInstance->Montage_SetEndDelegate(EmptyDelegate, ActiveMontage);
+}
+
+void UUOUPlayerInteractionExecutorComponent::StopOwnerMovementImmediately() const
+{
+	const ACharacter* OwnerCharacter = Cast<ACharacter>(GetOwner());
+	if (OwnerCharacter == nullptr)
+	{
+		return;
+	}
+
+	if (UCharacterMovementComponent* MovementComponent = OwnerCharacter->GetCharacterMovement())
+	{
+		MovementComponent->StopMovementImmediately();
+	}
+}
+
+bool UUOUPlayerInteractionExecutorComponent::HasExternalPlayerInputBlock() const
+{
+	for (const TPair<TWeakObjectPtr<UObject>, int32>& RequestPair : InputBlockRequestCounts)
+	{
+		if (RequestPair.Key.IsValid() && RequestPair.Value > 0)
+		{
+			return true;
+		}
+	}
+
+	return false;
 }
 
 void UUOUPlayerInteractionExecutorComponent::HandleInteractionMontageEnded(
