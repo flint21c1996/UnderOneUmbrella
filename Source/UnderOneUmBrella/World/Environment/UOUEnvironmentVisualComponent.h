@@ -164,17 +164,10 @@ protected:
 	UPROPERTY()
 	FName RainBlockerIntensityParameterName = TEXT("RainBlockerIntensity");
 
-	UPROPERTY()
-	bool bDrawRainBlockerNiagaraDebug = true;
-
-	UPROPERTY()
-	float RainBlockerNiagaraDebugThickness = 2.0f;
-
 	void ApplyVisualEffectSettings(bool bForcePrimarySystem = false, bool bForceSecondarySystem = false);
 	void ApplyVisualEffectTransforms();
 	void ApplyNiagaraParameters();
 	void RefreshNiagaraActivation();
-	void DrawRainBlockerNiagaraDebug(const UNiagaraComponent* Effect, const FVector& BlockerWorldCenter, const FVector& BlockerHalfExtent) const;
 	bool CanApplyNiagaraState() const;
 	UNiagaraComponent* GetPrimaryEffectComponent() const;
 	UNiagaraComponent* GetSecondaryEffectComponent() const;

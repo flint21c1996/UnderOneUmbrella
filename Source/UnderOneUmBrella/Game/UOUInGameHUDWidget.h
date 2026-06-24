@@ -10,6 +10,7 @@
 class AUOUMenuPlayerController;
 class UUOUDialogueBoxWidget;
 class UUOUDialogueSourceComponent;
+class UUOUUmbrellaStatusWidget;
 class UUOUUISubsystem;
 class UUserWidget;
 class UWidgetComponent;
@@ -43,9 +44,16 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "HUD|Dialogue")
 	void SetDialogueBoxWidget(UUOUDialogueBoxWidget* InDialogueBoxWidget);
 
+	UFUNCTION(BlueprintCallable, Category = "HUD|Umbrella")
+	void SetUmbrellaStatusWidget(UUOUUmbrellaStatusWidget* InUmbrellaStatusWidget);
+
 	// Requests a title card from Blueprint or level triggers.
 	UFUNCTION(BlueprintCallable, Category = "HUD|Title")
 	void ShowTitle(const FUOUTitleDisplayData& TitleData);
+
+	// Applies umbrella HUD data to C++ child widgets before optional Blueprint presentation logic runs.
+	UFUNCTION(BlueprintCallable, Category = "HUD|Umbrella")
+	void ApplyUmbrellaHUDState(const FUOUUmbrellaHUDState& State);
 
 	// Blueprint event used to redraw umbrella icon, state, rain block, and water gauge.
 	UFUNCTION(BlueprintImplementableEvent, BlueprintCosmetic, Category = "HUD|Umbrella")
@@ -82,8 +90,12 @@ private:
 	AUOUMenuPlayerController* GetMenuPlayerController() const;
 	UUOUUISubsystem* GetUISubsystem() const;
 	UWidgetComponent* ResolveSpeechBubbleWidgetComponent(AActor* SpeakerActor) const;
+	UUOUUmbrellaStatusWidget* ResolveUmbrellaStatusWidget();
 
 	// WBP_InGameHUD 안에 같은 이름으로 배치하면 자동 연결됩니다.
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional, AllowPrivateAccess = "true"), Category = "HUD|Dialogue")
 	TObjectPtr<UUOUDialogueBoxWidget> DialogueBoxWidget = nullptr;
+
+	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional, AllowPrivateAccess = "true"), Category = "HUD|Umbrella")
+	TObjectPtr<UUOUUmbrellaStatusWidget> UmbrellaStatusWidget = nullptr;
 };
