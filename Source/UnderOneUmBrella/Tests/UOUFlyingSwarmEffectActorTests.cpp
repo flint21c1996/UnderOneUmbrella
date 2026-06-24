@@ -100,11 +100,86 @@ bool FUOUPaperPlaneSwarmMotionTest::RunTest(const FString& Parameters)
 	ParticleRandom.PatternIndex = static_cast<int32>(EUOUPaperPlaneSwarmFlightPattern::WideGlide);
 	Result = AUOUFlyingSwarmEffectActor::SolvePaperPlaneSwarmMotion(MotionInput, ParticleRandom);
 	TestEqual(TEXT("WrapT reaches 1"), Result.WrapT, 1.0f);
-	TestVectorNear(TEXT("After wrap, final position follows spherical orbit position"), Result.Position, FVector(1350.0f, 0.0f, 0.0f));
-	TestVectorNear(TEXT("Velocity is derived from previous position and DeltaTime"), Result.Velocity, FVector(2700.0f, 0.0f, 0.0f));
+	TestVectorNear(TEXT("After wrap, final position follows flat orbit position"), Result.Position, FVector(1350.0f, 0.0f, 100.0f));
+	TestVectorNear(TEXT("Velocity is derived from previous position and DeltaTime"), Result.Velocity, FVector(2700.0f, 0.0f, 200.0f));
 	TestVectorNear(TEXT("Forward direction follows velocity alignment"), Result.ForwardDirection, Result.Velocity.GetSafeNormal());
 	TestEqual(TEXT("Default scale comes from particle scale random"), Result.Scale, 1.0f);
 	TestEqual(TEXT("Bank is zero when bank sine is zero"), Result.BankRadians, 0.0f);
+
+	ParticleRandom.SwoopSpeed = 1.25f;
+	MotionInput.FlightAlpha = 0.8f;
+	MotionInput.WrapAlpha = 0.0f;
+	MotionInput.Time = 0.0f;
+	MotionInput.PreviousPosition = FVector::ZeroVector;
+	Result = AUOUFlyingSwarmEffectActor::SolvePaperPlaneSwarmMotion(MotionInput, ParticleRandom);
+	TestTrue(TEXT("Fast planes enter full orbit as soon as their own flight completes"), FMath::IsNearlyEqual(Result.WrapT, 1.0f, 0.001f));
+	TestVectorNear(TEXT("Fast planes use orbit position without waiting for global wrap alpha"), Result.Position, FVector(1350.0f, 0.0f, 100.0f));
+
+	ParticleRandom.SwoopSpeed = 1.0f;
+	Result = AUOUFlyingSwarmEffectActor::SolvePaperPlaneSwarmMotion(MotionInput, ParticleRandom);
+	TestTrue(TEXT("Default-speed planes keep approaching until their own arrival time"), Result.WrapT < 0.01f);
+
+	MotionInput.FlightAlpha = 0.9f;
+	Result = AUOUFlyingSwarmEffectActor::SolvePaperPlaneSwarmMotion(MotionInput, ParticleRandom);
+	TestTrue(TEXT("Orbit blend starts before the final flight frame to avoid sudden speed changes"), Result.WrapT > 0.0f && Result.WrapT < 1.0f);
+
+	auto SolveFlightOnlyPosition = [&MotionInput, &ParticleRandom](float FlightAlpha)
+	{
+		FUOUPaperPlaneSwarmMotionInput SampleInput = MotionInput;
+		SampleInput.FlightAlpha = FlightAlpha;
+		SampleInput.WrapAlpha = 0.0f;
+		SampleInput.Time = 0.0f;
+		SampleInput.PreviousPosition = FVector::ZeroVector;
+		return AUOUFlyingSwarmEffectActor::SolvePaperPlaneSwarmMotion(SampleInput, ParticleRandom).Position;
+	};
+
+	const FVector HandoffBefore = SolveFlightOnlyPosition(0.54f);
+	const FVector HandoffMiddle = SolveFlightOnlyPosition(0.58f);
+	const FVector HandoffAfter = SolveFlightOnlyPosition(0.62f);
+	const float BeforeHandoffDistance = FVector::Dist(HandoffBefore, HandoffMiddle);
+	const float AfterHandoffDistance = FVector::Dist(HandoffMiddle, HandoffAfter);
+	TestTrue(TEXT("Flight handoff keeps moving before the far point"), BeforeHandoffDistance > 10.0f);
+	TestTrue(TEXT("Flight handoff keeps moving after the far point"), AfterHandoffDistance > 10.0f);
+	TestTrue(TEXT("Flight handoff keeps adjacent step distances comparable"),
+		FMath::Max(BeforeHandoffDistance, AfterHandoffDistance) / FMath::Max(FMath::Min(BeforeHandoffDistance, AfterHandoffDistance), 1.0f) < 8.0f);
+
+	ParticleRandom.RandomDelay = 0.2f;
+	MotionInput.FlightAlpha = 1.0f;
+	MotionInput.WrapAlpha = 0.0f;
+	MotionInput.Time = 0.0f;
+	MotionInput.PreviousPosition = Result.Position;
+	Result = AUOUFlyingSwarmEffectActor::SolvePaperPlaneSwarmMotion(MotionInput, ParticleRandom);
+	TestEqual(TEXT("Delayed flight completion enters full orbit without waiting"), Result.WrapT, 1.0f);
+	const FVector DelayedOrbitPosition = Result.Position;
+
+	MotionInput.Time = 0.5f;
+	MotionInput.PreviousPosition = DelayedOrbitPosition;
+	Result = AUOUFlyingSwarmEffectActor::SolvePaperPlaneSwarmMotion(MotionInput, ParticleRandom);
+	TestFalse(TEXT("Fully wrapped planes continue orbiting after arrival"), Result.Position.Equals(DelayedOrbitPosition, 0.01f));
+	TestFalse(TEXT("Fully wrapped planes keep non-zero velocity"), Result.Velocity.IsNearlyZero());
+	TestTrue(TEXT("Fully wrapped orbit keeps a constant height"), FMath::IsNearlyEqual(Result.Position.Z, DelayedOrbitPosition.Z, 0.01f));
+	ParticleRandom.RandomDelay = 0.0f;
+
+	MotionInput.Time = 0.5f;
+	MotionInput.FlightAlpha = 1.0f;
+	MotionInput.WrapAlpha = 1.0f;
+	MotionInput.PreviousPosition = FVector::ZeroVector;
+	ParticleRandom.OrbitSpeedRandom = 0.5f;
+	const FUOUPaperPlaneSwarmMotionResult SlowOrbitResult = AUOUFlyingSwarmEffectActor::SolvePaperPlaneSwarmMotion(MotionInput, ParticleRandom);
+	ParticleRandom.OrbitSpeedRandom = 1.5f;
+	const FUOUPaperPlaneSwarmMotionResult FastOrbitResult = AUOUFlyingSwarmEffectActor::SolvePaperPlaneSwarmMotion(MotionInput, ParticleRandom);
+	TestFalse(TEXT("Orbit speed random changes each plane's orbit position over time"), SlowOrbitResult.Position.Equals(FastOrbitResult.Position, 0.01f));
+	ParticleRandom.OrbitSpeedRandom = 1.0f;
+
+	MotionInput.Time = 0.0f;
+	MotionInput.MinOrbitHeight = 80.0f;
+	ParticleRandom.RandomHeight = -200.0f;
+	Result = AUOUFlyingSwarmEffectActor::SolvePaperPlaneSwarmMotion(MotionInput, ParticleRandom);
+	TestTrue(TEXT("Pre-wrap position is clamped above target orbit floor"), Result.PreWrapPosition.Z >= 80.0f);
+	TestTrue(TEXT("Wrap position is clamped above target orbit floor"), Result.WrapPosition.Z >= 80.0f);
+	TestTrue(TEXT("Final orbit position is clamped above target orbit floor"), Result.Position.Z >= 80.0f);
+	MotionInput.MinOrbitHeight = 0.0f;
+	ParticleRandom.RandomHeight = 100.0f;
 
 	MotionInput.Time = UE_PI * 0.125f;
 	ParticleRandom.BankAmount = 30.0f;
@@ -148,6 +223,7 @@ bool FUOUPaperPlaneSwarmRandomTest::RunTest(const FString& Parameters)
 	TestInRange(TEXT("RandomPhase is in guide range"), Particle0A.RandomPhase, Ranges.RandomPhaseMin, Ranges.RandomPhaseMax);
 	TestInRange(TEXT("RandomDelay is in guide range"), Particle0A.RandomDelay, Ranges.RandomDelayMin, Ranges.RandomDelayMax);
 	TestInRange(TEXT("RandomSpeed is in guide range"), Particle0A.RandomSpeed, Ranges.RandomSpeedMin, Ranges.RandomSpeedMax);
+	TestInRange(TEXT("OrbitSpeedRandom is in guide range"), Particle0A.OrbitSpeedRandom, Ranges.OrbitSpeedRandomMin, Ranges.OrbitSpeedRandomMax);
 	TestInRange(TEXT("RandomRadius is in guide range"), Particle0A.RandomRadius, Ranges.RandomRadiusMin, Ranges.RandomRadiusMax);
 	TestInRange(TEXT("RandomHeight is in guide range"), Particle0A.RandomHeight, Ranges.RandomHeightMin, Ranges.RandomHeightMax);
 	TestInRange(TEXT("SideOffset is in guide range"), Particle0A.SideOffset, Ranges.SideOffsetMin, Ranges.SideOffsetMax);
@@ -168,6 +244,11 @@ bool FUOUPaperPlaneSwarmRandomTest::RunTest(const FString& Parameters)
 	Ranges.RandomDelayMax = 0.1f;
 	const FUOUPaperPlaneSwarmParticleRandom SwappedRangeParticle = AUOUFlyingSwarmEffectActor::MakePaperPlaneSwarmParticleRandom(2, 2026, Ranges);
 	TestInRange(TEXT("Swapped ranges are normalized"), SwappedRangeParticle.RandomDelay, 0.1f, 0.35f);
+
+	Ranges.ScaleRandomMin = 1.5f;
+	Ranges.ScaleRandomMax = 1.8f;
+	const FUOUPaperPlaneSwarmParticleRandom ScaledParticle = AUOUFlyingSwarmEffectActor::MakePaperPlaneSwarmParticleRandom(3, 2026, Ranges);
+	TestInRange(TEXT("ScaleRandom follows configured mesh scale range"), ScaledParticle.ScaleRandom, 1.5f, 1.8f);
 
 	return true;
 }
