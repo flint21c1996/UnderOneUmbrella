@@ -22,6 +22,7 @@
 #include "Player/UOURainReceiverComponent.h"
 #include "Player/UOUUmbrellaAnimInstance.h"
 #include "Player/UOUWaterContainerComponent.h"
+#include "World/Pour/UOUPourDropActor.h"
 #include "World/Pour/UOUPourReceiverComponent.h"
 #include "World/WaterTarget/UOUWaterBasinTargetComponent.h"
 #include "World/WaterTarget/UOUUmbrellaWaterTarget.h"
@@ -52,6 +53,7 @@ const TCHAR* GetPourReceiverTypeText(EUOUUmbrellaPourReceiverType ReceiverType)
 UUOUUmbrellaComponent::UUOUUmbrellaComponent()
 {
 	PrimaryComponentTick.bCanEverTick = true;
+	PourDropActorClass = AUOUPourDropActor::StaticClass();
 }
 
 // 시작 시 필요한 참조를 찾고, 시작 보유 옵션과 기본 우산 비주얼을 현재 상태에 맞춥니다.
@@ -543,6 +545,18 @@ void UUOUUmbrellaComponent::SetState(EUOUUmbrellaState NewState)
 	else if (ResolvedState == EUOUUmbrellaState::UpsideDown || ResolvedState == EUOUUmbrellaState::Pouring)
 	{
 		CurrentDirectionState = EUOUUmbrellaDirectionState::Reversed;
+	}
+
+	if (PreviousState != EUOUUmbrellaState::Pouring && ResolvedState == EUOUUmbrellaState::Pouring)
+	{
+		ResetPendingPourDrop();
+	}
+	else if (PreviousState == EUOUUmbrellaState::Pouring && ResolvedState != EUOUUmbrellaState::Pouring)
+	{
+		if (!SpawnPendingPourDrop())
+		{
+			ResetPendingPourDrop();
+		}
 	}
 
 	if (PreviousState == ResolvedState)
@@ -1352,18 +1366,92 @@ void UUOUUmbrellaComponent::ClearPourAimFacing()
 {
 }
 
-// 붓기 상태에서 저장된 물을 줄이고, 라인트레이스로 맞은 대상에 물을 전달합니다.
+bool UUOUUmbrellaComponent::SpawnPendingPourDrop()
+{
+	if (PendingPourDropVolume <= KINDA_SMALL_NUMBER || PendingPourDropDuration <= KINDA_SMALL_NUMBER)
+	{
+		return false;
+	}
+
+	UWorld* World = GetWorld();
+	AActor* Owner = GetOwner();
+	if (World == nullptr || Owner == nullptr || PourDropActorClass == nullptr)
+	{
+		return false;
+	}
+
+	FVector DropOrigin = FVector::ZeroVector;
+	FVector DropDirection = FVector::ForwardVector;
+	if (!TryGetPourDirection(DropOrigin, DropDirection))
+	{
+		return false;
+	}
+
+	FActorSpawnParameters SpawnParameters;
+	SpawnParameters.Owner = Owner;
+	SpawnParameters.Instigator = Cast<APawn>(Owner);
+	SpawnParameters.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+	AUOUPourDropActor* DropActor = World->SpawnActor<AUOUPourDropActor>(
+		PourDropActorClass,
+		DropOrigin,
+		DropDirection.Rotation(),
+		SpawnParameters);
+	if (DropActor == nullptr)
+	{
+		return false;
+	}
+
+	FUOUPourDropContext DropContext;
+	DropContext.Volume = PendingPourDropVolume;
+	DropContext.Duration = PendingPourDropDuration;
+	DropContext.WorldDirection = DropDirection;
+	DropContext.InstigatorActor = Owner;
+	DropContext.bApplyToConnectedWaterBasinGroup = bPourDropAppliesToConnectedWaterBasinGroup;
+	DropActor->InitializePourDrop(DropContext);
+
+	LastPourTraceStart = DropOrigin;
+	LastPourTraceEnd = DropOrigin + DropDirection * PourDistance;
+	LastPourTraceImpactPoint = LastPourTraceEnd;
+	bHasLastPourTrace = true;
+	bLastPourTraceHit = false;
+	bLastPourDeliveredWater = false;
+	bLastPourCheckedWaterBasinImpactPoint = false;
+	bLastPourImpactPointInsideWaterBasin = false;
+	LastPourHitName = TEXT("PourDrop Spawned");
+	LastPourTargetName = DropActor->GetName();
+	LastPourReceiverType = EUOUUmbrellaPourReceiverType::None;
+	LastPourAmount = PendingPourDropVolume;
+	LastPourStoredWaterAfter = GetCurrentStoredWater();
+
+	ResetPendingPourDrop();
+	return true;
+}
+
+void UUOUUmbrellaComponent::ResetPendingPourDrop()
+{
+	PendingPourDropVolume = 0.0f;
+	PendingPourDropDuration = 0.0f;
+	TimeSinceLastPourDropSpawn = FMath::Max(0.0f, PourDropSpawnInterval);
+}
+
+// 붓기 상태에서 저장된 물을 줄이고, 일정 간격으로 낙하 물 액터를 생성합니다.
 void UUOUUmbrellaComponent::UpdatePouring(float DeltaTime)
 {
 	if (CurrentState != EUOUUmbrellaState::Pouring || StoredWaterContainer == nullptr)
 	{
 		ClearPourTraceDebug();
+		ResetPendingPourDrop();
 		return;
 	}
 
 	const float StoredWaterBefore = GetCurrentStoredWater();
 	if (StoredWaterBefore <= KINDA_SMALL_NUMBER)
 	{
+		if (!SpawnPendingPourDrop())
+		{
+			ResetPendingPourDrop();
+		}
 		EndPour();
 		return;
 	}
@@ -1389,9 +1477,13 @@ void UUOUUmbrellaComponent::UpdatePouring(float DeltaTime)
 	StoredWaterContainer->RemoveAmount(ConsumedStoredWater);
 	const float StoredWaterAfter = GetCurrentStoredWater();
 
-	FVector TraceStart = FVector::ZeroVector;
-	FVector TraceDirection = FVector::ForwardVector;
-	LastPourHitName = TEXT("No Hit");
+	PendingPourDropVolume += PourAmount;
+	PendingPourDropDuration += EffectivePourDuration;
+	TimeSinceLastPourDropSpawn += FMath::Max(0.0f, DeltaTime);
+
+	FVector DropOrigin = FVector::ZeroVector;
+	FVector DropDirection = FVector::ForwardVector;
+	LastPourHitName = TEXT("PourDrop Pending");
 	LastPourTargetName = TEXT("None");
 	LastPourReceiverType = EUOUUmbrellaPourReceiverType::None;
 	bHasLastPourTrace = false;
@@ -1403,63 +1495,36 @@ void UUOUUmbrellaComponent::UpdatePouring(float DeltaTime)
 	LastPourStoredWaterBefore = StoredWaterBefore;
 	LastPourStoredWaterAfter = StoredWaterAfter;
 
-	if (TryGetPourDirection(TraceStart, TraceDirection))
+	if (TryGetPourDirection(DropOrigin, DropDirection))
 	{
-		UWorld* World = GetWorld();
-		AActor* Owner = GetOwner();
-		if (World != nullptr && Owner != nullptr)
-		{
-			FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(UmbrellaPourTrace), false, Owner);
-			QueryParams.AddIgnoredActor(Owner);
-
-			const FVector TraceEnd = TraceStart + TraceDirection * PourDistance;
-			LastPourTraceStart = TraceStart;
-			LastPourTraceEnd = TraceEnd;
-			LastPourTraceImpactPoint = TraceEnd;
-			bHasLastPourTrace = true;
-
-			TArray<FHitResult> HitResults;
-			if (World->LineTraceMultiByChannel(HitResults, TraceStart, TraceEnd, PourTraceChannel, QueryParams))
-			{
-				// 여러 대상이 겹쳐 맞을 수 있으므로 가까운 히트부터 검사합니다.
-				HitResults.Sort([](const FHitResult& Left, const FHitResult& Right)
-				{
-					return Left.Distance < Right.Distance;
-				});
-
-				for (const FHitResult& HitResult : HitResults)
-				{
-					AActor* HitActor = HitResult.GetActor();
-					if (HitActor == nullptr || HitActor == Owner)
-					{
-						continue;
-					}
-
-					LastPourHitName = GetNameSafe(HitResult.GetComponent());
-					LastPourTraceImpactPoint = HitResult.ImpactPoint;
-					bLastPourTraceHit = true;
-
-					EUOUUmbrellaPourReceiverType ReceiverType = EUOUUmbrellaPourReceiverType::None;
-					bLastPourDeliveredWater = TryReceiveWaterAtHit(HitResult, PourAmount, EffectivePourDuration, TraceDirection, ReceiverType);
-					LastPourReceiverType = ReceiverType;
-					if (bLastPourDeliveredWater || HitResult.bBlockingHit)
-					{
-						break;
-					}
-				}
-			}
-		}
+		LastPourTraceStart = DropOrigin;
+		LastPourTraceEnd = DropOrigin + DropDirection * PourDistance;
+		LastPourTraceImpactPoint = LastPourTraceEnd;
+		bHasLastPourTrace = true;
 	}
 	else
 	{
 		ClearPourTraceDebug();
-		LastPourHitName = TEXT("Invalid Ray");
+		LastPourHitName = TEXT("Invalid Pour Direction");
 		LastPourTargetName = TEXT("None");
+		ResetPendingPourDrop();
+	}
+
+	const float SafeSpawnInterval = FMath::Max(0.0f, PourDropSpawnInterval);
+	if (PendingPourDropVolume > KINDA_SMALL_NUMBER
+		&& (SafeSpawnInterval <= KINDA_SMALL_NUMBER || TimeSinceLastPourDropSpawn >= SafeSpawnInterval)
+		&& !SpawnPendingPourDrop())
+	{
+		LastPourHitName = PourDropActorClass == nullptr ? TEXT("Missing PourDrop Class") : TEXT("PourDrop Spawn Failed");
 	}
 
 	if (GetCurrentStoredWater() <= 0.0f)
 	{
 		// 물이 다 떨어지면 입력을 계속 누르고 있어도 붓기를 종료합니다.
+		if (!SpawnPendingPourDrop())
+		{
+			ResetPendingPourDrop();
+		}
 		EndPour();
 	}
 }

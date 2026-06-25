@@ -15,6 +15,7 @@ class USceneComponent;
 class USkeletalMeshComponent;
 class UStaticMesh;
 class UStaticMeshComponent;
+class AUOUPourDropActor;
 class UUOURainReceiverComponent;
 class UUOUAudioCueComponent;
 class UUOUWaterContainerComponent;
@@ -287,6 +288,15 @@ public:
 	// 물을 부을 대상을 찾을 때 사용하는 충돌 채널입니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Water")
 	TEnumAsByte<ECollisionChannel> PourTraceChannel = ECC_Visibility;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Umbrella|Pour Drop", meta = (ToolTip = "Pouring 중 생성할 낙하 물 액터 클래스입니다. 비워두면 저장된 물은 소비되지만 물방울 액터를 만들 수 없습니다."))
+	TSubclassOf<AUOUPourDropActor> PourDropActorClass;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Umbrella|Pour Drop", meta = (ClampMin = "0.0", ToolTip = "물방울 액터를 생성하는 최소 간격입니다. 0이면 매 Tick 생성합니다."))
+	float PourDropSpawnInterval = 0.06f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Umbrella|Pour Drop", meta = (ToolTip = "WaterBasinTarget에 닿았을 때 연결된 Basin 그룹 전체에 물을 분배할지 정합니다."))
+	bool bPourDropAppliesToConnectedWaterBasinGroup = true;
 
 	// 물을 붓는 동안 플레이어가 마우스 방향을 바라보게 할지 정합니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Aim")
@@ -610,8 +620,12 @@ protected:
 	// 붓기 조준 회전에서 남겨둔 상태를 정리하기 위한 자리입니다.
 	void ClearPourAimFacing();
 
-	// 저장된 물을 시간에 따라 줄이고 라인트레이스로 물을 받을 대상을 찾습니다.
+	// 저장된 물을 시간에 따라 줄이고 일정 간격으로 낙하 물 액터를 생성합니다.
 	void UpdatePouring(float DeltaTime);
+
+	bool SpawnPendingPourDrop();
+
+	void ResetPendingPourDrop();
 
 	// 마우스 위치를 기준으로 플레이어가 바라볼 평면 방향을 계산합니다.
 	bool TryGetMouseAimDirection(FVector& AimDirection, FVector& AimPoint) const;
@@ -619,7 +633,7 @@ protected:
 	// 물 붓기 시작 위치와 최종 방향을 계산합니다.
 	bool TryGetPourDirection(FVector& PourOriginLocation, FVector& PourDirection) const;
 
-	// 라인트레이스에 맞은 액터가 물을 받을 수 있으면 물을 전달하고 대상 종류를 기록합니다.
+	// 레거시 ray 기반 전달 helper입니다. 현재 pouring 경로는 PourDropActor를 통해 전달합니다.
 	bool TryReceiveWaterAtHit(const FHitResult& HitResult, float WaterAmount, float PourDuration, const FVector& PourDirection, EUOUUmbrellaPourReceiverType& OutReceiverType);
 
 	// 상태 전환 과정에서 저장된 물을 버려야 하는지 판단합니다.
@@ -635,4 +649,10 @@ protected:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UAnimationAsset> LastAppliedSkeletalVisualAnimation = nullptr;
+
+	float PendingPourDropVolume = 0.0f;
+
+	float PendingPourDropDuration = 0.0f;
+
+	float TimeSinceLastPourDropSpawn = 0.0f;
 };
