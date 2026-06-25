@@ -47,6 +47,24 @@ const TCHAR* GetPourReceiverTypeText(EUOUUmbrellaPourReceiverType ReceiverType)
 		return TEXT("None");
 	}
 }
+
+EUOUUmbrellaPourReceiverType ConvertPourDropReceiverType(EUOUPourDropReceiverType ReceiverType)
+{
+	switch (ReceiverType)
+	{
+	case EUOUPourDropReceiverType::PurePourReceiver:
+		return EUOUUmbrellaPourReceiverType::PurePourReceiver;
+	case EUOUPourDropReceiverType::UmbrellaWaterTarget:
+		return EUOUUmbrellaPourReceiverType::UmbrellaWaterTarget;
+	case EUOUPourDropReceiverType::WaterBasinTarget:
+		return EUOUUmbrellaPourReceiverType::WaterBasinTarget;
+	case EUOUPourDropReceiverType::WaterContainer:
+		return EUOUUmbrellaPourReceiverType::WaterContainer;
+	case EUOUPourDropReceiverType::None:
+	default:
+		return EUOUUmbrellaPourReceiverType::None;
+	}
+}
 }
 
 // 우산 컴포넌트는 물 붓기, 조준 회전, 디버그 표시를 계속 갱신해야 해서 틱을 켭니다.
@@ -550,6 +568,7 @@ void UUOUUmbrellaComponent::SetState(EUOUUmbrellaState NewState)
 	if (PreviousState != EUOUUmbrellaState::Pouring && ResolvedState == EUOUUmbrellaState::Pouring)
 	{
 		ResetPendingPourDrop();
+		PrimeNextPourDropSpawn();
 	}
 	else if (PreviousState == EUOUUmbrellaState::Pouring && ResolvedState != EUOUUmbrellaState::Pouring)
 	{
@@ -1402,6 +1421,9 @@ bool UUOUUmbrellaComponent::SpawnPendingPourDrop()
 		return false;
 	}
 
+	DropActor->OnPourDropImpacted.RemoveDynamic(this, &UUOUUmbrellaComponent::HandlePourDropImpacted);
+	DropActor->OnPourDropImpacted.AddDynamic(this, &UUOUUmbrellaComponent::HandlePourDropImpacted);
+
 	FUOUPourDropContext DropContext;
 	DropContext.Volume = PendingPourDropVolume;
 	DropContext.Duration = PendingPourDropDuration;
@@ -1432,7 +1454,52 @@ void UUOUUmbrellaComponent::ResetPendingPourDrop()
 {
 	PendingPourDropVolume = 0.0f;
 	PendingPourDropDuration = 0.0f;
+	TimeSinceLastPourDropSpawn = 0.0f;
+}
+
+void UUOUUmbrellaComponent::PrimeNextPourDropSpawn()
+{
 	TimeSinceLastPourDropSpawn = FMath::Max(0.0f, PourDropSpawnInterval);
+}
+
+// Drop impact delegate updates the existing pour debug fields after the spawned actor reaches a receiver.
+void UUOUUmbrellaComponent::HandlePourDropImpacted(
+	AUOUPourDropActor* DropActor,
+	AActor* ImpactActor,
+	FVector ImpactLocation,
+	EUOUPourDropReceiverType ReceiverType,
+	bool bDeliveredWater)
+{
+	LastPourTraceImpactPoint = ImpactLocation;
+	LastPourTraceEnd = ImpactLocation;
+	bHasLastPourTrace = true;
+	bLastPourTraceHit = ImpactActor != nullptr;
+	bLastPourDeliveredWater = bDeliveredWater;
+	LastPourHitName = bDeliveredWater ? TEXT("PourDrop Delivered") : TEXT("PourDrop Impact");
+	LastPourTargetName = IsValid(ImpactActor) ? ImpactActor->GetName() : TEXT("None");
+	LastPourReceiverType = ConvertPourDropReceiverType(ReceiverType);
+	LastPourAmount = IsValid(DropActor) ? DropActor->CurrentVolume : 0.0f;
+	LastPourStoredWaterAfter = GetCurrentStoredWater();
+
+	bLastPourCheckedWaterBasinImpactPoint = false;
+	bLastPourImpactPointInsideWaterBasin = false;
+	if (ReceiverType == EUOUPourDropReceiverType::WaterBasinTarget && IsValid(ImpactActor))
+	{
+		UUOUWaterBasinTargetComponent* WaterBasinTarget = ImpactActor->FindComponentByClass<UUOUWaterBasinTargetComponent>();
+		if (WaterBasinTarget == nullptr)
+		{
+			if (AActor* ParentActor = ImpactActor->GetAttachParentActor())
+			{
+				WaterBasinTarget = ParentActor->FindComponentByClass<UUOUWaterBasinTargetComponent>();
+			}
+		}
+
+		if (WaterBasinTarget != nullptr)
+		{
+			bLastPourCheckedWaterBasinImpactPoint = true;
+			bLastPourImpactPointInsideWaterBasin = WaterBasinTarget->IsWorldLocationInsideBasin(ImpactLocation);
+		}
+	}
 }
 
 // 붓기 상태에서 저장된 물을 줄이고, 일정 간격으로 낙하 물 액터를 생성합니다.

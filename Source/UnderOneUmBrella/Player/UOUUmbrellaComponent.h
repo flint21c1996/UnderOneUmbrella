@@ -7,6 +7,7 @@
 #include "Components/ActorComponent.h"
 #include "Engine/EngineTypes.h"
 #include "InputCoreTypes.h"
+#include "World/Pour/UOUPourDropActor.h"
 #include "UOUUmbrellaComponent.generated.h"
 
 class UArrowComponent;
@@ -15,7 +16,6 @@ class USceneComponent;
 class USkeletalMeshComponent;
 class UStaticMesh;
 class UStaticMeshComponent;
-class AUOUPourDropActor;
 class UUOURainReceiverComponent;
 class UUOUAudioCueComponent;
 class UUOUWaterContainerComponent;
@@ -626,6 +626,11 @@ protected:
 	bool SpawnPendingPourDrop();
 
 	void ResetPendingPourDrop();
+
+	void PrimeNextPourDropSpawn();
+
+	UFUNCTION()
+	void HandlePourDropImpacted(AUOUPourDropActor* DropActor, AActor* ImpactActor, FVector ImpactLocation, EUOUPourDropReceiverType ReceiverType, bool bDeliveredWater);
 
 	// 마우스 위치를 기준으로 플레이어가 바라볼 평면 방향을 계산합니다.
 	bool TryGetMouseAimDirection(FVector& AimDirection, FVector& AimPoint) const;
