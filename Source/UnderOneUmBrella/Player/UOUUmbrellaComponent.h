@@ -7,7 +7,7 @@
 #include "Components/ActorComponent.h"
 #include "Engine/EngineTypes.h"
 #include "InputCoreTypes.h"
-#include "World/Pour/UOUPourDropActor.h"
+#include "World/Pour/UOUPourDropTypes.h"
 #include "UOUUmbrellaComponent.generated.h"
 
 class UArrowComponent;
@@ -16,6 +16,7 @@ class USceneComponent;
 class USkeletalMeshComponent;
 class UStaticMesh;
 class UStaticMeshComponent;
+class AUOUPourDropActor;
 class UUOURainReceiverComponent;
 class UUOUAudioCueComponent;
 class UUOUWaterContainerComponent;
@@ -637,9 +638,6 @@ protected:
 
 	// 물 붓기 시작 위치와 최종 방향을 계산합니다.
 	bool TryGetPourDirection(FVector& PourOriginLocation, FVector& PourDirection) const;
-
-	// 레거시 ray 기반 전달 helper입니다. 현재 pouring 경로는 PourDropActor를 통해 전달합니다.
-	bool TryReceiveWaterAtHit(const FHitResult& HitResult, float WaterAmount, float PourDuration, const FVector& PourDirection, EUOUUmbrellaPourReceiverType& OutReceiverType);
 
 	// 상태 전환 과정에서 저장된 물을 버려야 하는지 판단합니다.
 	bool ShouldSpillStoredWater(EUOUUmbrellaState PreviousState, EUOUUmbrellaState NextState) const;
