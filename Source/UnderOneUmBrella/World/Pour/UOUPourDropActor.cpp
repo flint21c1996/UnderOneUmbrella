@@ -1,0 +1,342 @@
+// Copyright Epic Games, Inc. All Rights Reserved.
+
+#include "World/Pour/UOUPourDropActor.h"
+
+#include "Components/SphereComponent.h"
+#include "Components/StaticMeshComponent.h"
+#include "GameFramework/ProjectileMovementComponent.h"
+#include "NiagaraComponent.h"
+#include "NiagaraFunctionLibrary.h"
+#include "Player/UOUWaterContainerComponent.h"
+#include "UObject/ConstructorHelpers.h"
+#include "World/Pour/UOUPourReceiverComponent.h"
+#include "World/WaterTarget/UOUUmbrellaWaterTarget.h"
+#include "World/WaterTarget/UOUWaterBasinTargetComponent.h"
+
+namespace
+{
+	AActor* ResolveAttachParentActor(AActor* Actor)
+	{
+		return IsValid(Actor) ? Actor->GetAttachParentActor() : nullptr;
+	}
+
+	template<typename ComponentType>
+	ComponentType* FindComponentOnActorOrParent(AActor* Actor, AActor*& OutOwnerActor)
+	{
+		OutOwnerActor = nullptr;
+		if (!IsValid(Actor))
+		{
+			return nullptr;
+		}
+
+		if (ComponentType* Component = Actor->FindComponentByClass<ComponentType>())
+		{
+			OutOwnerActor = Actor;
+			return Component;
+		}
+
+		if (AActor* ParentActor = ResolveAttachParentActor(Actor))
+		{
+			if (ComponentType* ParentComponent = ParentActor->FindComponentByClass<ComponentType>())
+			{
+				OutOwnerActor = ParentActor;
+				return ParentComponent;
+			}
+		}
+
+		return nullptr;
+	}
+
+	AUOUUmbrellaWaterTarget* FindUmbrellaWaterTargetOnActorOrParent(AActor* Actor)
+	{
+		if (AUOUUmbrellaWaterTarget* WaterTarget = Cast<AUOUUmbrellaWaterTarget>(Actor))
+		{
+			return WaterTarget;
+		}
+
+		return Cast<AUOUUmbrellaWaterTarget>(ResolveAttachParentActor(Actor));
+	}
+}
+
+AUOUPourDropActor::AUOUPourDropActor()
+{
+	PrimaryActorTick.bCanEverTick = false;
+
+	CollisionComponent = CreateDefaultSubobject<USphereComponent>(TEXT("CollisionComponent"));
+	SetRootComponent(CollisionComponent);
+	CollisionComponent->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+	CollisionComponent->SetCollisionObjectType(ECC_WorldDynamic);
+	CollisionComponent->SetCollisionResponseToAllChannels(ECR_Block);
+	CollisionComponent->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
+	CollisionComponent->SetGenerateOverlapEvents(true);
+	CollisionComponent->InitSphereRadius(CollisionRadius);
+
+	VisualMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("VisualMesh"));
+	VisualMesh->SetupAttachment(CollisionComponent);
+	VisualMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	VisualMesh->SetGenerateOverlapEvents(false);
+	VisualMesh->SetCastShadow(false);
+
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> SphereMeshFinder(TEXT("/Engine/BasicShapes/Sphere.Sphere"));
+	if (SphereMeshFinder.Succeeded())
+	{
+		VisualMesh->SetStaticMesh(SphereMeshFinder.Object);
+		VisualMesh->SetRelativeScale3D(FVector(0.08f));
+	}
+
+	TrailEffect = CreateDefaultSubobject<UNiagaraComponent>(TEXT("TrailEffect"));
+	TrailEffect->SetupAttachment(CollisionComponent);
+	TrailEffect->SetAutoActivate(true);
+
+	ProjectileMovement = CreateDefaultSubobject<UProjectileMovementComponent>(TEXT("ProjectileMovement"));
+	ProjectileMovement->UpdatedComponent = CollisionComponent;
+	ProjectileMovement->bRotationFollowsVelocity = true;
+	ProjectileMovement->bShouldBounce = false;
+	ProjectileMovement->InitialSpeed = InitialSpeed;
+	ProjectileMovement->MaxSpeed = MaxSpeed;
+	ProjectileMovement->ProjectileGravityScale = GravityScale;
+}
+
+void AUOUPourDropActor::OnConstruction(const FTransform& Transform)
+{
+	Super::OnConstruction(Transform);
+
+	ApplyCollisionSettings();
+	ApplyMovementSettings();
+}
+
+void AUOUPourDropActor::BeginPlay()
+{
+	Super::BeginPlay();
+
+	ApplyCollisionSettings();
+	ApplyMovementSettings();
+	IgnoreSourceActor();
+
+	if (DropLifeSpan > 0.0f)
+	{
+		SetLifeSpan(DropLifeSpan);
+	}
+
+	CollisionComponent->OnComponentBeginOverlap.RemoveDynamic(this, &AUOUPourDropActor::HandleCollisionBeginOverlap);
+	CollisionComponent->OnComponentBeginOverlap.AddDynamic(this, &AUOUPourDropActor::HandleCollisionBeginOverlap);
+
+	ProjectileMovement->OnProjectileStop.RemoveDynamic(this, &AUOUPourDropActor::HandleProjectileStop);
+	ProjectileMovement->OnProjectileStop.AddDynamic(this, &AUOUPourDropActor::HandleProjectileStop);
+
+	if (!bHasInitializedVelocity)
+	{
+		ApplyLaunchVelocity();
+	}
+}
+
+void AUOUPourDropActor::InitializePourDrop(const FUOUPourDropContext& DropContext)
+{
+	CurrentVolume = FMath::Max(0.0f, DropContext.Volume);
+	CurrentDuration = FMath::Max(0.0f, DropContext.Duration);
+	CurrentWorldDirection = DropContext.WorldDirection.GetSafeNormal();
+	if (CurrentWorldDirection.IsNearlyZero())
+	{
+		CurrentWorldDirection = GetActorForwardVector();
+	}
+
+	SourceInstigatorActor = DropContext.InstigatorActor;
+	bCurrentApplyToConnectedWaterBasinGroup = DropContext.bApplyToConnectedWaterBasinGroup;
+	IgnoreSourceActor();
+	ApplyMovementSettings();
+	ApplyLaunchVelocity();
+}
+
+void AUOUPourDropActor::HandleCollisionBeginOverlap(
+	UPrimitiveComponent*,
+	AActor* OtherActor,
+	UPrimitiveComponent*,
+	int32,
+	bool,
+	const FHitResult& SweepResult)
+{
+	HandleImpact(SweepResult, OtherActor, false);
+}
+
+void AUOUPourDropActor::HandleProjectileStop(const FHitResult& ImpactResult)
+{
+	HandleImpact(ImpactResult, ImpactResult.GetActor(), true);
+}
+
+void AUOUPourDropActor::ApplyCollisionSettings()
+{
+	if (CollisionComponent == nullptr)
+	{
+		return;
+	}
+
+	CollisionRadius = FMath::Max(0.0f, CollisionRadius);
+	CollisionComponent->SetSphereRadius(CollisionRadius);
+}
+
+void AUOUPourDropActor::ApplyMovementSettings()
+{
+	if (ProjectileMovement == nullptr)
+	{
+		return;
+	}
+
+	InitialSpeed = FMath::Max(0.0f, InitialSpeed);
+	MaxSpeed = FMath::Max(InitialSpeed, MaxSpeed);
+	ProjectileMovement->InitialSpeed = InitialSpeed;
+	ProjectileMovement->MaxSpeed = MaxSpeed;
+	ProjectileMovement->ProjectileGravityScale = GravityScale;
+}
+
+void AUOUPourDropActor::ApplyLaunchVelocity()
+{
+	if (ProjectileMovement == nullptr)
+	{
+		return;
+	}
+
+	FVector LaunchDirection = CurrentWorldDirection.GetSafeNormal();
+	if (LaunchDirection.IsNearlyZero())
+	{
+		LaunchDirection = GetActorForwardVector();
+	}
+
+	ProjectileMovement->Velocity = LaunchDirection * FMath::Max(0.0f, InitialSpeed);
+	bHasInitializedVelocity = true;
+}
+
+void AUOUPourDropActor::IgnoreSourceActor()
+{
+	if (CollisionComponent == nullptr)
+	{
+		return;
+	}
+
+	if (AActor* OwnerActor = GetOwner())
+	{
+		CollisionComponent->IgnoreActorWhenMoving(OwnerActor, true);
+	}
+
+	if (SourceInstigatorActor != nullptr)
+	{
+		CollisionComponent->IgnoreActorWhenMoving(SourceInstigatorActor, true);
+	}
+}
+
+void AUOUPourDropActor::HandleImpact(const FHitResult& ImpactResult, AActor* OtherActor, bool bIsBlockingImpact)
+{
+	if (bHasDeliveredWater || ShouldIgnoreActor(OtherActor))
+	{
+		return;
+	}
+
+	const FVector ImpactLocation = ImpactResult.bBlockingHit || ImpactResult.bStartPenetrating
+		? ImpactResult.ImpactPoint
+		: GetActorLocation();
+	const FVector ImpactNormal = !ImpactResult.ImpactNormal.IsNearlyZero()
+		? ImpactResult.ImpactNormal
+		: -CurrentWorldDirection.GetSafeNormal();
+
+	EUOUPourDropReceiverType ReceiverType = EUOUPourDropReceiverType::None;
+	const bool bDeliveredWater = TryDeliverWater(OtherActor, ImpactLocation, ReceiverType);
+
+	LastReceiverType = ReceiverType;
+	bHasDeliveredWater = bDeliveredWater;
+	SpawnImpactSplash(ImpactLocation, ImpactNormal, bDeliveredWater);
+	OnPourDropImpacted.Broadcast(this, OtherActor, ImpactLocation, ReceiverType, bDeliveredWater);
+
+	if ((bDeliveredWater && bDestroyOnFirstValidReceiver)
+		|| (!bDeliveredWater && bIsBlockingImpact && bDestroyOnBlockingHitWithoutReceiver))
+	{
+		Destroy();
+	}
+}
+
+bool AUOUPourDropActor::TryDeliverWater(AActor* HitActor, const FVector& ImpactLocation, EUOUPourDropReceiverType& OutReceiverType)
+{
+	OutReceiverType = EUOUPourDropReceiverType::None;
+	if (!IsValid(HitActor) || CurrentVolume <= 0.0f)
+	{
+		return false;
+	}
+
+	AActor* ReceiverOwner = nullptr;
+	if (UUOUPourReceiverComponent* PourReceiver = FindComponentOnActorOrParent<UUOUPourReceiverComponent>(HitActor, ReceiverOwner))
+	{
+		if (PourReceiver->CanReceivePour())
+		{
+			FUOUPourInputContext PourContext;
+			PourContext.Volume = CurrentVolume;
+			PourContext.Duration = CurrentDuration;
+			PourContext.WorldDirection = CurrentWorldDirection;
+			PourContext.WorldLocation = ImpactLocation;
+			PourContext.bHasValidWorldLocation = true;
+			PourContext.InstigatorActor = SourceInstigatorActor;
+			PourReceiver->ReceivePourInput(PourContext);
+			OutReceiverType = EUOUPourDropReceiverType::PurePourReceiver;
+			return true;
+		}
+	}
+
+	if (AUOUUmbrellaWaterTarget* WaterTarget = FindUmbrellaWaterTargetOnActorOrParent(HitActor))
+	{
+		WaterTarget->ReceiveWater(CurrentVolume);
+		OutReceiverType = EUOUPourDropReceiverType::UmbrellaWaterTarget;
+		return true;
+	}
+
+	if (UUOUWaterBasinTargetComponent* WaterBasinTarget = FindComponentOnActorOrParent<UUOUWaterBasinTargetComponent>(HitActor, ReceiverOwner))
+	{
+		FUOUWaterBasinInputContext InputContext;
+		InputContext.Volume = CurrentVolume;
+		InputContext.Duration = CurrentDuration;
+		InputContext.Source = EUOUWaterBasinInputSource::PlayerPour;
+		InputContext.WorldDirection = CurrentWorldDirection;
+		InputContext.WorldLocation = ImpactLocation;
+		InputContext.bHasValidWorldLocation = WaterBasinTarget->IsWorldLocationInsideBasin(ImpactLocation);
+		InputContext.InstigatorActor = SourceInstigatorActor;
+		InputContext.bApplyToConnectedGroup = bCurrentApplyToConnectedWaterBasinGroup;
+		WaterBasinTarget->ReceiveWaterInput(InputContext);
+		OutReceiverType = EUOUPourDropReceiverType::WaterBasinTarget;
+		return true;
+	}
+
+	if (UUOUWaterContainerComponent* WaterContainer = FindComponentOnActorOrParent<UUOUWaterContainerComponent>(HitActor, ReceiverOwner))
+	{
+		WaterContainer->AddAmount(CurrentVolume);
+		OutReceiverType = EUOUPourDropReceiverType::WaterContainer;
+		return true;
+	}
+
+	return false;
+}
+
+void AUOUPourDropActor::SpawnImpactSplash(const FVector& ImpactLocation, const FVector& ImpactNormal, bool bDeliveredWater) const
+{
+	if (ImpactSplashEffect == nullptr || (bSpawnSplashOnlyWhenDelivered && !bDeliveredWater))
+	{
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	if (World == nullptr)
+	{
+		return;
+	}
+
+	const FVector SafeNormal = ImpactNormal.IsNearlyZero() ? FVector::UpVector : ImpactNormal.GetSafeNormal();
+	UNiagaraFunctionLibrary::SpawnSystemAtLocation(
+		World,
+		ImpactSplashEffect,
+		ImpactLocation,
+		SafeNormal.Rotation(),
+		FVector(FMath::Max(0.0f, ImpactSplashScale)));
+}
+
+bool AUOUPourDropActor::ShouldIgnoreActor(const AActor* OtherActor) const
+{
+	return OtherActor == nullptr
+		|| OtherActor == this
+		|| OtherActor == GetOwner()
+		|| OtherActor == SourceInstigatorActor;
+}
