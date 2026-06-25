@@ -27,6 +27,22 @@ float UUOUWaterContainerComponent::AddAmount(float AmountToAdd)
 	return CurrentAmount;
 }
 
+float UUOUWaterContainerComponent::AddAmountWithContent(float AmountToAdd, UUOUPourContentProfile* NewContentProfile, bool bReplaceCurrentContent)
+{
+	if (AmountToAdd <= 0.0f)
+	{
+		return CurrentAmount;
+	}
+
+	if (NewContentProfile != nullptr
+		&& (bReplaceCurrentContent || CurrentAmount <= KINDA_SMALL_NUMBER || PourContentProfile == nullptr))
+	{
+		SetPourContentProfile(NewContentProfile);
+	}
+
+	return AddAmount(AmountToAdd);
+}
+
 float UUOUWaterContainerComponent::RemoveAmount(float AmountToRemove)
 {
 	if (AmountToRemove <= 0.0f)
@@ -51,6 +67,22 @@ void UUOUWaterContainerComponent::SetAmount(float NewAmount)
 	BroadcastAmountChanged();
 }
 
+void UUOUWaterContainerComponent::SetPourContentProfile(UUOUPourContentProfile* NewContentProfile)
+{
+	if (PourContentProfile == NewContentProfile)
+	{
+		return;
+	}
+
+	PourContentProfile = NewContentProfile;
+	BroadcastPourContentProfileChanged();
+}
+
+UUOUPourContentProfile* UUOUWaterContainerComponent::GetPourContentProfile() const
+{
+	return PourContentProfile.Get();
+}
+
 float UUOUWaterContainerComponent::GetFillRatio() const
 {
 	return MaxAmount > 0.0f ? CurrentAmount / MaxAmount : 0.0f;
@@ -64,4 +96,9 @@ float UUOUWaterContainerComponent::GetWeightContribution() const
 void UUOUWaterContainerComponent::BroadcastAmountChanged()
 {
 	OnWaterAmountChanged.Broadcast(CurrentAmount, MaxAmount);
+}
+
+void UUOUWaterContainerComponent::BroadcastPourContentProfileChanged()
+{
+	OnPourContentProfileChanged.Broadcast(PourContentProfile.Get());
 }

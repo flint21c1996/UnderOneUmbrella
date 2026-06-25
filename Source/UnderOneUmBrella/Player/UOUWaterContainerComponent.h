@@ -4,9 +4,11 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "World/Pour/UOUPourContentProfile.h"
 #include "UOUWaterContainerComponent.generated.h"
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnWaterAmountChangedSignature, float, NewAmount, float, MaxAmount);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnPourContentProfileChangedSignature, UUOUPourContentProfile*, NewProfile);
 
 // 물 양을 저장하고 퍼즐이나 무게 계산에 넘길 수 있게 관리하는 범용 물 컨테이너다.
 UCLASS(ClassGroup=(Gameplay), meta=(BlueprintSpawnableComponent))
@@ -24,6 +26,9 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Water")
 	FOnWaterAmountChangedSignature OnWaterAmountChanged;
 
+	UPROPERTY(BlueprintAssignable, Category = "Water|Content")
+	FOnPourContentProfileChangedSignature OnPourContentProfileChanged;
+
 	// 이 컨테이너가 가질 수 있는 최대 물 양이다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Water", meta = (ClampMin = "0.0"))
 	float MaxAmount = 5.0f;
@@ -36,6 +41,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Water", meta = (ClampMin = "0.0"))
 	float WeightMultiplier = 1.0f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Water|Content", meta = (ToolTip = "Runtime content profile for this container. Use SetPourContentProfile or AddAmountWithContent to change it during play."))
+	TObjectPtr<UUOUPourContentProfile> PourContentProfile = nullptr;
+
 	// 현재 실제로 저장된 물 양이다.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Water")
 	float CurrentAmount = 0.0f;
@@ -44,6 +52,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Water")
 	float AddAmount(float AmountToAdd);
 
+	UFUNCTION(BlueprintCallable, Category = "Water|Content")
+	float AddAmountWithContent(float AmountToAdd, UUOUPourContentProfile* NewContentProfile, bool bReplaceCurrentContent = true);
+
 	// 현재 물 양에서 값을 빼고 실제 빠진 양을 돌려준다.
 	UFUNCTION(BlueprintCallable, Category = "Water")
 	float RemoveAmount(float AmountToRemove);
@@ -51,6 +62,12 @@ public:
 	// 물 양을 직접 설정하고 범위를 안전하게 제한한다.
 	UFUNCTION(BlueprintCallable, Category = "Water")
 	void SetAmount(float NewAmount);
+
+	UFUNCTION(BlueprintCallable, Category = "Water|Content")
+	void SetPourContentProfile(UUOUPourContentProfile* NewContentProfile);
+
+	UFUNCTION(BlueprintPure, Category = "Water|Content")
+	UUOUPourContentProfile* GetPourContentProfile() const;
 
 	// 현재 물 양을 최대치 대비 비율로 돌려준다.
 	UFUNCTION(BlueprintPure, Category = "Water")
@@ -63,4 +80,6 @@ public:
 protected:
 	// 내부 물 양이 바뀐 뒤 변경 이벤트를 한 번에 방송한다.
 	void BroadcastAmountChanged();
+
+	void BroadcastPourContentProfileChanged();
 };
