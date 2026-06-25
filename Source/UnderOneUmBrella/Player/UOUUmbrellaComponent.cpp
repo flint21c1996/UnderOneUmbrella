@@ -19,9 +19,11 @@
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
 #include "Materials/MaterialInterface.h"
+#include "NiagaraComponent.h"
 #include "Player/UOURainReceiverComponent.h"
 #include "Player/UOUUmbrellaAnimInstance.h"
 #include "Player/UOUWaterContainerComponent.h"
+#include "World/Pour/UOUPourContentProfile.h"
 #include "World/Pour/UOUPourDropActor.h"
 #include "World/WaterTarget/UOUWaterBasinTargetComponent.h"
 
@@ -69,7 +71,6 @@ EUOUUmbrellaPourReceiverType ConvertPourDropReceiverType(EUOUPourDropReceiverTyp
 UUOUUmbrellaComponent::UUOUUmbrellaComponent()
 {
 	PrimaryComponentTick.bCanEverTick = true;
-	PourDropActorClass = AUOUPourDropActor::StaticClass();
 }
 
 // 시작 시 필요한 참조를 찾고, 시작 보유 옵션과 기본 우산 비주얼을 현재 상태에 맞춥니다.
@@ -80,11 +81,14 @@ void UUOUUmbrellaComponent::BeginPlay()
 	// 블루프린트에서 직접 연결하지 않은 참조는 컴포넌트 이름과 타입으로 보완합니다.
 	ResolveReferences();
 	EnsureRuntimeHeldVisual();
+	EnsurePouringEffect();
 
 	if (StoredWaterContainer != nullptr)
 	{
 		// 우산에 저장된 물이 퍼즐 무게로 환산될 때 쓰는 배율을 동기화합니다.
 		StoredWaterContainer->WeightMultiplier = FMath::Max(0.0f, StoredWaterWeightMultiplier);
+		StoredWaterContainer->OnPourContentProfileChanged.RemoveDynamic(this, &UUOUUmbrellaComponent::HandlePourContentProfileChanged);
+		StoredWaterContainer->OnPourContentProfileChanged.AddDynamic(this, &UUOUUmbrellaComponent::HandlePourContentProfileChanged);
 	}
 
 	bHasUmbrella = bStartWithUmbrella;
@@ -97,6 +101,7 @@ void UUOUUmbrellaComponent::BeginPlay()
 	}
 
 	RefreshVisuals();
+	UpdatePouringEffectState();
 }
 
 // 매 프레임 우산 상태에 따라 물 붓기, 마우스 조준 회전, 디버그 표시를 갱신합니다.
@@ -116,6 +121,7 @@ void UUOUUmbrellaComponent::TickComponent(float DeltaTime, ELevelTick TickType, 
 
 	UpdatePourAimFacing();
 	UpdatePouring(DeltaTime);
+	UpdatePouringEffectState();
 	DrawScreenDebug();
 	DrawRainBlockerDebug();
 	DrawPourTraceDebug();
@@ -580,6 +586,7 @@ void UUOUUmbrellaComponent::SetState(EUOUUmbrellaState NewState)
 	{
 		// 같은 상태여도 에디터 세팅 변경 뒤 비주얼을 다시 맞출 수 있게 갱신은 수행합니다.
 		RefreshVisuals();
+		UpdatePouringEffectState();
 		return;
 	}
 
@@ -613,6 +620,7 @@ void UUOUUmbrellaComponent::SetState(EUOUUmbrellaState NewState)
 	}
 
 	RefreshVisuals();
+	UpdatePouringEffectState();
 	OnUmbrellaStateChanged.Broadcast(CurrentState, bHasUmbrella);
 }
 
@@ -1030,6 +1038,147 @@ void UUOUUmbrellaComponent::EnsureRuntimeHeldVisual()
 	RuntimeHeldVisual->SetRelativeTransform(RuntimeHeldVisualBaseRelativeTransform);
 }
 
+void UUOUUmbrellaComponent::EnsurePouringEffect()
+{
+	AActor* Owner = GetOwner();
+	const UUOUPourContentProfile* ContentProfile = ResolvePourContentProfile();
+	if (Owner == nullptr || ContentProfile == nullptr || ContentProfile->StreamEffect == nullptr)
+	{
+		return;
+	}
+
+	USceneComponent* AttachParent = PourOrigin != nullptr
+		? static_cast<USceneComponent*>(PourOrigin.Get())
+		: HeldVisualAnchor.Get();
+	if (AttachParent == nullptr)
+	{
+		AttachParent = Owner->GetRootComponent();
+	}
+
+	if (PouringEffectComponent == nullptr)
+	{
+		PouringEffectComponent = NewObject<UNiagaraComponent>(Owner, TEXT("PouringNiagaraEffect"));
+		if (PouringEffectComponent == nullptr)
+		{
+			return;
+		}
+
+		Owner->AddInstanceComponent(PouringEffectComponent);
+		PouringEffectComponent->SetAutoActivate(false);
+		PouringEffectComponent->SetAutoDestroy(false);
+		PouringEffectComponent->SetVisibility(false, true);
+		PouringEffectComponent->SetHiddenInGame(true, true);
+		PouringEffectComponent->SetupAttachment(AttachParent);
+		PouringEffectComponent->RegisterComponent();
+	}
+	else if (AttachParent != nullptr && PouringEffectComponent->GetAttachParent() != AttachParent)
+	{
+		PouringEffectComponent->AttachToComponent(AttachParent, FAttachmentTransformRules::KeepRelativeTransform);
+	}
+
+	PouringEffectComponent->SetAsset(ContentProfile->StreamEffect);
+	PouringEffectComponent->SetRelativeScale3D(ContentProfile->StreamRelativeScale);
+	UpdatePouringEffectTransform();
+}
+
+void UUOUUmbrellaComponent::UpdatePouringEffectState()
+{
+	const UUOUPourContentProfile* ContentProfile = ResolvePourContentProfile();
+	const bool bShouldPlayPouringEffect = bHasUmbrella
+		&& CurrentState == EUOUUmbrellaState::Pouring
+		&& ContentProfile != nullptr
+		&& ContentProfile->StreamEffect != nullptr;
+
+	if (bShouldPlayPouringEffect)
+	{
+		EnsurePouringEffect();
+		if (PouringEffectComponent != nullptr)
+		{
+			UpdatePouringEffectTransform();
+			PouringEffectComponent->SetHiddenInGame(false, true);
+			PouringEffectComponent->SetVisibility(true, true);
+			if (!PouringEffectComponent->IsActive())
+			{
+				PouringEffectComponent->Activate(true);
+			}
+		}
+		return;
+	}
+
+	if (PouringEffectComponent != nullptr)
+	{
+		if (PouringEffectComponent->IsActive())
+		{
+			PouringEffectComponent->DeactivateImmediate();
+		}
+
+		PouringEffectComponent->SetVisibility(false, true);
+		PouringEffectComponent->SetHiddenInGame(true, true);
+	}
+}
+
+void UUOUUmbrellaComponent::UpdatePouringEffectTransform()
+{
+	if (PouringEffectComponent == nullptr)
+	{
+		return;
+	}
+
+	FVector DropLocation = FVector::ZeroVector;
+	FVector DropDirection = FVector::ForwardVector;
+	if (!TryGetPourDropSpawnPlacement(DropLocation, DropDirection))
+	{
+		return;
+	}
+
+	const FQuat DirectionRotation = FRotationMatrix::MakeFromYZ(DropDirection, FVector::UpVector).ToQuat();
+	const UUOUPourContentProfile* ContentProfile = ResolvePourContentProfile();
+	const FRotator RelativeRotation = ContentProfile != nullptr ? ContentProfile->StreamRelativeRotation : FRotator::ZeroRotator;
+	const FVector RelativeLocation = ContentProfile != nullptr ? ContentProfile->StreamRelativeLocation : FVector::ZeroVector;
+	const FVector RelativeScale = ContentProfile != nullptr ? ContentProfile->StreamRelativeScale : FVector::OneVector;
+	const FQuat EffectRotation = DirectionRotation * FRotator(RelativeRotation.Pitch, 0.0f, 0.0f).Quaternion();
+	const FVector EffectLocation = DropLocation + DirectionRotation.RotateVector(RelativeLocation);
+
+	PouringEffectComponent->SetWorldLocationAndRotation(EffectLocation, EffectRotation.Rotator());
+	PouringEffectComponent->SetRelativeScale3D(RelativeScale);
+}
+
+bool UUOUUmbrellaComponent::TryGetPourDropSpawnPlacement(FVector& OutDropLocation, FVector& OutDropDirection) const
+{
+	FVector DropOrigin = FVector::ZeroVector;
+	FVector DropDirection = FVector::ForwardVector;
+	if (!TryGetPourDirection(DropOrigin, DropDirection))
+	{
+		return false;
+	}
+
+	if (DropDirection.IsNearlyZero())
+	{
+		return false;
+	}
+
+	DropDirection = DropDirection.GetSafeNormal();
+	OutDropLocation = DropOrigin + DropDirection * PourDropOffset;
+	OutDropDirection = DropDirection;
+	return true;
+}
+
+const UUOUPourContentProfile* UUOUUmbrellaComponent::ResolvePourContentProfile() const
+{
+	return StoredWaterContainer != nullptr ? StoredWaterContainer->PourContentProfile.Get() : nullptr;
+}
+
+TSubclassOf<AUOUPourDropActor> UUOUUmbrellaComponent::ResolvePourDropActorClass() const
+{
+	const UUOUPourContentProfile* ContentProfile = ResolvePourContentProfile();
+	if (ContentProfile != nullptr && ContentProfile->DropActorClass != nullptr)
+	{
+		return ContentProfile->DropActorClass;
+	}
+
+	return AUOUPourDropActor::StaticClass();
+}
+
 // 월드 픽업 메쉬에서 스태틱 메쉬와 머티리얼을 읽어 손에 든 비주얼로 복사합니다.
 void UUOUUmbrellaComponent::ApplyHeldVisualFromMeshComponent(UStaticMeshComponent* SourceMeshComponent)
 {
@@ -1392,14 +1541,15 @@ bool UUOUUmbrellaComponent::SpawnPendingPourDrop()
 
 	UWorld* World = GetWorld();
 	AActor* Owner = GetOwner();
-	if (World == nullptr || Owner == nullptr || PourDropActorClass == nullptr)
+	TSubclassOf<AUOUPourDropActor> ResolvedPourDropActorClass = ResolvePourDropActorClass();
+	if (World == nullptr || Owner == nullptr || ResolvedPourDropActorClass == nullptr)
 	{
 		return false;
 	}
 
-	FVector DropOrigin = FVector::ZeroVector;
+	FVector DropLocation = FVector::ZeroVector;
 	FVector DropDirection = FVector::ForwardVector;
-	if (!TryGetPourDirection(DropOrigin, DropDirection))
+	if (!TryGetPourDropSpawnPlacement(DropLocation, DropDirection))
 	{
 		return false;
 	}
@@ -1409,11 +1559,9 @@ bool UUOUUmbrellaComponent::SpawnPendingPourDrop()
 	SpawnParameters.Instigator = Cast<APawn>(Owner);
 	SpawnParameters.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
-	FVector PourOffset = DropDirection * PourDropOffset;
-
 	AUOUPourDropActor* DropActor = World->SpawnActor<AUOUPourDropActor>(
-		PourDropActorClass,
-		DropOrigin + PourOffset,
+		ResolvedPourDropActorClass,
+		DropLocation,
 		DropDirection.Rotation(),
 		SpawnParameters);
 	if (DropActor == nullptr)
@@ -1432,8 +1580,8 @@ bool UUOUUmbrellaComponent::SpawnPendingPourDrop()
 	DropContext.bApplyToConnectedWaterBasinGroup = bPourDropAppliesToConnectedWaterBasinGroup;
 	DropActor->InitializePourDrop(DropContext);
 
-	LastPourTraceStart = DropOrigin;
-	LastPourTraceEnd = DropOrigin + DropDirection * PourDistance;
+	LastPourTraceStart = DropLocation;
+	LastPourTraceEnd = DropLocation + DropDirection * PourDistance;
 	LastPourTraceImpactPoint = LastPourTraceEnd;
 	bHasLastPourTrace = true;
 	bLastPourTraceHit = false;
@@ -1503,6 +1651,12 @@ void UUOUUmbrellaComponent::HandlePourDropImpacted(
 }
 
 // 붓기 상태에서 저장된 물을 줄이고, 일정 간격으로 낙하 물 액터를 생성합니다.
+void UUOUUmbrellaComponent::HandlePourContentProfileChanged(UUOUPourContentProfile* NewProfile)
+{
+	(void)NewProfile;
+	UpdatePouringEffectState();
+}
+
 void UUOUUmbrellaComponent::UpdatePouring(float DeltaTime)
 {
 	if (CurrentState != EUOUUmbrellaState::Pouring || StoredWaterContainer == nullptr)
@@ -1562,7 +1716,7 @@ void UUOUUmbrellaComponent::UpdatePouring(float DeltaTime)
 	LastPourStoredWaterBefore = StoredWaterBefore;
 	LastPourStoredWaterAfter = StoredWaterAfter;
 
-	if (TryGetPourDirection(DropOrigin, DropDirection))
+	if (TryGetPourDropSpawnPlacement(DropOrigin, DropDirection))
 	{
 		LastPourTraceStart = DropOrigin;
 		LastPourTraceEnd = DropOrigin + DropDirection * PourDistance;
@@ -1582,7 +1736,7 @@ void UUOUUmbrellaComponent::UpdatePouring(float DeltaTime)
 		&& (SafeSpawnInterval <= KINDA_SMALL_NUMBER || TimeSinceLastPourDropSpawn >= SafeSpawnInterval)
 		&& !SpawnPendingPourDrop())
 	{
-		LastPourHitName = PourDropActorClass == nullptr ? TEXT("Missing PourDrop Class") : TEXT("PourDrop Spawn Failed");
+		LastPourHitName = ResolvePourDropActorClass() == nullptr ? TEXT("Missing PourDrop Class") : TEXT("PourDrop Spawn Failed");
 	}
 
 	if (GetCurrentStoredWater() <= 0.0f)

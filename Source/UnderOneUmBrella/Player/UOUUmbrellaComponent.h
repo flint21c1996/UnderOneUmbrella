@@ -7,11 +7,13 @@
 #include "Components/ActorComponent.h"
 #include "Engine/EngineTypes.h"
 #include "InputCoreTypes.h"
+#include "World/Pour/UOUPourContentProfile.h"
 #include "World/Pour/UOUPourDropTypes.h"
 #include "UOUUmbrellaComponent.generated.h"
 
 class UArrowComponent;
 class UMaterialInterface;
+class UNiagaraComponent;
 class USceneComponent;
 class USkeletalMeshComponent;
 class UStaticMesh;
@@ -293,9 +295,6 @@ public:
 	// 물을 부을 대상을 찾을 때 사용하는 충돌 채널입니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Water")
 	TEnumAsByte<ECollisionChannel> PourTraceChannel = ECC_Visibility;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Umbrella|Pour Drop", meta = (ToolTip = "Pouring 중 생성할 낙하 물 액터 클래스입니다. 비워두면 저장된 물은 소비되지만 물방울 액터를 만들 수 없습니다."))
-	TSubclassOf<AUOUPourDropActor> PourDropActorClass;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Umbrella|Pour Drop", meta = (ClampMin = "0.0", ToolTip = "물방울 액터를 생성하는 최소 간격입니다. 0이면 매 Tick 생성합니다."))
 	float PourDropSpawnInterval = 0.06f;
@@ -592,6 +591,18 @@ protected:
 	// 픽업한 우산을 손에 보여줄 런타임 메쉬 컴포넌트를 준비합니다.
 	void EnsureRuntimeHeldVisual();
 
+	void EnsurePouringEffect();
+
+	void UpdatePouringEffectState();
+
+	void UpdatePouringEffectTransform();
+
+	bool TryGetPourDropSpawnPlacement(FVector& OutDropLocation, FVector& OutDropDirection) const;
+
+	const UUOUPourContentProfile* ResolvePourContentProfile() const;
+
+	TSubclassOf<AUOUPourDropActor> ResolvePourDropActorClass() const;
+
 	// 픽업 액터의 메쉬와 머티리얼 정보를 손에 든 우산 비주얼로 복사합니다.
 	void ApplyHeldVisualFromMeshComponent(UStaticMeshComponent* SourceMeshComponent);
 
@@ -637,6 +648,9 @@ protected:
 	UFUNCTION()
 	void HandlePourDropImpacted(AUOUPourDropActor* DropActor, AActor* ImpactActor, FVector ImpactLocation, EUOUPourDropReceiverType ReceiverType, bool bDeliveredWater);
 
+	UFUNCTION()
+	void HandlePourContentProfileChanged(UUOUPourContentProfile* NewProfile);
+
 	// 마우스 위치를 기준으로 플레이어가 바라볼 평면 방향을 계산합니다.
 	bool TryGetMouseAimDirection(FVector& AimDirection, FVector& AimPoint) const;
 
@@ -656,6 +670,9 @@ protected:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UAnimationAsset> LastAppliedSkeletalVisualAnimation = nullptr;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UNiagaraComponent> PouringEffectComponent = nullptr;
 
 	float PendingPourDropVolume = 0.0f;
 
