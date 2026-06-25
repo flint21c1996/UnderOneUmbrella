@@ -254,6 +254,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin|Pour Impact", meta = (ClampMin = "0.0", EditCondition = "bSpawnPlayerPourImpactSplash", EditConditionHides, ToolTip = "착수 Niagara 크기 배율입니다."))
 	float PlayerPourImpactSplashScale = 1.0f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin|Pour Impact", meta = (ClampMin = "0.0", EditCondition = "bSpawnPlayerPourImpactSplash", EditConditionHides, ToolTip = "PlayerPour 착수 Niagara를 다시 재생하기 전까지 기다릴 시간입니다. 0이면 입력마다 재생합니다."))
+	float PlayerPourImpactSplashCooldown = 0.15f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin|Pour Impact", meta = (EditCondition = "bSpawnPlayerPourImpactSplash", EditConditionHides, ToolTip = "착수 Niagara가 수면 상승에 묻히지 않도록 수면보다 위로 올릴 월드 Z 오프셋입니다."))
+	float PlayerPourImpactSplashSurfaceOffset = 8.0f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin|Pour Impact", meta = (ToolTip = "PlayerPour 입력이 들어오면 Water Visual을 짧게 위아래로 흔들어 착수감을 줍니다."))
 	bool bAnimateWaterVisualOnPlayerPour = true;
 
@@ -397,6 +403,7 @@ private:
 	bool bPendingInitialRedistribution = false;
 	bool bCapturedWaterVisualTransform = false;
 	float ActivePlayerPourWaterVisualRippleTime = 0.0f;
+	float LastPlayerPourImpactSplashTime = -TNumericLimits<float>::Max();
 	FVector InitialWaterVisualScale = FVector::OneVector;
 	FVector InitialWaterVisualLocation = FVector::ZeroVector;
 
@@ -446,6 +453,7 @@ private:
 	void HandlePlayerPourImpactVisuals(const FUOUWaterBasinInputContext& InputContext);
 	void UpdatePlayerPourWaterVisualRipple(float DeltaTime);
 	FVector ResolvePlayerPourImpactLocation(const FUOUWaterBasinInputContext& InputContext) const;
+	float EstimatePlayerPourSurfaceWorldZAfterInput(const FUOUWaterBasinInputContext& InputContext) const;
 
 	// CurrentWaterDepth를 기준으로 WaterVisual의 크기, 위치, 표시 상태를 갱신합니다.
 	void UpdateWaterVisual();

@@ -922,22 +922,32 @@ void UUOUWaterBasinTargetComponent::HandlePlayerPourImpactVisuals(const FUOUWate
 	if (bSpawnPlayerPourImpactSplash && PlayerPourImpactSplashEffect)
 	{
 		UWorld* World = GetWorld();
-		if (!World)
+		const float CurrentTime = World != nullptr ? World->GetTimeSeconds() : 0.0f;
+		const float SplashCooldown = FMath::Max(PlayerPourImpactSplashCooldown, 0.0f);
+		const bool bCanSpawnSplash = World != nullptr
+			&& (SplashCooldown <= KINDA_SMALL_NUMBER || CurrentTime - LastPlayerPourImpactSplashTime >= SplashCooldown);
+		if (bCanSpawnSplash)
 		{
-			return;
-		}
+			FVector ImpactLocation = ResolvePlayerPourImpactLocation(InputContext);
+			const float SurfaceZAfterInput = EstimatePlayerPourSurfaceWorldZAfterInput(InputContext);
+			const float SplashSurfaceZ = FMath::Max(WaterSurfaceWorldZ, SurfaceZAfterInput) + PlayerPourImpactSplashSurfaceOffset;
+			if (FMath::IsFinite(SplashSurfaceZ))
+			{
+				ImpactLocation.Z = FMath::Max(ImpactLocation.Z, SplashSurfaceZ);
+			}
 
-		const FVector ImpactLocation = ResolvePlayerPourImpactLocation(InputContext);
-		const FVector RawImpactNormal = -InputContext.WorldDirection;
-		const FVector ImpactNormal = RawImpactNormal.IsNearlyZero()
-			? FVector::UpVector
-			: RawImpactNormal.GetSafeNormal();
-		UNiagaraFunctionLibrary::SpawnSystemAtLocation(
-			World,
-			PlayerPourImpactSplashEffect,
-			ImpactLocation,
-			ImpactNormal.Rotation(),
-			FVector(FMath::Max(PlayerPourImpactSplashScale, 0.0f)));
+			const FVector RawImpactNormal = -InputContext.WorldDirection;
+			const FVector ImpactNormal = RawImpactNormal.IsNearlyZero()
+				? FVector::UpVector
+				: RawImpactNormal.GetSafeNormal();
+			UNiagaraFunctionLibrary::SpawnSystemAtLocation(
+				World,
+				PlayerPourImpactSplashEffect,
+				ImpactLocation,
+				ImpactNormal.Rotation(),
+				FVector(FMath::Max(PlayerPourImpactSplashScale, 0.0f)));
+			LastPlayerPourImpactSplashTime = CurrentTime;
+		}
 	}
 
 	if (bAnimateWaterVisualOnPlayerPour
@@ -994,6 +1004,72 @@ FVector UUOUWaterBasinTargetComponent::ResolvePlayerPourImpactLocation(const FUO
 		ImpactLocation.Z = SurfaceZ;
 	}
 	return ImpactLocation;
+}
+
+float UUOUWaterBasinTargetComponent::EstimatePlayerPourSurfaceWorldZAfterInput(const FUOUWaterBasinInputContext& InputContext) const
+{
+	const float Duration = FMath::Max(InputContext.Duration, 0.0f);
+	const bool bApplyToConnectedGroup = InputContext.bApplyToConnectedGroup;
+
+	if (bApplyToConnectedGroup)
+	{
+		TArray<UUOUWaterBasinTargetComponent*> Group;
+		GetConnectedGroup(Group);
+		const FUOUWaterBasinGroupDebugData GroupData = BuildGroupDebugData(Group);
+		if (GroupData.TotalCapacity <= KINDA_SMALL_NUMBER)
+		{
+			return GroupData.SurfaceWorldZ;
+		}
+
+		switch (PouredWaterFillMode)
+		{
+		case EUOUWaterBasinPouredWaterFillMode::Volume:
+			return SolveSurfaceWorldZForVolume(Group, GroupData.TotalVolume + FMath::Max(InputContext.Volume, 0.0f));
+
+		case EUOUWaterBasinPouredWaterFillMode::FillRatio:
+		{
+			const float RatioDelta = FMath::Max(PouredWaterFillRatioPerSecond, 0.0f) * Duration;
+			const float NewFillRatio = FMath::Clamp(GroupData.FillRatio + RatioDelta, 0.0f, 1.0f);
+			return SolveSurfaceWorldZForVolume(Group, GroupData.TotalCapacity * NewFillRatio);
+		}
+
+		case EUOUWaterBasinPouredWaterFillMode::WaterDepth:
+		{
+			const float SurfaceDeltaWorld = FMath::Max(PouredWaterDepthPerSecond, 0.0f) * Duration * FMath::Max(WorldUnitsPerTile, MinWorldUnitsPerTile);
+			return GroupData.SurfaceWorldZ + SurfaceDeltaWorld;
+		}
+
+		case EUOUWaterBasinPouredWaterFillMode::SurfaceWorldZ:
+			return GroupData.SurfaceWorldZ + FMath::Max(PouredWaterSurfaceWorldZPerSecond, 0.0f) * Duration;
+
+		default:
+			return GroupData.SurfaceWorldZ;
+		}
+	}
+
+	switch (PouredWaterFillMode)
+	{
+	case EUOUWaterBasinPouredWaterFillMode::Volume:
+		return GetBottomWorldZ()
+			+ (FMath::Clamp(CurrentWaterVolume + FMath::Max(InputContext.Volume, 0.0f), 0.0f, GetCapacity()) / GetSurfaceArea())
+			* FMath::Max(WorldUnitsPerTile, MinWorldUnitsPerTile);
+
+	case EUOUWaterBasinPouredWaterFillMode::FillRatio:
+	{
+		const float RatioDelta = FMath::Max(PouredWaterFillRatioPerSecond, 0.0f) * Duration;
+		const float NewFillRatio = FMath::Clamp(CurrentFillRatio + RatioDelta, 0.0f, 1.0f);
+		return GetBottomWorldZ() + (NewFillRatio * GetMaxWaterHeight() * FMath::Max(WorldUnitsPerTile, MinWorldUnitsPerTile));
+	}
+
+	case EUOUWaterBasinPouredWaterFillMode::WaterDepth:
+		return WaterSurfaceWorldZ + FMath::Max(PouredWaterDepthPerSecond, 0.0f) * Duration * FMath::Max(WorldUnitsPerTile, MinWorldUnitsPerTile);
+
+	case EUOUWaterBasinPouredWaterFillMode::SurfaceWorldZ:
+		return WaterSurfaceWorldZ + FMath::Max(PouredWaterSurfaceWorldZPerSecond, 0.0f) * Duration;
+
+	default:
+		return WaterSurfaceWorldZ;
+	}
 }
 
 void UUOUWaterBasinTargetComponent::UpdateWaterVisual()
