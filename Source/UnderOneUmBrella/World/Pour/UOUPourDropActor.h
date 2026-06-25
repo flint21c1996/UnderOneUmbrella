@@ -109,6 +109,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pour Drop|Movement")
 	float GravityScale = 1.0f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pour Drop|Movement", meta = (ToolTip = "When enabled, the drop falls straight down instead of using the input direction as a ballistic launch."))
+	bool bUseVerticalDescent = true;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pour Drop|Lifetime", meta = (ClampMin = "0.0"))
 	float DropLifeSpan = 3.0f;
 
@@ -171,6 +174,7 @@ private:
 	void ApplyVisualSettings();
 	void ApplyMovementSettings();
 	void ApplyLaunchVelocity();
+	FVector ResolveLaunchDirection() const;
 	void IgnoreSourceActor();
 	void HandleImpact(const FHitResult& ImpactResult, AActor* OtherActor, bool bIsBlockingImpact);
 	bool TryDeliverWater(AActor* HitActor, const FVector& ImpactLocation, EUOUPourDropReceiverType& OutReceiverType);

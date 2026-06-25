@@ -263,14 +263,27 @@ void AUOUPourDropActor::ApplyLaunchVelocity()
 		return;
 	}
 
+	const FVector LaunchDirection = ResolveLaunchDirection();
+
+	ProjectileMovement->Velocity = LaunchDirection * FMath::Max(0.0f, InitialSpeed);
+	CurrentWorldDirection = LaunchDirection;
+	bHasInitializedVelocity = true;
+}
+
+FVector AUOUPourDropActor::ResolveLaunchDirection() const
+{
+	if (bUseVerticalDescent)
+	{
+		return FVector::DownVector;
+	}
+
 	FVector LaunchDirection = CurrentWorldDirection.GetSafeNormal();
 	if (LaunchDirection.IsNearlyZero())
 	{
 		LaunchDirection = GetActorForwardVector();
 	}
 
-	ProjectileMovement->Velocity = LaunchDirection * FMath::Max(0.0f, InitialSpeed);
-	bHasInitializedVelocity = true;
+	return LaunchDirection.IsNearlyZero() ? FVector::DownVector : LaunchDirection;
 }
 
 void AUOUPourDropActor::IgnoreSourceActor()
