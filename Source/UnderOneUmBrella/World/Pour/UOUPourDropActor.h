@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "World/Pour/UOUPourDropTypes.h"
 #include "UOUPourDropActor.generated.h"
 
 class AActor;
@@ -11,19 +12,11 @@ class UPrimitiveComponent;
 class UProjectileMovementComponent;
 class USphereComponent;
 class UStaticMeshComponent;
+class UStaticMesh;
 class UNiagaraComponent;
 class UNiagaraSystem;
 class AUOUPourDropActor;
-
-UENUM(BlueprintType)
-enum class EUOUPourDropReceiverType : uint8
-{
-	None,
-	PurePourReceiver,
-	UmbrellaWaterTarget,
-	WaterBasinTarget,
-	WaterContainer
-};
+class UUOUWaterBasinTargetComponent;
 
 USTRUCT(BlueprintType)
 struct UNDERONEUMBRELLA_API FUOUPourDropContext
@@ -66,6 +59,7 @@ public:
 
 	virtual void OnConstruction(const FTransform& Transform) override;
 	virtual void BeginPlay() override;
+	virtual void Tick(float DeltaTime) override;
 
 	UPROPERTY(BlueprintAssignable, Category = "Pour Drop")
 	FUOUPourDropImpactSignature OnPourDropImpacted;
@@ -82,8 +76,29 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Pour Drop")
 	TObjectPtr<UProjectileMovementComponent> ProjectileMovement = nullptr;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pour Drop|Visual")
+	TObjectPtr<UStaticMesh> VisualMeshAsset = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pour Drop|Visual")
+	FVector VisualMeshRelativeScale = FVector(0.08f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pour Drop|Visual")
+	FVector VisualMeshRelativeOffset = FVector::ZeroVector;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pour Drop|Visual")
+	FRotator VisualMeshRelativeRotation = FRotator::ZeroRotator;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pour Drop|Visual")
+	TObjectPtr<UNiagaraSystem> TrailEffectAsset = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pour Drop|Visual")
+	bool bActivateTrailEffect = true;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pour Drop|Collision", meta = (ClampMin = "0.0"))
 	float CollisionRadius = 8.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pour Drop|Collision", meta = (ClampMin = "0.0"))
+	float WaterBasinDeliveryVerticalTolerance = 50.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pour Drop|Movement", meta = (ClampMin = "0.0"))
 	float InitialSpeed = 600.0f;
@@ -153,11 +168,14 @@ private:
 	void HandleProjectileStop(const FHitResult& ImpactResult);
 
 	void ApplyCollisionSettings();
+	void ApplyVisualSettings();
 	void ApplyMovementSettings();
 	void ApplyLaunchVelocity();
 	void IgnoreSourceActor();
 	void HandleImpact(const FHitResult& ImpactResult, AActor* OtherActor, bool bIsBlockingImpact);
 	bool TryDeliverWater(AActor* HitActor, const FVector& ImpactLocation, EUOUPourDropReceiverType& OutReceiverType);
+	bool TryDeliverWaterToBasinAtLocation(const FVector& ImpactLocation, EUOUPourDropReceiverType& OutReceiverType, AActor*& OutReceiverActor);
+	bool IsWaterBasinDeliveryLocation(const UUOUWaterBasinTargetComponent* WaterBasinTarget, const FVector& ImpactLocation) const;
 	void SpawnImpactSplash(const FVector& ImpactLocation, const FVector& ImpactNormal, bool bDeliveredWater) const;
 	bool ShouldIgnoreActor(const AActor* OtherActor) const;
 };

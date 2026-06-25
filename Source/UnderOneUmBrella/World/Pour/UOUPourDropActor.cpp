@@ -9,6 +9,7 @@
 #include "NiagaraFunctionLibrary.h"
 #include "Player/UOUWaterContainerComponent.h"
 #include "UObject/ConstructorHelpers.h"
+#include "UObject/UObjectIterator.h"
 #include "World/Pour/UOUPourReceiverComponent.h"
 #include "World/WaterTarget/UOUUmbrellaWaterTarget.h"
 #include "World/WaterTarget/UOUWaterBasinTargetComponent.h"
@@ -60,7 +61,7 @@ namespace
 
 AUOUPourDropActor::AUOUPourDropActor()
 {
-	PrimaryActorTick.bCanEverTick = false;
+	PrimaryActorTick.bCanEverTick = true;
 
 	CollisionComponent = CreateDefaultSubobject<USphereComponent>(TEXT("CollisionComponent"));
 	SetRootComponent(CollisionComponent);
@@ -81,12 +82,11 @@ AUOUPourDropActor::AUOUPourDropActor()
 	if (SphereMeshFinder.Succeeded())
 	{
 		VisualMesh->SetStaticMesh(SphereMeshFinder.Object);
-		VisualMesh->SetRelativeScale3D(FVector(0.08f));
 	}
 
 	TrailEffect = CreateDefaultSubobject<UNiagaraComponent>(TEXT("TrailEffect"));
 	TrailEffect->SetupAttachment(CollisionComponent);
-	TrailEffect->SetAutoActivate(true);
+	TrailEffect->SetAutoActivate(bActivateTrailEffect);
 
 	ProjectileMovement = CreateDefaultSubobject<UProjectileMovementComponent>(TEXT("ProjectileMovement"));
 	ProjectileMovement->UpdatedComponent = CollisionComponent;
@@ -102,6 +102,7 @@ void AUOUPourDropActor::OnConstruction(const FTransform& Transform)
 	Super::OnConstruction(Transform);
 
 	ApplyCollisionSettings();
+	ApplyVisualSettings();
 	ApplyMovementSettings();
 }
 
@@ -110,6 +111,7 @@ void AUOUPourDropActor::BeginPlay()
 	Super::BeginPlay();
 
 	ApplyCollisionSettings();
+	ApplyVisualSettings();
 	ApplyMovementSettings();
 	IgnoreSourceActor();
 
@@ -127,6 +129,35 @@ void AUOUPourDropActor::BeginPlay()
 	if (!bHasInitializedVelocity)
 	{
 		ApplyLaunchVelocity();
+	}
+}
+
+void AUOUPourDropActor::Tick(float DeltaTime)
+{
+	Super::Tick(DeltaTime);
+
+	if (bHasDeliveredWater || CurrentVolume <= 0.0f)
+	{
+		return;
+	}
+
+	EUOUPourDropReceiverType ReceiverType = EUOUPourDropReceiverType::None;
+	AActor* ReceiverActor = nullptr;
+	const FVector ImpactLocation = GetActorLocation();
+	if (!TryDeliverWaterToBasinAtLocation(ImpactLocation, ReceiverType, ReceiverActor))
+	{
+		return;
+	}
+
+	const FVector ImpactNormal = -CurrentWorldDirection.GetSafeNormal();
+	LastReceiverType = ReceiverType;
+	bHasDeliveredWater = true;
+	SpawnImpactSplash(ImpactLocation, ImpactNormal, true);
+	OnPourDropImpacted.Broadcast(this, ReceiverActor, ImpactLocation, ReceiverType, true);
+
+	if (bDestroyOnFirstValidReceiver)
+	{
+		Destroy();
 	}
 }
 
@@ -172,6 +203,43 @@ void AUOUPourDropActor::ApplyCollisionSettings()
 
 	CollisionRadius = FMath::Max(0.0f, CollisionRadius);
 	CollisionComponent->SetSphereRadius(CollisionRadius);
+}
+
+void AUOUPourDropActor::ApplyVisualSettings()
+{
+	if (VisualMesh != nullptr)
+	{
+		if (VisualMeshAsset != nullptr)
+		{
+			VisualMesh->SetStaticMesh(VisualMeshAsset);
+		}
+
+		const FVector SafeVisualScale(
+			FMath::Max(0.0f, VisualMeshRelativeScale.X),
+			FMath::Max(0.0f, VisualMeshRelativeScale.Y),
+			FMath::Max(0.0f, VisualMeshRelativeScale.Z));
+		VisualMesh->SetRelativeLocation(VisualMeshRelativeOffset);
+		VisualMesh->SetRelativeRotation(VisualMeshRelativeRotation);
+		VisualMesh->SetRelativeScale3D(SafeVisualScale);
+	}
+
+	if (TrailEffect != nullptr)
+	{
+		if (TrailEffectAsset != nullptr)
+		{
+			TrailEffect->SetAsset(TrailEffectAsset);
+		}
+
+		TrailEffect->SetAutoActivate(bActivateTrailEffect);
+		if (bActivateTrailEffect)
+		{
+			TrailEffect->Activate(true);
+		}
+		else
+		{
+			TrailEffect->DeactivateImmediate();
+		}
+	}
 }
 
 void AUOUPourDropActor::ApplyMovementSettings()
@@ -230,12 +298,23 @@ void AUOUPourDropActor::HandleImpact(const FHitResult& ImpactResult, AActor* Oth
 		return;
 	}
 
-	const FVector ImpactLocation = ImpactResult.bBlockingHit || ImpactResult.bStartPenetrating
-		? ImpactResult.ImpactPoint
-		: GetActorLocation();
-	const FVector ImpactNormal = !ImpactResult.ImpactNormal.IsNearlyZero()
-		? ImpactResult.ImpactNormal
-		: -CurrentWorldDirection.GetSafeNormal();
+	FVector ImpactLocation = GetActorLocation();
+	if (ImpactResult.bBlockingHit || ImpactResult.bStartPenetrating)
+	{
+		ImpactLocation = FVector(
+			ImpactResult.ImpactPoint.X,
+			ImpactResult.ImpactPoint.Y,
+			ImpactResult.ImpactPoint.Z);
+	}
+
+	FVector ImpactNormal = -CurrentWorldDirection.GetSafeNormal();
+	if (!ImpactResult.ImpactNormal.IsNearlyZero())
+	{
+		ImpactNormal = FVector(
+			ImpactResult.ImpactNormal.X,
+			ImpactResult.ImpactNormal.Y,
+			ImpactResult.ImpactNormal.Z);
+	}
 
 	EUOUPourDropReceiverType ReceiverType = EUOUPourDropReceiverType::None;
 	const bool bDeliveredWater = TryDeliverWater(OtherActor, ImpactLocation, ReceiverType);
@@ -255,60 +334,122 @@ void AUOUPourDropActor::HandleImpact(const FHitResult& ImpactResult, AActor* Oth
 bool AUOUPourDropActor::TryDeliverWater(AActor* HitActor, const FVector& ImpactLocation, EUOUPourDropReceiverType& OutReceiverType)
 {
 	OutReceiverType = EUOUPourDropReceiverType::None;
-	if (!IsValid(HitActor) || CurrentVolume <= 0.0f)
+	if (CurrentVolume <= 0.0f)
 	{
 		return false;
 	}
 
 	AActor* ReceiverOwner = nullptr;
-	if (UUOUPourReceiverComponent* PourReceiver = FindComponentOnActorOrParent<UUOUPourReceiverComponent>(HitActor, ReceiverOwner))
+	if (IsValid(HitActor))
 	{
-		if (PourReceiver->CanReceivePour())
+		if (UUOUPourReceiverComponent* PourReceiver = FindComponentOnActorOrParent<UUOUPourReceiverComponent>(HitActor, ReceiverOwner))
 		{
-			FUOUPourInputContext PourContext;
-			PourContext.Volume = CurrentVolume;
-			PourContext.Duration = CurrentDuration;
-			PourContext.WorldDirection = CurrentWorldDirection;
-			PourContext.WorldLocation = ImpactLocation;
-			PourContext.bHasValidWorldLocation = true;
-			PourContext.InstigatorActor = SourceInstigatorActor;
-			PourReceiver->ReceivePourInput(PourContext);
-			OutReceiverType = EUOUPourDropReceiverType::PurePourReceiver;
+			if (PourReceiver->CanReceivePour())
+			{
+				FUOUPourInputContext PourContext;
+				PourContext.Volume = CurrentVolume;
+				PourContext.Duration = CurrentDuration;
+				PourContext.WorldDirection = CurrentWorldDirection;
+				PourContext.WorldLocation = ImpactLocation;
+				PourContext.bHasValidWorldLocation = true;
+				PourContext.InstigatorActor = SourceInstigatorActor;
+				PourReceiver->ReceivePourInput(PourContext);
+				OutReceiverType = EUOUPourDropReceiverType::PurePourReceiver;
+				return true;
+			}
+		}
+
+		if (AUOUUmbrellaWaterTarget* WaterTarget = FindUmbrellaWaterTargetOnActorOrParent(HitActor))
+		{
+			WaterTarget->ReceiveWater(CurrentVolume);
+			OutReceiverType = EUOUPourDropReceiverType::UmbrellaWaterTarget;
+			return true;
+		}
+
+		if (UUOUWaterBasinTargetComponent* WaterBasinTarget = FindComponentOnActorOrParent<UUOUWaterBasinTargetComponent>(HitActor, ReceiverOwner))
+		{
+			FUOUWaterBasinInputContext InputContext;
+			InputContext.Volume = CurrentVolume;
+			InputContext.Duration = CurrentDuration;
+			InputContext.Source = EUOUWaterBasinInputSource::PlayerPour;
+			InputContext.WorldDirection = CurrentWorldDirection;
+			InputContext.WorldLocation = ImpactLocation;
+			InputContext.bHasValidWorldLocation = WaterBasinTarget->IsWorldLocationInsideBasin(ImpactLocation);
+			InputContext.InstigatorActor = SourceInstigatorActor;
+			InputContext.bApplyToConnectedGroup = bCurrentApplyToConnectedWaterBasinGroup;
+			WaterBasinTarget->ReceiveWaterInput(InputContext);
+			OutReceiverType = EUOUPourDropReceiverType::WaterBasinTarget;
+			return true;
+		}
+
+		if (UUOUWaterContainerComponent* WaterContainer = FindComponentOnActorOrParent<UUOUWaterContainerComponent>(HitActor, ReceiverOwner))
+		{
+			WaterContainer->AddAmount(CurrentVolume);
+			OutReceiverType = EUOUPourDropReceiverType::WaterContainer;
 			return true;
 		}
 	}
 
-	if (AUOUUmbrellaWaterTarget* WaterTarget = FindUmbrellaWaterTargetOnActorOrParent(HitActor))
+	AActor* BasinReceiverActor = nullptr;
+	return TryDeliverWaterToBasinAtLocation(ImpactLocation, OutReceiverType, BasinReceiverActor);
+}
+
+bool AUOUPourDropActor::TryDeliverWaterToBasinAtLocation(const FVector& ImpactLocation, EUOUPourDropReceiverType& OutReceiverType, AActor*& OutReceiverActor)
+{
+	OutReceiverType = EUOUPourDropReceiverType::None;
+	OutReceiverActor = nullptr;
+	if (CurrentVolume <= 0.0f)
 	{
-		WaterTarget->ReceiveWater(CurrentVolume);
-		OutReceiverType = EUOUPourDropReceiverType::UmbrellaWaterTarget;
-		return true;
+		return false;
 	}
 
-	if (UUOUWaterBasinTargetComponent* WaterBasinTarget = FindComponentOnActorOrParent<UUOUWaterBasinTargetComponent>(HitActor, ReceiverOwner))
+	UWorld* World = GetWorld();
+	if (World == nullptr)
 	{
+		return false;
+	}
+
+	for (TObjectIterator<UUOUWaterBasinTargetComponent> It; It; ++It)
+	{
+		UUOUWaterBasinTargetComponent* WaterBasinTarget = *It;
+		if (!IsValid(WaterBasinTarget)
+			|| WaterBasinTarget->GetWorld() != World
+			|| !IsWaterBasinDeliveryLocation(WaterBasinTarget, ImpactLocation))
+		{
+			continue;
+		}
+
 		FUOUWaterBasinInputContext InputContext;
 		InputContext.Volume = CurrentVolume;
 		InputContext.Duration = CurrentDuration;
 		InputContext.Source = EUOUWaterBasinInputSource::PlayerPour;
 		InputContext.WorldDirection = CurrentWorldDirection;
 		InputContext.WorldLocation = ImpactLocation;
-		InputContext.bHasValidWorldLocation = WaterBasinTarget->IsWorldLocationInsideBasin(ImpactLocation);
+		InputContext.bHasValidWorldLocation = true;
 		InputContext.InstigatorActor = SourceInstigatorActor;
 		InputContext.bApplyToConnectedGroup = bCurrentApplyToConnectedWaterBasinGroup;
 		WaterBasinTarget->ReceiveWaterInput(InputContext);
-		OutReceiverType = EUOUPourDropReceiverType::WaterBasinTarget;
-		return true;
-	}
 
-	if (UUOUWaterContainerComponent* WaterContainer = FindComponentOnActorOrParent<UUOUWaterContainerComponent>(HitActor, ReceiverOwner))
-	{
-		WaterContainer->AddAmount(CurrentVolume);
-		OutReceiverType = EUOUPourDropReceiverType::WaterContainer;
+		OutReceiverType = EUOUPourDropReceiverType::WaterBasinTarget;
+		OutReceiverActor = WaterBasinTarget->GetOwner();
 		return true;
 	}
 
 	return false;
+}
+
+bool AUOUPourDropActor::IsWaterBasinDeliveryLocation(const UUOUWaterBasinTargetComponent* WaterBasinTarget, const FVector& ImpactLocation) const
+{
+	if (!IsValid(WaterBasinTarget) || !WaterBasinTarget->IsWorldLocationInsideBasin(ImpactLocation))
+	{
+		return false;
+	}
+
+	const float DeliveryTolerance = FMath::Max(FMath::Max(CollisionRadius, WaterBasinDeliveryVerticalTolerance), 1.0f);
+	const float BottomWorldZ = WaterBasinTarget->GetBottomWorldZ();
+	const float SurfaceWorldZ = FMath::Max(WaterBasinTarget->WaterSurfaceWorldZ, BottomWorldZ);
+	return ImpactLocation.Z >= BottomWorldZ - DeliveryTolerance
+		&& ImpactLocation.Z <= SurfaceWorldZ + DeliveryTolerance;
 }
 
 void AUOUPourDropActor::SpawnImpactSplash(const FVector& ImpactLocation, const FVector& ImpactNormal, bool bDeliveredWater) const
