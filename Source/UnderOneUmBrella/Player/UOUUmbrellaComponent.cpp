@@ -1409,9 +1409,11 @@ bool UUOUUmbrellaComponent::SpawnPendingPourDrop()
 	SpawnParameters.Instigator = Cast<APawn>(Owner);
 	SpawnParameters.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
+	FVector PourOffset = DropDirection * PourDropOffset;
+
 	AUOUPourDropActor* DropActor = World->SpawnActor<AUOUPourDropActor>(
 		PourDropActorClass,
-		DropOrigin,
+		DropOrigin + PourOffset,
 		DropDirection.Rotation(),
 		SpawnParameters);
 	if (DropActor == nullptr)

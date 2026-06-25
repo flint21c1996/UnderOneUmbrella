@@ -286,6 +286,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Water", meta = (ClampMin = "0.0"))
 	float PourDistance = 300.0f;
 
+	//물 붓기 위치 offset
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Water")
+	float PourDropOffset = 0.f;
+
 	// 물을 부을 대상을 찾을 때 사용하는 충돌 채널입니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Water")
 	TEnumAsByte<ECollisionChannel> PourTraceChannel = ECC_Visibility;
