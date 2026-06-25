@@ -8,6 +8,7 @@
 
 class USceneComponent;
 class AActor;
+class UNiagaraComponent;
 class UNiagaraSystem;
 class UUOUWaterBasinTargetComponent;
 
@@ -451,6 +452,10 @@ private:
 
 	// PlayerPour input uses the drop impact point to drive local splash/ripple feedback.
 	void HandlePlayerPourImpactVisuals(const FUOUWaterBasinInputContext& InputContext);
+
+	UFUNCTION()
+	void HandlePlayerPourImpactSplashFinished(UNiagaraComponent* FinishedComponent);
+
 	void UpdatePlayerPourWaterVisualRipple(float DeltaTime);
 	FVector ResolvePlayerPourImpactLocation(const FUOUWaterBasinInputContext& InputContext) const;
 	float EstimatePlayerPourSurfaceWorldZAfterInput(const FUOUWaterBasinInputContext& InputContext) const;

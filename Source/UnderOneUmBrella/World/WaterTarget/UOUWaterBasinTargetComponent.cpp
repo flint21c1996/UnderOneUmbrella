@@ -8,6 +8,7 @@
 #include "Debug/UOUDebugSubsystem.h"
 #include "DrawDebugHelpers.h"
 #include "GameFramework/Actor.h"
+#include "NiagaraComponent.h"
 #include "NiagaraFunctionLibrary.h"
 #include "UObject/UObjectIterator.h"
 
@@ -940,12 +941,17 @@ void UUOUWaterBasinTargetComponent::HandlePlayerPourImpactVisuals(const FUOUWate
 			const FVector ImpactNormal = RawImpactNormal.IsNearlyZero()
 				? FVector::UpVector
 				: RawImpactNormal.GetSafeNormal();
-			UNiagaraFunctionLibrary::SpawnSystemAtLocation(
+			UNiagaraComponent* SplashComponent = UNiagaraFunctionLibrary::SpawnSystemAtLocation(
 				World,
 				PlayerPourImpactSplashEffect,
 				ImpactLocation,
 				ImpactNormal.Rotation(),
 				FVector(FMath::Max(PlayerPourImpactSplashScale, 0.0f)));
+			if (SplashComponent)
+			{
+				SplashComponent->SetAutoDestroy(true);
+				SplashComponent->OnSystemFinished.AddDynamic(this, &UUOUWaterBasinTargetComponent::HandlePlayerPourImpactSplashFinished);
+			}
 			LastPlayerPourImpactSplashTime = CurrentTime;
 		}
 	}
@@ -958,6 +964,17 @@ void UUOUWaterBasinTargetComponent::HandlePlayerPourImpactVisuals(const FUOUWate
 			? PlayerPourWaterVisualRippleDuration
 			: FMath::Max(ActivePlayerPourWaterVisualRippleTime, PlayerPourWaterVisualRippleDuration * 0.5f);
 	}
+}
+
+void UUOUWaterBasinTargetComponent::HandlePlayerPourImpactSplashFinished(UNiagaraComponent* FinishedComponent)
+{
+	if (!IsValid(FinishedComponent))
+	{
+		return;
+	}
+
+	FinishedComponent->OnSystemFinished.RemoveAll(this);
+	FinishedComponent->DestroyComponent();
 }
 
 void UUOUWaterBasinTargetComponent::UpdatePlayerPourWaterVisualRipple(float DeltaTime)
