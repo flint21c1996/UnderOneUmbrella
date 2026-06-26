@@ -62,15 +62,6 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pour Content|Drop Visual")
 	FUOUPourDropVisualSettings DropVisual;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pour Content|Drop Spawn", meta = (ToolTip = "When enabled, drop spawn offsets come from this content profile instead of the UmbrellaComponent fallback values."))
-	bool bOverrideDropSpawnPlacement = false;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pour Content|Drop Spawn", meta = (EditCondition = "bOverrideDropSpawnPlacement", EditConditionHides, ToolTip = "Distance added along the horizontal pour direction before spawning the drop actor."))
-	float DropSpawnForwardOffset = 0.0f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pour Content|Drop Spawn", meta = (EditCondition = "bOverrideDropSpawnPlacement", EditConditionHides, ToolTip = "World Z offset added after the forward offset. Negative values move the spawned drop and stream lower."))
-	float DropSpawnVerticalOffset = 0.0f;
-
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pour Content|Stored Visual")
 	FUOUPourStoredVisualSettings StoredVisual;
 
@@ -86,15 +77,4 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pour Content|Stream Visual", meta = (ClampMin = "0.0"))
 	FVector StreamRelativeScale = FVector::OneVector;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pour Content|Stream Visual|Animation", meta = (ToolTip = "When enabled, stream location animation settings come from this content profile instead of UmbrellaComponent fallback values."))
-	bool bOverrideUmbrellaStreamLocationAnimation = false;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pour Content|Stream Visual|Animation", meta = (ClampMin = "0.0", EditCondition = "bOverrideUmbrellaStreamLocationAnimation", EditConditionHides, ToolTip = "Seconds used for the stream visual to move from its initial offset to the target pour location. Set to 0 to snap."))
-	float StreamLocationInterpDuration = 1.0f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pour Content|Stream Visual|Animation", meta = (ClampMin = "1.0", EditCondition = "bOverrideUmbrellaStreamLocationAnimation", EditConditionHides, ToolTip = "Ease-out power used for stream location animation. Higher values slow down more near the final position."))
-	float StreamLocationEasePower = 2.0f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pour Content|Stream Visual|Animation", meta = (EditCondition = "bOverrideUmbrellaStreamLocationAnimation", EditConditionHides, ToolTip = "World-space offset added to the stream target location when the pour animation alpha is 0. This lets each content start from a different visual position before settling."))
-	FVector StreamInitialWorldLocationOffset = FVector::ZeroVector;
 };
