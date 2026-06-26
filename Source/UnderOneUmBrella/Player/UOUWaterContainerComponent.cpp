@@ -19,11 +19,14 @@ void UUOUWaterContainerComponent::BeginPlay()
 
 	MaxAmount = FMath::Max(0.0f, MaxAmount);
 	WeightMultiplier = FMath::Max(0.0f, WeightMultiplier);
-	ResolveFillVisualComponent();
-	ApplyFillVisualContentProfile();
 	SetAmount(InitialAmount);
-	DisplayedFillVisualRatio = TargetFillVisualRatio;
-	UpdateFillVisual(0.0f, true);
+	if (bUpdateFillVisual)
+	{
+		ResolveFillVisualComponent();
+		ApplyFillVisualContentProfile();
+		DisplayedFillVisualRatio = TargetFillVisualRatio;
+		UpdateFillVisual(0.0f, true);
+	}
 	SetComponentTickEnabled(bUpdateFillVisual);
 }
 
@@ -95,7 +98,10 @@ void UUOUWaterContainerComponent::SetPourContentProfile(UUOUPourContentProfile* 
 	}
 
 	PourContentProfile = NewContentProfile;
-	ApplyFillVisualContentProfile();
+	if (bUpdateFillVisual)
+	{
+		ApplyFillVisualContentProfile();
+	}
 	BroadcastPourContentProfileChanged();
 }
 
@@ -338,7 +344,9 @@ void UUOUWaterContainerComponent::ApplyFillVisualContentProfile()
 		return;
 	}
 
-	const FUOUPourStoredVisualSettings* StoredVisualSettings = GetActiveStoredVisualSettings();
+	const FUOUPourStoredVisualSettings* StoredVisualSettings = PourContentProfile != nullptr
+		? &PourContentProfile->StoredVisual
+		: nullptr;
 	if (StoredVisualSettings == nullptr)
 	{
 		return;

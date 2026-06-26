@@ -61,8 +61,8 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water|Fill Visual", meta = (ToolTip = "Automatically find FillVisualComponent by name or tag when it is not assigned."))
 	bool bAutoFindFillVisualComponent = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water|Fill Visual", meta = (ToolTip = "Enables fill visual updates from this container amount."))
-	bool bUpdateFillVisual = true;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water|Fill Visual", meta = (ToolTip = "Legacy fallback. Prefer UOUStoredContentVisualComponent for content-profile driven stored visuals."))
+	bool bUpdateFillVisual = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water|Fill Visual", meta = (ClampMin = "0.0", ToolTip = "Fill ratio interpolation speed. Set to 0 to snap to the stored amount."))
 	float FillVisualInterpSpeed = 2.0f;
