@@ -76,5 +76,4 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pour Content|Stream Visual", meta = (ClampMin = "0.0"))
 	FVector StreamRelativeScale = FVector::OneVector;
-
 };

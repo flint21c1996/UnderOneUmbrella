@@ -1193,7 +1193,7 @@ void UUOUUmbrellaComponent::UpdatePouringEffectTransform()
 	const FVector RelativeScale = ContentProfile != nullptr ? ContentProfile->StreamRelativeScale : FVector::OneVector;
 	const FQuat EffectRotation = DirectionRotation * FRotator(0.0f, RelativeRotation.Yaw, 0.0f).Quaternion();
 	const FVector TargetEffectLocation = DropLocation + DirectionRotation.RotateVector(RelativeLocation);
-	const FVector InitialEffectLocation = TargetEffectLocation + FVector(0.0f, 0.0f, -PourDropVerticalOffset);
+	const FVector InitialEffectLocation = TargetEffectLocation + ContentProfile->DropVisual.SpawnRelativeOffset;
 	const float VisualAlpha = FMath::InterpEaseOut(0.0f, 1.0f, PourAnimationAlpha, FMath::Max(1.0f, PourStreamLocationEasePower));
 	const FVector EffectLocation = FMath::Lerp(InitialEffectLocation, TargetEffectLocation, VisualAlpha);
 
@@ -1216,7 +1216,9 @@ bool UUOUUmbrellaComponent::TryGetPourDropSpawnPlacement(FVector& OutDropLocatio
 	}
 
 	DropDirection = DropDirection.GetSafeNormal();
-	OutDropLocation = DropOrigin + DropDirection * PourDropOffset + FVector(0.0f, 0.0f, PourDropVerticalOffset);
+	const UUOUPourContentProfile* ContentProfile = ResolvePourContentProfile();
+	
+	OutDropLocation = DropOrigin + DropDirection * ContentProfile->DropVisual.SpawnDirectionOffset + ContentProfile->DropVisual.SpawnRelativeOffset;
 	OutDropDirection = DropDirection;
 	return true;
 }

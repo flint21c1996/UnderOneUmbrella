@@ -288,13 +288,6 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Water", meta = (ClampMin = "0.0"))
 	float PourDistance = 300.0f;
 
-	//물 붓기 위치 offset
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Water")
-	float PourDropOffset = 0.f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Water", meta = (ToolTip = "World Z offset added after the horizontal pour direction offset. Use negative values when the drop and stream start too high."))
-	float PourDropVerticalOffset = 0.0f;
-
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Water", meta = (ClampMin = "0.0", ToolTip = "Seconds used for the visual pour stream to move from the unadjusted start height to the final offset height. Set to 0 to snap immediately."))
 	float PourStreamLocationInterpDuration = 1.0f;
 
