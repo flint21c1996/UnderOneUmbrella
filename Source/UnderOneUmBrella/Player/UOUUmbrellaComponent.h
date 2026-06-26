@@ -7,7 +7,6 @@
 #include "Components/ActorComponent.h"
 #include "Engine/EngineTypes.h"
 #include "InputCoreTypes.h"
-#include "World/Pour/UOUPourContentProfile.h"
 #include "World/Pour/UOUPourDropTypes.h"
 #include "UOUUmbrellaComponent.generated.h"
 
@@ -21,6 +20,7 @@ class UStaticMeshComponent;
 class AUOUPourDropActor;
 class UUOURainReceiverComponent;
 class UUOUAudioCueComponent;
+class UUOUPourContentProfile;
 class UUOUWaterContainerComponent;
 
 // 우산이 현재 어떤 형태로 사용되는지 나타내는 상태입니다.
@@ -619,16 +619,6 @@ protected:
 	const UUOUPourContentProfile* ResolvePourContentProfile() const;
 
 	TSubclassOf<AUOUPourDropActor> ResolvePourDropActorClass() const;
-
-	float ResolvePourDropForwardOffset() const;
-
-	float ResolvePourDropVerticalOffset() const;
-
-	float ResolvePourStreamLocationInterpDuration() const;
-
-	float ResolvePourStreamLocationEasePower() const;
-
-	FVector ResolvePourStreamInitialWorldLocationOffset() const;
 
 	// 픽업 액터의 메쉬와 머티리얼 정보를 손에 든 우산 비주얼로 복사합니다.
 	void ApplyHeldVisualFromMeshComponent(UStaticMeshComponent* SourceMeshComponent);
