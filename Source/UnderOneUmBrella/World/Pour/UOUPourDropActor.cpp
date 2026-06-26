@@ -173,8 +173,12 @@ void AUOUPourDropActor::InitializePourDrop(const FUOUPourDropContext& DropContex
 
 	SourceInstigatorActor = DropContext.InstigatorActor;
 	bCurrentApplyToConnectedWaterBasinGroup = DropContext.bApplyToConnectedWaterBasinGroup;
+	ApplyContextVisualSettings(DropContext.VisualSettings);
 	IgnoreSourceActor();
+	ApplyCollisionSettings();
+	ApplyVisualSettings();
 	ApplyMovementSettings();
+	SetLifeSpan(FMath::Max(0.0f, DropLifeSpan));
 	ApplyLaunchVelocity();
 }
 
@@ -214,6 +218,14 @@ void AUOUPourDropActor::ApplyVisualSettings()
 			VisualMesh->SetStaticMesh(VisualMeshAsset);
 		}
 
+		for (int32 MaterialIndex = 0; MaterialIndex < VisualMaterials.Num(); ++MaterialIndex)
+		{
+			if (VisualMaterials[MaterialIndex] != nullptr)
+			{
+				VisualMesh->SetMaterial(MaterialIndex, VisualMaterials[MaterialIndex]);
+			}
+		}
+
 		const FVector SafeVisualScale(
 			FMath::Max(0.0f, VisualMeshRelativeScale.X),
 			FMath::Max(0.0f, VisualMeshRelativeScale.Y),
@@ -240,6 +252,46 @@ void AUOUPourDropActor::ApplyVisualSettings()
 			TrailEffect->DeactivateImmediate();
 		}
 	}
+}
+
+void AUOUPourDropActor::ApplyContextVisualSettings(const FUOUPourDropVisualSettings& VisualSettings)
+{
+	if (!VisualSettings.bOverrideDropActorSettings)
+	{
+		return;
+	}
+
+	if (VisualSettings.VisualMesh != nullptr)
+	{
+		VisualMeshAsset = VisualSettings.VisualMesh;
+	}
+	VisualMaterials = VisualSettings.VisualMaterials;
+	VisualMeshRelativeScale = VisualSettings.VisualMeshRelativeScale;
+	VisualMeshRelativeOffset = VisualSettings.VisualMeshRelativeOffset;
+	VisualMeshRelativeRotation = VisualSettings.VisualMeshRelativeRotation;
+
+	if (VisualSettings.TrailEffect != nullptr)
+	{
+		TrailEffectAsset = VisualSettings.TrailEffect;
+	}
+	bActivateTrailEffect = VisualSettings.bActivateTrailEffect;
+
+	CollisionRadius = VisualSettings.CollisionRadius;
+	WaterBasinDeliveryVerticalTolerance = VisualSettings.WaterBasinDeliveryVerticalTolerance;
+	InitialSpeed = VisualSettings.InitialSpeed;
+	MaxSpeed = VisualSettings.MaxSpeed;
+	GravityScale = VisualSettings.GravityScale;
+	bUseVerticalDescent = VisualSettings.bUseVerticalDescent;
+	DropLifeSpan = VisualSettings.DropLifeSpan;
+
+	bDestroyOnFirstValidReceiver = VisualSettings.bDestroyOnFirstValidReceiver;
+	bDestroyOnBlockingHitWithoutReceiver = VisualSettings.bDestroyOnBlockingHitWithoutReceiver;
+	bSpawnSplashOnlyWhenDelivered = VisualSettings.bSpawnSplashOnlyWhenDelivered;
+	if (VisualSettings.ImpactSplashEffect != nullptr)
+	{
+		ImpactSplashEffect = VisualSettings.ImpactSplashEffect;
+	}
+	ImpactSplashScale = VisualSettings.ImpactSplashScale;
 }
 
 void AUOUPourDropActor::ApplyMovementSettings()

@@ -1216,7 +1216,7 @@ bool UUOUUmbrellaComponent::TryGetPourDropSpawnPlacement(FVector& OutDropLocatio
 	}
 
 	DropDirection = DropDirection.GetSafeNormal();
-	OutDropLocation = DropOrigin + DropDirection * PourDropOffset + FVector(0.0f, 0.0f, PourDropVerticalOffset);
+	OutDropLocation = DropOrigin + DropDirection * ResolvePourDropForwardOffset() + FVector(0.0f, 0.0f, ResolvePourDropVerticalOffset());
 	OutDropDirection = DropDirection;
 	return true;
 }
@@ -1235,6 +1235,28 @@ TSubclassOf<AUOUPourDropActor> UUOUUmbrellaComponent::ResolvePourDropActorClass(
 	}
 
 	return AUOUPourDropActor::StaticClass();
+}
+
+float UUOUUmbrellaComponent::ResolvePourDropForwardOffset() const
+{
+	const UUOUPourContentProfile* ContentProfile = ResolvePourContentProfile();
+	if (ContentProfile != nullptr && ContentProfile->bOverrideDropSpawnPlacement)
+	{
+		return ContentProfile->DropSpawnForwardOffset;
+	}
+
+	return PourDropOffset;
+}
+
+float UUOUUmbrellaComponent::ResolvePourDropVerticalOffset() const
+{
+	const UUOUPourContentProfile* ContentProfile = ResolvePourContentProfile();
+	if (ContentProfile != nullptr && ContentProfile->bOverrideDropSpawnPlacement)
+	{
+		return ContentProfile->DropSpawnVerticalOffset;
+	}
+
+	return PourDropVerticalOffset;
 }
 
 float UUOUUmbrellaComponent::ResolvePourStreamLocationInterpDuration() const
@@ -1267,7 +1289,7 @@ FVector UUOUUmbrellaComponent::ResolvePourStreamInitialWorldLocationOffset() con
 		return ContentProfile->StreamInitialWorldLocationOffset;
 	}
 
-	return FVector(0.0f, 0.0f, -PourDropVerticalOffset);
+	return FVector(0.0f, 0.0f, -ResolvePourDropVerticalOffset());
 }
 
 // 월드 픽업 메쉬에서 스태틱 메쉬와 머티리얼을 읽어 손에 든 비주얼로 복사합니다.
@@ -1669,6 +1691,10 @@ bool UUOUUmbrellaComponent::SpawnPendingPourDrop()
 	DropContext.WorldDirection = DropDirection;
 	DropContext.InstigatorActor = Owner;
 	DropContext.bApplyToConnectedWaterBasinGroup = bPourDropAppliesToConnectedWaterBasinGroup;
+	if (const UUOUPourContentProfile* ContentProfile = ResolvePourContentProfile())
+	{
+		DropContext.VisualSettings = ContentProfile->DropVisual;
+	}
 	DropActor->InitializePourDrop(DropContext);
 
 	LastPourTraceStart = DropLocation;

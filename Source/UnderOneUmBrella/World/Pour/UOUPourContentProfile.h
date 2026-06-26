@@ -4,12 +4,11 @@
 
 #include "CoreMinimal.h"
 #include "Engine/DataAsset.h"
+#include "Engine/StaticMesh.h"
+#include "Materials/MaterialInterface.h"
+#include "NiagaraSystem.h"
 #include "World/Pour/UOUPourDropActor.h"
 #include "UOUPourContentProfile.generated.h"
-
-class UMaterialInterface;
-class UNiagaraSystem;
-class UStaticMesh;
 
 USTRUCT(BlueprintType)
 struct UNDERONEUMBRELLA_API FUOUPourStoredVisualSettings
@@ -59,6 +58,18 @@ class UNDERONEUMBRELLA_API UUOUPourContentProfile : public UDataAsset
 public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pour Content")
 	TSubclassOf<AUOUPourDropActor> DropActorClass;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pour Content|Drop Visual")
+	FUOUPourDropVisualSettings DropVisual;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pour Content|Drop Spawn", meta = (ToolTip = "When enabled, drop spawn offsets come from this content profile instead of the UmbrellaComponent fallback values."))
+	bool bOverrideDropSpawnPlacement = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pour Content|Drop Spawn", meta = (EditCondition = "bOverrideDropSpawnPlacement", EditConditionHides, ToolTip = "Distance added along the horizontal pour direction before spawning the drop actor."))
+	float DropSpawnForwardOffset = 0.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pour Content|Drop Spawn", meta = (EditCondition = "bOverrideDropSpawnPlacement", EditConditionHides, ToolTip = "World Z offset added after the forward offset. Negative values move the spawned drop and stream lower."))
+	float DropSpawnVerticalOffset = 0.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pour Content|Stored Visual")
 	FUOUPourStoredVisualSettings StoredVisual;

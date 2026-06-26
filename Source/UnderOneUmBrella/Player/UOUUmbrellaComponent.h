@@ -620,6 +620,10 @@ protected:
 
 	TSubclassOf<AUOUPourDropActor> ResolvePourDropActorClass() const;
 
+	float ResolvePourDropForwardOffset() const;
+
+	float ResolvePourDropVerticalOffset() const;
+
 	float ResolvePourStreamLocationInterpDuration() const;
 
 	float ResolvePourStreamLocationEasePower() const;

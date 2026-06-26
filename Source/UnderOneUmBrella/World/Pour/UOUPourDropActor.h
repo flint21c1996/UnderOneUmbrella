@@ -8,6 +8,7 @@
 #include "UOUPourDropActor.generated.h"
 
 class AActor;
+class UMaterialInterface;
 class UPrimitiveComponent;
 class UProjectileMovementComponent;
 class USphereComponent;
@@ -37,6 +38,9 @@ struct UNDERONEUMBRELLA_API FUOUPourDropContext
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pour Drop")
 	bool bApplyToConnectedWaterBasinGroup = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pour Drop|Visual")
+	FUOUPourDropVisualSettings VisualSettings;
 };
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_FiveParams(
@@ -78,6 +82,9 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pour Drop|Visual")
 	TObjectPtr<UStaticMesh> VisualMeshAsset = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pour Drop|Visual")
+	TArray<TObjectPtr<UMaterialInterface>> VisualMaterials;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pour Drop|Visual")
 	FVector VisualMeshRelativeScale = FVector(0.08f);
@@ -172,6 +179,7 @@ private:
 
 	void ApplyCollisionSettings();
 	void ApplyVisualSettings();
+	void ApplyContextVisualSettings(const FUOUPourDropVisualSettings& VisualSettings);
 	void ApplyMovementSettings();
 	void ApplyLaunchVelocity();
 	FVector ResolveLaunchDirection() const;
