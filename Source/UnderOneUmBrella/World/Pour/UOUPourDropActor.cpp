@@ -256,24 +256,34 @@ void AUOUPourDropActor::ApplyVisualSettings()
 
 void AUOUPourDropActor::ApplyContextVisualSettings(const FUOUPourDropVisualSettings& VisualSettings)
 {
-	if (!VisualSettings.bOverrideDropActorSettings)
-	{
-		return;
-	}
-
 	if (VisualSettings.VisualMesh != nullptr)
 	{
 		VisualMeshAsset = VisualSettings.VisualMesh;
 	}
-	VisualMaterials = VisualSettings.VisualMaterials;
-	VisualMeshRelativeScale = VisualSettings.VisualMeshRelativeScale;
-	VisualMeshRelativeOffset = VisualSettings.VisualMeshRelativeOffset;
-	VisualMeshRelativeRotation = VisualSettings.VisualMeshRelativeRotation;
+	if (!VisualSettings.VisualMaterials.IsEmpty())
+	{
+		VisualMaterials = VisualSettings.VisualMaterials;
+	}
 
 	if (VisualSettings.TrailEffect != nullptr)
 	{
 		TrailEffectAsset = VisualSettings.TrailEffect;
 	}
+
+	if (VisualSettings.ImpactSplashEffect != nullptr)
+	{
+		ImpactSplashEffect = VisualSettings.ImpactSplashEffect;
+	}
+
+	if (!VisualSettings.bOverrideDropActorSettings)
+	{
+		return;
+	}
+
+	VisualMeshRelativeScale = VisualSettings.VisualMeshRelativeScale;
+	VisualMeshRelativeOffset = VisualSettings.VisualMeshRelativeOffset;
+	VisualMeshRelativeRotation = VisualSettings.VisualMeshRelativeRotation;
+
 	bActivateTrailEffect = VisualSettings.bActivateTrailEffect;
 
 	CollisionRadius = VisualSettings.CollisionRadius;
@@ -287,10 +297,6 @@ void AUOUPourDropActor::ApplyContextVisualSettings(const FUOUPourDropVisualSetti
 	bDestroyOnFirstValidReceiver = VisualSettings.bDestroyOnFirstValidReceiver;
 	bDestroyOnBlockingHitWithoutReceiver = VisualSettings.bDestroyOnBlockingHitWithoutReceiver;
 	bSpawnSplashOnlyWhenDelivered = VisualSettings.bSpawnSplashOnlyWhenDelivered;
-	if (VisualSettings.ImpactSplashEffect != nullptr)
-	{
-		ImpactSplashEffect = VisualSettings.ImpactSplashEffect;
-	}
 	ImpactSplashScale = VisualSettings.ImpactSplashScale;
 }
 
