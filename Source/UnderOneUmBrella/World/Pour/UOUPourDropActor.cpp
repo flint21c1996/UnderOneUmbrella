@@ -442,6 +442,7 @@ bool AUOUPourDropActor::TryDeliverWater(AActor* HitActor, const FVector& ImpactL
 			InputContext.bHasValidWorldLocation = WaterBasinTarget->IsWorldLocationInsideBasin(ImpactLocation);
 			InputContext.InstigatorActor = SourceInstigatorActor;
 			InputContext.bApplyToConnectedGroup = bCurrentApplyToConnectedWaterBasinGroup;
+			InputContext.bImpactSplashHandledBySource = ShouldHandleImpactSplashAtSource(true);
 			WaterBasinTarget->ReceiveWaterInput(InputContext);
 			OutReceiverType = EUOUPourDropReceiverType::WaterBasinTarget;
 			return true;
@@ -493,6 +494,7 @@ bool AUOUPourDropActor::TryDeliverWaterToBasinAtLocation(const FVector& ImpactLo
 		InputContext.bHasValidWorldLocation = true;
 		InputContext.InstigatorActor = SourceInstigatorActor;
 		InputContext.bApplyToConnectedGroup = bCurrentApplyToConnectedWaterBasinGroup;
+		InputContext.bImpactSplashHandledBySource = ShouldHandleImpactSplashAtSource(true);
 		WaterBasinTarget->ReceiveWaterInput(InputContext);
 
 		OutReceiverType = EUOUPourDropReceiverType::WaterBasinTarget;
@@ -517,15 +519,17 @@ bool AUOUPourDropActor::IsWaterBasinDeliveryLocation(const UUOUWaterBasinTargetC
 		&& ImpactLocation.Z <= SurfaceWorldZ + DeliveryTolerance;
 }
 
+bool AUOUPourDropActor::ShouldHandleImpactSplashAtSource(bool bDeliveredWater) const
+{
+	return ImpactSplashEffect != nullptr
+		&& ImpactSplashScale > KINDA_SMALL_NUMBER
+		&& (!bSpawnSplashOnlyWhenDelivered || bDeliveredWater);
+}
+
 void AUOUPourDropActor::SpawnImpactSplash(const FVector& ImpactLocation, const FVector& ImpactNormal, bool bDeliveredWater) const
 {
-	if (ImpactSplashEffect == nullptr || (bSpawnSplashOnlyWhenDelivered && !bDeliveredWater))
-	{
-		return;
-	}
-
 	UWorld* World = GetWorld();
-	if (World == nullptr)
+	if (World == nullptr || !ShouldHandleImpactSplashAtSource(bDeliveredWater))
 	{
 		return;
 	}

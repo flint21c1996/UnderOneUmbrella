@@ -920,7 +920,7 @@ void UUOUWaterBasinTargetComponent::HandlePlayerPourImpactVisuals(const FUOUWate
 		return;
 	}
 
-	if (bSpawnPlayerPourImpactSplash && PlayerPourImpactSplashEffect)
+	if (!InputContext.bImpactSplashHandledBySource && bSpawnPlayerPourImpactSplash && PlayerPourImpactSplashEffect)
 	{
 		UWorld* World = GetWorld();
 		const float CurrentTime = World != nullptr ? World->GetTimeSeconds() : 0.0f;

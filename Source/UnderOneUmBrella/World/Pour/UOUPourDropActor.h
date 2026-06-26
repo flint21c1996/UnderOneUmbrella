@@ -188,6 +188,7 @@ private:
 	bool TryDeliverWater(AActor* HitActor, const FVector& ImpactLocation, EUOUPourDropReceiverType& OutReceiverType);
 	bool TryDeliverWaterToBasinAtLocation(const FVector& ImpactLocation, EUOUPourDropReceiverType& OutReceiverType, AActor*& OutReceiverActor);
 	bool IsWaterBasinDeliveryLocation(const UUOUWaterBasinTargetComponent* WaterBasinTarget, const FVector& ImpactLocation) const;
+	bool ShouldHandleImpactSplashAtSource(bool bDeliveredWater) const;
 	void SpawnImpactSplash(const FVector& ImpactLocation, const FVector& ImpactNormal, bool bDeliveredWater) const;
 	bool ShouldIgnoreActor(const AActor* OtherActor) const;
 };

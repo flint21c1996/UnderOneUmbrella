@@ -95,6 +95,9 @@ struct FUOUWaterBasinInputContext
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Input")
 	bool bApplyToConnectedGroup = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Input", meta = (ToolTip = "True when the pour source already spawned its own impact splash. WaterBasinTarget should still react with ripple, but skip its fallback splash."))
+	bool bImpactSplashHandledBySource = false;
 };
 
 // 런타임 디버그 표시 범위입니다.
