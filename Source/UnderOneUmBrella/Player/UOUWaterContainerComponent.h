@@ -141,6 +141,10 @@ protected:
 
 	bool ShouldShowFillVisual() const;
 
+	const FUOUPourStoredVisualSettings* GetActiveStoredVisualSettings() const;
+
+	void ApplyFillVisualContentProfile();
+
 	bool bCapturedFillVisualTransform = false;
 
 	FVector InitialFillVisualRelativeLocation = FVector::ZeroVector;

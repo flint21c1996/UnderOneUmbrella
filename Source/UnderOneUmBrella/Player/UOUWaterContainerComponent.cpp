@@ -4,6 +4,7 @@
 
 #include "Components/MeshComponent.h"
 #include "Components/SceneComponent.h"
+#include "Components/StaticMeshComponent.h"
 #include "GameFramework/Actor.h"
 #include "NiagaraComponent.h"
 
@@ -19,6 +20,7 @@ void UUOUWaterContainerComponent::BeginPlay()
 	MaxAmount = FMath::Max(0.0f, MaxAmount);
 	WeightMultiplier = FMath::Max(0.0f, WeightMultiplier);
 	ResolveFillVisualComponent();
+	ApplyFillVisualContentProfile();
 	SetAmount(InitialAmount);
 	DisplayedFillVisualRatio = TargetFillVisualRatio;
 	UpdateFillVisual(0.0f, true);
@@ -93,6 +95,7 @@ void UUOUWaterContainerComponent::SetPourContentProfile(UUOUPourContentProfile* 
 	}
 
 	PourContentProfile = NewContentProfile;
+	ApplyFillVisualContentProfile();
 	BroadcastPourContentProfileChanged();
 }
 
@@ -145,6 +148,7 @@ void UUOUWaterContainerComponent::ResolveFillVisualComponent()
 	bResolvedFillVisualComponent = FillVisualComponent != nullptr;
 	ResolvedFillVisualComponentName = FillVisualComponent != nullptr ? FillVisualComponent->GetName() : TEXT("None");
 	CaptureFillVisualTransformIfNeeded();
+	ApplyFillVisualContentProfile();
 }
 
 USceneComponent* UUOUWaterContainerComponent::FindFillVisualComponent() const
@@ -208,7 +212,11 @@ void UUOUWaterContainerComponent::UpdateFillVisual(float DeltaTime, bool bSnapTo
 
 	RefreshFillVisualTarget();
 	const float SafeDeltaTime = FMath::Max(0.0f, DeltaTime);
-	const float SafeInterpSpeed = FMath::Max(0.0f, FillVisualInterpSpeed);
+	const FUOUPourStoredVisualSettings* StoredVisualSettings = GetActiveStoredVisualSettings();
+	const float ResolvedInterpSpeed = StoredVisualSettings != nullptr
+		? StoredVisualSettings->FillVisualInterpSpeed
+		: FillVisualInterpSpeed;
+	const float SafeInterpSpeed = FMath::Max(0.0f, ResolvedInterpSpeed);
 	if (bSnapToTarget || SafeInterpSpeed <= KINDA_SMALL_NUMBER)
 	{
 		DisplayedFillVisualRatio = TargetFillVisualRatio;
@@ -225,8 +233,12 @@ void UUOUWaterContainerComponent::UpdateFillVisual(float DeltaTime, bool bSnapTo
 	DisplayedFillVisualRatio = FMath::Clamp(DisplayedFillVisualRatio, 0.0f, 1.0f);
 	CaptureFillVisualTransformIfNeeded();
 
-	FVector EffectiveEmptyScaleMultiplier = FillVisualEmptyScaleMultiplier;
-	const FVector EffectiveFullScaleMultiplier = FillVisualFullScaleMultiplier;
+	FVector EffectiveEmptyScaleMultiplier = StoredVisualSettings != nullptr
+		? StoredVisualSettings->EmptyScaleMultiplier
+		: FillVisualEmptyScaleMultiplier;
+	const FVector EffectiveFullScaleMultiplier = StoredVisualSettings != nullptr
+		? StoredVisualSettings->FullScaleMultiplier
+		: FillVisualFullScaleMultiplier;
 	if (EffectiveEmptyScaleMultiplier.Equals(FVector::OneVector)
 		&& EffectiveFullScaleMultiplier.Equals(FVector::OneVector))
 	{
@@ -241,25 +253,34 @@ void UUOUWaterContainerComponent::UpdateFillVisual(float DeltaTime, bool bSnapTo
 		InitialFillVisualRelativeScale.X * ScaleMultiplier.X,
 		InitialFillVisualRelativeScale.Y * ScaleMultiplier.Y,
 		InitialFillVisualRelativeScale.Z * ScaleMultiplier.Z);
+	const FVector ResolvedFullLocationOffset = StoredVisualSettings != nullptr
+		? StoredVisualSettings->FullLocationOffset
+		: FillVisualFullLocationOffset;
 	const FVector NewLocation = InitialFillVisualRelativeLocation
-		+ FillVisualFullLocationOffset * DisplayedFillVisualRatio;
+		+ ResolvedFullLocationOffset * DisplayedFillVisualRatio;
 
 	FillVisualComponent->SetRelativeLocation(NewLocation);
 	FillVisualComponent->SetRelativeScale3D(NewScale);
 
-	if (!MeshFillRatioParameterName.IsNone())
+	const FName ResolvedMeshFillRatioParameterName = StoredVisualSettings != nullptr
+		? StoredVisualSettings->MeshFillRatioParameterName
+		: MeshFillRatioParameterName;
+	if (!ResolvedMeshFillRatioParameterName.IsNone())
 	{
 		if (UMeshComponent* FillVisualMesh = Cast<UMeshComponent>(FillVisualComponent.Get()))
 		{
-			FillVisualMesh->SetScalarParameterValueOnMaterials(MeshFillRatioParameterName, DisplayedFillVisualRatio);
+			FillVisualMesh->SetScalarParameterValueOnMaterials(ResolvedMeshFillRatioParameterName, DisplayedFillVisualRatio);
 		}
 	}
 
-	if (!NiagaraFillRatioParameterName.IsNone())
+	const FName ResolvedNiagaraFillRatioParameterName = StoredVisualSettings != nullptr
+		? StoredVisualSettings->NiagaraFillRatioParameterName
+		: NiagaraFillRatioParameterName;
+	if (!ResolvedNiagaraFillRatioParameterName.IsNone())
 	{
 		if (UNiagaraComponent* FillVisualNiagara = Cast<UNiagaraComponent>(FillVisualComponent.Get()))
 		{
-			FillVisualNiagara->SetVariableFloat(NiagaraFillRatioParameterName, DisplayedFillVisualRatio);
+			FillVisualNiagara->SetVariableFloat(ResolvedNiagaraFillRatioParameterName, DisplayedFillVisualRatio);
 		}
 	}
 
@@ -287,7 +308,10 @@ bool UUOUWaterContainerComponent::ShouldShowFillVisual() const
 		return false;
 	}
 
-	if (bHideFillVisualWhenEmpty
+	const bool bResolvedHideWhenEmpty = GetActiveStoredVisualSettings() != nullptr
+		? GetActiveStoredVisualSettings()->bHideWhenEmpty
+		: bHideFillVisualWhenEmpty;
+	if (bResolvedHideWhenEmpty
 		&& TargetFillVisualRatio <= KINDA_SMALL_NUMBER
 		&& DisplayedFillVisualRatio <= KINDA_SMALL_NUMBER)
 	{
@@ -295,4 +319,52 @@ bool UUOUWaterContainerComponent::ShouldShowFillVisual() const
 	}
 
 	return true;
+}
+
+const FUOUPourStoredVisualSettings* UUOUWaterContainerComponent::GetActiveStoredVisualSettings() const
+{
+	if (PourContentProfile != nullptr && PourContentProfile->StoredVisual.bOverrideContainerFillVisual)
+	{
+		return &PourContentProfile->StoredVisual;
+	}
+
+	return nullptr;
+}
+
+void UUOUWaterContainerComponent::ApplyFillVisualContentProfile()
+{
+	if (FillVisualComponent == nullptr)
+	{
+		return;
+	}
+
+	const FUOUPourStoredVisualSettings* StoredVisualSettings = GetActiveStoredVisualSettings();
+	if (StoredVisualSettings == nullptr)
+	{
+		return;
+	}
+
+	if (UStaticMeshComponent* FillVisualStaticMesh = Cast<UStaticMeshComponent>(FillVisualComponent.Get()))
+	{
+		if (StoredVisualSettings->Mesh != nullptr)
+		{
+			FillVisualStaticMesh->SetStaticMesh(StoredVisualSettings->Mesh);
+		}
+
+		for (int32 MaterialIndex = 0; MaterialIndex < StoredVisualSettings->Materials.Num(); ++MaterialIndex)
+		{
+			if (StoredVisualSettings->Materials[MaterialIndex] != nullptr)
+			{
+				FillVisualStaticMesh->SetMaterial(MaterialIndex, StoredVisualSettings->Materials[MaterialIndex]);
+			}
+		}
+	}
+
+	if (UNiagaraComponent* FillVisualNiagara = Cast<UNiagaraComponent>(FillVisualComponent.Get()))
+	{
+		if (StoredVisualSettings->NiagaraSystem != nullptr)
+		{
+			FillVisualNiagara->SetAsset(StoredVisualSettings->NiagaraSystem);
+		}
+	}
 }
