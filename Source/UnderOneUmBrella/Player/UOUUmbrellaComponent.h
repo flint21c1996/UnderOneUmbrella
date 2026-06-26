@@ -620,6 +620,12 @@ protected:
 
 	TSubclassOf<AUOUPourDropActor> ResolvePourDropActorClass() const;
 
+	float ResolvePourStreamLocationInterpDuration() const;
+
+	float ResolvePourStreamLocationEasePower() const;
+
+	FVector ResolvePourStreamInitialWorldLocationOffset() const;
+
 	// 픽업 액터의 메쉬와 머티리얼 정보를 손에 든 우산 비주얼로 복사합니다.
 	void ApplyHeldVisualFromMeshComponent(UStaticMeshComponent* SourceMeshComponent);
 

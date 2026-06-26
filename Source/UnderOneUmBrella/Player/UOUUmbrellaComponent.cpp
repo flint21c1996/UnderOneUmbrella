@@ -1141,7 +1141,7 @@ void UUOUUmbrellaComponent::UpdatePourAnimationAlpha(float DeltaTime)
 		return;
 	}
 
-	const float SafeInterpDuration = FMath::Max(0.0f, PourStreamLocationInterpDuration);
+	const float SafeInterpDuration = FMath::Max(0.0f, ResolvePourStreamLocationInterpDuration());
 	const float TargetAlpha = CurrentState == EUOUUmbrellaState::Pouring ? 1.0f : 0.0f;
 	if (SafeInterpDuration <= KINDA_SMALL_NUMBER)
 	{
@@ -1193,8 +1193,8 @@ void UUOUUmbrellaComponent::UpdatePouringEffectTransform()
 	const FVector RelativeScale = ContentProfile != nullptr ? ContentProfile->StreamRelativeScale : FVector::OneVector;
 	const FQuat EffectRotation = DirectionRotation * FRotator(0.0f, RelativeRotation.Yaw, 0.0f).Quaternion();
 	const FVector TargetEffectLocation = DropLocation + DirectionRotation.RotateVector(RelativeLocation);
-	const FVector InitialEffectLocation = TargetEffectLocation - FVector(0.0f, 0.0f, PourDropVerticalOffset);
-	const float VisualAlpha = FMath::InterpEaseOut(0.0f, 1.0f, PourAnimationAlpha, FMath::Max(1.0f, PourStreamLocationEasePower));
+	const FVector InitialEffectLocation = TargetEffectLocation + ResolvePourStreamInitialWorldLocationOffset();
+	const float VisualAlpha = FMath::InterpEaseOut(0.0f, 1.0f, PourAnimationAlpha, FMath::Max(1.0f, ResolvePourStreamLocationEasePower()));
 	const FVector EffectLocation = FMath::Lerp(InitialEffectLocation, TargetEffectLocation, VisualAlpha);
 
 	PouringEffectComponent->SetWorldLocationAndRotation(EffectLocation, EffectRotation.Rotator());
@@ -1235,6 +1235,39 @@ TSubclassOf<AUOUPourDropActor> UUOUUmbrellaComponent::ResolvePourDropActorClass(
 	}
 
 	return AUOUPourDropActor::StaticClass();
+}
+
+float UUOUUmbrellaComponent::ResolvePourStreamLocationInterpDuration() const
+{
+	const UUOUPourContentProfile* ContentProfile = ResolvePourContentProfile();
+	if (ContentProfile != nullptr && ContentProfile->bOverrideUmbrellaStreamLocationAnimation)
+	{
+		return ContentProfile->StreamLocationInterpDuration;
+	}
+
+	return PourStreamLocationInterpDuration;
+}
+
+float UUOUUmbrellaComponent::ResolvePourStreamLocationEasePower() const
+{
+	const UUOUPourContentProfile* ContentProfile = ResolvePourContentProfile();
+	if (ContentProfile != nullptr && ContentProfile->bOverrideUmbrellaStreamLocationAnimation)
+	{
+		return ContentProfile->StreamLocationEasePower;
+	}
+
+	return PourStreamLocationEasePower;
+}
+
+FVector UUOUUmbrellaComponent::ResolvePourStreamInitialWorldLocationOffset() const
+{
+	const UUOUPourContentProfile* ContentProfile = ResolvePourContentProfile();
+	if (ContentProfile != nullptr && ContentProfile->bOverrideUmbrellaStreamLocationAnimation)
+	{
+		return ContentProfile->StreamInitialWorldLocationOffset;
+	}
+
+	return FVector(0.0f, 0.0f, -PourDropVerticalOffset);
 }
 
 // 월드 픽업 메쉬에서 스태틱 메쉬와 머티리얼을 읽어 손에 든 비주얼로 복사합니다.
