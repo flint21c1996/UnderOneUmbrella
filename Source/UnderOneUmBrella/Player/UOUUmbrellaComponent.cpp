@@ -121,6 +121,7 @@ void UUOUUmbrellaComponent::TickComponent(float DeltaTime, ELevelTick TickType, 
 
 	UpdatePourAimFacing();
 	UpdatePouring(DeltaTime);
+	UpdatePourAnimationAlpha(DeltaTime);
 	UpdatePouringEffectState();
 	DrawScreenDebug();
 	DrawRainBlockerDebug();
@@ -404,6 +405,17 @@ bool UUOUUmbrellaComponent::IsPouring() const
 	return bHasUmbrella && CurrentState == EUOUUmbrellaState::Pouring;
 }
 
+void UUOUUmbrellaComponent::SetPourAnimationAlpha(float NewPourAnimationAlpha)
+{
+	PourAnimationAlpha = FMath::Clamp(NewPourAnimationAlpha, 0.0f, 1.0f);
+	bUseExternalPourAnimationAlpha = true;
+}
+
+void UUOUUmbrellaComponent::ClearExternalPourAnimationAlpha()
+{
+	bUseExternalPourAnimationAlpha = false;
+}
+
 bool UUOUUmbrellaComponent::IsNormalDirection() const
 {
 	return bHasUmbrella && CurrentDirectionState == EUOUUmbrellaDirectionState::Normal;
@@ -617,6 +629,11 @@ void UUOUUmbrellaComponent::SetState(EUOUUmbrellaState NewState)
 		LastPourTargetName = TEXT("None");
 		LastPourReceiverType = EUOUUmbrellaPourReceiverType::None;
 		ClearPourTraceDebug();
+	}
+
+	if (CurrentState != EUOUUmbrellaState::Pouring && CurrentState != EUOUUmbrellaState::UpsideDown)
+	{
+		ResetPourStreamLocationInterpolation();
 	}
 
 	RefreshVisuals();
@@ -1117,6 +1134,28 @@ void UUOUUmbrellaComponent::UpdatePouringEffectState()
 	}
 }
 
+void UUOUUmbrellaComponent::UpdatePourAnimationAlpha(float DeltaTime)
+{
+	if (bUseExternalPourAnimationAlpha)
+	{
+		return;
+	}
+
+	const float SafeInterpDuration = FMath::Max(0.0f, PourStreamLocationInterpDuration);
+	const float TargetAlpha = CurrentState == EUOUUmbrellaState::Pouring ? 1.0f : 0.0f;
+	if (SafeInterpDuration <= KINDA_SMALL_NUMBER)
+	{
+		PourAnimationAlpha = TargetAlpha;
+		return;
+	}
+
+	const float AlphaInterpSpeed = 1.0f / SafeInterpDuration;
+	PourAnimationAlpha = FMath::Clamp(
+		FMath::FInterpConstantTo(PourAnimationAlpha, TargetAlpha, FMath::Max(0.0f, DeltaTime), AlphaInterpSpeed),
+		0.0f,
+		1.0f);
+}
+
 void UUOUUmbrellaComponent::UpdatePouringEffectTransform()
 {
 	if (PouringEffectComponent == nullptr)
@@ -1131,13 +1170,32 @@ void UUOUUmbrellaComponent::UpdatePouringEffectTransform()
 		return;
 	}
 
-	const FQuat DirectionRotation = FRotationMatrix::MakeFromYZ(DropDirection, FVector::UpVector).ToQuat();
+	FVector StreamForward = FVector(DropDirection.X, DropDirection.Y, 0.0f);
+	if (StreamForward.IsNearlyZero())
+	{
+		if (const AActor* Owner = GetOwner())
+		{
+			StreamForward = FVector(Owner->GetActorForwardVector().X, Owner->GetActorForwardVector().Y, 0.0f);
+		}
+	}
+
+	if (StreamForward.IsNearlyZero())
+	{
+		StreamForward = FVector::ForwardVector;
+	}
+
+	StreamForward.Normalize();
+
+	const FQuat DirectionRotation = FRotationMatrix::MakeFromYZ(StreamForward, FVector::UpVector).ToQuat();
 	const UUOUPourContentProfile* ContentProfile = ResolvePourContentProfile();
 	const FRotator RelativeRotation = ContentProfile != nullptr ? ContentProfile->StreamRelativeRotation : FRotator::ZeroRotator;
 	const FVector RelativeLocation = ContentProfile != nullptr ? ContentProfile->StreamRelativeLocation : FVector::ZeroVector;
 	const FVector RelativeScale = ContentProfile != nullptr ? ContentProfile->StreamRelativeScale : FVector::OneVector;
-	const FQuat EffectRotation = DirectionRotation * FRotator(RelativeRotation.Pitch, 0.0f, 0.0f).Quaternion();
-	const FVector EffectLocation = DropLocation + DirectionRotation.RotateVector(RelativeLocation);
+	const FQuat EffectRotation = DirectionRotation * FRotator(0.0f, RelativeRotation.Yaw, 0.0f).Quaternion();
+	const FVector TargetEffectLocation = DropLocation + DirectionRotation.RotateVector(RelativeLocation);
+	const FVector InitialEffectLocation = TargetEffectLocation - FVector(0.0f, 0.0f, PourDropVerticalOffset);
+	const float VisualAlpha = FMath::InterpEaseOut(0.0f, 1.0f, PourAnimationAlpha, FMath::Max(1.0f, PourStreamLocationEasePower));
+	const FVector EffectLocation = FMath::Lerp(InitialEffectLocation, TargetEffectLocation, VisualAlpha);
 
 	PouringEffectComponent->SetWorldLocationAndRotation(EffectLocation, EffectRotation.Rotator());
 	PouringEffectComponent->SetRelativeScale3D(RelativeScale);
@@ -1158,7 +1216,7 @@ bool UUOUUmbrellaComponent::TryGetPourDropSpawnPlacement(FVector& OutDropLocatio
 	}
 
 	DropDirection = DropDirection.GetSafeNormal();
-	OutDropLocation = DropOrigin + DropDirection * PourDropOffset;
+	OutDropLocation = DropOrigin + DropDirection * PourDropOffset + FVector(0.0f, 0.0f, PourDropVerticalOffset);
 	OutDropDirection = DropDirection;
 	return true;
 }
@@ -1610,6 +1668,12 @@ void UUOUUmbrellaComponent::PrimeNextPourDropSpawn()
 	TimeSinceLastPourDropSpawn = FMath::Max(0.0f, PourDropSpawnInterval);
 }
 
+void UUOUUmbrellaComponent::ResetPourStreamLocationInterpolation()
+{
+	PourAnimationAlpha = 0.0f;
+	bUseExternalPourAnimationAlpha = false;
+}
+
 // Drop impact delegate updates the existing pour debug fields after the spawned actor reaches a receiver.
 void UUOUUmbrellaComponent::HandlePourDropImpacted(
 	AUOUPourDropActor* DropActor,
@@ -1824,19 +1888,31 @@ bool UUOUUmbrellaComponent::TryGetPourDirection(FVector& PourOriginLocation, FVe
 
 	PourOriginLocation = OriginComponent->GetComponentLocation();
 	PourDirection = OriginComponent->GetForwardVector();
+	PourDirection.Z = 0.0f;
 
 	FVector AimDirection = FVector::ZeroVector;
 	FVector AimPoint = FVector::ZeroVector;
 	if (TryGetMouseAimDirection(AimDirection, AimPoint))
 	{
 		// 물줄기가 손 위치에서 마우스가 가리키는 지점으로 향하도록 방향을 다시 계산합니다.
-		const FVector MouseAimDirection = AimPoint - PourOriginLocation;
-		if (!MouseAimDirection.IsNearlyZero())
+		if (!AimDirection.IsNearlyZero())
 		{
-			PourDirection = MouseAimDirection.GetSafeNormal();
+			PourDirection = AimDirection.GetSafeNormal();
 		}
 	}
 
+	if (PourDirection.IsNearlyZero() && Owner != nullptr)
+	{
+		PourDirection = Owner->GetActorForwardVector();
+		PourDirection.Z = 0.0f;
+	}
+
+	if (PourDirection.IsNearlyZero())
+	{
+		PourDirection = FVector::ForwardVector;
+	}
+
+	PourDirection.Normalize();
 	return !PourDirection.IsNearlyZero();
 }
 

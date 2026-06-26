@@ -292,6 +292,15 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Water")
 	float PourDropOffset = 0.f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Water", meta = (ToolTip = "World Z offset added after the horizontal pour direction offset. Use negative values when the drop and stream start too high."))
+	float PourDropVerticalOffset = 0.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Water", meta = (ClampMin = "0.0", ToolTip = "Seconds used for the visual pour stream to move from the unadjusted start height to the final offset height. Set to 0 to snap immediately."))
+	float PourStreamLocationInterpDuration = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Water", meta = (ClampMin = "1.0", ToolTip = "Ease-out power used only for the visual pour stream location. Higher values slow down more near the final position."))
+	float PourStreamLocationEasePower = 2.0f;
+
 	// 물을 부을 대상을 찾을 때 사용하는 충돌 채널입니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Water")
 	TEnumAsByte<ECollisionChannel> PourTraceChannel = ECC_Visibility;
@@ -489,6 +498,12 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Umbrella")
 	bool IsPouring() const;
 
+	UFUNCTION(BlueprintCallable, Category = "Umbrella|Water")
+	void SetPourAnimationAlpha(float NewPourAnimationAlpha);
+
+	UFUNCTION(BlueprintCallable, Category = "Umbrella|Water")
+	void ClearExternalPourAnimationAlpha();
+
 	// 우산 손잡이가 정방향인지 확인합니다.
 	UFUNCTION(BlueprintPure, Category = "Umbrella")
 	bool IsNormalDirection() const;
@@ -595,6 +610,8 @@ protected:
 
 	void UpdatePouringEffectState();
 
+	void UpdatePourAnimationAlpha(float DeltaTime);
+
 	void UpdatePouringEffectTransform();
 
 	bool TryGetPourDropSpawnPlacement(FVector& OutDropLocation, FVector& OutDropDirection) const;
@@ -645,6 +662,8 @@ protected:
 
 	void PrimeNextPourDropSpawn();
 
+	void ResetPourStreamLocationInterpolation();
+
 	UFUNCTION()
 	void HandlePourDropImpacted(AUOUPourDropActor* DropActor, AActor* ImpactActor, FVector ImpactLocation, EUOUPourDropReceiverType ReceiverType, bool bDeliveredWater);
 
@@ -673,6 +692,10 @@ protected:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UNiagaraComponent> PouringEffectComponent = nullptr;
+
+	float PourAnimationAlpha = 0.0f;
+
+	bool bUseExternalPourAnimationAlpha = false;
 
 	float PendingPourDropVolume = 0.0f;
 

@@ -25,7 +25,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pour Content|Stream Visual")
 	FVector StreamRelativeLocation = FVector::ZeroVector;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pour Content|Stream Visual", meta = (ToolTip = "Only Pitch is applied as a twist around the Niagara component local +Y axis after +Y is aligned with the pour direction."))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pour Content|Stream Visual", meta = (ToolTip = "Only Yaw is applied after the Niagara component local +Z is aligned with world up and local +Y faces the horizontal pour direction."))
 	FRotator StreamRelativeRotation = FRotator::ZeroRotator;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pour Content|Stream Visual", meta = (ClampMin = "0.0"))
