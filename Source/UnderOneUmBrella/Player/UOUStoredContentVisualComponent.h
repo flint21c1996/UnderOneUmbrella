@@ -47,44 +47,8 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stored Content Visual")
 	bool bUpdateStoredVisual = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stored Content Visual|Visibility", meta = (ToolTip = "When enabled, stored content is visible only while the owner umbrella is upside down."))
-	bool bOnlyShowWhenUmbrellaUpsideDown = true;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stored Content Visual|Visibility", meta = (ToolTip = "When enabled, stored content is hidden while the container target and displayed fill ratio are empty."))
-	bool bOnlyShowWhenHasStoredContent = true;
-
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stored Content Visual|Visibility", meta = (ToolTip = "Umbrella component used to decide whether stored content should be visible. Leave empty to auto-find on the owner."))
 	TObjectPtr<UUOUUmbrellaComponent> UmbrellaComponent = nullptr;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stored Content Visual|Visibility", meta = (ToolTip = "Optional component name or tag used when auto-finding the UmbrellaComponent. Leave None to use the first umbrella component on the owner."))
-	FName UmbrellaComponentName = NAME_None;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stored Content Visual|Visibility")
-	bool bAutoFindUmbrellaComponent = true;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stored Content Visual|Socket", meta = (ToolTip = "When enabled, this component follows a socket on the equipped umbrella visual before applying child fill motion."))
-	bool bFollowSocketTransform = true;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stored Content Visual|Socket", meta = (ToolTip = "Component that owns the socket to follow. Leave empty to auto-find on the owner."))
-	TObjectPtr<USceneComponent> SocketSourceComponent = nullptr;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stored Content Visual|Socket", meta = (ToolTip = "Component name or tag used when auto-finding the socket source."))
-	FName SocketSourceComponentName = TEXT("UmbrellaSkeletalVisual");
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stored Content Visual|Socket")
-	bool bAutoFindSocketSourceComponent = true;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stored Content Visual|Socket", meta = (ToolTip = "Socket on the equipped umbrella visual where stored content should be placed. Leave None to follow the component origin."))
-	FName StoredContentSocketName = TEXT("StoredWaterPoint");
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stored Content Visual|Socket", meta = (ToolTip = "Additional transform applied after the socket world transform."))
-	FTransform SocketFollowOffset = FTransform::Identity;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stored Content Visual|Socket", meta = (ToolTip = "When disabled, only socket world location is used and this component keeps its current world rotation. Useful for XY plane stored visuals."))
-	bool bFollowSocketRotation = false;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stored Content Visual|Socket", meta = (ToolTip = "When enabled, socket world scale is copied to this component. Usually disabled for stored fill planes."))
-	bool bFollowSocketScale = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stored Content Visual", meta = (ClampMin = "0.0", ToolTip = "Fallback fill ratio interpolation speed when the content profile does not override visual motion. Set to 0 to snap."))
 	float FillVisualInterpSpeed = 2.0f;
@@ -97,9 +61,6 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stored Content Visual", meta = (ToolTip = "Fallback scale multiplier at full fill."))
 	FVector FullScaleMultiplier = FVector::OneVector;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stored Content Visual", meta = (ToolTip = "Hide the stored visual only when target and displayed fill are both empty."))
-	bool bHideWhenEmpty = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stored Content Visual|Mesh", meta = (ToolTip = "Fallback scalar parameter updated on mesh materials. Leave None to disable material parameter updates."))
 	FName MeshFillRatioParameterName = TEXT("FillRatio");
@@ -161,7 +122,7 @@ protected:
 
 	void ResolveSocketSourceComponent();
 	USceneComponent* FindSocketSourceComponent() const;
-	void UpdateSocketFollowTransform();
+	void UpdateSocketFollowLocation();
 
 	void BindWaterContainerEvents();
 	void UnbindWaterContainerEvents();
@@ -193,6 +154,9 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UUOUUmbrellaComponent> BoundUmbrellaComponent = nullptr;
+
+	UPROPERTY(Transient)
+	TObjectPtr<USceneComponent> SocketSourceComponent = nullptr;
 
 	bool bCapturedStoredVisualTransform = false;
 	FVector InitialStoredVisualRelativeLocation = FVector::ZeroVector;

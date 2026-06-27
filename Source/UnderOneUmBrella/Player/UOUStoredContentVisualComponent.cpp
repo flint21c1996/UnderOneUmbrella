@@ -10,6 +10,12 @@
 #include "Player/UOUUmbrellaComponent.h"
 #include "Player/UOUWaterContainerComponent.h"
 
+namespace
+{
+constexpr TCHAR StoredContentSocketSourceComponentName[] = TEXT("UmbrellaSkeletalVisual");
+const FName StoredContentSocketName = TEXT("StoredWaterPoint");
+}
+
 UUOUStoredContentVisualComponent::UUOUStoredContentVisualComponent()
 {
 	PrimaryComponentTick.bCanEverTick = true;
@@ -143,11 +149,6 @@ void UUOUStoredContentVisualComponent::ResolveUmbrellaComponent()
 	bResolvedUmbrellaComponent = false;
 	ResolvedUmbrellaComponentName = TEXT("None");
 
-	if (!bAutoFindUmbrellaComponent)
-	{
-		return;
-	}
-
 	UmbrellaComponent = FindUmbrellaComponent();
 	bResolvedUmbrellaComponent = UmbrellaComponent != nullptr;
 	ResolvedUmbrellaComponentName = UmbrellaComponent != nullptr ? UmbrellaComponent->GetName() : TEXT("None");
@@ -167,38 +168,11 @@ UUOUUmbrellaComponent* UUOUStoredContentVisualComponent::FindUmbrellaComponent()
 		return nullptr;
 	}
 
-	if (UmbrellaComponentName.IsNone())
-	{
-		return UmbrellaComponents[0];
-	}
-
-	const FString TargetName = UmbrellaComponentName.ToString();
-	for (UUOUUmbrellaComponent* Candidate : UmbrellaComponents)
-	{
-		if (Candidate == nullptr)
-		{
-			continue;
-		}
-
-		if (Candidate->GetFName() == UmbrellaComponentName
-			|| Candidate->ComponentTags.Contains(UmbrellaComponentName)
-			|| Candidate->GetName().Equals(TargetName, ESearchCase::IgnoreCase)
-			|| Candidate->GetName().Contains(TargetName, ESearchCase::IgnoreCase))
-		{
-			return Candidate;
-		}
-	}
-
-	return nullptr;
+	return UmbrellaComponents[0];
 }
 
 bool UUOUStoredContentVisualComponent::IsUmbrellaVisualStateAllowed() const
 {
-	if (!bOnlyShowWhenUmbrellaUpsideDown)
-	{
-		return true;
-	}
-
 	return UmbrellaComponent != nullptr && UmbrellaComponent->IsUpsideDown();
 }
 
@@ -215,11 +189,6 @@ void UUOUStoredContentVisualComponent::ResolveSocketSourceComponent()
 	bResolvedSocketSourceComponent = false;
 	ResolvedSocketSourceComponentName = TEXT("None");
 
-	if (!bAutoFindSocketSourceComponent)
-	{
-		return;
-	}
-
 	SocketSourceComponent = FindSocketSourceComponent();
 	bResolvedSocketSourceComponent = SocketSourceComponent != nullptr;
 	ResolvedSocketSourceComponentName = SocketSourceComponent != nullptr ? SocketSourceComponent->GetName() : TEXT("None");
@@ -228,12 +197,13 @@ void UUOUStoredContentVisualComponent::ResolveSocketSourceComponent()
 USceneComponent* UUOUStoredContentVisualComponent::FindSocketSourceComponent() const
 {
 	AActor* Owner = GetOwner();
-	if (Owner == nullptr || SocketSourceComponentName.IsNone())
+	if (Owner == nullptr)
 	{
 		return nullptr;
 	}
 
-	const FString TargetName = SocketSourceComponentName.ToString();
+	const FName TargetComponentName = FName(StoredContentSocketSourceComponentName);
+	const FString TargetName = TargetComponentName.ToString();
 	TInlineComponentArray<USceneComponent*> SceneComponents(Owner);
 	for (USceneComponent* SceneComponent : SceneComponents)
 	{
@@ -242,8 +212,8 @@ USceneComponent* UUOUStoredContentVisualComponent::FindSocketSourceComponent() c
 			continue;
 		}
 
-		if (SceneComponent->GetFName() == SocketSourceComponentName
-			|| SceneComponent->ComponentTags.Contains(SocketSourceComponentName)
+		if (SceneComponent->GetFName() == TargetComponentName
+			|| SceneComponent->ComponentTags.Contains(TargetComponentName)
 			|| SceneComponent->GetName().Equals(TargetName, ESearchCase::IgnoreCase)
 			|| SceneComponent->GetName().Contains(TargetName, ESearchCase::IgnoreCase))
 		{
@@ -254,13 +224,8 @@ USceneComponent* UUOUStoredContentVisualComponent::FindSocketSourceComponent() c
 	return nullptr;
 }
 
-void UUOUStoredContentVisualComponent::UpdateSocketFollowTransform()
+void UUOUStoredContentVisualComponent::UpdateSocketFollowLocation()
 {
-	if (!bFollowSocketTransform)
-	{
-		return;
-	}
-
 	ResolveSocketSourceComponent();
 	if (SocketSourceComponent == nullptr)
 	{
@@ -268,23 +233,14 @@ void UUOUStoredContentVisualComponent::UpdateSocketFollowTransform()
 	}
 
 	FTransform SocketWorldTransform = SocketSourceComponent->GetComponentTransform();
-	if (!StoredContentSocketName.IsNone() && SocketSourceComponent->DoesSocketExist(StoredContentSocketName))
+	if (SocketSourceComponent->DoesSocketExist(StoredContentSocketName))
 	{
 		SocketWorldTransform = SocketSourceComponent->GetSocketTransform(StoredContentSocketName, RTS_World);
 	}
 
 	FTransform TargetWorldTransform = GetComponentTransform();
 	TargetWorldTransform.SetLocation(SocketWorldTransform.GetLocation());
-	if (bFollowSocketRotation)
-	{
-		TargetWorldTransform.SetRotation(SocketWorldTransform.GetRotation());
-	}
-	if (bFollowSocketScale)
-	{
-		TargetWorldTransform.SetScale3D(SocketWorldTransform.GetScale3D());
-	}
-
-	SetWorldTransform(SocketFollowOffset * TargetWorldTransform, false, nullptr, ETeleportType::TeleportPhysics);
+	SetWorldTransform(TargetWorldTransform, false, nullptr, ETeleportType::TeleportPhysics);
 }
 
 void UUOUStoredContentVisualComponent::ResolveStoredVisualComponent()
@@ -430,9 +386,7 @@ void UUOUStoredContentVisualComponent::CaptureStoredVisualTransformIfNeeded()
 		return;
 	}
 
-	InitialStoredVisualRelativeLocation = bFollowSocketTransform
-		? FVector::ZeroVector
-		: StoredVisualComponent->GetRelativeLocation();
+	InitialStoredVisualRelativeLocation = FVector::ZeroVector;
 	InitialStoredVisualRelativeScale = StoredVisualComponent->GetRelativeScale3D();
 	bCapturedStoredVisualTransform = true;
 }
@@ -486,7 +440,7 @@ void UUOUStoredContentVisualComponent::UpdateStoredVisual(float DeltaTime, bool 
 		return;
 	}
 
-	UpdateSocketFollowTransform();
+	UpdateSocketFollowLocation();
 	if (WaterContainerComponent == nullptr || StoredVisualComponent == nullptr)
 	{
 		return;
@@ -632,19 +586,7 @@ bool UUOUStoredContentVisualComponent::ShouldShowStoredVisual() const
 		return false;
 	}
 
-	if (bOnlyShowWhenHasStoredContent
-		&& GetTargetFillVisualRatio() <= KINDA_SMALL_NUMBER
-		&& DisplayedFillVisualRatio <= KINDA_SMALL_NUMBER)
-	{
-		return false;
-	}
-
-	const FUOUPourStoredVisualSettings* MotionSettings = GetActiveMotionSettings();
-	const bool bResolvedHideWhenEmpty = MotionSettings != nullptr
-		? MotionSettings->bHideWhenEmpty
-		: bHideWhenEmpty;
-	if (bResolvedHideWhenEmpty
-		&& GetTargetFillVisualRatio() <= KINDA_SMALL_NUMBER
+	if (GetTargetFillVisualRatio() <= KINDA_SMALL_NUMBER
 		&& DisplayedFillVisualRatio <= KINDA_SMALL_NUMBER)
 	{
 		return false;
