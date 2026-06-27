@@ -22,6 +22,7 @@
 #include "Player/UOURainReceiverComponent.h"
 #include "Player/UOUUmbrellaAnimInstance.h"
 #include "Player/UOUWaterContainerComponent.h"
+#include "Puzzle/Water/UOUWaterWheelRainConditionComponent.h"
 #include "World/Pour/UOUPourReceiverComponent.h"
 #include "World/WaterTarget/UOUWaterBasinTargetComponent.h"
 #include "World/WaterTarget/UOUUmbrellaWaterTarget.h"
@@ -41,6 +42,8 @@ const TCHAR* GetPourReceiverTypeText(EUOUUmbrellaPourReceiverType ReceiverType)
 		return TEXT("WaterBasinTarget");
 	case EUOUUmbrellaPourReceiverType::WaterContainer:
 		return TEXT("WaterContainer");
+	case EUOUUmbrellaPourReceiverType::WaterWheel:
+		return TEXT("WaterWheel");
 	case EUOUUmbrellaPourReceiverType::None:
 	default:
 		return TEXT("None");
@@ -1577,6 +1580,44 @@ bool UUOUUmbrellaComponent::TryReceiveWaterAtHit(const FHitResult& HitResult, fl
 		return PourContext;
 	};
 
+	auto BuildWaterWheelInputContext = [this, &HitResult, WaterAmount, PourDuration, &PourDirection]()
+	{
+		FUOUWaterWheelRainInputContext WaterWheelContext;
+		WaterWheelContext.Strength = PourDuration > KINDA_SMALL_NUMBER
+			? WaterAmount / PourDuration
+			: WaterAmount;
+		WaterWheelContext.Duration = PourDuration;
+		WaterWheelContext.WorldDirection = PourDirection;
+		WaterWheelContext.WorldLocation = HitResult.ImpactPoint;
+		WaterWheelContext.bHasValidWorldLocation = HitResult.bBlockingHit;
+		WaterWheelContext.InstigatorActor = GetOwner();
+		return WaterWheelContext;
+	};
+
+	auto TryReceiveWaterWheelInput = [this, &BuildWaterWheelInputContext, &OutReceiverType](AActor* TargetActor)
+	{
+		if (TargetActor == nullptr)
+		{
+			return false;
+		}
+
+		if (UUOUWaterWheelRainConditionComponent* WaterWheelCondition =
+			TargetActor->FindComponentByClass<UUOUWaterWheelRainConditionComponent>())
+		{
+			if (!WaterWheelCondition->CanReceivePouredWaterInput())
+			{
+				return false;
+			}
+
+			LastPourTargetName = TargetActor->GetName();
+			OutReceiverType = EUOUUmbrellaPourReceiverType::WaterWheel;
+			WaterWheelCondition->ReceivePouredWaterInput(BuildWaterWheelInputContext());
+			return true;
+		}
+
+		return false;
+	};
+
 	if (UUOUPourReceiverComponent* PourReceiver = HitActor->FindComponentByClass<UUOUPourReceiverComponent>())
 	{
 		if (PourReceiver->CanReceivePour())
@@ -1599,6 +1640,19 @@ bool UUOUUmbrellaComponent::TryReceiveWaterAtHit(const FHitResult& HitResult, fl
 				ParentPourReceiver->ReceivePourInput(BuildPourInputContext());
 				return true;
 			}
+		}
+	}
+
+	if (TryReceiveWaterWheelInput(HitActor))
+	{
+		return true;
+	}
+
+	if (AActor* ParentActor = HitActor->GetAttachParentActor())
+	{
+		if (TryReceiveWaterWheelInput(ParentActor))
+		{
+			return true;
 		}
 	}
 
