@@ -42,6 +42,8 @@ bool AUOUPuzzleLevelTransitionActor::StartLevelTransition()
 	Settings.FadeColor = FadeColor;
 	Settings.bFadeAudio = bFadeAudio;
 	Settings.bLockPlayerInputDuringTransition = bLockPlayerInputDuringTransition;
+	Settings.FadeOutMessageSettings = FadeOutMessageSettings;
+	Settings.FadeInMessageSettings = FadeInMessageSettings;
 
 	bool bStarted = false;
 	switch (TransitionMode)

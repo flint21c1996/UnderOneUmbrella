@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "TimerManager.h"
+#include "UI/UOUTransitionMessagePresenter.h"
 #include "UOUFadeTeleportTriggerActor.generated.h"
 
 class APlayerController;
@@ -63,6 +64,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Stage|Transition")
 	FLinearColor FadeColor = FLinearColor::Black;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Stage|Transition|Message", meta = (DisplayName = "페이드 아웃 문구", ToolTip = "위치 이동 전 화면이 검게 가려진 뒤 표시할 문구입니다. 비워두면 표시하지 않습니다."))
+	FUOUTransitionMessageSettings FadeOutMessageSettings;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Stage|Transition|Message", meta = (DisplayName = "페이드 인 문구", ToolTip = "위치 이동 후 화면이 밝아지는 동안 표시할 문구입니다. 비워두면 표시하지 않습니다."))
+	FUOUTransitionMessageSettings FadeInMessageSettings;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Stage|Transition", meta = (ClampMin = "0.0"))
 	FVector TriggerExtent = FVector(150.0f, 150.0f, 100.0f);
 
@@ -83,6 +90,8 @@ private:
 	void FinishFadeOut();
 	void StartFadeIn();
 	void FinishTransition();
+	void ShowTransitionMessage(const FUOUTransitionMessageSettings& MessageSettings);
+	void HideTransitionMessage();
 	bool TeleportPendingActor();
 	void StopActorMovement(AActor* TargetActor) const;
 
@@ -95,6 +104,7 @@ private:
 	FTimerHandle FadeOutTimerHandle;
 	FTimerHandle BlackHoldTimerHandle;
 	FTimerHandle FadeInTimerHandle;
+	FUOUTransitionMessagePresenter TransitionMessagePresenter;
 
 	bool bHasTriggered = false;
 	bool bIsTransitioning = false;
