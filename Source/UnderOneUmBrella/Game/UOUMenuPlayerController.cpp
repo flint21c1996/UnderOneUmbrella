@@ -109,7 +109,13 @@ void AUOUMenuPlayerController::ReturnToTitle()
 		: nullptr;
 	if (TransitionSubsystem != nullptr)
 	{
-		TransitionSubsystem->RequestLevelTransition(TitleLevel, FUOULevelTransitionSettings());
+		FUOULevelTransitionSettings ReturnToTitleSettings;
+		ReturnToTitleSettings.FadeOutDuration = 0.35f;
+		ReturnToTitleSettings.BlackHoldDuration = 0.05f;
+		ReturnToTitleSettings.FadeInDuration = 0.35f;
+		ReturnToTitleSettings.bUseCurrentMapExitSettings = false;
+		ReturnToTitleSettings.bUseLoadedMapEnterSettings = false;
+		TransitionSubsystem->RequestLevelTransition(TitleLevel, ReturnToTitleSettings);
 	}
 }
 

@@ -49,6 +49,8 @@ void AUOUFadeTeleportTriggerActor::EndPlay(const EEndPlayReason::Type EndPlayRea
 		World->GetTimerManager().ClearTimer(FadeInTimerHandle);
 	}
 
+	HideTransitionMessage();
+
 	Super::EndPlay(EndPlayReason);
 }
 
@@ -187,6 +189,7 @@ APlayerController* AUOUFadeTeleportTriggerActor::ResolvePlayerController(AActor*
 void AUOUFadeTeleportTriggerActor::FinishFadeOut()
 {
 	TeleportPendingActor();
+	ShowTransitionMessage(FadeOutMessageSettings);
 
 	UWorld* World = GetWorld();
 	if (World == nullptr)
@@ -216,6 +219,8 @@ void AUOUFadeTeleportTriggerActor::StartFadeIn()
 	}
 
 	const float SafeFadeInDuration = FMath::Max(0.0f, FadeInDuration);
+	ShowTransitionMessage(FadeInMessageSettings);
+
 	PlayerController->PlayerCameraManager->StartCameraFade(
 		1.0f,
 		0.0f,
@@ -237,9 +242,21 @@ void AUOUFadeTeleportTriggerActor::StartFadeIn()
 
 void AUOUFadeTeleportTriggerActor::FinishTransition()
 {
+	HideTransitionMessage();
+
 	PendingTransitionActor = nullptr;
 	PendingPlayerController = nullptr;
 	bIsTransitioning = false;
+}
+
+void AUOUFadeTeleportTriggerActor::ShowTransitionMessage(const FUOUTransitionMessageSettings& MessageSettings)
+{
+	TransitionMessagePresenter.Show(GetWorld(), MessageSettings);
+}
+
+void AUOUFadeTeleportTriggerActor::HideTransitionMessage()
+{
+	TransitionMessagePresenter.Hide();
 }
 
 bool AUOUFadeTeleportTriggerActor::TeleportPendingActor()
