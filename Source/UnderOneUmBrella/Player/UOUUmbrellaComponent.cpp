@@ -30,6 +30,9 @@
 namespace
 {
 // 물 붓기 디버그 라벨에 표시할 수 있도록 수신 대상 enum을 짧은 문자열로 바꿉니다.
+const FName PouringSocketSourceComponentName = TEXT("UmbrellaSkeletalVisual");
+const FName PouringSocketName = TEXT("PouringPoint");
+
 const TCHAR* GetPourReceiverTypeText(EUOUUmbrellaPourReceiverType ReceiverType)
 {
 	switch (ReceiverType)
@@ -1064,9 +1067,19 @@ void UUOUUmbrellaComponent::EnsurePouringEffect()
 		return;
 	}
 
-	USceneComponent* AttachParent = PourOrigin != nullptr
-		? static_cast<USceneComponent*>(PourOrigin.Get())
-		: HeldVisualAnchor.Get();
+	USceneComponent* AttachParent = nullptr;
+	FName AttachSocketName = NAME_None;
+	if (SkeletalHeldVisual != nullptr && SkeletalHeldVisual->DoesSocketExist(PouringSocketName))
+	{
+		AttachParent = SkeletalHeldVisual;
+		AttachSocketName = PouringSocketName;
+	}
+	else
+	{
+		AttachParent = PourOrigin != nullptr
+			? static_cast<USceneComponent*>(PourOrigin.Get())
+			: HeldVisualAnchor.Get();
+	}
 	if (AttachParent == nullptr)
 	{
 		AttachParent = Owner->GetRootComponent();
@@ -1085,16 +1098,18 @@ void UUOUUmbrellaComponent::EnsurePouringEffect()
 		PouringEffectComponent->SetAutoDestroy(false);
 		PouringEffectComponent->SetVisibility(false, true);
 		PouringEffectComponent->SetHiddenInGame(true, true);
-		PouringEffectComponent->SetupAttachment(AttachParent);
+		PouringEffectComponent->SetupAttachment(AttachParent, AttachSocketName);
 		PouringEffectComponent->RegisterComponent();
 	}
-	else if (AttachParent != nullptr && PouringEffectComponent->GetAttachParent() != AttachParent)
+	else if (AttachParent != nullptr
+		&& (PouringEffectComponent->GetAttachParent() != AttachParent
+			|| PouringEffectComponent->GetAttachSocketName() != AttachSocketName))
 	{
-		PouringEffectComponent->AttachToComponent(AttachParent, FAttachmentTransformRules::KeepRelativeTransform);
+		PouringEffectComponent->AttachToComponent(AttachParent, FAttachmentTransformRules::KeepRelativeTransform, AttachSocketName);
 	}
 
 	PouringEffectComponent->SetAsset(ContentProfile->StreamEffect);
-	PouringEffectComponent->SetRelativeScale3D(ContentProfile->StreamRelativeScale);
+	PouringEffectComponent->SetWorldScale3D(ContentProfile->StreamRelativeScale);
 	UpdatePouringEffectTransform();
 }
 
@@ -1156,6 +1171,35 @@ void UUOUUmbrellaComponent::UpdatePourAnimationAlpha(float DeltaTime)
 		1.0f);
 }
 
+bool UUOUUmbrellaComponent::TryGetPouringPointTransform(FTransform& OutTransform) const
+{
+	const USkeletalMeshComponent* PouringSocketSource = SkeletalHeldVisual.Get();
+	if (PouringSocketSource == nullptr)
+	{
+		if (const AActor* Owner = GetOwner())
+		{
+			TInlineComponentArray<USkeletalMeshComponent*> SkeletalMeshComponents(Owner);
+			for (const USkeletalMeshComponent* SkeletalMeshComponent : SkeletalMeshComponents)
+			{
+				if (SkeletalMeshComponent != nullptr
+					&& SkeletalMeshComponent->GetFName() == PouringSocketSourceComponentName)
+				{
+					PouringSocketSource = SkeletalMeshComponent;
+					break;
+				}
+			}
+		}
+	}
+
+	if (PouringSocketSource == nullptr || !PouringSocketSource->DoesSocketExist(PouringSocketName))
+	{
+		return false;
+	}
+
+	OutTransform = PouringSocketSource->GetSocketTransform(PouringSocketName, RTS_World);
+	return true;
+}
+
 void UUOUUmbrellaComponent::UpdatePouringEffectTransform()
 {
 	if (PouringEffectComponent == nullptr)
@@ -1189,16 +1233,11 @@ void UUOUUmbrellaComponent::UpdatePouringEffectTransform()
 	const FQuat DirectionRotation = FRotationMatrix::MakeFromYZ(StreamForward, FVector::UpVector).ToQuat();
 	const UUOUPourContentProfile* ContentProfile = ResolvePourContentProfile();
 	const FRotator RelativeRotation = ContentProfile != nullptr ? ContentProfile->StreamRelativeRotation : FRotator::ZeroRotator;
-	const FVector RelativeLocation = ContentProfile != nullptr ? ContentProfile->StreamRelativeLocation : FVector::ZeroVector;
 	const FVector RelativeScale = ContentProfile != nullptr ? ContentProfile->StreamRelativeScale : FVector::OneVector;
 	const FQuat EffectRotation = DirectionRotation * FRotator(0.0f, RelativeRotation.Yaw, 0.0f).Quaternion();
-	const FVector TargetEffectLocation = DropLocation + DirectionRotation.RotateVector(RelativeLocation);
-	const FVector InitialEffectLocation = TargetEffectLocation + ContentProfile->DropVisual.SpawnRelativeOffset;
-	const float VisualAlpha = FMath::InterpEaseOut(0.0f, 1.0f, PourAnimationAlpha, FMath::Max(1.0f, PourStreamLocationEasePower));
-	const FVector EffectLocation = FMath::Lerp(InitialEffectLocation, TargetEffectLocation, VisualAlpha);
 
-	PouringEffectComponent->SetWorldLocationAndRotation(EffectLocation, EffectRotation.Rotator());
-	PouringEffectComponent->SetRelativeScale3D(RelativeScale);
+	PouringEffectComponent->SetWorldLocationAndRotation(DropLocation, EffectRotation.Rotator());
+	PouringEffectComponent->SetWorldScale3D(RelativeScale);
 }
 
 bool UUOUUmbrellaComponent::TryGetPourDropSpawnPlacement(FVector& OutDropLocation, FVector& OutDropDirection) const
@@ -1216,9 +1255,7 @@ bool UUOUUmbrellaComponent::TryGetPourDropSpawnPlacement(FVector& OutDropLocatio
 	}
 
 	DropDirection = DropDirection.GetSafeNormal();
-	const UUOUPourContentProfile* ContentProfile = ResolvePourContentProfile();
-	
-	OutDropLocation = DropOrigin + DropDirection * ContentProfile->DropVisual.SpawnDirectionOffset + ContentProfile->DropVisual.SpawnRelativeOffset;
+	OutDropLocation = DropOrigin;
 	OutDropDirection = DropDirection;
 	return true;
 }
@@ -1877,24 +1914,34 @@ bool UUOUUmbrellaComponent::TryGetMouseAimDirection(FVector& AimDirection, FVect
 bool UUOUUmbrellaComponent::TryGetPourDirection(FVector& PourOriginLocation, FVector& PourDirection) const
 {
 	AActor* Owner = GetOwner();
-	const USceneComponent* OriginComponent = nullptr;
-	if (PourOrigin != nullptr)
+	FTransform PouringPointTransform = FTransform::Identity;
+	if (TryGetPouringPointTransform(PouringPointTransform))
 	{
-		OriginComponent = PourOrigin;
+		PourOriginLocation = PouringPointTransform.GetLocation();
+		PourDirection = PouringPointTransform.GetRotation().GetForwardVector();
+		PourDirection.Z = 0.0f;
 	}
-	else if (Owner != nullptr)
+	else
 	{
-		OriginComponent = Cast<USceneComponent>(Owner->GetRootComponent());
-	}
+		const USceneComponent* OriginComponent = nullptr;
+		if (PourOrigin != nullptr)
+		{
+			OriginComponent = PourOrigin;
+		}
+		else if (Owner != nullptr)
+		{
+			OriginComponent = Cast<USceneComponent>(Owner->GetRootComponent());
+		}
 
-	if (OriginComponent == nullptr)
-	{
-		return false;
-	}
+		if (OriginComponent == nullptr)
+		{
+			return false;
+		}
 
-	PourOriginLocation = OriginComponent->GetComponentLocation();
-	PourDirection = OriginComponent->GetForwardVector();
-	PourDirection.Z = 0.0f;
+		PourOriginLocation = OriginComponent->GetComponentLocation();
+		PourDirection = OriginComponent->GetForwardVector();
+		PourDirection.Z = 0.0f;
+	}
 
 	FVector AimDirection = FVector::ZeroVector;
 	FVector AimPoint = FVector::ZeroVector;

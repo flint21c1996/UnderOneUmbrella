@@ -607,6 +607,8 @@ protected:
 
 	void UpdatePouringEffectTransform();
 
+	bool TryGetPouringPointTransform(FTransform& OutTransform) const;
+
 	bool TryGetPourDropSpawnPlacement(FVector& OutDropLocation, FVector& OutDropDirection) const;
 
 	const UUOUPourContentProfile* ResolvePourContentProfile() const;
