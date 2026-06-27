@@ -124,7 +124,6 @@ void UUOUUmbrellaComponent::TickComponent(float DeltaTime, ELevelTick TickType, 
 
 	UpdatePourAimFacing();
 	UpdatePouring(DeltaTime);
-	UpdatePourAnimationAlpha(DeltaTime);
 	UpdatePouringEffectState();
 	DrawScreenDebug();
 	DrawRainBlockerDebug();
@@ -408,17 +407,6 @@ bool UUOUUmbrellaComponent::IsPouring() const
 	return bHasUmbrella && CurrentState == EUOUUmbrellaState::Pouring;
 }
 
-void UUOUUmbrellaComponent::SetPourAnimationAlpha(float NewPourAnimationAlpha)
-{
-	PourAnimationAlpha = FMath::Clamp(NewPourAnimationAlpha, 0.0f, 1.0f);
-	bUseExternalPourAnimationAlpha = true;
-}
-
-void UUOUUmbrellaComponent::ClearExternalPourAnimationAlpha()
-{
-	bUseExternalPourAnimationAlpha = false;
-}
-
 bool UUOUUmbrellaComponent::IsNormalDirection() const
 {
 	return bHasUmbrella && CurrentDirectionState == EUOUUmbrellaDirectionState::Normal;
@@ -632,11 +620,6 @@ void UUOUUmbrellaComponent::SetState(EUOUUmbrellaState NewState)
 		LastPourTargetName = TEXT("None");
 		LastPourReceiverType = EUOUUmbrellaPourReceiverType::None;
 		ClearPourTraceDebug();
-	}
-
-	if (CurrentState != EUOUUmbrellaState::Pouring && CurrentState != EUOUUmbrellaState::UpsideDown)
-	{
-		ResetPourStreamLocationInterpolation();
 	}
 
 	RefreshVisuals();
@@ -1147,28 +1130,6 @@ void UUOUUmbrellaComponent::UpdatePouringEffectState()
 		PouringEffectComponent->SetVisibility(false, true);
 		PouringEffectComponent->SetHiddenInGame(true, true);
 	}
-}
-
-void UUOUUmbrellaComponent::UpdatePourAnimationAlpha(float DeltaTime)
-{
-	if (bUseExternalPourAnimationAlpha)
-	{
-		return;
-	}
-
-	const float SafeInterpDuration = FMath::Max(0.0f, PourStreamLocationInterpDuration);
-	const float TargetAlpha = CurrentState == EUOUUmbrellaState::Pouring ? 1.0f : 0.0f;
-	if (SafeInterpDuration <= KINDA_SMALL_NUMBER)
-	{
-		PourAnimationAlpha = TargetAlpha;
-		return;
-	}
-
-	const float AlphaInterpSpeed = 1.0f / SafeInterpDuration;
-	PourAnimationAlpha = FMath::Clamp(
-		FMath::FInterpConstantTo(PourAnimationAlpha, TargetAlpha, FMath::Max(0.0f, DeltaTime), AlphaInterpSpeed),
-		0.0f,
-		1.0f);
 }
 
 bool UUOUUmbrellaComponent::TryGetPouringPointTransform(FTransform& OutTransform) const
@@ -1709,12 +1670,6 @@ void UUOUUmbrellaComponent::ResetPendingPourDrop()
 void UUOUUmbrellaComponent::PrimeNextPourDropSpawn()
 {
 	TimeSinceLastPourDropSpawn = FMath::Max(0.0f, PourDropSpawnInterval);
-}
-
-void UUOUUmbrellaComponent::ResetPourStreamLocationInterpolation()
-{
-	PourAnimationAlpha = 0.0f;
-	bUseExternalPourAnimationAlpha = false;
 }
 
 // Drop impact delegate updates the existing pour debug fields after the spawned actor reaches a receiver.

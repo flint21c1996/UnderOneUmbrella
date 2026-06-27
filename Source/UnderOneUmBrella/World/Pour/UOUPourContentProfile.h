@@ -68,9 +68,6 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pour Content|Stream Visual", meta = (ToolTip = "Looping Niagara used to show this content while pouring."))
 	TObjectPtr<UNiagaraSystem> StreamEffect = nullptr;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pour Content|Stream Visual")
-	FVector StreamRelativeLocation = FVector::ZeroVector;
-
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pour Content|Stream Visual", meta = (ToolTip = "Only Yaw is applied after the Niagara component local +Z is aligned with world up and local +Y faces the horizontal pour direction."))
 	FRotator StreamRelativeRotation = FRotator::ZeroRotator;
 

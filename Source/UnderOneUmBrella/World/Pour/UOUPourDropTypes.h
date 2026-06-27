@@ -39,12 +39,6 @@ struct UNDERONEUMBRELLA_API FUOUPourDropVisualSettings
 	FVector VisualMeshRelativeOffset = FVector::ZeroVector;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pour Drop|Visual", meta = (EditCondition = "bOverrideDropActorSettings", EditConditionHides))
-	float SpawnDirectionOffset = 1.0f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pour Drop|Visual", meta = (EditCondition = "bOverrideDropActorSettings", EditConditionHides))
-	FVector SpawnRelativeOffset = FVector::ZeroVector;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pour Drop|Visual", meta = (EditCondition = "bOverrideDropActorSettings", EditConditionHides))
 	FRotator VisualMeshRelativeRotation = FRotator::ZeroRotator;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pour Drop|Trail", meta = (ToolTip = "Optional trail Niagara applied to the spawned drop. Leave empty to keep the actor default."))
