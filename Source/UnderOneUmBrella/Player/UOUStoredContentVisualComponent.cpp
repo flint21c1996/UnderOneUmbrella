@@ -173,7 +173,8 @@ UUOUUmbrellaComponent* UUOUStoredContentVisualComponent::FindUmbrellaComponent()
 
 bool UUOUStoredContentVisualComponent::IsUmbrellaVisualStateAllowed() const
 {
-	return UmbrellaComponent != nullptr && UmbrellaComponent->IsUpsideDown();
+	return UmbrellaComponent != nullptr
+		&& (UmbrellaComponent->IsUpsideDown() || UmbrellaComponent->IsPouring());
 }
 
 void UUOUStoredContentVisualComponent::ResolveSocketSourceComponent()
