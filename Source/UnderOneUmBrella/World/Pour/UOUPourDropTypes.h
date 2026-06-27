@@ -41,6 +41,9 @@ struct UNDERONEUMBRELLA_API FUOUPourDropVisualSettings
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pour Drop|Visual", meta = (EditCondition = "bOverrideDropActorSettings", EditConditionHides))
 	FRotator VisualMeshRelativeRotation = FRotator::ZeroRotator;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pour Drop|Debug", meta = (EditCondition = "bOverrideDropActorSettings", EditConditionHides))
+	bool bShowDebugVisualMesh = false;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pour Drop|Trail", meta = (ToolTip = "Optional trail Niagara applied to the spawned drop. Leave empty to keep the actor default."))
 	TObjectPtr<UNiagaraSystem> TrailEffect = nullptr;
 

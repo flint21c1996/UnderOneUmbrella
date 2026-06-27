@@ -233,6 +233,8 @@ void AUOUPourDropActor::ApplyVisualSettings()
 		VisualMesh->SetRelativeLocation(VisualMeshRelativeOffset);
 		VisualMesh->SetRelativeRotation(VisualMeshRelativeRotation);
 		VisualMesh->SetRelativeScale3D(SafeVisualScale);
+		VisualMesh->SetVisibility(bShowDebugVisualMesh, true);
+		VisualMesh->SetHiddenInGame(!bShowDebugVisualMesh, true);
 	}
 
 	if (TrailEffect != nullptr)
@@ -283,6 +285,7 @@ void AUOUPourDropActor::ApplyContextVisualSettings(const FUOUPourDropVisualSetti
 	VisualMeshRelativeScale = VisualSettings.VisualMeshRelativeScale;
 	VisualMeshRelativeOffset = VisualSettings.VisualMeshRelativeOffset;
 	VisualMeshRelativeRotation = VisualSettings.VisualMeshRelativeRotation;
+	bShowDebugVisualMesh = VisualSettings.bShowDebugVisualMesh;
 
 	bActivateTrailEffect = VisualSettings.bActivateTrailEffect;
 

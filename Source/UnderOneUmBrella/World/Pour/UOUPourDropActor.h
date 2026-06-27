@@ -95,6 +95,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pour Drop|Visual")
 	FRotator VisualMeshRelativeRotation = FRotator::ZeroRotator;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pour Drop|Debug")
+	bool bShowDebugVisualMesh = false;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pour Drop|Visual")
 	TObjectPtr<UNiagaraSystem> TrailEffectAsset = nullptr;
 
