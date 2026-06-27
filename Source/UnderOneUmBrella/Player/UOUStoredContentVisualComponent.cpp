@@ -7,20 +7,29 @@
 #include "Components/StaticMeshComponent.h"
 #include "GameFramework/Actor.h"
 #include "NiagaraComponent.h"
+#include "Player/UOUUmbrellaComponent.h"
 #include "Player/UOUWaterContainerComponent.h"
 
 UUOUStoredContentVisualComponent::UUOUStoredContentVisualComponent()
 {
 	PrimaryComponentTick.bCanEverTick = true;
+	PrimaryComponentTick.bStartWithTickEnabled = true;
+}
+
+void UUOUStoredContentVisualComponent::OnRegister()
+{
+	Super::OnRegister();
+
+	ResolveReferences();
 }
 
 void UUOUStoredContentVisualComponent::BeginPlay()
 {
 	Super::BeginPlay();
 
-	ResolveWaterContainerComponent();
-	ResolveStoredVisualComponent();
+	ResolveReferences();
 	BindWaterContainerEvents();
+	BindUmbrellaEvents();
 	ApplyStoredVisualContentProfile();
 	DisplayedFillVisualRatio = GetTargetFillVisualRatio();
 	UpdateStoredVisual(0.0f, true);
@@ -30,6 +39,7 @@ void UUOUStoredContentVisualComponent::BeginPlay()
 void UUOUStoredContentVisualComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	UnbindWaterContainerEvents();
+	UnbindUmbrellaEvents();
 
 	Super::EndPlay(EndPlayReason);
 }
@@ -43,11 +53,19 @@ void UUOUStoredContentVisualComponent::TickComponent(float DeltaTime, ELevelTick
 
 void UUOUStoredContentVisualComponent::RefreshStoredContentVisual(bool bSnapToTarget)
 {
-	ResolveWaterContainerComponent();
-	ResolveStoredVisualComponent();
+	ResolveReferences();
 	BindWaterContainerEvents();
+	BindUmbrellaEvents();
 	ApplyStoredVisualContentProfile();
 	UpdateStoredVisual(0.0f, bSnapToTarget);
+}
+
+void UUOUStoredContentVisualComponent::ResolveReferences()
+{
+	ResolveWaterContainerComponent();
+	ResolveUmbrellaComponent();
+	ResolveSocketSourceComponent();
+	ResolveStoredVisualComponent();
 }
 
 void UUOUStoredContentVisualComponent::ResolveWaterContainerComponent()
@@ -110,6 +128,163 @@ UUOUWaterContainerComponent* UUOUStoredContentVisualComponent::FindWaterContaine
 	}
 
 	return nullptr;
+}
+
+void UUOUStoredContentVisualComponent::ResolveUmbrellaComponent()
+{
+	if (IsValid(UmbrellaComponent))
+	{
+		bResolvedUmbrellaComponent = true;
+		ResolvedUmbrellaComponentName = UmbrellaComponent->GetName();
+		return;
+	}
+
+	UmbrellaComponent = nullptr;
+	bResolvedUmbrellaComponent = false;
+	ResolvedUmbrellaComponentName = TEXT("None");
+
+	if (!bAutoFindUmbrellaComponent)
+	{
+		return;
+	}
+
+	UmbrellaComponent = FindUmbrellaComponent();
+	bResolvedUmbrellaComponent = UmbrellaComponent != nullptr;
+	ResolvedUmbrellaComponentName = UmbrellaComponent != nullptr ? UmbrellaComponent->GetName() : TEXT("None");
+}
+
+UUOUUmbrellaComponent* UUOUStoredContentVisualComponent::FindUmbrellaComponent() const
+{
+	AActor* Owner = GetOwner();
+	if (Owner == nullptr)
+	{
+		return nullptr;
+	}
+
+	TInlineComponentArray<UUOUUmbrellaComponent*> UmbrellaComponents(Owner);
+	if (UmbrellaComponents.IsEmpty())
+	{
+		return nullptr;
+	}
+
+	if (UmbrellaComponentName.IsNone())
+	{
+		return UmbrellaComponents[0];
+	}
+
+	const FString TargetName = UmbrellaComponentName.ToString();
+	for (UUOUUmbrellaComponent* Candidate : UmbrellaComponents)
+	{
+		if (Candidate == nullptr)
+		{
+			continue;
+		}
+
+		if (Candidate->GetFName() == UmbrellaComponentName
+			|| Candidate->ComponentTags.Contains(UmbrellaComponentName)
+			|| Candidate->GetName().Equals(TargetName, ESearchCase::IgnoreCase)
+			|| Candidate->GetName().Contains(TargetName, ESearchCase::IgnoreCase))
+		{
+			return Candidate;
+		}
+	}
+
+	return nullptr;
+}
+
+bool UUOUStoredContentVisualComponent::IsUmbrellaVisualStateAllowed() const
+{
+	if (!bOnlyShowWhenUmbrellaUpsideDown)
+	{
+		return true;
+	}
+
+	return UmbrellaComponent != nullptr && UmbrellaComponent->IsUpsideDown();
+}
+
+void UUOUStoredContentVisualComponent::ResolveSocketSourceComponent()
+{
+	if (IsValid(SocketSourceComponent))
+	{
+		bResolvedSocketSourceComponent = true;
+		ResolvedSocketSourceComponentName = SocketSourceComponent->GetName();
+		return;
+	}
+
+	SocketSourceComponent = nullptr;
+	bResolvedSocketSourceComponent = false;
+	ResolvedSocketSourceComponentName = TEXT("None");
+
+	if (!bAutoFindSocketSourceComponent)
+	{
+		return;
+	}
+
+	SocketSourceComponent = FindSocketSourceComponent();
+	bResolvedSocketSourceComponent = SocketSourceComponent != nullptr;
+	ResolvedSocketSourceComponentName = SocketSourceComponent != nullptr ? SocketSourceComponent->GetName() : TEXT("None");
+}
+
+USceneComponent* UUOUStoredContentVisualComponent::FindSocketSourceComponent() const
+{
+	AActor* Owner = GetOwner();
+	if (Owner == nullptr || SocketSourceComponentName.IsNone())
+	{
+		return nullptr;
+	}
+
+	const FString TargetName = SocketSourceComponentName.ToString();
+	TInlineComponentArray<USceneComponent*> SceneComponents(Owner);
+	for (USceneComponent* SceneComponent : SceneComponents)
+	{
+		if (SceneComponent == nullptr || SceneComponent == this)
+		{
+			continue;
+		}
+
+		if (SceneComponent->GetFName() == SocketSourceComponentName
+			|| SceneComponent->ComponentTags.Contains(SocketSourceComponentName)
+			|| SceneComponent->GetName().Equals(TargetName, ESearchCase::IgnoreCase)
+			|| SceneComponent->GetName().Contains(TargetName, ESearchCase::IgnoreCase))
+		{
+			return SceneComponent;
+		}
+	}
+
+	return nullptr;
+}
+
+void UUOUStoredContentVisualComponent::UpdateSocketFollowTransform()
+{
+	if (!bFollowSocketTransform)
+	{
+		return;
+	}
+
+	ResolveSocketSourceComponent();
+	if (SocketSourceComponent == nullptr)
+	{
+		return;
+	}
+
+	FTransform SocketWorldTransform = SocketSourceComponent->GetComponentTransform();
+	if (!StoredContentSocketName.IsNone() && SocketSourceComponent->DoesSocketExist(StoredContentSocketName))
+	{
+		SocketWorldTransform = SocketSourceComponent->GetSocketTransform(StoredContentSocketName, RTS_World);
+	}
+
+	FTransform TargetWorldTransform = GetComponentTransform();
+	TargetWorldTransform.SetLocation(SocketWorldTransform.GetLocation());
+	if (bFollowSocketRotation)
+	{
+		TargetWorldTransform.SetRotation(SocketWorldTransform.GetRotation());
+	}
+	if (bFollowSocketScale)
+	{
+		TargetWorldTransform.SetScale3D(SocketWorldTransform.GetScale3D());
+	}
+
+	SetWorldTransform(SocketFollowOffset * TargetWorldTransform, false, nullptr, ETeleportType::TeleportPhysics);
 }
 
 void UUOUStoredContentVisualComponent::ResolveStoredVisualComponent()
@@ -218,6 +393,36 @@ void UUOUStoredContentVisualComponent::UnbindWaterContainerEvents()
 	BoundWaterContainerComponent = nullptr;
 }
 
+void UUOUStoredContentVisualComponent::BindUmbrellaEvents()
+{
+	if (BoundUmbrellaComponent == UmbrellaComponent)
+	{
+		return;
+	}
+
+	UnbindUmbrellaEvents();
+	BoundUmbrellaComponent = UmbrellaComponent;
+	if (!IsValid(BoundUmbrellaComponent))
+	{
+		return;
+	}
+
+	BoundUmbrellaComponent->OnUmbrellaStateChanged.RemoveDynamic(this, &UUOUStoredContentVisualComponent::HandleUmbrellaStateChanged);
+	BoundUmbrellaComponent->OnUmbrellaStateChanged.AddDynamic(this, &UUOUStoredContentVisualComponent::HandleUmbrellaStateChanged);
+}
+
+void UUOUStoredContentVisualComponent::UnbindUmbrellaEvents()
+{
+	if (!IsValid(BoundUmbrellaComponent))
+	{
+		BoundUmbrellaComponent = nullptr;
+		return;
+	}
+
+	BoundUmbrellaComponent->OnUmbrellaStateChanged.RemoveDynamic(this, &UUOUStoredContentVisualComponent::HandleUmbrellaStateChanged);
+	BoundUmbrellaComponent = nullptr;
+}
+
 void UUOUStoredContentVisualComponent::CaptureStoredVisualTransformIfNeeded()
 {
 	if (!StoredVisualComponent || bCapturedStoredVisualTransform)
@@ -225,7 +430,9 @@ void UUOUStoredContentVisualComponent::CaptureStoredVisualTransformIfNeeded()
 		return;
 	}
 
-	InitialStoredVisualRelativeLocation = StoredVisualComponent->GetRelativeLocation();
+	InitialStoredVisualRelativeLocation = bFollowSocketTransform
+		? FVector::ZeroVector
+		: StoredVisualComponent->GetRelativeLocation();
 	InitialStoredVisualRelativeScale = StoredVisualComponent->GetRelativeScale3D();
 	bCapturedStoredVisualTransform = true;
 }
@@ -270,19 +477,21 @@ void UUOUStoredContentVisualComponent::ApplyStoredVisualContentProfile()
 
 void UUOUStoredContentVisualComponent::UpdateStoredVisual(float DeltaTime, bool bSnapToTarget)
 {
+	ResolveReferences();
+	BindWaterContainerEvents();
+	BindUmbrellaEvents();
+
 	if (!bUpdateStoredVisual)
 	{
 		return;
 	}
 
-	ResolveWaterContainerComponent();
-	ResolveStoredVisualComponent();
+	UpdateSocketFollowTransform();
 	if (WaterContainerComponent == nullptr || StoredVisualComponent == nullptr)
 	{
 		return;
 	}
 
-	BindWaterContainerEvents();
 	const float TargetFillRatio = GetTargetFillVisualRatio();
 	const float SafeDeltaTime = FMath::Max(0.0f, DeltaTime);
 	const FUOUPourStoredVisualSettings* MotionSettings = GetActiveMotionSettings();
@@ -350,6 +559,12 @@ void UUOUStoredContentVisualComponent::ApplyStoredVisualTransform(float FillRati
 		return;
 	}
 
+	if (bKeepStaticMeshScaleForFill && Cast<UStaticMeshComponent>(StoredVisualComponent.Get()) != nullptr)
+	{
+		StoredVisualComponent->SetRelativeScale3D(InitialStoredVisualRelativeScale);
+		return;
+	}
+
 	FVector EffectiveEmptyScaleMultiplier = MotionSettings != nullptr
 		? MotionSettings->EmptyScaleMultiplier
 		: EmptyScaleMultiplier;
@@ -412,6 +627,18 @@ bool UUOUStoredContentVisualComponent::ShouldShowStoredVisual() const
 		return false;
 	}
 
+	if (!IsUmbrellaVisualStateAllowed())
+	{
+		return false;
+	}
+
+	if (bOnlyShowWhenHasStoredContent
+		&& GetTargetFillVisualRatio() <= KINDA_SMALL_NUMBER
+		&& DisplayedFillVisualRatio <= KINDA_SMALL_NUMBER)
+	{
+		return false;
+	}
+
 	const FUOUPourStoredVisualSettings* MotionSettings = GetActiveMotionSettings();
 	const bool bResolvedHideWhenEmpty = MotionSettings != nullptr
 		? MotionSettings->bHideWhenEmpty
@@ -463,4 +690,9 @@ void UUOUStoredContentVisualComponent::HandlePourContentProfileChanged(UUOUPourC
 {
 	ApplyStoredVisualContentProfile();
 	UpdateStoredVisual(0.0f, false);
+}
+
+void UUOUStoredContentVisualComponent::HandleUmbrellaStateChanged(EUOUUmbrellaState, bool)
+{
+	RefreshStoredContentVisual(true);
 }
