@@ -67,6 +67,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Puzzle|Level Transition", meta = (ToolTip = "If enabled, player move and look input are blocked while the transition is running."))
 	bool bLockPlayerInputDuringTransition = true;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Puzzle|Level Transition|Message", meta = (DisplayName = "페이드 아웃 문구", ToolTip = "현재 레벨에서 화면이 검게 가려진 뒤 표시할 문구입니다. 비워두면 표시하지 않습니다."))
+	FUOUTransitionMessageSettings FadeOutMessageSettings;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Puzzle|Level Transition|Message", meta = (DisplayName = "페이드 인 문구", ToolTip = "새 레벨이 로드된 뒤 화면이 밝아지는 동안 표시할 문구입니다. 비워두면 표시하지 않습니다."))
+	FUOUTransitionMessageSettings FadeInMessageSettings;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Puzzle|Runtime")
 	bool bHasTriggered = false;
 

@@ -5,7 +5,9 @@
 #include "Blueprint/UserWidget.h"
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
+#include "EngineUtils.h"
 #include "Game/UOULevelTransitionSubsystem.h"
+#include "Game/UOUTitleLevelTransitionActor.h"
 #include "InputCoreTypes.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "UObject/SoftObjectPath.h"
@@ -95,7 +97,21 @@ void AUOUTitlePlayerController::StartGame()
 		return;
 	}
 
-	bIsOpeningLevel = TransitionSubsystem->RequestLevelTransition(nextLevel, FUOULevelTransitionSettings());
+	TSoftObjectPtr<UWorld> TargetLevel = nextLevel;
+	if (const AUOUTitleLevelTransitionActor* TransitionActor = FindTitleLevelTransitionActor())
+	{
+		if (!TransitionActor->TargetLevel.IsNull())
+		{
+			TargetLevel = TransitionActor->TargetLevel;
+		}
+	}
+
+	if (TargetLevel.IsNull())
+	{
+		return;
+	}
+
+	bIsOpeningLevel = TransitionSubsystem->RequestLevelTransition(TargetLevel, FUOULevelTransitionSettings());
 }
 
 void AUOUTitlePlayerController::QuitGame()
@@ -130,4 +146,20 @@ void AUOUTitlePlayerController::ApplyTitleMenuInputMode()
 	ResetIgnoreLookInput();
 	SetIgnoreMoveInput(true);
 	SetIgnoreLookInput(true);
+}
+
+AUOUTitleLevelTransitionActor* AUOUTitlePlayerController::FindTitleLevelTransitionActor() const
+{
+	UWorld* World = GetWorld();
+	if (World == nullptr)
+	{
+		return nullptr;
+	}
+
+	for (TActorIterator<AUOUTitleLevelTransitionActor> It(World); It; ++It)
+	{
+		return *It;
+	}
+
+	return nullptr;
 }

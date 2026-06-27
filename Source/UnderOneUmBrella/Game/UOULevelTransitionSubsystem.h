@@ -5,9 +5,12 @@
 #include "CoreMinimal.h"
 #include "Subsystems/GameInstanceSubsystem.h"
 #include "TimerManager.h"
+#include "UI/UOUTransitionMessageTypes.h"
 #include "UOULevelTransitionSubsystem.generated.h"
 
 class APlayerController;
+class AUOULevelTransitionSettingsActor;
+class UUOULevelTransitionOverlayWidget;
 class UWorld;
 
 USTRUCT(BlueprintType)
@@ -32,6 +35,18 @@ struct FUOULevelTransitionSettings
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Level Transition", meta = (ToolTip = "If enabled, player move and look input are blocked while the transition is running."))
 	bool bLockPlayerInputDuringTransition = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Level Transition|Map Settings", meta = (DisplayName = "현재 맵 Exit 설정 사용", ToolTip = "켜져 있으면 현재 맵의 UOU Level Transition Settings Actor에 있는 Exit 설정으로 페이드 아웃을 덮어씁니다."))
+	bool bUseCurrentMapExitSettings = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Level Transition|Map Settings", meta = (DisplayName = "도착 맵 Enter 설정 사용", ToolTip = "켜져 있으면 도착 맵의 UOU Level Transition Settings Actor에 있는 Enter 설정으로 페이드 인을 덮어씁니다."))
+	bool bUseLoadedMapEnterSettings = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Level Transition|Message", meta = (DisplayName = "페이드 아웃 문구", ToolTip = "현재 레벨에서 화면이 검게 가려진 뒤 표시할 문구입니다. 비워두면 표시하지 않습니다."))
+	FUOUTransitionMessageSettings FadeOutMessageSettings;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Level Transition|Message", meta = (DisplayName = "페이드 인 문구", ToolTip = "새 레벨이 로드된 뒤 화면이 밝아지는 동안 표시할 문구입니다. 비워두면 표시하지 않습니다."))
+	FUOUTransitionMessageSettings FadeInMessageSettings;
 };
 
 UCLASS()
@@ -66,14 +81,41 @@ private:
 		LevelName
 	};
 
+	enum class ETransitionMessageStage : uint8
+	{
+		None,
+		FadeOut,
+		FadeIn
+	};
+
 	bool BeginTransition(FUOULevelTransitionSettings Settings);
+	void UpdateFadeOutOverlay();
+	void UpdateFadeInOverlay();
 	void FinishFadeOut();
+	void StartFadeOutMessageSequence();
+	void StartFadeInMessageSequence();
+	void StartMessageSequence(ETransitionMessageStage MessageStage, const FUOUTransitionMessageSettings& MessageSettings);
+	void UpdateMessageFadeIn();
+	void FinishMessageFadeIn();
+	void FinishMessageHold();
+	void UpdateMessageFadeOut();
+	void FinishMessageSequence();
+	void ContinueAfterFadeOutMessageSequence();
+	void ContinueAfterFadeInMessageSequence();
 	void OpenPendingLevel();
 	void HandlePostLoadMapWithWorld(UWorld* LoadedWorld);
 	void StartPostLoadFadeIn();
 	void FinishTransition();
 	void ClearTransitionTimers(UWorld* World);
 	void ResetPendingTransition();
+	void ApplyCurrentMapExitSettings(UWorld* World, FUOULevelTransitionSettings& Settings) const;
+	bool ApplyLoadedMapEnterSettings(UWorld* World, FUOULevelTransitionSettings& Settings) const;
+	const AUOULevelTransitionSettingsActor* FindLevelTransitionSettingsActor(UWorld* World) const;
+	UUOULevelTransitionOverlayWidget* GetOrCreateTransitionOverlay(UWorld* World, const FUOUTransitionMessageSettings& MessageSettings);
+	void ShowTransitionOverlay(UWorld* World, const FUOUTransitionMessageSettings& MessageSettings, float InitialBackgroundOpacity, float InitialMessageOpacity);
+	void SetTransitionBackgroundOpacity(float NewOpacity);
+	void SetTransitionMessageOpacity(float NewOpacity);
+	void HideTransitionOverlay();
 	void SetPlayerInputLocked(UWorld* World, bool bLocked) const;
 	APlayerController* ResolvePlayerController(UWorld* World) const;
 	UWorld* GetSubsystemWorld() const;
@@ -82,12 +124,21 @@ private:
 	TSoftObjectPtr<UWorld> PendingTargetLevel;
 	FName PendingLevelName = NAME_None;
 	FUOULevelTransitionSettings ActiveSettings;
+	FUOUTransitionMessageSettings ActiveMessageSettings;
 	TWeakObjectPtr<UWorld> FadeInWorld;
 
 	FTimerHandle FadeOutTimerHandle;
 	FTimerHandle BlackHoldTimerHandle;
 	FTimerHandle FadeInTimerHandle;
+	FTimerHandle MessageTimerHandle;
 
+	UPROPERTY(Transient)
+	TObjectPtr<UUOULevelTransitionOverlayWidget> TransitionOverlayWidget = nullptr;
+
+	float FadeOverlayElapsedTime = 0.0f;
+	float MessageElapsedTime = 0.0f;
+	ETransitionMessageStage ActiveMessageStage = ETransitionMessageStage::None;
 	bool bIsTransitioning = false;
 	bool bWaitingForPostLoadFadeIn = false;
+	bool bInputLockedDuringTransition = false;
 };
