@@ -176,6 +176,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|References")
 	TObjectPtr<USkeletalMeshComponent> SkeletalHeldVisual = nullptr;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Pour Socket", meta = (ToolTip = "Component name or tag that owns the socket used for stream visual and drop spawn."))
+	FName PouringSocketSourceComponentName = TEXT("UmbrellaSkeletalVisual");
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Pour Socket", meta = (ToolTip = "Socket used for stream visual and drop spawn."))
+	FName PouringSocketName = TEXT("PouringPoint");
+
 	// 픽업한 우산 메쉬를 런타임에 복사해서 플레이어 손에 보여주는 컴포넌트입니다.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Umbrella|References")
 	TObjectPtr<UStaticMeshComponent> RuntimeHeldVisual = nullptr;

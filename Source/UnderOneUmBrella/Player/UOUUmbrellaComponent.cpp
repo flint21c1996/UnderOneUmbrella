@@ -30,9 +30,6 @@
 namespace
 {
 // 물 붓기 디버그 라벨에 표시할 수 있도록 수신 대상 enum을 짧은 문자열로 바꿉니다.
-const FName PouringSocketSourceComponentName = TEXT("UmbrellaSkeletalVisual");
-const FName PouringSocketName = TEXT("PouringPoint");
-
 const TCHAR* GetPourReceiverTypeText(EUOUUmbrellaPourReceiverType ReceiverType)
 {
 	switch (ReceiverType)
@@ -1135,7 +1132,7 @@ void UUOUUmbrellaComponent::UpdatePouringEffectState()
 bool UUOUUmbrellaComponent::TryGetPouringPointTransform(FTransform& OutTransform) const
 {
 	const USkeletalMeshComponent* PouringSocketSource = SkeletalHeldVisual.Get();
-	if (PouringSocketSource == nullptr)
+	if (PouringSocketSource == nullptr && !PouringSocketSourceComponentName.IsNone())
 	{
 		if (const AActor* Owner = GetOwner())
 		{
@@ -1143,7 +1140,8 @@ bool UUOUUmbrellaComponent::TryGetPouringPointTransform(FTransform& OutTransform
 			for (const USkeletalMeshComponent* SkeletalMeshComponent : SkeletalMeshComponents)
 			{
 				if (SkeletalMeshComponent != nullptr
-					&& SkeletalMeshComponent->GetFName() == PouringSocketSourceComponentName)
+					&& (SkeletalMeshComponent->GetFName() == PouringSocketSourceComponentName
+						|| SkeletalMeshComponent->ComponentTags.Contains(PouringSocketSourceComponentName)))
 				{
 					PouringSocketSource = SkeletalMeshComponent;
 					break;
@@ -1152,7 +1150,7 @@ bool UUOUUmbrellaComponent::TryGetPouringPointTransform(FTransform& OutTransform
 		}
 	}
 
-	if (PouringSocketSource == nullptr || !PouringSocketSource->DoesSocketExist(PouringSocketName))
+	if (PouringSocketSource == nullptr || PouringSocketName.IsNone() || !PouringSocketSource->DoesSocketExist(PouringSocketName))
 	{
 		return false;
 	}

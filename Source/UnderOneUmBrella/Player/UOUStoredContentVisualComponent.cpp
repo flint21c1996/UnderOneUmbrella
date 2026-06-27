@@ -10,12 +10,6 @@
 #include "Player/UOUUmbrellaComponent.h"
 #include "Player/UOUWaterContainerComponent.h"
 
-namespace
-{
-constexpr TCHAR StoredContentSocketSourceComponentName[] = TEXT("UmbrellaSkeletalVisual");
-const FName StoredContentSocketName = TEXT("StoredWaterPoint");
-}
-
 UUOUStoredContentVisualComponent::UUOUStoredContentVisualComponent()
 {
 	PrimaryComponentTick.bCanEverTick = true;
@@ -100,7 +94,7 @@ void UUOUStoredContentVisualComponent::ResolveWaterContainerComponent()
 UUOUWaterContainerComponent* UUOUStoredContentVisualComponent::FindWaterContainerComponent() const
 {
 	AActor* Owner = GetOwner();
-	if (Owner == nullptr)
+	if (Owner == nullptr || SocketSourceComponentName.IsNone())
 	{
 		return nullptr;
 	}
@@ -203,8 +197,7 @@ USceneComponent* UUOUStoredContentVisualComponent::FindSocketSourceComponent() c
 		return nullptr;
 	}
 
-	const FName TargetComponentName = FName(StoredContentSocketSourceComponentName);
-	const FString TargetName = TargetComponentName.ToString();
+	const FString TargetName = SocketSourceComponentName.ToString();
 	TInlineComponentArray<USceneComponent*> SceneComponents(Owner);
 	for (USceneComponent* SceneComponent : SceneComponents)
 	{
@@ -213,8 +206,8 @@ USceneComponent* UUOUStoredContentVisualComponent::FindSocketSourceComponent() c
 			continue;
 		}
 
-		if (SceneComponent->GetFName() == TargetComponentName
-			|| SceneComponent->ComponentTags.Contains(TargetComponentName)
+		if (SceneComponent->GetFName() == SocketSourceComponentName
+			|| SceneComponent->ComponentTags.Contains(SocketSourceComponentName)
 			|| SceneComponent->GetName().Equals(TargetName, ESearchCase::IgnoreCase)
 			|| SceneComponent->GetName().Contains(TargetName, ESearchCase::IgnoreCase))
 		{
@@ -234,7 +227,7 @@ void UUOUStoredContentVisualComponent::UpdateSocketFollowLocation()
 	}
 
 	FTransform SocketWorldTransform = SocketSourceComponent->GetComponentTransform();
-	if (SocketSourceComponent->DoesSocketExist(StoredContentSocketName))
+	if (!StoredContentSocketName.IsNone() && SocketSourceComponent->DoesSocketExist(StoredContentSocketName))
 	{
 		SocketWorldTransform = SocketSourceComponent->GetSocketTransform(StoredContentSocketName, RTS_World);
 	}

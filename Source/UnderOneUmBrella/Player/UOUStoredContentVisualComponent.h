@@ -50,6 +50,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stored Content Visual|Visibility", meta = (ToolTip = "Umbrella component used to decide whether stored content should be visible. Leave empty to auto-find on the owner."))
 	TObjectPtr<UUOUUmbrellaComponent> UmbrellaComponent = nullptr;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stored Content Visual|Socket", meta = (ToolTip = "Component name or tag that owns the stored content socket."))
+	FName SocketSourceComponentName = TEXT("UmbrellaSkeletalVisual");
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stored Content Visual|Socket", meta = (ToolTip = "Socket where stored content visual starts."))
+	FName StoredContentSocketName = TEXT("StoredWaterPoint");
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stored Content Visual", meta = (ClampMin = "0.0", ToolTip = "Fallback fill ratio interpolation speed when the content profile does not override visual motion. Set to 0 to snap."))
 	float FillVisualInterpSpeed = 2.0f;
 
