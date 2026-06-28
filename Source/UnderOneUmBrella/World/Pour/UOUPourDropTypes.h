@@ -23,13 +23,13 @@ struct UNDERONEUMBRELLA_API FUOUPourDropVisualSettings
 {
 	GENERATED_BODY()
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pour Drop", meta = (ToolTip = "When enabled, spawned PourDropActor instances use these profile settings instead of the actor class defaults."))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pour Drop", meta = (ToolTip = "켜면 생성되는 PourDropActor가 액터 기본값 대신 이 프로필의 Drop 설정을 사용합니다."))
 	bool bOverrideDropActorSettings = false;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pour Drop|Visual", meta = (ToolTip = "Optional mesh applied to the spawned drop visual. Leave empty to keep the actor default."))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pour Drop|Visual", meta = (ToolTip = "디버그용 DropActor mesh에 적용할 메쉬입니다. 실제 붓기 시각 표현은 Stream Visual이 담당하므로 보통 비워둡니다."))
 	TObjectPtr<UStaticMesh> VisualMesh = nullptr;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pour Drop|Visual", meta = (ToolTip = "Optional materials applied to the spawned drop visual. Empty entries are ignored."))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pour Drop|Visual", meta = (ToolTip = "디버그용 DropActor mesh에 적용할 머티리얼 목록입니다. 비어 있는 슬롯은 무시됩니다."))
 	TArray<TObjectPtr<UMaterialInterface>> VisualMaterials;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pour Drop|Visual", meta = (EditCondition = "bOverrideDropActorSettings", EditConditionHides))
@@ -41,10 +41,10 @@ struct UNDERONEUMBRELLA_API FUOUPourDropVisualSettings
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pour Drop|Visual", meta = (EditCondition = "bOverrideDropActorSettings", EditConditionHides))
 	FRotator VisualMeshRelativeRotation = FRotator::ZeroRotator;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pour Drop|Debug", meta = (EditCondition = "bOverrideDropActorSettings", EditConditionHides))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pour Drop|Debug", meta = (EditCondition = "bOverrideDropActorSettings", EditConditionHides, ToolTip = "켜면 DropActor의 mesh를 디버그용으로 표시합니다. 꺼져 있어도 충돌/물 전달 판정은 그대로 동작합니다."))
 	bool bShowDebugVisualMesh = false;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pour Drop|Trail", meta = (ToolTip = "Optional trail Niagara applied to the spawned drop. Leave empty to keep the actor default."))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pour Drop|Trail", meta = (ToolTip = "DropActor에 붙일 보조 trail Niagara입니다. 기본 붓기 표현은 Stream Visual이 담당하므로 필요할 때만 사용합니다."))
 	TObjectPtr<UNiagaraSystem> TrailEffect = nullptr;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pour Drop|Trail", meta = (EditCondition = "bOverrideDropActorSettings", EditConditionHides))
@@ -80,7 +80,7 @@ struct UNDERONEUMBRELLA_API FUOUPourDropVisualSettings
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pour Drop|Impact", meta = (EditCondition = "bOverrideDropActorSettings", EditConditionHides))
 	bool bSpawnSplashOnlyWhenDelivered = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pour Drop|Impact", meta = (ToolTip = "Optional impact splash Niagara applied to the spawned drop. Leave empty to keep the actor default."))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pour Drop|Impact", meta = (ToolTip = "DropActor가 유효한 대상에 닿았을 때 재생할 splash Niagara입니다. 비워두면 액터 기본값을 유지합니다."))
 	TObjectPtr<UNiagaraSystem> ImpactSplashEffect = nullptr;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pour Drop|Impact", meta = (ClampMin = "0.0", EditCondition = "bOverrideDropActorSettings", EditConditionHides))

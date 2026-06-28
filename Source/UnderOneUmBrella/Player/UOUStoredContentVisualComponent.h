@@ -12,7 +12,7 @@ class UNiagaraComponent;
 class USceneComponent;
 class UUOUWaterContainerComponent;
 
-// Drives the visual representation of content stored in a WaterContainerComponent.
+// WaterContainerComponent에 저장된 내용물을 실제 화면에 보이도록 갱신하는 컴포넌트입니다.
 UCLASS(ClassGroup=(Gameplay), meta=(BlueprintSpawnableComponent))
 class UUOUStoredContentVisualComponent : public USceneComponent
 {
@@ -26,19 +26,19 @@ public:
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stored Content Visual|Container", meta = (ToolTip = "Container that provides stored amount and content profile. Leave empty to auto-find on the owner."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stored Content Visual|Container", meta = (ToolTip = "저장량과 ContentProfile을 제공하는 WaterContainerComponent입니다. 비워두면 Owner에서 자동으로 찾습니다."))
 	TObjectPtr<UUOUWaterContainerComponent> WaterContainerComponent = nullptr;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stored Content Visual|Container", meta = (ToolTip = "Optional component name or tag used when auto-finding the WaterContainerComponent. Leave None to use the first container on the owner."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stored Content Visual|Container", meta = (ToolTip = "WaterContainerComponent를 자동으로 찾을 때 사용할 컴포넌트 이름 또는 태그입니다. None이면 Owner의 첫 WaterContainerComponent를 사용합니다."))
 	FName WaterContainerComponentName = NAME_None;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stored Content Visual|Container")
 	bool bAutoFindWaterContainerComponent = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stored Content Visual", meta = (ToolTip = "Mesh or Niagara component that is scaled/parameterized by stored fill ratio. Leave empty to auto-find by name or child attachment."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stored Content Visual", meta = (ToolTip = "저장량 비율에 따라 위치/파라미터가 갱신될 Mesh 또는 Niagara 컴포넌트입니다. 비워두면 자식 컴포넌트나 이름으로 자동 탐색합니다."))
 	TObjectPtr<USceneComponent> StoredVisualComponent = nullptr;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stored Content Visual", meta = (ToolTip = "Component name or tag used for auto-find."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stored Content Visual", meta = (ToolTip = "StoredVisualComponent를 자동으로 찾을 때 사용할 컴포넌트 이름 또는 태그입니다."))
 	FName StoredVisualComponentName = TEXT("StoredWaterVisual");
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stored Content Visual")
@@ -47,19 +47,19 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stored Content Visual")
 	bool bUpdateStoredVisual = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stored Content Visual|Visibility", meta = (ToolTip = "Umbrella component used to decide whether stored content should be visible. Leave empty to auto-find on the owner."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stored Content Visual|Visibility", meta = (ToolTip = "우산 상태를 확인해 저장 내용물 표시 여부를 결정하는 UmbrellaComponent입니다. 비워두면 Owner에서 자동으로 찾습니다."))
 	TObjectPtr<UUOUUmbrellaComponent> UmbrellaComponent = nullptr;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stored Content Visual|Socket", meta = (ToolTip = "Component name or tag that owns the stored content socket."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stored Content Visual|Socket", meta = (ToolTip = "저장 내용물 소켓을 가진 컴포넌트 이름 또는 태그입니다. 기본값은 플레이어의 우산 스켈레탈 메시입니다."))
 	FName SocketSourceComponentName = TEXT("UmbrellaSkeletalVisual");
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stored Content Visual|Socket", meta = (ToolTip = "Socket where stored content visual starts."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stored Content Visual|Socket", meta = (ToolTip = "저장 내용물 visual의 시작 위치가 되는 소켓 이름입니다. 이 소켓 위치를 기준으로 fill offset이 적용됩니다."))
 	FName StoredContentSocketName = TEXT("StoredWaterPoint");
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stored Content Visual", meta = (ClampMin = "0.0", ToolTip = "Fallback fill ratio interpolation speed when the content profile does not override visual motion. Set to 0 to snap."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stored Content Visual", meta = (ClampMin = "0.0", ToolTip = "ContentProfile에서 별도 설정하지 않았을 때 사용할 fill ratio 보간 속도입니다. 0이면 즉시 목표값으로 이동합니다."))
 	float FillVisualInterpSpeed = 2.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stored Content Visual", meta = (ToolTip = "Fallback relative location offset applied at full fill."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stored Content Visual", meta = (ToolTip = "가득 찼을 때 StoredVisualComponent에 적용할 상대 위치 offset입니다. 보통 물 표면이 위로 차오르는 높이로 사용합니다."))
 	FVector FullLocationOffset = FVector(0.0f, 0.0f, 12.0f);
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stored Content Visual", meta = (ToolTip = "Fallback scale multiplier at empty fill."))
@@ -68,19 +68,19 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stored Content Visual", meta = (ToolTip = "Fallback scale multiplier at full fill."))
 	FVector FullScaleMultiplier = FVector::OneVector;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stored Content Visual|Mesh", meta = (ToolTip = "Fallback scalar parameter updated on mesh materials. Leave None to disable material parameter updates."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stored Content Visual|Mesh", meta = (ToolTip = "Mesh 머티리얼에 전달할 fill ratio 스칼라 파라미터 이름입니다. None이면 머티리얼 파라미터를 갱신하지 않습니다."))
 	FName MeshFillRatioParameterName = TEXT("FillRatio");
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stored Content Visual|Niagara", meta = (ToolTip = "Fallback Niagara float variable updated from fill ratio. Use a User parameter such as User.FillRatio. Leave None to disable Niagara parameter updates."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stored Content Visual|Niagara", meta = (ToolTip = "Niagara에 전달할 fill ratio float 변수 이름입니다. 예: User.FillRatio. None이면 Niagara 파라미터를 갱신하지 않습니다."))
 	FName NiagaraFillRatioParameterName = TEXT("User.FillRatio");
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stored Content Visual|Niagara", meta = (ToolTip = "When enabled, Niagara visuals activate while visible and deactivate when hidden."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stored Content Visual|Niagara", meta = (ToolTip = "켜면 visual이 보일 때 Niagara를 활성화하고, 숨겨질 때 즉시 비활성화합니다."))
 	bool bAutoActivateNiagara = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stored Content Visual|Niagara", meta = (ToolTip = "When enabled, Niagara plane visuals keep their initial relative scale and use location/parameters for fill expression."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stored Content Visual|Niagara", meta = (ToolTip = "켜면 Niagara visual의 초기 스케일을 유지하고 위치/파라미터만으로 차오름을 표현합니다."))
 	bool bKeepNiagaraScaleForFill = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stored Content Visual|Mesh", meta = (ToolTip = "When enabled, static mesh visuals keep their initial relative scale and use location/parameters for fill expression."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stored Content Visual|Mesh", meta = (ToolTip = "켜면 StaticMesh visual의 초기 스케일을 유지하고 위치/파라미터만으로 차오름을 표현합니다."))
 	bool bKeepStaticMeshScaleForFill = true;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Stored Content Visual|Runtime")

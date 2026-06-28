@@ -176,10 +176,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|References")
 	TObjectPtr<USkeletalMeshComponent> SkeletalHeldVisual = nullptr;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Pour Socket", meta = (ToolTip = "Component name or tag that owns the socket used for stream visual and drop spawn."))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Pour Socket", meta = (ToolTip = "Stream Visual과 DropActor 생성 위치로 사용할 소켓을 가진 컴포넌트 이름 또는 태그입니다. 기본값은 플레이어의 우산 스켈레탈 메시입니다."))
 	FName PouringSocketSourceComponentName = TEXT("UmbrellaSkeletalVisual");
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Pour Socket", meta = (ToolTip = "Socket used for stream visual and drop spawn."))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Pour Socket", meta = (ToolTip = "Stream Visual과 DropActor가 시작되는 소켓 이름입니다. 우산 리소스마다 이 소켓 위치를 맞추면 붓기 시작점이 일관됩니다."))
 	FName PouringSocketName = TEXT("PouringPoint");
 
 	// 픽업한 우산 메쉬를 런타임에 복사해서 플레이어 손에 보여주는 컴포넌트입니다.
