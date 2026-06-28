@@ -22,6 +22,7 @@
 #include "Player/UOURainReceiverComponent.h"
 #include "Player/UOUUmbrellaAnimInstance.h"
 #include "Player/UOUWaterContainerComponent.h"
+#include "Puzzle/Water/UOUWaterWheelRainConditionComponent.h"
 #include "World/Pour/UOUPourReceiverComponent.h"
 #include "World/WaterTarget/UOUWaterBasinTargetComponent.h"
 #include "World/WaterTarget/UOUUmbrellaWaterTarget.h"
@@ -41,6 +42,8 @@ const TCHAR* GetPourReceiverTypeText(EUOUUmbrellaPourReceiverType ReceiverType)
 		return TEXT("WaterBasinTarget");
 	case EUOUUmbrellaPourReceiverType::WaterContainer:
 		return TEXT("WaterContainer");
+	case EUOUUmbrellaPourReceiverType::WaterWheel:
+		return TEXT("WaterWheel");
 	case EUOUUmbrellaPourReceiverType::None:
 	default:
 		return TEXT("None");
@@ -475,6 +478,35 @@ bool UUOUUmbrellaComponent::TryGetRainBlockerVolumeData(FVector& OutWorldCenter,
 	}
 
 	return false;
+}
+
+bool UUOUUmbrellaComponent::TryGetGameplayRainBlockerVolumeData(FVector& OutWorldCenter, FRotator& OutWorldRotation, FVector& OutHalfExtent) const
+{
+	OutWorldCenter = FVector::ZeroVector;
+	OutWorldRotation = FRotator::ZeroRotator;
+	OutHalfExtent = FVector::ZeroVector;
+
+	const FVector SafeHalfExtent(
+		FMath::Max(0.0f, RainBlockerVolumeHalfExtent.X),
+		FMath::Max(0.0f, RainBlockerVolumeHalfExtent.Y),
+		FMath::Max(0.0f, RainBlockerVolumeHalfExtent.Z));
+
+	if (SafeHalfExtent.IsNearlyZero())
+	{
+		return false;
+	}
+
+	const AActor* Owner = GetOwner();
+	if (Owner == nullptr)
+	{
+		return false;
+	}
+
+	const FTransform OwnerTransform = Owner->GetActorTransform();
+	OutWorldCenter = OwnerTransform.TransformPosition(RainBlockerLocalOffset);
+	OutWorldRotation = OwnerTransform.Rotator();
+	OutHalfExtent = SafeHalfExtent;
+	return true;
 }
 
 float UUOUUmbrellaComponent::GetCurrentStoredWater() const
@@ -1079,7 +1111,7 @@ void UUOUUmbrellaComponent::DrawRainBlockerDebug() const
 	FVector BlockerWorldCenter = FVector::ZeroVector;
 	FRotator BlockerWorldRotation = FRotator::ZeroRotator;
 	FVector BlockerHalfExtent = FVector::ZeroVector;
-	if (!TryGetRainBlockerVolumeData(BlockerWorldCenter, BlockerWorldRotation, BlockerHalfExtent))
+	if (!TryGetGameplayRainBlockerVolumeData(BlockerWorldCenter, BlockerWorldRotation, BlockerHalfExtent))
 	{
 		// 비를 막는 상태가 아니면 그릴 기준 데이터가 없으므로 바로 종료합니다.
 		return;
@@ -1089,7 +1121,7 @@ void UUOUUmbrellaComponent::DrawRainBlockerDebug() const
 	const float LifeTime = 0.0f;
 	const bool bIsActiveBlocker = IsBlockingRain();
 	const FColor PlayerDebugColor = bIsActiveBlocker
-		? UUOUDebugSubsystem::GetDebugCategoryColor(this, EUOUDebugCategory::Player, FColor::Cyan)
+		? FColor::Cyan
 		: FColor(90, 90, 90);
 
 	DrawDebugSphere(
@@ -1128,7 +1160,7 @@ void UUOUUmbrellaComponent::DrawRainBlockerDebug() const
 		World,
 		BlockerWorldCenter + BlockerWorldRotation.Quaternion().GetAxisZ() * (BlockerHalfExtent.Z + 18.0f),
 		FString::Printf(
-			TEXT("RainBlocker %s Half %.1f %.1f %.1f Offset %.1f %.1f %.1f"),
+			TEXT("Gameplay RainBlocker %s Half %.1f %.1f %.1f Offset %.1f %.1f %.1f"),
 			bIsActiveBlocker ? TEXT("Active") : TEXT("Inactive"),
 			BlockerHalfExtent.X,
 			BlockerHalfExtent.Y,
@@ -1548,6 +1580,44 @@ bool UUOUUmbrellaComponent::TryReceiveWaterAtHit(const FHitResult& HitResult, fl
 		return PourContext;
 	};
 
+	auto BuildWaterWheelInputContext = [this, &HitResult, WaterAmount, PourDuration, &PourDirection]()
+	{
+		FUOUWaterWheelRainInputContext WaterWheelContext;
+		WaterWheelContext.Strength = PourDuration > KINDA_SMALL_NUMBER
+			? WaterAmount / PourDuration
+			: WaterAmount;
+		WaterWheelContext.Duration = PourDuration;
+		WaterWheelContext.WorldDirection = PourDirection;
+		WaterWheelContext.WorldLocation = HitResult.ImpactPoint;
+		WaterWheelContext.bHasValidWorldLocation = HitResult.bBlockingHit;
+		WaterWheelContext.InstigatorActor = GetOwner();
+		return WaterWheelContext;
+	};
+
+	auto TryReceiveWaterWheelInput = [this, &BuildWaterWheelInputContext, &OutReceiverType](AActor* TargetActor)
+	{
+		if (TargetActor == nullptr)
+		{
+			return false;
+		}
+
+		if (UUOUWaterWheelRainConditionComponent* WaterWheelCondition =
+			TargetActor->FindComponentByClass<UUOUWaterWheelRainConditionComponent>())
+		{
+			if (!WaterWheelCondition->CanReceivePouredWaterInput())
+			{
+				return false;
+			}
+
+			LastPourTargetName = TargetActor->GetName();
+			OutReceiverType = EUOUUmbrellaPourReceiverType::WaterWheel;
+			WaterWheelCondition->ReceivePouredWaterInput(BuildWaterWheelInputContext());
+			return true;
+		}
+
+		return false;
+	};
+
 	if (UUOUPourReceiverComponent* PourReceiver = HitActor->FindComponentByClass<UUOUPourReceiverComponent>())
 	{
 		if (PourReceiver->CanReceivePour())
@@ -1570,6 +1640,19 @@ bool UUOUUmbrellaComponent::TryReceiveWaterAtHit(const FHitResult& HitResult, fl
 				ParentPourReceiver->ReceivePourInput(BuildPourInputContext());
 				return true;
 			}
+		}
+	}
+
+	if (TryReceiveWaterWheelInput(HitActor))
+	{
+		return true;
+	}
+
+	if (AActor* ParentActor = HitActor->GetAttachParentActor())
+	{
+		if (TryReceiveWaterWheelInput(ParentActor))
+		{
+			return true;
 		}
 	}
 

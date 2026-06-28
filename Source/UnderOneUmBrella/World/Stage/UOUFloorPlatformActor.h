@@ -13,12 +13,22 @@ class UBoxComponent;
 class USceneComponent;
 class USplineComponent;
 class UStaticMeshComponent;
+class APawn;
 class UUOUFloorPlatformCarryComponent;
 class UUOUFloorPlatformStepComponent;
+class UUOUPlayerInteractionExecutorComponent;
 class AUOUFloorPlatformActor;
 class AUOUFloorPlatformTargetActor;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FUOUFloorPlatformMoveFinishedSignature, AUOUFloorPlatformActor*, Platform);
+
+UENUM(BlueprintType)
+enum class EUOUFloorPlatformInputBlockPolicy : uint8
+{
+	Never,
+	WhenPlayerOnPlatform,
+	Always
+};
 
 // 플랫폼 이동 시간을 어떤 감속과 가속 곡선으로 보정할지 정합니다.
 UENUM(BlueprintType)
@@ -212,6 +222,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Rules", meta = (EditCondition = "!bUseSequentialTargetMarkers", EditConditionHides, DisplayName = "Start At Target Single Target Only"))
 	bool bStartAtTarget = false;
 
+	// 플랫폼 이동 결과가 진행되는 동안 플레이어 조작을 어떤 조건으로 막을지 정합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Control")
+	EUOUFloorPlatformInputBlockPolicy InputBlockPolicyDuringMove = EUOUFloorPlatformInputBlockPolicy::WhenPlayerOnPlatform;
+
 	// 에디터에서 이동 기준점을 현재 액터 위치로 다시 잡을 때 사용합니다.
 	UFUNCTION(BlueprintCallable, CallInEditor, Category = "Floor Platform|Editor")
 	void CaptureCurrentAsStart();
@@ -327,6 +341,11 @@ protected:
 	// 예약된 이동 스텝이 남아 있으면 다음 마커 이동을 하나 시작합니다.
 	bool TryStartQueuedSequentialMove();
 
+	void RequestPlayerInputBlockForMove();
+	void ReleasePlayerInputBlockForMove();
+	bool ShouldBlockPlayerInputForMove(const APawn* PlayerPawn) const;
+	bool IsPlayerOnPlatformForInputBlock(const APawn* PlayerPawn) const;
+
 	// 현재 이동 구간의 시작과 목표를 기준으로 실제 플랫폼 트랜스폼을 계산합니다.
 	FTransform BuildActivePlatformTransformAtAlpha(float Alpha) const;
 
@@ -432,6 +451,9 @@ private:
 
 	// 완료 상태가 바뀔 때 완료 조건 컴포넌트가 Tick 없이 다시 평가하도록 알려주는 네이티브 이벤트입니다.
 	FOnUOUPuzzleResultCompletionStateChangedNativeSignature OnPuzzleResultCompletionStateChanged;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UUOUPlayerInteractionExecutorComponent> LockedInputExecutorComponent = nullptr;
 
 	// 플랫폼이 이동을 시작하는 기준 트랜스폼입니다.
 	UPROPERTY(Transient)

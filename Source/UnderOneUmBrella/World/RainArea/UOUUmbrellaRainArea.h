@@ -12,6 +12,7 @@ class UNiagaraComponent;
 class USceneComponent;
 class UStaticMeshComponent;
 class UUOUEnvironmentVisualComponent;
+struct FUOUWaterWheelRainCatchSample;
 
 UENUM(BlueprintType)
 enum class EUOURainAreaFlowDirection : uint8
@@ -95,6 +96,51 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Water Basin", meta = (ToolTip = "RainVolume 안의 WaterBasinTarget에 비 입력을 전달할지 여부입니다. 런타임에는 SetWaterBasinRainFillEnabled로 변경할 수 있습니다."))
 	bool bEnableWaterBasinRainFill = false;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Water Wheel", meta = (ToolTip = "RainVolume 안의 WaterWheelRainConditionComponent에 위치 기반 비 입력을 전달할지 여부입니다."))
+	bool bEnableWaterWheelRainInput = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Water Wheel", meta = (ClampMin = "0.0", ClampMax = "1.0", ToolTip = "물레방아 입력 계산에서 RainVolume 가장자리 샘플이 가지는 최소 강도입니다."))
+	float WaterWheelRainEdgeStrength = 0.35f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Water Wheel", meta = (ClampMin = "0.1", ToolTip = "물레방아 입력 계산에서 RainVolume 중심부 쪽으로 강해지는 곡선입니다."))
+	float WaterWheelRainCenterFalloffExponent = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Water Wheel", meta = (ToolTip = "켜면 Catch Point 중심점이 RainVolume 안에 있을 때만 물레방아 비 입력을 허용합니다. Coverage Radius는 중심점이 들어온 뒤 강도 계산에만 사용됩니다."))
+	bool bRequireWaterWheelCatchPointCenterInsideRainVolume = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Water Wheel|Debug", meta = (ToolTip = "켜져 있으면 물레방아 비 입력 샘플 위치와 판정 결과를 월드에 표시합니다."))
+	bool bDrawWaterWheelRainInputDebug = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Water Wheel|Debug", meta = (ClampMin = "0.0", ToolTip = "물레방아 비 입력 디버그 표시 유지 시간입니다. 0이면 매 프레임 갱신됩니다."))
+	float WaterWheelRainInputDebugLifeTime = 0.0f;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Rain|Water Wheel|Runtime")
+	bool bLastWaterWheelRainInputTickRan = false;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Rain|Water Wheel|Runtime")
+	int32 LastWaterWheelActorScanCount = 0;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Rain|Water Wheel|Runtime")
+	int32 LastWaterWheelComponentCount = 0;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Rain|Water Wheel|Runtime")
+	int32 LastWaterWheelValidComponentCount = 0;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Rain|Water Wheel|Runtime")
+	int32 LastWaterWheelCatchSampleCount = 0;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Rain|Water Wheel|Runtime")
+	int32 LastWaterWheelAcceptedSampleCount = 0;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Rain|Water Wheel|Runtime")
+	float LastWaterWheelDeliveredStrength = 0.0f;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Rain|Water Wheel|Runtime")
+	FVector LastWaterWheelSampleLocation = FVector::ZeroVector;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Rain|Water Wheel|Runtime")
+	FString LastWaterWheelRainDebugReason = TEXT("Not Run");
+
 	// 비가 아래로 떨어질지, 아래에서 위로 올라갈지 정하는 방향값입니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Falling", meta = (DisplayName = "Flow Direction", DisplayPriority = "0", ToolTip = "Downward는 기존처럼 위에서 아래로 떨어지고, Upward는 같은 영역/Blocker 흐름을 사용하면서 아래에서 위로 뿜어집니다."))
 	EUOURainAreaFlowDirection FlowDirection = EUOURainAreaFlowDirection::Downward;
@@ -154,10 +200,18 @@ protected:
 	void ApplyEnvironmentVisualRainBlocker(bool bIsBlocking, const FVector& BlockerWorldCenter, const FVector& BlockerHalfExtent, float BlockerIntensity);
 	// RainVolume 안에 있는 WaterBasinTarget에 기존 물 입력 규칙으로 비를 전달합니다.
 	void ApplyRainToWaterBasinTargets(float DeltaSeconds, bool bHasRainBlocker, const FVector& RainBlockerWorldCenter, const FRotator& RainBlockerWorldRotation, const FVector& RainBlockerHalfExtent) const;
+	// RainVolume 안의 물레방아 Catch Point에 위치 기반 비 입력을 전달합니다.
+	void ApplyRainToWaterWheelTargets(float DeltaSeconds, bool bHasRainBlocker, const FVector& RainBlockerWorldCenter, const FRotator& RainBlockerWorldRotation, const FVector& RainBlockerHalfExtent);
+	float CalculateWaterWheelCatchRainScale(const FUOUWaterWheelRainCatchSample& CatchSample, bool bHasRainBlocker, const FVector& RainBlockerWorldCenter, const FRotator& RainBlockerWorldRotation, const FVector& RainBlockerHalfExtent) const;
+	float CalculateRainVolumeCenterStrength(const FVector& WorldLocation) const;
 	// 대상 Actor의 bounds가 RainVolume과 겹치는지 확인합니다.
 	bool DoesActorBoundsOverlapRainVolume(const AActor* Actor) const;
+	// 월드 위치가 RainVolume 안에 있는지 확인합니다.
+	bool IsWorldLocationInsideRainVolume(const FVector& WorldLocation) const;
 	// 대상 Actor의 bounds가 우산 차단 영역 아래에 걸치는지 확인합니다.
 	bool IsActorBlockedByRainBlocker(const AActor* Actor, const FVector& BlockerWorldCenter, const FRotator& BlockerWorldRotation, const FVector& BlockerHalfExtent) const;
+	// 월드 위치가 우산 비 차단 영역에 가려지는지 확인합니다.
+	bool IsWorldLocationBlockedByRainBlocker(const FVector& WorldLocation, const FVector& BlockerWorldCenter, const FRotator& BlockerWorldRotation, const FVector& BlockerHalfExtent) const;
 	// 비주얼 디버그 박스를 그려서 환경 연동 범위를 확인합니다.
 	void DrawRainVisualDebug() const;
 	float GetAreaScaledRainSpawnRate() const;

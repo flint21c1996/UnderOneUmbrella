@@ -13,6 +13,10 @@
 #include "Curves/CurveFloat.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/World.h"
+#include "GameFramework/Pawn.h"
+#include "GameFramework/PlayerController.h"
+#include "Kismet/GameplayStatics.h"
+#include "Player/UOUPlayerInteractionExecutorComponent.h"
 
 AUOUFloorPlatformActor::AUOUFloorPlatformActor()
 {
@@ -131,6 +135,8 @@ void AUOUFloorPlatformActor::BeginPlay()
 
 void AUOUFloorPlatformActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	ReleasePlayerInputBlockForMove();
+
 	if (CarryComponent != nullptr)
 	{
 		CarryComponent->DetachCarriedActors();
@@ -223,6 +229,8 @@ void AUOUFloorPlatformActor::MoveToNextSequentialTarget()
 
 void AUOUFloorPlatformActor::ResetPlatform()
 {
+	ReleasePlayerInputBlockForMove();
+
 	EnsureStartTransform();
 	RefreshMovementBaseReferenceTransform();
 
@@ -275,6 +283,8 @@ void AUOUFloorPlatformActor::ResetPlatform()
 
 void AUOUFloorPlatformActor::SnapToTarget()
 {
+	ReleasePlayerInputBlockForMove();
+
 	EnsureStartTransform();
 	RefreshMovementBaseReferenceTransform();
 
@@ -626,7 +636,11 @@ void AUOUFloorPlatformActor::FinishMoveToTarget()
 	{
 		PendingSequentialMoveCount = FMath::Max(PendingSequentialMoveCount, 1);
 	}
-	TryStartQueuedSequentialMove();
+	const bool bStartedNextMove = TryStartQueuedSequentialMove();
+	if (!bStartedNextMove && !bIsMoving && PendingSequentialMoveCount <= 0)
+	{
+		ReleasePlayerInputBlockForMove();
+	}
 }
 
 void AUOUFloorPlatformActor::ApplyTargetCollisionState()
@@ -725,6 +739,7 @@ bool AUOUFloorPlatformActor::BeginMoveToTransform(
 	bIsMoving = true;
 	bIsAtTarget = false;
 	MoveElapsedTime = 0.0f;
+	RequestPlayerInputBlockForMove();
 	SetPuzzleResultCompletionState(EOUUPuzzleResultAction::Activate, false);
 	SetPuzzleResultCompletionState(EOUUPuzzleResultAction::Deactivate, false);
 	ApplyTargetCollisionState();
@@ -777,6 +792,84 @@ bool AUOUFloorPlatformActor::TryStartQueuedSequentialMove()
 
 	--PendingSequentialMoveCount;
 	return BeginMoveToTransform(NextTargetTransform, NextTargetMarker, NextTargetIndex);
+}
+
+void AUOUFloorPlatformActor::RequestPlayerInputBlockForMove()
+{
+	if (LockedInputExecutorComponent != nullptr)
+	{
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	if (World == nullptr || !World->IsGameWorld())
+	{
+		return;
+	}
+
+	const APlayerController* PlayerController = UGameplayStatics::GetPlayerController(this, 0);
+	const APawn* PlayerPawn = PlayerController != nullptr ? PlayerController->GetPawn() : nullptr;
+	if (PlayerPawn == nullptr)
+	{
+		return;
+	}
+
+	if (!ShouldBlockPlayerInputForMove(PlayerPawn))
+	{
+		return;
+	}
+
+	UUOUPlayerInteractionExecutorComponent* InputExecutor =
+		UUOUPlayerInteractionExecutorComponent::FindLocalPlayerExecutor(this);
+	if (InputExecutor == nullptr)
+	{
+		return;
+	}
+
+	InputExecutor->RequestPlayerInputBlock(this, true);
+	LockedInputExecutorComponent = InputExecutor;
+}
+
+void AUOUFloorPlatformActor::ReleasePlayerInputBlockForMove()
+{
+	if (LockedInputExecutorComponent == nullptr)
+	{
+		return;
+	}
+
+	LockedInputExecutorComponent->ReleasePlayerInputBlock(this);
+	LockedInputExecutorComponent = nullptr;
+}
+
+bool AUOUFloorPlatformActor::ShouldBlockPlayerInputForMove(const APawn* PlayerPawn) const
+{
+	switch (InputBlockPolicyDuringMove)
+	{
+	case EUOUFloorPlatformInputBlockPolicy::Always:
+		return true;
+	case EUOUFloorPlatformInputBlockPolicy::WhenPlayerOnPlatform:
+		return IsPlayerOnPlatformForInputBlock(PlayerPawn);
+	case EUOUFloorPlatformInputBlockPolicy::Never:
+	default:
+		return false;
+	}
+}
+
+bool AUOUFloorPlatformActor::IsPlayerOnPlatformForInputBlock(const APawn* PlayerPawn) const
+{
+	if (PlayerPawn == nullptr || CarryDetectionBox == nullptr)
+	{
+		return false;
+	}
+
+	const FVector PlayerLocation = PlayerPawn->GetActorLocation();
+	const FTransform BoxTransform = CarryDetectionBox->GetComponentTransform();
+	const FVector LocalPlayerLocation = BoxTransform.InverseTransformPosition(PlayerLocation);
+	const FVector BoxExtent = CarryDetectionBox->GetUnscaledBoxExtent();
+
+	return FMath::Abs(LocalPlayerLocation.X) <= BoxExtent.X
+		&& FMath::Abs(LocalPlayerLocation.Y) <= BoxExtent.Y
+		&& FMath::Abs(LocalPlayerLocation.Z) <= BoxExtent.Z;
 }
 
 FTransform AUOUFloorPlatformActor::BuildActivePlatformTransformAtAlpha(float Alpha) const

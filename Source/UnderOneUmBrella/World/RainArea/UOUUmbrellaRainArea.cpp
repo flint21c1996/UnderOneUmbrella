@@ -7,12 +7,13 @@
 #include "Components/StaticMeshComponent.h"
 #include "Debug/UOUDebugSubsystem.h"
 #include "DrawDebugHelpers.h"
+#include "EngineUtils.h"
 #include "GameFramework/Actor.h"
 #include "Materials/MaterialInterface.h"
 #include "NiagaraComponent.h"
 #include "Player/UOUUmbrellaComponent.h"
+#include "Puzzle/Water/UOUWaterWheelRainConditionComponent.h"
 #include "UObject/ConstructorHelpers.h"
-#include "UObject/UObjectIterator.h"
 #include "World/Environment/UOUEnvironmentVisualComponent.h"
 #include "World/WaterTarget/UOUWaterBasinTargetComponent.h"
 
@@ -26,6 +27,19 @@ namespace
 	{
 		const float SpeedMagnitude = FMath::Clamp(FMath::Abs(FlowSpeed), 0.0f, MaxRainAreaFlowSpeed);
 		return FlowDirection == EUOURainAreaFlowDirection::Upward ? SpeedMagnitude : -SpeedMagnitude;
+	}
+
+	void BuildRainSampleBasis(const FVector& RainDirection, FVector& OutBasisX, FVector& OutBasisY)
+	{
+		const FVector SafeDirection = RainDirection.GetSafeNormal();
+		OutBasisX = FVector::CrossProduct(SafeDirection, FVector::UpVector);
+		if (OutBasisX.IsNearlyZero())
+		{
+			OutBasisX = FVector::CrossProduct(SafeDirection, FVector::RightVector);
+		}
+
+		OutBasisX = OutBasisX.GetSafeNormal();
+		OutBasisY = FVector::CrossProduct(SafeDirection, OutBasisX).GetSafeNormal();
 	}
 }
 
@@ -210,33 +224,44 @@ void AUOUUmbrellaRainArea::Tick(float DeltaSeconds)
 				UmbrellaComponent->ApplyRainExposure(RainFillRate * DeltaSeconds);
 			}
 
-			FVector CandidateBlockerWorldCenter = FVector::ZeroVector;
-			FRotator CandidateBlockerWorldRotation = FRotator::ZeroRotator;
-			FVector CandidateBlockerHalfExtent = FVector::ZeroVector;
+			FVector CandidateVisualBlockerWorldCenter = FVector::ZeroVector;
+			FRotator CandidateVisualBlockerWorldRotation = FRotator::ZeroRotator;
+			FVector CandidateVisualBlockerHalfExtent = FVector::ZeroVector;
 			const bool bBlocksGameplayRain = UmbrellaComponent->IsBlockingRain();
 			const bool bBlocksRainVisual = bBlocksGameplayRain || UmbrellaComponent->IsUpsideDown();
 			if (bBlocksRainVisual
-				&& UmbrellaComponent->TryGetRainBlockerVolumeData(CandidateBlockerWorldCenter, CandidateBlockerWorldRotation, CandidateBlockerHalfExtent)
-				&& CandidateBlockerHalfExtent.SizeSquared() > VisualRainBlockerHalfExtent.SizeSquared())
+				&& UmbrellaComponent->TryGetGameplayRainBlockerVolumeData(CandidateVisualBlockerWorldCenter, CandidateVisualBlockerWorldRotation, CandidateVisualBlockerHalfExtent)
+				&& CandidateVisualBlockerHalfExtent.SizeSquared() > VisualRainBlockerHalfExtent.SizeSquared())
 			{
 				bHasVisualRainBlocker = true;
-				VisualRainBlockerWorldCenter = CandidateBlockerWorldCenter;
-				VisualRainBlockerHalfExtent = CandidateBlockerHalfExtent;
+				VisualRainBlockerWorldCenter = CandidateVisualBlockerWorldCenter;
+				VisualRainBlockerHalfExtent = CandidateVisualBlockerHalfExtent;
 			}
 
+			FVector CandidateGameplayBlockerWorldCenter = FVector::ZeroVector;
+			FRotator CandidateGameplayBlockerWorldRotation = FRotator::ZeroRotator;
+			FVector CandidateGameplayBlockerHalfExtent = FVector::ZeroVector;
 			if (bBlocksGameplayRain
-				&& CandidateBlockerHalfExtent.SizeSquared() > RainBlockerHalfExtent.SizeSquared())
+				&& UmbrellaComponent->TryGetGameplayRainBlockerVolumeData(CandidateGameplayBlockerWorldCenter, CandidateGameplayBlockerWorldRotation, CandidateGameplayBlockerHalfExtent)
+				&& CandidateGameplayBlockerHalfExtent.SizeSquared() > RainBlockerHalfExtent.SizeSquared())
 			{
 				bHasRainBlocker = true;
-				RainBlockerWorldCenter = CandidateBlockerWorldCenter;
-				RainBlockerWorldRotation = CandidateBlockerWorldRotation;
-				RainBlockerHalfExtent = CandidateBlockerHalfExtent;
+				RainBlockerWorldCenter = CandidateGameplayBlockerWorldCenter;
+				RainBlockerWorldRotation = CandidateGameplayBlockerWorldRotation;
+				RainBlockerHalfExtent = CandidateGameplayBlockerHalfExtent;
 			}
 		}
 	}
 
 	// 물받이 판정은 우산이 막고 있는 영역을 제외한 대상에게만 비 입력을 전달합니다.
 	ApplyRainToWaterBasinTargets(
+		DeltaSeconds,
+		bHasRainBlocker,
+		RainBlockerWorldCenter,
+		RainBlockerWorldRotation,
+		RainBlockerHalfExtent);
+
+	ApplyRainToWaterWheelTargets(
 		DeltaSeconds,
 		bHasRainBlocker,
 		RainBlockerWorldCenter,
@@ -463,6 +488,323 @@ void AUOUUmbrellaRainArea::ApplyRainToWaterBasinTargets(float DeltaSeconds, bool
 	}
 }
 
+void AUOUUmbrellaRainArea::ApplyRainToWaterWheelTargets(float DeltaSeconds, bool bHasRainBlocker, const FVector& RainBlockerWorldCenter, const FRotator& RainBlockerWorldRotation, const FVector& RainBlockerHalfExtent)
+{
+	bLastWaterWheelRainInputTickRan = true;
+	LastWaterWheelActorScanCount = 0;
+	LastWaterWheelComponentCount = 0;
+	LastWaterWheelValidComponentCount = 0;
+	LastWaterWheelCatchSampleCount = 0;
+	LastWaterWheelAcceptedSampleCount = 0;
+	LastWaterWheelDeliveredStrength = 0.0f;
+	LastWaterWheelSampleLocation = FVector::ZeroVector;
+	LastWaterWheelRainDebugReason = TEXT("Running");
+
+	if (!bEnableWaterWheelRainInput)
+	{
+		LastWaterWheelRainDebugReason = TEXT("Disabled");
+		return;
+	}
+
+	const float SafeDeltaSeconds = FMath::Max(0.0f, DeltaSeconds);
+	const float RainStrength = FMath::Max(0.0f, RainFillRate);
+	if (SafeDeltaSeconds <= 0.0f || RainStrength <= KINDA_SMALL_NUMBER || RainVolume == nullptr)
+	{
+		LastWaterWheelRainDebugReason = FString::Printf(
+			TEXT("Skipped: Delta %.3f Rain %.3f Volume %s"),
+			SafeDeltaSeconds,
+			RainStrength,
+			RainVolume != nullptr ? TEXT("Y") : TEXT("N"));
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	if (World == nullptr)
+	{
+		LastWaterWheelRainDebugReason = TEXT("Skipped: No World");
+		return;
+	}
+
+	const FVector RainDirection = FlowDirection == EUOURainAreaFlowDirection::Upward
+		? RainVolume->GetUpVector()
+		: -RainVolume->GetUpVector();
+	int32 RainInputDisabledComponentCount = 0;
+	int32 InactiveComponentCount = 0;
+	int32 NoOwnerComponentCount = 0;
+	int32 OtherCannotReceiveComponentCount = 0;
+
+	for (TActorIterator<AActor> ActorIt(World); ActorIt; ++ActorIt)
+	{
+		AActor* Actor = *ActorIt;
+		++LastWaterWheelActorScanCount;
+		if (!IsValid(Actor))
+		{
+			continue;
+		}
+
+		TInlineComponentArray<UUOUWaterWheelRainConditionComponent*> WaterWheelComponents(Actor);
+		LastWaterWheelComponentCount += WaterWheelComponents.Num();
+		for (UUOUWaterWheelRainConditionComponent* WaterWheel : WaterWheelComponents)
+		{
+			if (!IsValid(WaterWheel))
+			{
+				continue;
+			}
+
+			if (!WaterWheel->bRainInputEnabled)
+			{
+				++RainInputDisabledComponentCount;
+				continue;
+			}
+
+			if (!WaterWheel->IsActive())
+			{
+				++InactiveComponentCount;
+				continue;
+			}
+
+			if (WaterWheel->GetOwner() == nullptr)
+			{
+				++NoOwnerComponentCount;
+				continue;
+			}
+
+			if (!WaterWheel->CanReceiveRainInput())
+			{
+				++OtherCannotReceiveComponentCount;
+				continue;
+			}
+			++LastWaterWheelValidComponentCount;
+
+			TArray<FUOUWaterWheelRainCatchSample> CatchSamples;
+			WaterWheel->GetRainCatchSamples(CatchSamples);
+			LastWaterWheelCatchSampleCount += CatchSamples.Num();
+			for (const FUOUWaterWheelRainCatchSample& CatchSample : CatchSamples)
+			{
+				LastWaterWheelSampleLocation = CatchSample.WorldLocation;
+				const float RainScale = CalculateWaterWheelCatchRainScale(
+					CatchSample,
+					bHasRainBlocker,
+					RainBlockerWorldCenter,
+					RainBlockerWorldRotation,
+					RainBlockerHalfExtent);
+
+				if (bDrawWaterWheelRainInputDebug)
+				{
+					const FColor DebugColor =
+						CatchSample.Weight <= KINDA_SMALL_NUMBER
+							? FColor::Yellow
+							: (RainScale > KINDA_SMALL_NUMBER ? FColor::Green : FColor::Red);
+					DrawDebugSphere(
+						World,
+						CatchSample.WorldLocation,
+						FMath::Max(8.0f, CatchSample.CoverageRadius * 0.15f),
+						12,
+						DebugColor,
+						false,
+						WaterWheelRainInputDebugLifeTime,
+						0,
+						2.0f);
+					DrawDebugString(
+						World,
+						CatchSample.WorldLocation + FVector(0.0f, 0.0f, 22.0f),
+						FString::Printf(TEXT("WheelRain %.2f W %.2f"), RainScale, CatchSample.Weight),
+						nullptr,
+						DebugColor,
+						WaterWheelRainInputDebugLifeTime,
+						true,
+						0.85f);
+				}
+
+				if (CatchSample.Weight <= KINDA_SMALL_NUMBER || RainScale <= KINDA_SMALL_NUMBER)
+				{
+					continue;
+				}
+
+				FUOUWaterWheelRainInputContext InputContext;
+				InputContext.Strength = RainStrength * CatchSample.Weight * RainScale;
+				InputContext.Duration = SafeDeltaSeconds;
+				InputContext.WorldLocation = CatchSample.WorldLocation;
+				InputContext.WorldDirection = RainDirection;
+				InputContext.bHasValidWorldLocation = true;
+				InputContext.InstigatorActor = const_cast<AUOUUmbrellaRainArea*>(this);
+				WaterWheel->ReceiveRainInput(InputContext);
+				++LastWaterWheelAcceptedSampleCount;
+				LastWaterWheelDeliveredStrength += InputContext.Strength;
+			}
+		}
+	}
+
+	if (LastWaterWheelComponentCount == 0)
+	{
+		LastWaterWheelRainDebugReason = TEXT("No WaterWheel Components");
+	}
+	else if (LastWaterWheelValidComponentCount == 0)
+	{
+		LastWaterWheelRainDebugReason = FString::Printf(
+			TEXT("Cannot Receive: RainOff %d Inactive %d NoOwner %d Other %d"),
+			RainInputDisabledComponentCount,
+			InactiveComponentCount,
+			NoOwnerComponentCount,
+			OtherCannotReceiveComponentCount);
+	}
+	else if (LastWaterWheelCatchSampleCount == 0)
+	{
+		LastWaterWheelRainDebugReason = TEXT("No Catch Samples");
+	}
+	else if (LastWaterWheelAcceptedSampleCount == 0)
+	{
+		LastWaterWheelRainDebugReason = TEXT("All Samples Outside Or Blocked");
+	}
+	else
+	{
+		LastWaterWheelRainDebugReason = FString::Printf(
+			TEXT("Delivered %.2f from %d samples"),
+			LastWaterWheelDeliveredStrength,
+			LastWaterWheelAcceptedSampleCount);
+	}
+
+	if (bDrawWaterWheelRainInputDebug && RainVolume != nullptr)
+	{
+		const FColor SummaryColor = LastWaterWheelAcceptedSampleCount > 0 ? FColor::Green : FColor::Red;
+		const FVector SummaryLocation =
+			RainVolume->GetComponentLocation()
+			+ RainVolume->GetUpVector() * (RainVolume->GetScaledBoxExtent().Z + 80.0f);
+		DrawDebugString(
+			World,
+			SummaryLocation,
+			FString::Printf(
+				TEXT("WheelRain: %s\nActors %d Components %d Valid %d Samples %d Accepted %d"),
+				*LastWaterWheelRainDebugReason,
+				LastWaterWheelActorScanCount,
+				LastWaterWheelComponentCount,
+				LastWaterWheelValidComponentCount,
+				LastWaterWheelCatchSampleCount,
+				LastWaterWheelAcceptedSampleCount),
+			nullptr,
+			SummaryColor,
+			WaterWheelRainInputDebugLifeTime,
+			true,
+			0.9f);
+	}
+}
+
+float AUOUUmbrellaRainArea::CalculateWaterWheelCatchRainScale(
+	const FUOUWaterWheelRainCatchSample& CatchSample,
+	bool bHasRainBlocker,
+	const FVector& RainBlockerWorldCenter,
+	const FRotator& RainBlockerWorldRotation,
+	const FVector& RainBlockerHalfExtent) const
+{
+	if (RainVolume == nullptr)
+	{
+		return 0.0f;
+	}
+
+	const auto CanReceiveAtLocation = [this, bHasRainBlocker, &RainBlockerWorldCenter, &RainBlockerWorldRotation, &RainBlockerHalfExtent](const FVector& WorldLocation)
+	{
+		return IsWorldLocationInsideRainVolume(WorldLocation)
+			&& (!bHasRainBlocker
+				|| !IsWorldLocationBlockedByRainBlocker(
+					WorldLocation,
+					RainBlockerWorldCenter,
+					RainBlockerWorldRotation,
+					RainBlockerHalfExtent));
+	};
+
+	const bool bCanReceiveAtCenter = CanReceiveAtLocation(CatchSample.WorldLocation);
+	if (bRequireWaterWheelCatchPointCenterInsideRainVolume && !bCanReceiveAtCenter)
+	{
+		return 0.0f;
+	}
+
+	const float SafeCoverageRadius = FMath::Max(0.0f, CatchSample.CoverageRadius);
+	if (SafeCoverageRadius <= KINDA_SMALL_NUMBER)
+	{
+		return bCanReceiveAtCenter
+			? CalculateRainVolumeCenterStrength(CatchSample.WorldLocation)
+			: 0.0f;
+	}
+
+	const FVector RainDirection = FlowDirection == EUOURainAreaFlowDirection::Upward
+		? RainVolume->GetUpVector()
+		: -RainVolume->GetUpVector();
+
+	FVector BasisX = FVector::RightVector;
+	FVector BasisY = FVector::ForwardVector;
+	BuildRainSampleBasis(RainDirection, BasisX, BasisY);
+
+	struct FRainCoverageSampleOffset
+	{
+		FVector2D Offset;
+		float Weight = 1.0f;
+	};
+
+	const FRainCoverageSampleOffset SampleOffsets[] = {
+		{ FVector2D(0.0f, 0.0f), 1.5f },
+		{ FVector2D(1.0f, 0.0f), 1.0f },
+		{ FVector2D(-1.0f, 0.0f), 1.0f },
+		{ FVector2D(0.0f, 1.0f), 1.0f },
+		{ FVector2D(0.0f, -1.0f), 1.0f },
+		{ FVector2D(0.7071f, 0.7071f), 0.75f },
+		{ FVector2D(0.7071f, -0.7071f), 0.75f },
+		{ FVector2D(-0.7071f, 0.7071f), 0.75f },
+		{ FVector2D(-0.7071f, -0.7071f), 0.75f }
+	};
+
+	float WeightedRainScale = 0.0f;
+	float TotalWeight = 0.0f;
+	for (const FRainCoverageSampleOffset& SampleOffset : SampleOffsets)
+	{
+		const FVector SampleLocation =
+			CatchSample.WorldLocation
+			+ BasisX * (SampleOffset.Offset.X * SafeCoverageRadius)
+			+ BasisY * (SampleOffset.Offset.Y * SafeCoverageRadius);
+		TotalWeight += SampleOffset.Weight;
+
+		if (!CanReceiveAtLocation(SampleLocation))
+		{
+			continue;
+		}
+
+		WeightedRainScale += SampleOffset.Weight * CalculateRainVolumeCenterStrength(SampleLocation);
+	}
+
+	return TotalWeight > KINDA_SMALL_NUMBER ? WeightedRainScale / TotalWeight : 0.0f;
+}
+
+float AUOUUmbrellaRainArea::CalculateRainVolumeCenterStrength(const FVector& WorldLocation) const
+{
+	if (RainVolume == nullptr)
+	{
+		return 0.0f;
+	}
+
+	const FVector LocalLocation = RainVolume->GetComponentTransform().InverseTransformPosition(WorldLocation);
+	const FVector BoxExtent = RainVolume->GetUnscaledBoxExtent();
+	if (FMath::Abs(LocalLocation.X) > BoxExtent.X
+		|| FMath::Abs(LocalLocation.Y) > BoxExtent.Y
+		|| FMath::Abs(LocalLocation.Z) > BoxExtent.Z)
+	{
+		return 0.0f;
+	}
+
+	const float NormalizedX = BoxExtent.X > KINDA_SMALL_NUMBER
+		? FMath::Abs(LocalLocation.X) / BoxExtent.X
+		: 0.0f;
+	const float NormalizedY = BoxExtent.Y > KINDA_SMALL_NUMBER
+		? FMath::Abs(LocalLocation.Y) / BoxExtent.Y
+		: 0.0f;
+	const float EdgeAlpha = FMath::Clamp(FMath::Max(NormalizedX, NormalizedY), 0.0f, 1.0f);
+	const float CenterAlpha = 1.0f - EdgeAlpha;
+	const float SmoothCenterAlpha = CenterAlpha * CenterAlpha * (3.0f - 2.0f * CenterAlpha);
+	const float SafeExponent = FMath::Max(0.1f, WaterWheelRainCenterFalloffExponent);
+	const float CurvedCenterAlpha = FMath::Pow(SmoothCenterAlpha, SafeExponent);
+	const float SafeEdgeStrength = FMath::Clamp(WaterWheelRainEdgeStrength, 0.0f, 1.0f);
+
+	return FMath::Lerp(SafeEdgeStrength, 1.0f, CurvedCenterAlpha);
+}
+
 bool AUOUUmbrellaRainArea::DoesActorBoundsOverlapRainVolume(const AActor* Actor) const
 {
 	if (RainVolume == nullptr || !IsValid(Actor))
@@ -505,6 +847,20 @@ bool AUOUUmbrellaRainArea::DoesActorBoundsOverlapRainVolume(const AActor* Actor)
 		&& ActorBoundsInRainVolumeLocal.Max.Y >= -BoxExtent.Y
 		&& ActorBoundsInRainVolumeLocal.Min.Z <= BoxExtent.Z
 		&& ActorBoundsInRainVolumeLocal.Max.Z >= -BoxExtent.Z;
+}
+
+bool AUOUUmbrellaRainArea::IsWorldLocationInsideRainVolume(const FVector& WorldLocation) const
+{
+	if (RainVolume == nullptr)
+	{
+		return false;
+	}
+
+	const FVector LocalLocation = RainVolume->GetComponentTransform().InverseTransformPosition(WorldLocation);
+	const FVector BoxExtent = RainVolume->GetUnscaledBoxExtent();
+	return FMath::Abs(LocalLocation.X) <= BoxExtent.X
+		&& FMath::Abs(LocalLocation.Y) <= BoxExtent.Y
+		&& FMath::Abs(LocalLocation.Z) <= BoxExtent.Z;
 }
 
 bool AUOUUmbrellaRainArea::IsActorBlockedByRainBlocker(const AActor* Actor, const FVector& BlockerWorldCenter, const FRotator& BlockerWorldRotation, const FVector& BlockerHalfExtent) const
@@ -557,6 +913,31 @@ bool AUOUUmbrellaRainArea::IsActorBlockedByRainBlocker(const AActor* Actor, cons
 		&& ActorBoundsInBlockerLocal.Max.Y >= -SafeHalfExtent.Y;
 
 	return bOverlapsBlockerArea && ActorBoundsInBlockerLocal.Min.Z <= SafeHalfExtent.Z;
+}
+
+bool AUOUUmbrellaRainArea::IsWorldLocationBlockedByRainBlocker(const FVector& WorldLocation, const FVector& BlockerWorldCenter, const FRotator& BlockerWorldRotation, const FVector& BlockerHalfExtent) const
+{
+	const FVector SafeHalfExtent(
+		FMath::Max(0.0f, BlockerHalfExtent.X),
+		FMath::Max(0.0f, BlockerHalfExtent.Y),
+		FMath::Max(0.0f, BlockerHalfExtent.Z));
+	if (SafeHalfExtent.X <= KINDA_SMALL_NUMBER || SafeHalfExtent.Y <= KINDA_SMALL_NUMBER)
+	{
+		return false;
+	}
+
+	const FTransform BlockerTransform(BlockerWorldRotation, BlockerWorldCenter);
+	const FVector LocalLocation = BlockerTransform.InverseTransformPosition(WorldLocation);
+	const bool bOverlapsBlockerArea = FMath::Abs(LocalLocation.X) <= SafeHalfExtent.X
+		&& FMath::Abs(LocalLocation.Y) <= SafeHalfExtent.Y;
+	if (!bOverlapsBlockerArea)
+	{
+		return false;
+	}
+
+	return FlowDirection == EUOURainAreaFlowDirection::Upward
+		? LocalLocation.Z >= -SafeHalfExtent.Z
+		: LocalLocation.Z <= SafeHalfExtent.Z;
 }
 
 void AUOUUmbrellaRainArea::DrawRainVisualDebug() const
@@ -664,10 +1045,11 @@ void AUOUUmbrellaRainArea::ApplyPreviewSettings()
 	}
 
 	const FVector BoxExtent = RainVolume->GetUnscaledBoxExtent();
+	const FVector VolumeRelativeScale = RainVolume->GetRelativeScale3D();
 	const FVector BaseScale(
-		BoxExtent.X / 50.0f,
-		BoxExtent.Y / 50.0f,
-		BoxExtent.Z / 50.0f);
+		(BoxExtent.X / 50.0f) * VolumeRelativeScale.X,
+		(BoxExtent.Y / 50.0f) * VolumeRelativeScale.Y,
+		(BoxExtent.Z / 50.0f) * VolumeRelativeScale.Z);
 
 	// 프리뷰 메쉬는 RainVolume의 상대 위치와 회전을 그대로 따라갑니다.
 	// 스케일만 자동 맞춤 또는 수동 입력 중 하나로 결정합니다.

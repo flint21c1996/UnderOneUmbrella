@@ -92,6 +92,9 @@ public:
 	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Puzzle|Group Actor|Conditions")
 	TArray<TObjectPtr<AActor>> ConditionActors;
 
+	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Puzzle|Group Actor|Conditions", meta = (ToolTip = "특정 조건 소스 컴포넌트만 직접 지정합니다. 한 액터에 여러 조건이 있을 때 사용합니다."))
+	TArray<FComponentReference> ConditionSourceReferences;
+
 	// 조건 액터들 안의 조건 소스를 자동으로 수집할지 결정합니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Puzzle|Group Actor|Conditions")
 	bool bCollectConditionSourcesFromConditionActors = true;

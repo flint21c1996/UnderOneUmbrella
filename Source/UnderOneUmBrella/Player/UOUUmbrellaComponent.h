@@ -58,7 +58,8 @@ enum class EUOUUmbrellaPourReceiverType : uint8
 	UmbrellaWaterTarget,
 	WaterBasinTarget,
 	WaterContainer,
-	PurePourReceiver
+	PurePourReceiver,
+	WaterWheel
 };
 
 // 우산 보유 여부나 상태가 바뀌었을 때 블루프린트와 다른 시스템에 알려주는 이벤트입니다.
@@ -502,6 +503,10 @@ public:
 	// 현재 설정된 우산 비 차단 박스의 중심, 회전, 절반 크기를 계산합니다. 실제 차단 활성 여부는 IsBlockingRain()으로 따로 확인합니다.
 	UFUNCTION(BlueprintPure, Category = "Umbrella")
 	bool TryGetRainBlockerVolumeData(FVector& OutWorldCenter, FRotator& OutWorldRotation, FVector& OutHalfExtent) const;
+
+	// Gameplay rain blocker uses the owning player transform instead of the umbrella visual transform.
+	UFUNCTION(BlueprintPure, Category = "Umbrella")
+	bool TryGetGameplayRainBlockerVolumeData(FVector& OutWorldCenter, FRotator& OutWorldRotation, FVector& OutHalfExtent) const;
 
 	// 우산에 현재 저장된 물 양을 반환합니다.
 	UFUNCTION(BlueprintPure, Category = "Umbrella")

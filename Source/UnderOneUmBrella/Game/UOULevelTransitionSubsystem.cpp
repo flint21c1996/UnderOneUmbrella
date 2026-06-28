@@ -1,0 +1,812 @@
+// Copyright Epic Games, Inc. All Rights Reserved.
+
+#include "Game/UOULevelTransitionSubsystem.h"
+
+#include "Camera/PlayerCameraManager.h"
+#include "Blueprint/UserWidget.h"
+#include "Engine/GameInstance.h"
+#include "Engine/World.h"
+#include "EngineUtils.h"
+#include "GameFramework/PlayerController.h"
+#include "Kismet/GameplayStatics.h"
+#include "Game/UOULevelTransitionSettingsActor.h"
+#include "UI/UOULevelTransitionOverlayWidget.h"
+#include "UObject/SoftObjectPath.h"
+#include "UObject/UObjectGlobals.h"
+
+namespace
+{
+	constexpr float FadeOverlayTickInterval = 1.0f / 60.0f;
+	constexpr TCHAR DefaultTransitionOverlayWidgetClassPath[] = TEXT("/Game/UOU/UI/WBP_LevelTransitionOverlay.WBP_LevelTransitionOverlay_C");
+
+	FUOUTransitionMessageSettings SanitizeMessageSettings(FUOUTransitionMessageSettings Settings)
+	{
+		Settings.FontSize = FMath::Max(1, Settings.FontSize);
+		Settings.WrapTextAt = FMath::Max(100.0f, Settings.WrapTextAt);
+		Settings.ViewportZOrder = FMath::Max(0, Settings.ViewportZOrder);
+		Settings.MessageFadeInDuration = FMath::Max(0.0f, Settings.MessageFadeInDuration);
+		Settings.MessageHoldDuration = FMath::Max(0.0f, Settings.MessageHoldDuration);
+		Settings.MessageFadeOutDuration = FMath::Max(0.0f, Settings.MessageFadeOutDuration);
+		return Settings;
+	}
+
+	FUOULevelTransitionSettings SanitizeTransitionSettings(FUOULevelTransitionSettings Settings)
+	{
+		Settings.FadeOutDuration = FMath::Max(0.0f, Settings.FadeOutDuration);
+		Settings.BlackHoldDuration = FMath::Max(0.0f, Settings.BlackHoldDuration);
+		Settings.FadeInDuration = FMath::Max(0.0f, Settings.FadeInDuration);
+		Settings.FadeOutMessageSettings = SanitizeMessageSettings(Settings.FadeOutMessageSettings);
+		Settings.FadeInMessageSettings = SanitizeMessageSettings(Settings.FadeInMessageSettings);
+		return Settings;
+	}
+}
+
+void UUOULevelTransitionSubsystem::Initialize(FSubsystemCollectionBase& Collection)
+{
+	Super::Initialize(Collection);
+
+	FCoreUObjectDelegates::PostLoadMapWithWorld.AddUObject(
+		this,
+		&UUOULevelTransitionSubsystem::HandlePostLoadMapWithWorld);
+}
+
+void UUOULevelTransitionSubsystem::Deinitialize()
+{
+	FCoreUObjectDelegates::PostLoadMapWithWorld.RemoveAll(this);
+
+	if (UWorld* World = GetSubsystemWorld())
+	{
+		ClearTransitionTimers(World);
+	}
+
+	HideTransitionOverlay();
+
+	Super::Deinitialize();
+}
+
+bool UUOULevelTransitionSubsystem::RequestLevelTransition(
+	TSoftObjectPtr<UWorld> TargetLevel,
+	FUOULevelTransitionSettings Settings)
+{
+	if (bIsTransitioning)
+	{
+		return false;
+	}
+
+	if (TargetLevel.IsNull())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Level transition requested without a target level."));
+		return false;
+	}
+
+	PendingTargetType = ETransitionTargetType::SoftLevel;
+	PendingTargetLevel = TargetLevel;
+	PendingLevelName = NAME_None;
+
+	if (!BeginTransition(Settings))
+	{
+		ResetPendingTransition();
+		return false;
+	}
+
+	return true;
+}
+
+bool UUOULevelTransitionSubsystem::RequestLevelTransitionByName(
+	FName LevelName,
+	FUOULevelTransitionSettings Settings)
+{
+	if (bIsTransitioning)
+	{
+		return false;
+	}
+
+	if (LevelName.IsNone())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Level transition requested without a level name."));
+		return false;
+	}
+
+	PendingTargetType = ETransitionTargetType::LevelName;
+	PendingTargetLevel.Reset();
+	PendingLevelName = LevelName;
+
+	if (!BeginTransition(Settings))
+	{
+		ResetPendingTransition();
+		return false;
+	}
+
+	return true;
+}
+
+bool UUOULevelTransitionSubsystem::RestartCurrentLevel(FUOULevelTransitionSettings Settings)
+{
+	UWorld* World = GetSubsystemWorld();
+	if (World == nullptr)
+	{
+		return false;
+	}
+
+	const FString CurrentLevelName = UGameplayStatics::GetCurrentLevelName(World, true);
+	if (CurrentLevelName.IsEmpty())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Current level name could not be resolved for restart."));
+		return false;
+	}
+
+	return RequestLevelTransitionByName(FName(*CurrentLevelName), Settings);
+}
+
+void UUOULevelTransitionSubsystem::CancelTransition()
+{
+	UWorld* World = GetSubsystemWorld();
+	if (World != nullptr)
+	{
+		ClearTransitionTimers(World);
+
+		if (APlayerController* PlayerController = ResolvePlayerController(World))
+		{
+			if (ActiveSettings.bFadeAudio && PlayerController->PlayerCameraManager != nullptr)
+			{
+				PlayerController->PlayerCameraManager->StopCameraFade();
+			}
+		}
+
+		if (bInputLockedDuringTransition)
+		{
+			SetPlayerInputLocked(World, false);
+		}
+	}
+
+	ResetPendingTransition();
+}
+
+bool UUOULevelTransitionSubsystem::BeginTransition(FUOULevelTransitionSettings Settings)
+{
+	UWorld* World = GetSubsystemWorld();
+	if (World == nullptr)
+	{
+		return false;
+	}
+
+	ActiveSettings = SanitizeTransitionSettings(Settings);
+	if (ActiveSettings.bUseCurrentMapExitSettings)
+	{
+		ApplyCurrentMapExitSettings(World, ActiveSettings);
+	}
+	ActiveSettings = SanitizeTransitionSettings(ActiveSettings);
+	bIsTransitioning = true;
+	FadeOverlayElapsedTime = 0.0f;
+
+	if (ActiveSettings.bLockPlayerInputDuringTransition)
+	{
+		SetPlayerInputLocked(World, true);
+		bInputLockedDuringTransition = true;
+	}
+
+	ShowTransitionOverlay(World, ActiveSettings.FadeOutMessageSettings, 0.0f, 0.0f);
+
+	APlayerController* PlayerController = ResolvePlayerController(World);
+	if (ActiveSettings.bFadeAudio && PlayerController != nullptr && PlayerController->PlayerCameraManager != nullptr)
+	{
+		PlayerController->PlayerCameraManager->StartCameraFade(
+			0.0f,
+			1.0f,
+			ActiveSettings.FadeOutDuration,
+			ActiveSettings.FadeColor,
+			ActiveSettings.bFadeAudio,
+			true);
+	}
+
+	if (ActiveSettings.FadeOutDuration <= 0.0f)
+	{
+		SetTransitionBackgroundOpacity(1.0f);
+		FinishFadeOut();
+		return true;
+	}
+
+	SetTransitionBackgroundOpacity(0.0f);
+	SetTransitionMessageOpacity(0.0f);
+
+	World->GetTimerManager().SetTimer(
+		FadeOutTimerHandle,
+		this,
+		&UUOULevelTransitionSubsystem::UpdateFadeOutOverlay,
+		FadeOverlayTickInterval,
+		true);
+
+	return true;
+}
+
+void UUOULevelTransitionSubsystem::UpdateFadeOutOverlay()
+{
+	UWorld* World = GetSubsystemWorld();
+	if (World == nullptr)
+	{
+		FinishFadeOut();
+		return;
+	}
+
+	FadeOverlayElapsedTime += FadeOverlayTickInterval;
+	const float Alpha = ActiveSettings.FadeOutDuration > 0.0f
+		? FMath::Clamp(FadeOverlayElapsedTime / ActiveSettings.FadeOutDuration, 0.0f, 1.0f)
+		: 1.0f;
+	SetTransitionBackgroundOpacity(Alpha);
+
+	if (Alpha >= 1.0f)
+	{
+		World->GetTimerManager().ClearTimer(FadeOutTimerHandle);
+		FinishFadeOut();
+	}
+}
+
+void UUOULevelTransitionSubsystem::FinishFadeOut()
+{
+	SetTransitionBackgroundOpacity(1.0f);
+	SetTransitionMessageOpacity(0.0f);
+
+	UWorld* World = GetSubsystemWorld();
+	if (World != nullptr)
+	{
+		World->GetTimerManager().ClearTimer(FadeOutTimerHandle);
+	}
+
+	StartFadeOutMessageSequence();
+}
+
+void UUOULevelTransitionSubsystem::StartFadeOutMessageSequence()
+{
+	StartMessageSequence(ETransitionMessageStage::FadeOut, ActiveSettings.FadeOutMessageSettings);
+}
+
+void UUOULevelTransitionSubsystem::StartFadeInMessageSequence()
+{
+	StartMessageSequence(ETransitionMessageStage::FadeIn, ActiveSettings.FadeInMessageSettings);
+}
+
+void UUOULevelTransitionSubsystem::StartMessageSequence(
+	ETransitionMessageStage MessageStage,
+	const FUOUTransitionMessageSettings& MessageSettings)
+{
+	UWorld* World = MessageStage == ETransitionMessageStage::FadeIn
+		? FadeInWorld.Get()
+		: GetSubsystemWorld();
+	if (World == nullptr)
+	{
+		World = GetSubsystemWorld();
+	}
+
+	ActiveMessageStage = MessageStage;
+	ActiveMessageSettings = SanitizeMessageSettings(MessageSettings);
+	MessageElapsedTime = 0.0f;
+
+	if (World != nullptr)
+	{
+		World->GetTimerManager().ClearTimer(MessageTimerHandle);
+		ShowTransitionOverlay(World, ActiveMessageSettings, 1.0f, 0.0f);
+	}
+
+	SetTransitionBackgroundOpacity(1.0f);
+	SetTransitionMessageOpacity(0.0f);
+
+	if (!ActiveMessageSettings.ShouldDisplay())
+	{
+		FinishMessageSequence();
+		return;
+	}
+
+	if (ActiveMessageSettings.MessageFadeInDuration <= 0.0f)
+	{
+		SetTransitionMessageOpacity(1.0f);
+		FinishMessageFadeIn();
+		return;
+	}
+
+	if (World == nullptr)
+	{
+		FinishMessageSequence();
+		return;
+	}
+
+	World->GetTimerManager().SetTimer(
+		MessageTimerHandle,
+		this,
+		&UUOULevelTransitionSubsystem::UpdateMessageFadeIn,
+		FadeOverlayTickInterval,
+		true);
+}
+
+void UUOULevelTransitionSubsystem::UpdateMessageFadeIn()
+{
+	UWorld* World = ActiveMessageStage == ETransitionMessageStage::FadeIn
+		? FadeInWorld.Get()
+		: GetSubsystemWorld();
+	if (World == nullptr)
+	{
+		FinishMessageSequence();
+		return;
+	}
+
+	MessageElapsedTime += FadeOverlayTickInterval;
+	const float Alpha = ActiveMessageSettings.MessageFadeInDuration > 0.0f
+		? FMath::Clamp(MessageElapsedTime / ActiveMessageSettings.MessageFadeInDuration, 0.0f, 1.0f)
+		: 1.0f;
+	SetTransitionMessageOpacity(Alpha);
+
+	if (Alpha >= 1.0f)
+	{
+		World->GetTimerManager().ClearTimer(MessageTimerHandle);
+		FinishMessageFadeIn();
+	}
+}
+
+void UUOULevelTransitionSubsystem::FinishMessageFadeIn()
+{
+	SetTransitionMessageOpacity(1.0f);
+	MessageElapsedTime = 0.0f;
+
+	UWorld* World = ActiveMessageStage == ETransitionMessageStage::FadeIn
+		? FadeInWorld.Get()
+		: GetSubsystemWorld();
+	if (World == nullptr || ActiveMessageSettings.MessageHoldDuration <= 0.0f)
+	{
+		FinishMessageHold();
+		return;
+	}
+
+	World->GetTimerManager().SetTimer(
+		MessageTimerHandle,
+		this,
+		&UUOULevelTransitionSubsystem::FinishMessageHold,
+		ActiveMessageSettings.MessageHoldDuration,
+		false);
+}
+
+void UUOULevelTransitionSubsystem::FinishMessageHold()
+{
+	MessageElapsedTime = 0.0f;
+
+	if (ActiveMessageSettings.MessageFadeOutDuration <= 0.0f)
+	{
+		SetTransitionMessageOpacity(0.0f);
+		FinishMessageSequence();
+		return;
+	}
+
+	UWorld* World = ActiveMessageStage == ETransitionMessageStage::FadeIn
+		? FadeInWorld.Get()
+		: GetSubsystemWorld();
+	if (World == nullptr)
+	{
+		FinishMessageSequence();
+		return;
+	}
+
+	World->GetTimerManager().SetTimer(
+		MessageTimerHandle,
+		this,
+		&UUOULevelTransitionSubsystem::UpdateMessageFadeOut,
+		FadeOverlayTickInterval,
+		true);
+}
+
+void UUOULevelTransitionSubsystem::UpdateMessageFadeOut()
+{
+	UWorld* World = ActiveMessageStage == ETransitionMessageStage::FadeIn
+		? FadeInWorld.Get()
+		: GetSubsystemWorld();
+	if (World == nullptr)
+	{
+		FinishMessageSequence();
+		return;
+	}
+
+	MessageElapsedTime += FadeOverlayTickInterval;
+	const float Alpha = ActiveMessageSettings.MessageFadeOutDuration > 0.0f
+		? 1.0f - FMath::Clamp(MessageElapsedTime / ActiveMessageSettings.MessageFadeOutDuration, 0.0f, 1.0f)
+		: 0.0f;
+	SetTransitionMessageOpacity(Alpha);
+
+	if (Alpha <= 0.0f)
+	{
+		World->GetTimerManager().ClearTimer(MessageTimerHandle);
+		FinishMessageSequence();
+	}
+}
+
+void UUOULevelTransitionSubsystem::FinishMessageSequence()
+{
+	SetTransitionMessageOpacity(0.0f);
+
+	UWorld* World = ActiveMessageStage == ETransitionMessageStage::FadeIn
+		? FadeInWorld.Get()
+		: GetSubsystemWorld();
+	if (World != nullptr)
+	{
+		World->GetTimerManager().ClearTimer(MessageTimerHandle);
+	}
+
+	const ETransitionMessageStage FinishedStage = ActiveMessageStage;
+	ActiveMessageStage = ETransitionMessageStage::None;
+	ActiveMessageSettings = FUOUTransitionMessageSettings();
+	MessageElapsedTime = 0.0f;
+
+	switch (FinishedStage)
+	{
+	case ETransitionMessageStage::FadeOut:
+		ContinueAfterFadeOutMessageSequence();
+		break;
+	case ETransitionMessageStage::FadeIn:
+		ContinueAfterFadeInMessageSequence();
+		break;
+	case ETransitionMessageStage::None:
+	default:
+		break;
+	}
+}
+
+void UUOULevelTransitionSubsystem::ContinueAfterFadeOutMessageSequence()
+{
+	UWorld* World = GetSubsystemWorld();
+	if (World == nullptr || ActiveSettings.BlackHoldDuration <= 0.0f)
+	{
+		OpenPendingLevel();
+		return;
+	}
+
+	World->GetTimerManager().SetTimer(
+		BlackHoldTimerHandle,
+		this,
+		&UUOULevelTransitionSubsystem::OpenPendingLevel,
+		ActiveSettings.BlackHoldDuration,
+		false);
+}
+
+void UUOULevelTransitionSubsystem::ContinueAfterFadeInMessageSequence()
+{
+	UWorld* World = FadeInWorld.Get();
+	if (World == nullptr)
+	{
+		World = GetSubsystemWorld();
+	}
+
+	if (World == nullptr || ActiveSettings.FadeInDuration <= 0.0f)
+	{
+		FinishTransition();
+		return;
+	}
+
+	FadeOverlayElapsedTime = 0.0f;
+
+	World->GetTimerManager().SetTimer(
+		FadeInTimerHandle,
+		this,
+		&UUOULevelTransitionSubsystem::UpdateFadeInOverlay,
+		FadeOverlayTickInterval,
+		true);
+}
+
+void UUOULevelTransitionSubsystem::OpenPendingLevel()
+{
+	UWorld* World = GetSubsystemWorld();
+	if (World == nullptr)
+	{
+		ResetPendingTransition();
+		return;
+	}
+
+	ClearTransitionTimers(World);
+
+	const ETransitionTargetType TargetType = PendingTargetType;
+	const TSoftObjectPtr<UWorld> TargetLevel = PendingTargetLevel;
+	const FName LevelName = PendingLevelName;
+	bool bIssuedOpenLevel = false;
+	bWaitingForPostLoadFadeIn = true;
+
+	switch (TargetType)
+	{
+	case ETransitionTargetType::SoftLevel:
+		if (!TargetLevel.IsNull())
+		{
+			UGameplayStatics::OpenLevelBySoftObjectPtr(World, TargetLevel);
+			bIssuedOpenLevel = true;
+		}
+		break;
+	case ETransitionTargetType::LevelName:
+		if (!LevelName.IsNone())
+		{
+			UGameplayStatics::OpenLevel(World, LevelName);
+			bIssuedOpenLevel = true;
+		}
+		break;
+	case ETransitionTargetType::None:
+	default:
+		break;
+	}
+
+	if (!bIssuedOpenLevel)
+	{
+		FinishTransition();
+	}
+}
+
+void UUOULevelTransitionSubsystem::HandlePostLoadMapWithWorld(UWorld* LoadedWorld)
+{
+	if (!bWaitingForPostLoadFadeIn || LoadedWorld == nullptr || !LoadedWorld->IsGameWorld())
+	{
+		return;
+	}
+
+	bWaitingForPostLoadFadeIn = false;
+	FadeInWorld = LoadedWorld;
+	FadeOverlayElapsedTime = 0.0f;
+	LoadedWorld->GetTimerManager().SetTimerForNextTick(
+		FTimerDelegate::CreateUObject(this, &UUOULevelTransitionSubsystem::StartPostLoadFadeIn));
+}
+
+void UUOULevelTransitionSubsystem::StartPostLoadFadeIn()
+{
+	UWorld* World = FadeInWorld.Get();
+	if (World == nullptr)
+	{
+		World = GetSubsystemWorld();
+	}
+
+	APlayerController* PlayerController = ResolvePlayerController(World);
+	if (World == nullptr)
+	{
+		FinishTransition();
+		return;
+	}
+
+	const bool bHasLoadedMapSettings = ActiveSettings.bUseLoadedMapEnterSettings
+		&& ApplyLoadedMapEnterSettings(World, ActiveSettings);
+	if (!bHasLoadedMapSettings)
+	{
+		ActiveSettings.FadeInMessageSettings = FUOUTransitionMessageSettings();
+	}
+	ActiveSettings = SanitizeTransitionSettings(ActiveSettings);
+
+	if (ActiveSettings.bLockPlayerInputDuringTransition)
+	{
+		SetPlayerInputLocked(World, true);
+		bInputLockedDuringTransition = true;
+	}
+
+	if (PlayerController != nullptr && PlayerController->PlayerCameraManager != nullptr)
+	{
+		PlayerController->PlayerCameraManager->StopCameraFade();
+	}
+
+	ShowTransitionOverlay(World, ActiveSettings.FadeInMessageSettings, 1.0f, 0.0f);
+	StartFadeInMessageSequence();
+}
+
+void UUOULevelTransitionSubsystem::UpdateFadeInOverlay()
+{
+	UWorld* World = FadeInWorld.Get();
+	if (World == nullptr)
+	{
+		World = GetSubsystemWorld();
+	}
+
+	if (World == nullptr)
+	{
+		FinishTransition();
+		return;
+	}
+
+	FadeOverlayElapsedTime += FadeOverlayTickInterval;
+	const float Alpha = ActiveSettings.FadeInDuration > 0.0f
+		? 1.0f - FMath::Clamp(FadeOverlayElapsedTime / ActiveSettings.FadeInDuration, 0.0f, 1.0f)
+		: 0.0f;
+	SetTransitionBackgroundOpacity(Alpha);
+	SetTransitionMessageOpacity(0.0f);
+
+	if (Alpha <= 0.0f)
+	{
+		World->GetTimerManager().ClearTimer(FadeInTimerHandle);
+		FinishTransition();
+	}
+}
+
+void UUOULevelTransitionSubsystem::FinishTransition()
+{
+	UWorld* World = FadeInWorld.Get();
+	if (World == nullptr)
+	{
+		World = GetSubsystemWorld();
+	}
+
+	if (World != nullptr)
+	{
+		ClearTransitionTimers(World);
+
+		if (bInputLockedDuringTransition)
+		{
+			SetPlayerInputLocked(World, false);
+		}
+	}
+
+	ResetPendingTransition();
+}
+
+void UUOULevelTransitionSubsystem::ClearTransitionTimers(UWorld* World)
+{
+	if (World == nullptr)
+	{
+		return;
+	}
+
+	World->GetTimerManager().ClearTimer(FadeOutTimerHandle);
+	World->GetTimerManager().ClearTimer(BlackHoldTimerHandle);
+	World->GetTimerManager().ClearTimer(FadeInTimerHandle);
+	World->GetTimerManager().ClearTimer(MessageTimerHandle);
+}
+
+void UUOULevelTransitionSubsystem::ResetPendingTransition()
+{
+	HideTransitionOverlay();
+
+	PendingTargetType = ETransitionTargetType::None;
+	PendingTargetLevel.Reset();
+	PendingLevelName = NAME_None;
+	ActiveSettings = FUOULevelTransitionSettings();
+	ActiveMessageSettings = FUOUTransitionMessageSettings();
+	FadeInWorld.Reset();
+	FadeOverlayElapsedTime = 0.0f;
+	MessageElapsedTime = 0.0f;
+	ActiveMessageStage = ETransitionMessageStage::None;
+	bIsTransitioning = false;
+	bWaitingForPostLoadFadeIn = false;
+	bInputLockedDuringTransition = false;
+}
+
+void UUOULevelTransitionSubsystem::ApplyCurrentMapExitSettings(UWorld* World, FUOULevelTransitionSettings& Settings) const
+{
+	const AUOULevelTransitionSettingsActor* SettingsActor = FindLevelTransitionSettingsActor(World);
+	if (SettingsActor == nullptr)
+	{
+		return;
+	}
+
+	Settings.FadeOutDuration = SettingsActor->ExitFadeOutDuration;
+	Settings.BlackHoldDuration = SettingsActor->ExitBlackHoldDuration;
+	Settings.FadeColor = SettingsActor->FadeColor;
+	Settings.bFadeAudio = SettingsActor->bFadeAudio;
+	Settings.bLockPlayerInputDuringTransition = SettingsActor->bLockPlayerInputDuringTransition;
+	Settings.FadeOutMessageSettings = SettingsActor->ExitMessageSettings;
+}
+
+bool UUOULevelTransitionSubsystem::ApplyLoadedMapEnterSettings(UWorld* World, FUOULevelTransitionSettings& Settings) const
+{
+	const AUOULevelTransitionSettingsActor* SettingsActor = FindLevelTransitionSettingsActor(World);
+	if (SettingsActor == nullptr)
+	{
+		return false;
+	}
+
+	Settings.FadeInDuration = SettingsActor->EnterFadeInDuration;
+	Settings.FadeColor = SettingsActor->FadeColor;
+	Settings.bFadeAudio = SettingsActor->bFadeAudio;
+	Settings.bLockPlayerInputDuringTransition = SettingsActor->bLockPlayerInputDuringTransition;
+	Settings.FadeInMessageSettings = SettingsActor->EnterMessageSettings;
+	return true;
+}
+
+const AUOULevelTransitionSettingsActor* UUOULevelTransitionSubsystem::FindLevelTransitionSettingsActor(UWorld* World) const
+{
+	if (World == nullptr)
+	{
+		return nullptr;
+	}
+
+	for (TActorIterator<AUOULevelTransitionSettingsActor> It(World); It; ++It)
+	{
+		return *It;
+	}
+
+	return nullptr;
+}
+
+UUOULevelTransitionOverlayWidget* UUOULevelTransitionSubsystem::GetOrCreateTransitionOverlay(UWorld* World, const FUOUTransitionMessageSettings& MessageSettings)
+{
+	if (TransitionOverlayWidget != nullptr)
+	{
+		if (!TransitionOverlayWidget->IsInViewport())
+		{
+			TransitionOverlayWidget->AddToViewport(MessageSettings.ViewportZOrder);
+		}
+
+		return TransitionOverlayWidget;
+	}
+
+	UGameInstance* GameInstance = GetGameInstance();
+	if (GameInstance == nullptr)
+	{
+		return nullptr;
+	}
+
+	TSoftClassPtr<UUOULevelTransitionOverlayWidget> OverlayWidgetClass{ FSoftClassPath(DefaultTransitionOverlayWidgetClassPath) };
+	TSubclassOf<UUOULevelTransitionOverlayWidget> LoadedOverlayWidgetClass = OverlayWidgetClass.LoadSynchronous();
+	if (LoadedOverlayWidgetClass == nullptr)
+	{
+		LoadedOverlayWidgetClass = UUOULevelTransitionOverlayWidget::StaticClass();
+	}
+
+	TransitionOverlayWidget = CreateWidget<UUOULevelTransitionOverlayWidget>(GameInstance, LoadedOverlayWidgetClass);
+	if (TransitionOverlayWidget != nullptr)
+	{
+		TransitionOverlayWidget->AddToViewport(MessageSettings.ViewportZOrder);
+	}
+
+	return TransitionOverlayWidget;
+}
+
+void UUOULevelTransitionSubsystem::ShowTransitionOverlay(
+	UWorld* World,
+	const FUOUTransitionMessageSettings& MessageSettings,
+	float InitialBackgroundOpacity,
+	float InitialMessageOpacity)
+{
+	UUOULevelTransitionOverlayWidget* OverlayWidget = GetOrCreateTransitionOverlay(World, MessageSettings);
+	if (OverlayWidget == nullptr)
+	{
+		return;
+	}
+
+	OverlayWidget->SetTransitionBackgroundColor(ActiveSettings.FadeColor);
+	OverlayWidget->ApplyTransitionMessage(MessageSettings);
+	OverlayWidget->SetRenderOpacity(1.0f);
+	OverlayWidget->SetTransitionBackgroundOpacity(InitialBackgroundOpacity);
+	OverlayWidget->SetTransitionMessageOpacity(InitialMessageOpacity);
+}
+
+void UUOULevelTransitionSubsystem::SetTransitionBackgroundOpacity(float NewOpacity)
+{
+	if (TransitionOverlayWidget != nullptr)
+	{
+		TransitionOverlayWidget->SetTransitionBackgroundOpacity(NewOpacity);
+	}
+}
+
+void UUOULevelTransitionSubsystem::SetTransitionMessageOpacity(float NewOpacity)
+{
+	if (TransitionOverlayWidget != nullptr)
+	{
+		TransitionOverlayWidget->SetTransitionMessageOpacity(NewOpacity);
+	}
+}
+
+void UUOULevelTransitionSubsystem::HideTransitionOverlay()
+{
+	if (TransitionOverlayWidget != nullptr)
+	{
+		TransitionOverlayWidget->RemoveFromParent();
+		TransitionOverlayWidget = nullptr;
+	}
+}
+
+void UUOULevelTransitionSubsystem::SetPlayerInputLocked(UWorld* World, bool bLocked) const
+{
+	APlayerController* PlayerController = ResolvePlayerController(World);
+	if (PlayerController == nullptr)
+	{
+		return;
+	}
+
+	PlayerController->SetIgnoreMoveInput(bLocked);
+	PlayerController->SetIgnoreLookInput(bLocked);
+}
+
+APlayerController* UUOULevelTransitionSubsystem::ResolvePlayerController(UWorld* World) const
+{
+	return World != nullptr ? World->GetFirstPlayerController() : nullptr;
+}
+
+UWorld* UUOULevelTransitionSubsystem::GetSubsystemWorld() const
+{
+	const UGameInstance* GameInstance = GetGameInstance();
+	return GameInstance != nullptr ? GameInstance->GetWorld() : nullptr;
+}

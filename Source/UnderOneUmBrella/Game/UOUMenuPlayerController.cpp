@@ -3,8 +3,9 @@
 #include "UOUMenuPlayerController.h"
 
 #include "Blueprint/UserWidget.h"
+#include "Engine/GameInstance.h"
 #include "Engine/World.h"
-#include "Kismet/GameplayStatics.h"
+#include "Game/UOULevelTransitionSubsystem.h"
 #include "UObject/SoftObjectPath.h"
 
 namespace
@@ -102,7 +103,20 @@ void AUOUMenuPlayerController::ReturnToTitle()
 		UE_LOG(LogTemp, Warning, TEXT("Title level was not configured. Falling back to %s."), DefaultTitleLevelPath);
 	}
 
-	UGameplayStatics::OpenLevelBySoftObjectPtr(this, TitleLevel);
+	UGameInstance* GameInstance = GetGameInstance();
+	UUOULevelTransitionSubsystem* TransitionSubsystem = GameInstance != nullptr
+		? GameInstance->GetSubsystem<UUOULevelTransitionSubsystem>()
+		: nullptr;
+	if (TransitionSubsystem != nullptr)
+	{
+		FUOULevelTransitionSettings ReturnToTitleSettings;
+		ReturnToTitleSettings.FadeOutDuration = 0.35f;
+		ReturnToTitleSettings.BlackHoldDuration = 0.05f;
+		ReturnToTitleSettings.FadeInDuration = 0.35f;
+		ReturnToTitleSettings.bUseCurrentMapExitSettings = false;
+		ReturnToTitleSettings.bUseLoadedMapEnterSettings = false;
+		TransitionSubsystem->RequestLevelTransition(TitleLevel, ReturnToTitleSettings);
+	}
 }
 
 void AUOUMenuPlayerController::ToggleTestSetting()

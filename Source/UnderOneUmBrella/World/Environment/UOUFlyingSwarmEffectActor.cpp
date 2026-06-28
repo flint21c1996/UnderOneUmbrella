@@ -17,6 +17,8 @@
 namespace
 {
 constexpr int32 MaxPaperPlaneSwarmFlightPatternCount = 4;
+constexpr float OrbitBlendStartFlightT = 0.80f;
+constexpr float FlightHandoffBlendHalfWidth = 0.08f;
 constexpr TCHAR DefaultPaperPlaneMeshPath[] = TEXT("/Engine/BasicShapes/Cone.Cone");
 
 FName NormalizeNiagaraUserParameterName(FName ParameterName)
@@ -83,6 +85,33 @@ FVector RandomRangeVector(FRandomStream& RandomStream, const FVector& MinValue, 
 		RandomRangeFloat(RandomStream, MinValue.Y, MaxValue.Y),
 		RandomRangeFloat(RandomStream, MinValue.Z, MaxValue.Z));
 }
+
+FVector ConstrainToMinimumOrbitHeight(const FVector& Position, const FVector& Origin, const FVector& UpDirection, float MinHeight)
+{
+	const float CurrentHeight = FVector::DotProduct(Position - Origin, UpDirection);
+	const float SafeMinHeight = FMath::Max(0.0f, MinHeight);
+	if (CurrentHeight >= SafeMinHeight)
+	{
+		return Position;
+	}
+
+	return Position + UpDirection * (SafeMinHeight - CurrentHeight);
+}
+
+FVector BlendFlightHandoffPath(const FVector& OutPath, const FVector& BackPath, float PatternT, float FarReachT, float BlendWidth, float BlendT)
+{
+	if (PatternT <= FarReachT - BlendWidth)
+	{
+		return OutPath;
+	}
+
+	if (PatternT >= FarReachT + BlendWidth)
+	{
+		return BackPath;
+	}
+
+	return FMath::Lerp(OutPath, BackPath, BlendT);
+}
 }
 
 AUOUFlyingSwarmEffectActor::AUOUFlyingSwarmEffectActor()
@@ -135,9 +164,14 @@ void AUOUFlyingSwarmEffectActor::OnConstruction(const FTransform& Transform)
 	PlaneCount = FMath::Max(0, PlaneCount);
 	WrapRadius = FMath::Max(0.0f, WrapRadius);
 	WrapHeight = FMath::Max(0.0f, WrapHeight);
+	MinOrbitHeight = FMath::Max(0.0f, MinOrbitHeight);
 	OrbitSpeed = FMath::Max(0.0f, OrbitSpeed);
+	OrbitSpeedRandomMin = FMath::Max(0.001f, OrbitSpeedRandomMin);
+	OrbitSpeedRandomMax = FMath::Max(0.001f, OrbitSpeedRandomMax);
 	WobbleRightAmount = FMath::Max(0.0f, WobbleRightAmount);
 	WobbleUpAmount = FMath::Max(0.0f, WobbleUpAmount);
+	PlaneScaleRandomMin = FMath::Max(0.001f, PlaneScaleRandomMin);
+	PlaneScaleRandomMax = FMath::Max(0.001f, PlaneScaleRandomMax);
 	FlightPatternCount = FMath::Clamp(FlightPatternCount, 1, MaxPaperPlaneSwarmFlightPatternCount);
 	GlideSwoopAmount = FMath::Max(0.0f, GlideSwoopAmount);
 	GlideSwoopHeight = FMath::Max(0.0f, GlideSwoopHeight);
@@ -413,9 +447,14 @@ void AUOUFlyingSwarmEffectActor::ApplyNiagaraParameters()
 	SetFloatParameter(TimeParameterName, EffectElapsedTime);
 	SetFloatParameter(WrapRadiusParameterName, FMath::Max(0.0f, WrapRadius));
 	SetFloatParameter(WrapHeightParameterName, FMath::Max(0.0f, WrapHeight));
+	SetFloatParameter(MinOrbitHeightParameterName, FMath::Max(0.0f, MinOrbitHeight));
 	SetFloatParameter(OrbitSpeedParameterName, FMath::Max(0.0f, OrbitSpeed));
+	SetFloatParameter(OrbitSpeedRandomMinParameterName, FMath::Max(0.001f, OrbitSpeedRandomMin));
+	SetFloatParameter(OrbitSpeedRandomMaxParameterName, FMath::Max(0.001f, OrbitSpeedRandomMax));
 	SetFloatParameter(WobbleRightAmountParameterName, FMath::Max(0.0f, WobbleRightAmount));
 	SetFloatParameter(WobbleUpAmountParameterName, FMath::Max(0.0f, WobbleUpAmount));
+	SetFloatParameter(PlaneScaleRandomMinParameterName, FMath::Max(0.001f, PlaneScaleRandomMin));
+	SetFloatParameter(PlaneScaleRandomMaxParameterName, FMath::Max(0.001f, PlaneScaleRandomMax));
 	SetIntParameter(FlightPatternCountParameterName, FMath::Clamp(FlightPatternCount, 1, MaxPaperPlaneSwarmFlightPatternCount));
 	SetFloatParameter(GlideSwoopAmountParameterName, FMath::Max(0.0f, GlideSwoopAmount));
 	SetFloatParameter(GlideSwoopHeightParameterName, FMath::Max(0.0f, GlideSwoopHeight));
@@ -535,6 +574,10 @@ FUOUPaperPlaneSwarmRandomRanges AUOUFlyingSwarmEffectActor::BuildRandomRanges() 
 {
 	FUOUPaperPlaneSwarmRandomRanges RandomRanges;
 	RandomRanges.FlightPatternCount = FMath::Clamp(FlightPatternCount, 1, MaxPaperPlaneSwarmFlightPatternCount);
+	RandomRanges.OrbitSpeedRandomMin = FMath::Max(0.001f, OrbitSpeedRandomMin);
+	RandomRanges.OrbitSpeedRandomMax = FMath::Max(0.001f, OrbitSpeedRandomMax);
+	RandomRanges.ScaleRandomMin = FMath::Max(0.001f, PlaneScaleRandomMin);
+	RandomRanges.ScaleRandomMax = FMath::Max(0.001f, PlaneScaleRandomMax);
 	RandomRanges.FarPointMin = FarPointMin;
 	RandomRanges.FarPointMax = FarPointMax;
 	return RandomRanges;
@@ -553,6 +596,7 @@ FUOUPaperPlaneSwarmMotionInput AUOUFlyingSwarmEffectActor::BuildMotionInput(floa
 	MotionInput.Time = EffectElapsedTime;
 	MotionInput.WrapRadius = FMath::Max(0.0f, WrapRadius);
 	MotionInput.WrapHeight = FMath::Max(0.0f, WrapHeight);
+	MotionInput.MinOrbitHeight = FMath::Max(0.0f, MinOrbitHeight);
 	MotionInput.OrbitSpeed = FMath::Max(0.0f, OrbitSpeed);
 	MotionInput.WobbleRightAmount = FMath::Max(0.0f, WobbleRightAmount);
 	MotionInput.WobbleUpAmount = FMath::Max(0.0f, WobbleUpAmount);
@@ -837,9 +881,16 @@ FUOUPaperPlaneSwarmMotionResult AUOUFlyingSwarmEffectActor::SolvePaperPlaneSwarm
 {
 	FUOUPaperPlaneSwarmMotionResult Result;
 
-	const float RawFlightT = FMath::Clamp(MotionInput.FlightAlpha * FMath::Max(ParticleRandom.SwoopSpeed, 0.001f) - ParticleRandom.RandomDelay, 0.0f, 1.0f);
-	const float RawWrapT = FMath::Clamp(MotionInput.WrapAlpha - ParticleRandom.RandomDelay, 0.0f, 1.0f);
-	Result.FlightT = SmoothStep01(RawFlightT);
+	const float ParticleDelay = FMath::Clamp(ParticleRandom.RandomDelay, 0.0f, 0.95f);
+	const float SafeSwoopSpeed = FMath::Max(ParticleRandom.SwoopSpeed, 0.001f);
+	const float FlightArrivalAlpha = FMath::Clamp(1.0f / SafeSwoopSpeed, 0.55f, 1.0f);
+	const float FlightDurationAlpha = FMath::Max(FlightArrivalAlpha - ParticleDelay, 0.001f);
+	const float WrapDelayDuration = FMath::Max(1.0f - ParticleDelay, 0.001f);
+	const float RawFlightT = FMath::Clamp((MotionInput.FlightAlpha - ParticleDelay) / FlightDurationAlpha, 0.0f, 1.0f);
+	const float DelayedWrapT = FMath::Clamp((MotionInput.WrapAlpha - ParticleDelay) / WrapDelayDuration, 0.0f, 1.0f);
+	const float FlightDrivenWrapT = FMath::Clamp((RawFlightT - OrbitBlendStartFlightT) / FMath::Max(1.0f - OrbitBlendStartFlightT, 0.001f), 0.0f, 1.0f);
+	const float RawWrapT = FMath::Max(DelayedWrapT, FlightDrivenWrapT);
+	Result.FlightT = RawFlightT;
 	Result.WrapT = SmoothStep01(RawWrapT);
 	Result.Radius = FMath::Max(MotionInput.WrapRadius + ParticleRandom.RandomRadius, 50.0f);
 	const int32 ActivePatternCount = FMath::Clamp(MotionInput.FlightPatternCount, 1, MaxPaperPlaneSwarmFlightPatternCount);
@@ -861,18 +912,24 @@ FUOUPaperPlaneSwarmMotionResult AUOUFlyingSwarmEffectActor::SolvePaperPlaneSwarm
 	const FVector EntryDirection = GetSafeDirection(
 		OrbitForward * PhaseCos
 		+ OrbitRight * PhaseSin * PatternCos
-		+ OrbitUp * PatternSin * 0.65f,
+		+ OrbitUp * FMath::Max(0.0f, PatternSin) * 0.65f,
 		OrbitForward);
 	Result.PreWrapPosition = MotionInput.TargetPosition
 		+ EntryDirection * Result.Radius
 		+ OrbitUp * ParticleRandom.RandomHeight;
+	Result.PreWrapPosition = ConstrainToMinimumOrbitHeight(
+		Result.PreWrapPosition,
+		MotionInput.TargetPosition,
+		OrbitUp,
+		MotionInput.MinOrbitHeight);
 	Result.FarPoint = ParticleRandom.FarPoint;
 
 	const float PatternT = Result.FlightT;
 	const float FarReachT = FMath::Clamp(MotionInput.FarReachAlpha, 0.05f, 0.95f);
-	const float ToFarT = SmoothStep01(PatternT / FarReachT);
-	const float ToTargetT = SmoothStep01((PatternT - FarReachT) / FMath::Max(1.0f - FarReachT, 0.001f));
-	const bool bUseOutPath = PatternT < FarReachT;
+	const float ToFarT = FMath::Clamp(PatternT / FarReachT, 0.0f, 1.0f);
+	const float ToTargetT = FMath::Clamp((PatternT - FarReachT) / FMath::Max(1.0f - FarReachT, 0.001f), 0.0f, 1.0f);
+	const float HandoffBlendWidth = FMath::Min(FlightHandoffBlendHalfWidth, FMath::Min(FarReachT, 1.0f - FarReachT) * 0.5f);
+	const float HandoffBlendT = SmoothStep01((PatternT - (FarReachT - HandoffBlendWidth)) / FMath::Max(HandoffBlendWidth * 2.0f, 0.001f));
 
 	const FVector ToFarVector = Result.FarPoint - MotionInput.StartPosition;
 	const FVector FromFarVector = Result.PreWrapPosition - Result.FarPoint;
@@ -891,11 +948,6 @@ FUOUPaperPlaneSwarmMotionResult AUOUFlyingSwarmEffectActor::SolvePaperPlaneSwarm
 	const float BoomerangSideAmount = MotionInput.GlideSideAmount * ParticleRandom.SwoopSideAmount;
 	const float OvershootDistance = FMath::Max(MotionInput.GlideOvershootAmount, MotionInput.GlideSwoopAmount * 0.35f) * ParticleRandom.SwoopAmount;
 
-	auto SelectPath = [bUseOutPath](const FVector& OutPath, const FVector& BackPath)
-	{
-		return bUseOutPath ? OutPath : BackPath;
-	};
-
 	switch (static_cast<EUOUPaperPlaneSwarmFlightPattern>(Result.PatternIndex))
 	{
 	case EUOUPaperPlaneSwarmFlightPattern::DiveAndRise:
@@ -907,9 +959,13 @@ FUOUPaperPlaneSwarmMotionResult AUOUFlyingSwarmEffectActor::SolvePaperPlaneSwarm
 			+ FromFarDirection * FromFarDistance * 0.40f
 			- FarSideDirection * BoomerangSideAmount * 0.15f
 			+ OrbitUp * BoomerangHeight * 0.75f;
-		Result.BezierPosition = SelectPath(
+		Result.BezierPosition = BlendFlightHandoffPath(
 			SolveQuadraticBezier(MotionInput.StartPosition, Result.ControlPointA, Result.FarPoint, ToFarT),
-			SolveQuadraticBezier(Result.FarPoint, Result.ControlPointB, Result.PreWrapPosition, ToTargetT));
+			SolveQuadraticBezier(Result.FarPoint, Result.ControlPointB, Result.PreWrapPosition, ToTargetT),
+			PatternT,
+			FarReachT,
+			HandoffBlendWidth,
+			HandoffBlendT);
 		break;
 
 	case EUOUPaperPlaneSwarmFlightPattern::SCurve:
@@ -921,9 +977,13 @@ FUOUPaperPlaneSwarmMotionResult AUOUFlyingSwarmEffectActor::SolvePaperPlaneSwarm
 			+ FromFarDirection * FromFarDistance * 0.48f
 			- OutSideDirection * BoomerangSideAmount * 1.10f
 			+ OrbitUp * BoomerangHeight * 0.20f;
-		Result.BezierPosition = SelectPath(
+		Result.BezierPosition = BlendFlightHandoffPath(
 			SolveQuadraticBezier(MotionInput.StartPosition, Result.ControlPointA, Result.FarPoint, ToFarT),
-			SolveQuadraticBezier(Result.FarPoint, Result.ControlPointB, Result.PreWrapPosition, ToTargetT));
+			SolveQuadraticBezier(Result.FarPoint, Result.ControlPointB, Result.PreWrapPosition, ToTargetT),
+			PatternT,
+			FarReachT,
+			HandoffBlendWidth,
+			HandoffBlendT);
 		Result.BezierPosition += FarSideDirection
 			* FMath::Sin(PatternT * UE_TWO_PI + ParticleRandom.PatternPhase)
 			* FMath::Sin(PatternT * UE_PI)
@@ -944,9 +1004,13 @@ FUOUPaperPlaneSwarmMotionResult AUOUFlyingSwarmEffectActor::SolvePaperPlaneSwarm
 			+ FromFarDirection * FromFarDistance * 0.42f
 			- FarSideDirection * BoomerangSideAmount * 0.55f
 			+ OrbitUp * BoomerangHeight * 0.25f;
-		Result.BezierPosition = SelectPath(
+		Result.BezierPosition = BlendFlightHandoffPath(
 			SolveQuadraticBezier(MotionInput.StartPosition, Result.ControlPointA, Result.OvershootPosition, ToFarT),
-			SolveQuadraticBezier(Result.OvershootPosition, Result.ControlPointB, Result.PreWrapPosition, ToTargetT));
+			SolveQuadraticBezier(Result.OvershootPosition, Result.ControlPointB, Result.PreWrapPosition, ToTargetT),
+			PatternT,
+			FarReachT,
+			HandoffBlendWidth,
+			HandoffBlendT);
 		break;
 
 	case EUOUPaperPlaneSwarmFlightPattern::WideGlide:
@@ -959,9 +1023,13 @@ FUOUPaperPlaneSwarmMotionResult AUOUFlyingSwarmEffectActor::SolvePaperPlaneSwarm
 			+ FromFarDirection * FromFarDistance * 0.45f
 			- FarSideDirection * BoomerangSideAmount * 0.30f
 			+ OrbitUp * BoomerangHeight * 0.20f;
-		Result.BezierPosition = SelectPath(
+		Result.BezierPosition = BlendFlightHandoffPath(
 			SolveQuadraticBezier(MotionInput.StartPosition, Result.ControlPointA, Result.FarPoint, ToFarT),
-			SolveQuadraticBezier(Result.FarPoint, Result.ControlPointB, Result.PreWrapPosition, ToTargetT));
+			SolveQuadraticBezier(Result.FarPoint, Result.ControlPointB, Result.PreWrapPosition, ToTargetT),
+			PatternT,
+			FarReachT,
+			HandoffBlendWidth,
+			HandoffBlendT);
 		break;
 	}
 
@@ -980,21 +1048,25 @@ FUOUPaperPlaneSwarmMotionResult AUOUFlyingSwarmEffectActor::SolvePaperPlaneSwarm
 		* WobbleFade;
 	Result.PathPosition = Result.BezierPosition + WobbleOffset;
 
-	const float OrbitAngle = MotionInput.Time * MotionInput.OrbitSpeed * ParticleRandom.RandomSpeed + ParticleRandom.RandomPhase;
+	const float OrbitAngle = MotionInput.Time * MotionInput.OrbitSpeed * FMath::Max(0.001f, ParticleRandom.OrbitSpeedRandom) + ParticleRandom.RandomPhase;
 	float OrbitSin = 0.0f;
 	float OrbitCos = 1.0f;
 	FMath::SinCos(&OrbitSin, &OrbitCos, OrbitAngle);
-	const float TiltAmount = PatternSin * 0.85f;
-	float TiltSin = 0.0f;
-	float TiltCos = 1.0f;
-	FMath::SinCos(&TiltSin, &TiltCos, TiltAmount);
-	const FVector SphereDirection = GetSafeDirection(
+	const FVector OrbitPlanarDirection = GetSafeDirection(
 		OrbitForward * OrbitCos
-		+ OrbitRight * OrbitSin * TiltCos
-		+ OrbitUp * FMath::Sin(OrbitAngle + ParticleRandom.PatternPhase) * TiltSin,
+		+ OrbitRight * OrbitSin,
 		OrbitForward);
-	const float BreathRadius = Result.Radius + FMath::Sin(OrbitAngle * 1.37f + ParticleRandom.PatternPhase) * MotionInput.WrapHeight * 0.25f;
-	Result.WrapPosition = MotionInput.TargetPosition + SphereDirection * BreathRadius;
+	const float StaticOrbitHeight = FMath::Max(0.0f, ParticleRandom.RandomHeight)
+		+ MotionInput.WrapHeight * FMath::Max(0.0f, PatternSin) * 0.25f;
+	const float OrbitHeight = FMath::Max(MotionInput.MinOrbitHeight, StaticOrbitHeight);
+	Result.WrapPosition = MotionInput.TargetPosition
+		+ OrbitPlanarDirection * Result.Radius
+		+ OrbitUp * OrbitHeight;
+	Result.WrapPosition = ConstrainToMinimumOrbitHeight(
+		Result.WrapPosition,
+		MotionInput.TargetPosition,
+		OrbitUp,
+		MotionInput.MinOrbitHeight);
 
 	Result.Position = FMath::Lerp(Result.PathPosition, Result.WrapPosition, Result.WrapT);
 	Result.Velocity = (Result.Position - MotionInput.PreviousPosition) / FMath::Max(MotionInput.DeltaTime, 0.0001f);
@@ -1020,6 +1092,7 @@ FUOUPaperPlaneSwarmParticleRandom AUOUFlyingSwarmEffectActor::MakePaperPlaneSwar
 	ParticleRandom.RandomPhase = RandomRangeFloat(RandomStream, RandomRanges.RandomPhaseMin, RandomRanges.RandomPhaseMax);
 	ParticleRandom.RandomDelay = RandomRangeFloat(RandomStream, RandomRanges.RandomDelayMin, RandomRanges.RandomDelayMax);
 	ParticleRandom.RandomSpeed = RandomRangeFloat(RandomStream, RandomRanges.RandomSpeedMin, RandomRanges.RandomSpeedMax);
+	ParticleRandom.OrbitSpeedRandom = RandomRangeFloat(RandomStream, RandomRanges.OrbitSpeedRandomMin, RandomRanges.OrbitSpeedRandomMax);
 	ParticleRandom.RandomRadius = RandomRangeFloat(RandomStream, RandomRanges.RandomRadiusMin, RandomRanges.RandomRadiusMax);
 	ParticleRandom.RandomHeight = RandomRangeFloat(RandomStream, RandomRanges.RandomHeightMin, RandomRanges.RandomHeightMax);
 	ParticleRandom.SideOffset = RandomRangeFloat(RandomStream, RandomRanges.SideOffsetMin, RandomRanges.SideOffsetMax);
