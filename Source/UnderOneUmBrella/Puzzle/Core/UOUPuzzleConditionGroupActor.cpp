@@ -184,6 +184,18 @@ void AUOUPuzzleConditionGroupActor::ResolveConditionSourcesFromActors()
 	// 각 액터 안의 조건 소스 컴포넌트를 꺼내 하나의 그룹으로 묶습니다.
 	ResolvedConditionSources.Reset();
 
+	for (const FComponentReference& ConditionSourceReference : ConditionSourceReferences)
+	{
+		if (UActorComponent* Component = ConditionSourceReference.GetComponent(this))
+		{
+			if (UUOUPuzzleConditionSourceComponent* ConditionSource =
+				Cast<UUOUPuzzleConditionSourceComponent>(Component))
+			{
+				ResolvedConditionSources.AddUnique(ConditionSource);
+			}
+		}
+	}
+
 	if (!bCollectConditionSourcesFromConditionActors)
 	{
 		return;
