@@ -9,7 +9,6 @@
 class UBoxComponent;
 class UMaterialInterface;
 class UNiagaraComponent;
-class UNiagaraSystem;
 class USceneComponent;
 class UStaticMeshComponent;
 class UUOUEnvironmentVisualComponent;
@@ -61,16 +60,8 @@ protected:
 	TObjectPtr<UStaticMeshComponent> PreviewVolumeMesh = nullptr;
 
 	// Niagara 파라미터와 비 차단 데이터를 실제 이펙트 컴포넌트에 전달하는 내부 비주얼 컴포넌트입니다.
-	UPROPERTY(VisibleDefaultsOnly, BlueprintReadOnly, Category = "Rain|Internal")
+	UPROPERTY(VisibleDefaultsOnly, BlueprintReadOnly, Category = "Rain|Internal", meta = (DisplayName = "Rain VFX Controller"))
 	TObjectPtr<UUOUEnvironmentVisualComponent> RainVisual = nullptr;
-
-	// 주 비 파티클입니다. 일반적으로 빗줄기 Niagara를 연결합니다.
-	UPROPERTY(VisibleDefaultsOnly, BlueprintReadOnly, Category = "Rain|Internal")
-	TObjectPtr<UNiagaraComponent> PrimaryRainEffect = nullptr;
-
-	// 보조 비 파티클입니다. 일반적으로 바닥 물튀김 Niagara를 연결합니다.
-	UPROPERTY(VisibleDefaultsOnly, BlueprintReadOnly, Category = "Rain|Internal")
-	TObjectPtr<UNiagaraComponent> SecondaryRainEffect = nullptr;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Preview")
 	// 에디터 안에서 프리뷰 메쉬를 보여줄지 정한 값입니다.
@@ -108,29 +99,27 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Falling", meta = (DisplayName = "Flow Direction", DisplayPriority = "0", ToolTip = "Downward는 기존처럼 위에서 아래로 떨어지고, Upward는 같은 영역/Blocker 흐름을 사용하면서 아래에서 위로 뿜어집니다."))
 	EUOURainAreaFlowDirection FlowDirection = EUOURainAreaFlowDirection::Downward;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Falling", meta = (DisplayName = "Rain System", DisplayPriority = "1", ToolTip = "비 내림 표현에 사용할 Niagara System입니다."))
-	TObjectPtr<UNiagaraSystem> RainEffectSystem = nullptr;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Falling", meta = (DisplayName = "Ground Splash System", DisplayPriority = "2", ToolTip = "바닥 물 튐 표현에 사용할 Niagara System입니다."))
-	TObjectPtr<UNiagaraSystem> GroundSplashEffectSystem = nullptr;
-
-	// 에디터에서 RainEffectSystem을 직접 골랐는지 기록해서, Construction 중 자동 덮어쓰기를 막습니다.
-	UPROPERTY()
-	bool bHasExplicitRainEffectSystemSelection = false;
-
-	// 에디터에서 GroundSplashEffectSystem을 직접 골랐는지 기록해서, Construction 중 자동 덮어쓰기를 막습니다.
-	UPROPERTY()
-	bool bHasExplicitGroundSplashEffectSystemSelection = false;
-
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Falling", meta = (DisplayName = "Enable", DisplayPriority = "10", ToolTip = "이 RainArea의 비 내림 Niagara 표시 여부입니다. 게임플레이 RainFillRate와는 별도입니다."))
 	// RainVisual 컴포넌트에도 비주얼 세팅을 함께 밀어넣을지 정한 값입니다.
 	bool bEnableRainVisuals = true;
+
+	// 켜져 있으면 RainVisual 아래에 추가한 Niagara 컴포넌트를 모두 비 효과로 자동 등록합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Falling", meta = (DisplayName = "Auto Collect Niagara Children", DisplayPriority = "10"))
+	bool bAutoCollectNiagaraChildren = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Falling", meta = (DisplayName = "Intensity", ClampMin = "0.0", ClampMax = "1.0", EditCondition = "bEnableRainVisuals", DisplayPriority = "11", ToolTip = "비 내림 표현의 전체 강도입니다. 0이면 보이지 않고, 1이면 RainSpawnRate가 그대로 적용됩니다."))
 	float RainVisualIntensity = 1.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Falling", meta = (DisplayName = "Rate", ClampMin = "0.0", UIMin = "0.0", UIMax = "6000.0", EditCondition = "bEnableRainVisuals", DisplayPriority = "12", ToolTip = "비 Niagara가 초당 생성할 기본 파티클 수입니다. 최종 Spawn Rate는 RainSpawnRate와 RainVisualIntensity를 곱한 값입니다."))
 	float RainSpawnRate = 2400.0f;
+
+	// RainVolume의 XY 면적이 커질수록 SpawnRate도 같은 비율로 보정합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Falling", meta = (DisplayName = "Scale Rate By Area", DisplayPriority = "12", EditCondition = "bEnableRainVisuals"))
+	bool bScaleRainSpawnRateByArea = true;
+
+	// SpawnRate가 1배로 적용되는 기준 면적입니다. 기본값은 500 x 500 RainVolume 기준입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Falling", meta = (DisplayName = "Rate Reference Area", ClampMin = "1.0", UIMin = "1.0", DisplayPriority = "12", EditCondition = "bEnableRainVisuals && bScaleRainSpawnRateByArea"))
+	float RainSpawnRateReferenceArea = 250000.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Falling", meta = (DisplayName = "Speed", ClampMin = "-3000.0", ClampMax = "3000.0", UIMin = "-3000.0", UIMax = "3000.0", EditCondition = "bEnableRainVisuals", DisplayPriority = "13", ToolTip = "Niagara에 전달할 수직 속도입니다. Downward는 음수로, Upward는 양수로 자동 보정됩니다."))
 	float RainFallSpeed = -900.0f;
@@ -153,8 +142,8 @@ protected:
 
 	// 현재 프리뷰 메쉬의 표시 상태와 스케일을 설정값에 맞게 다시 맞춥니다.
 	void ApplyPreviewSettings();
-	// RainArea에서 선택한 Niagara System을 내부 RainVisual 컴포넌트에 전달합니다.
-	void ApplyEnvironmentVisualEffectSystems();
+	// RainVisual 아래에 배치한 Niagara 컴포넌트들을 수집해 n개짜리 비 효과로 등록합니다.
+	void RefreshRainVisualEffectComponents();
 	// RainVisual 컴포넌트에 강도와 표시 옵션 같은 공통 설정을 넘깁니다.
 	void ApplyEnvironmentVisualSettings();
 	// 비 영역 크기에 맞춰 RainVisual 컴포넌트의 배치 범위를 갱신합니다.
@@ -171,4 +160,5 @@ protected:
 	bool IsActorBlockedByRainBlocker(const AActor* Actor, const FVector& BlockerWorldCenter, const FRotator& BlockerWorldRotation, const FVector& BlockerHalfExtent) const;
 	// 비주얼 디버그 박스를 그려서 환경 연동 범위를 확인합니다.
 	void DrawRainVisualDebug() const;
+	float GetAreaScaledRainSpawnRate() const;
 };

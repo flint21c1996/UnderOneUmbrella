@@ -39,16 +39,6 @@ AUOUUmbrellaRainArea::AUOUUmbrellaRainArea()
 	RainVisual = CreateDefaultSubobject<UUOUEnvironmentVisualComponent>(TEXT("RainVisual"));
 	RainVisual->SetupAttachment(RootScene);
 
-	PrimaryRainEffect = CreateDefaultSubobject<UNiagaraComponent>(TEXT("PrimaryRainEffect"));
-	PrimaryRainEffect->SetupAttachment(RainVisual);
-	PrimaryRainEffect->SetAutoActivate(false);
-
-	SecondaryRainEffect = CreateDefaultSubobject<UNiagaraComponent>(TEXT("SecondaryRainEffect"));
-	SecondaryRainEffect->SetupAttachment(RainVisual);
-	SecondaryRainEffect->SetAutoActivate(false);
-
-	RainVisual->SetEffectComponents(PrimaryRainEffect, SecondaryRainEffect);
-
 	RainVolume = CreateDefaultSubobject<UBoxComponent>(TEXT("RainVolume"));
 	RainVolume->SetupAttachment(RootScene);
 	RainVolume->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
@@ -83,6 +73,44 @@ bool AUOUUmbrellaRainArea::IsWaterBasinRainFillEnabled() const
 	return bEnableWaterBasinRainFill;
 }
 
+void AUOUUmbrellaRainArea::RefreshRainVisualEffectComponents()
+{
+	if (RainVisual == nullptr)
+	{
+		return;
+	}
+
+	TArray<UNiagaraComponent*> RainEffectComponents;
+	if (bAutoCollectNiagaraChildren)
+	{
+		TArray<USceneComponent*> RainVisualChildren;
+		RainVisual->GetChildrenComponents(true, RainVisualChildren);
+		for (USceneComponent* ChildComponent : RainVisualChildren)
+		{
+			if (UNiagaraComponent* NiagaraChild = Cast<UNiagaraComponent>(ChildComponent))
+			{
+				NiagaraChild->SetAutoActivate(false);
+				RainEffectComponents.AddUnique(NiagaraChild);
+			}
+		}
+
+		TArray<UNiagaraComponent*> OwnedNiagaraComponents;
+		GetComponents<UNiagaraComponent>(OwnedNiagaraComponents);
+		for (UNiagaraComponent* NiagaraComponent : OwnedNiagaraComponents)
+		{
+			if (NiagaraComponent == nullptr)
+			{
+				continue;
+			}
+
+			NiagaraComponent->SetAutoActivate(false);
+			RainEffectComponents.AddUnique(NiagaraComponent);
+		}
+	}
+
+	RainVisual->SetEffectComponentList(RainEffectComponents);
+}
+
 void AUOUUmbrellaRainArea::BeginPlay()
 {
 	Super::BeginPlay();
@@ -94,10 +122,7 @@ void AUOUUmbrellaRainArea::BeginPlay()
 
 	// BeginPlay 시점에 Construction에서 정리된 값이 있어도 한 번 더 내부 컴포넌트와 동기화합니다.
 	// 블루프린트 인스턴스에서 바뀐 Niagara 참조나 프리뷰 설정을 런타임 상태에 맞추기 위한 단계입니다.
-	if (RainVisual != nullptr)
-	{
-		RainVisual->SetEffectComponents(PrimaryRainEffect, SecondaryRainEffect);
-	}
+	RefreshRainVisualEffectComponents();
 	ApplyPreviewSettings();
 	ApplyEnvironmentVisualSettings();
 }
@@ -111,10 +136,7 @@ void AUOUUmbrellaRainArea::OnConstruction(const FTransform& Transform)
 	RainSpawnRate = FMath::Max(0.0f, RainSpawnRate);
 	GroundSplashIntensityMultiplier = FMath::Max(0.0f, GroundSplashIntensityMultiplier);
 	RainFallSpeed = NormalizeRainAreaFlowSpeed(RainFallSpeed, FlowDirection);
-	if (RainVisual != nullptr)
-	{
-		RainVisual->SetEffectComponents(PrimaryRainEffect, SecondaryRainEffect);
-	}
+	RefreshRainVisualEffectComponents();
 	ApplyPreviewSettings();
 	ApplyEnvironmentVisualSettings();
 }
@@ -126,9 +148,6 @@ void AUOUUmbrellaRainArea::PostEditChangeProperty(FPropertyChangedEvent& Propert
 		? PropertyChangedEvent.Property->GetFName()
 		: NAME_None;
 
-	bHasExplicitRainEffectSystemSelection |= PropertyName == GET_MEMBER_NAME_CHECKED(AUOUUmbrellaRainArea, RainEffectSystem);
-	bHasExplicitGroundSplashEffectSystemSelection |= PropertyName == GET_MEMBER_NAME_CHECKED(AUOUUmbrellaRainArea, GroundSplashEffectSystem);
-
 	Super::PostEditChangeProperty(PropertyChangedEvent);
 
 	RainFillRate = FMath::Max(0.0f, RainFillRate);
@@ -136,10 +155,7 @@ void AUOUUmbrellaRainArea::PostEditChangeProperty(FPropertyChangedEvent& Propert
 	RainSpawnRate = FMath::Max(0.0f, RainSpawnRate);
 	GroundSplashIntensityMultiplier = FMath::Max(0.0f, GroundSplashIntensityMultiplier);
 	RainFallSpeed = NormalizeRainAreaFlowSpeed(RainFallSpeed, FlowDirection);
-	if (RainVisual != nullptr)
-	{
-		RainVisual->SetEffectComponents(PrimaryRainEffect, SecondaryRainEffect);
-	}
+	RefreshRainVisualEffectComponents();
 	ApplyPreviewSettings();
 	ApplyEnvironmentVisualSettings();
 }
@@ -148,10 +164,7 @@ void AUOUUmbrellaRainArea::PostEditMove(bool bFinished)
 {
 	Super::PostEditMove(bFinished);
 
-	if (RainVisual != nullptr)
-	{
-		RainVisual->SetEffectComponents(PrimaryRainEffect, SecondaryRainEffect);
-	}
+	RefreshRainVisualEffectComponents();
 	ApplyPreviewSettings();
 	ApplyEnvironmentVisualSettings();
 }
@@ -238,39 +251,8 @@ void AUOUUmbrellaRainArea::Tick(float DeltaSeconds)
 		bHasVisualRainBlocker ? RainVisualIntensity : 0.0f);
 }
 
-void AUOUUmbrellaRainArea::ApplyEnvironmentVisualEffectSystems()
-{
-	// 에디터에서 사용자가 직접 고른 Niagara System은 유지하고,
-	// 명시 선택이 없을 때만 현재 NiagaraComponent의 기본 에셋을 초기값으로 가져옵니다.
-	if (RainEffectSystem != nullptr)
-	{
-		bHasExplicitRainEffectSystemSelection = true;
-	}
-	else if (!bHasExplicitRainEffectSystemSelection && PrimaryRainEffect != nullptr)
-	{
-		RainEffectSystem = PrimaryRainEffect->GetAsset();
-		bHasExplicitRainEffectSystemSelection = RainEffectSystem != nullptr;
-	}
-
-	if (GroundSplashEffectSystem != nullptr)
-	{
-		bHasExplicitGroundSplashEffectSystemSelection = true;
-	}
-	else if (!bHasExplicitGroundSplashEffectSystemSelection && SecondaryRainEffect != nullptr)
-	{
-		GroundSplashEffectSystem = SecondaryRainEffect->GetAsset();
-		bHasExplicitGroundSplashEffectSystemSelection = GroundSplashEffectSystem != nullptr;
-	}
-
-	if (RainVisual != nullptr)
-	{
-		RainVisual->SetEffectSystems(RainEffectSystem, GroundSplashEffectSystem);
-	}
-}
-
 void AUOUUmbrellaRainArea::ApplyEnvironmentVisualSettings()
 {
-	ApplyEnvironmentVisualEffectSystems();
 	ApplyEnvironmentVisualGeometry();
 	ApplyEnvironmentVisualState();
 }
@@ -327,10 +309,51 @@ void AUOUUmbrellaRainArea::ApplyEnvironmentVisualState()
 	// 비주얼 파라미터는 EnvironmentVisualComponent를 통해 Niagara에 전달됩니다.
 	// 게임플레이 비 노출량인 RainFillRate와 시각적 SpawnRate는 서로 별개 값입니다.
 	RainFallSpeed = NormalizeRainAreaFlowSpeed(RainFallSpeed, FlowDirection);
-	RainVisual->SetRainSpawnRate(RainSpawnRate);
+	const float FinalRainSpawnRate = GetAreaScaledRainSpawnRate();
+	static double LastRainSpawnRateLogTime = -1000.0;
+	const UWorld* World = GetWorld();
+	const double CurrentTime = World != nullptr ? World->GetTimeSeconds() : FPlatformTime::Seconds();
+	if (CurrentTime - LastRainSpawnRateLogTime >= 0.5)
+	{
+		LastRainSpawnRateLogTime = CurrentTime;
+		const FVector BoxExtent = RainVolume != nullptr ? RainVolume->GetScaledBoxExtent() : FVector::ZeroVector;
+		const float AreaWidth = FMath::Max(0.0f, BoxExtent.X * 2.0f);
+		const float AreaDepth = FMath::Max(0.0f, BoxExtent.Y * 2.0f);
+		const float AreaSize = AreaWidth * AreaDepth;
+		UE_LOG(
+			LogTemp,
+			Warning,
+			TEXT("[RainSpawnRate][RainArea] Area=%s ScaleByArea=%s Base=%.1f Final=%.1f Size=(%.1f %.1f) Area=%.1f RefArea=%.1f"),
+			*GetName(),
+			bScaleRainSpawnRateByArea ? TEXT("true") : TEXT("false"),
+			RainSpawnRate,
+			FinalRainSpawnRate,
+			AreaWidth,
+			AreaDepth,
+			AreaSize,
+			RainSpawnRateReferenceArea);
+	}
+	RainVisual->SetRainSpawnRate(FinalRainSpawnRate);
 	RainVisual->SetRainFallSpeed(RainFallSpeed);
 	RainVisual->SetVisualIntensities(PrimaryIntensity, SecondaryIntensity);
 	RainVisual->SetVisualsEnabled(bEnableRainVisuals);
+}
+
+float AUOUUmbrellaRainArea::GetAreaScaledRainSpawnRate() const
+{
+	const float BaseSpawnRate = FMath::Max(0.0f, RainSpawnRate);
+	if (!bScaleRainSpawnRateByArea || RainVolume == nullptr)
+	{
+		return BaseSpawnRate;
+	}
+
+	const FVector BoxExtent = RainVolume->GetScaledBoxExtent();
+	const float AreaWidth = FMath::Max(0.0f, BoxExtent.X * 2.0f);
+	const float AreaDepth = FMath::Max(0.0f, BoxExtent.Y * 2.0f);
+	const float AreaSize = AreaWidth * AreaDepth;
+	const float SafeReferenceArea = FMath::Max(1.0f, RainSpawnRateReferenceArea);
+
+	return BaseSpawnRate * FMath::Max(0.0f, AreaSize / SafeReferenceArea);
 }
 
 void AUOUUmbrellaRainArea::ApplyEnvironmentVisualRainBlocker(bool bIsBlocking, const FVector& BlockerWorldCenter, const FVector& BlockerHalfExtent, float BlockerIntensity)
@@ -346,6 +369,30 @@ void AUOUUmbrellaRainArea::ApplyEnvironmentVisualRainBlocker(bool bIsBlocking, c
 		: FVector::ZeroVector;
 
 	// 우산 차단 위치는 RainVisual 로컬 좌표로 넘겨야 Niagara 모듈의 Kill/Mask 계산과 좌표계가 맞습니다.
+	static double LastRainAreaBlockerLogTime = -1000.0;
+	const UWorld* World = GetWorld();
+	const double CurrentTime = World != nullptr ? World->GetTimeSeconds() : FPlatformTime::Seconds();
+	if (CurrentTime - LastRainAreaBlockerLogTime >= 0.5)
+	{
+		LastRainAreaBlockerLogTime = CurrentTime;
+		UE_LOG(
+			LogTemp,
+			Warning,
+			TEXT("[RainBlocker][RainArea->RainVisual] Area=%s Blocking=%s WorldCenter=(%.1f %.1f %.1f) VisualLocal=(%.1f %.1f %.1f) Half=(%.1f %.1f %.1f) Intensity=%.2f"),
+			*GetName(),
+			bIsBlocking ? TEXT("true") : TEXT("false"),
+			BlockerWorldCenter.X,
+			BlockerWorldCenter.Y,
+			BlockerWorldCenter.Z,
+			BlockerLocalCenter.X,
+			BlockerLocalCenter.Y,
+			BlockerLocalCenter.Z,
+			BlockerHalfExtent.X,
+			BlockerHalfExtent.Y,
+			BlockerHalfExtent.Z,
+			BlockerIntensity);
+	}
+
 	RainVisual->SetRainBlockerData(
 		bIsBlocking,
 		BlockerLocalCenter,

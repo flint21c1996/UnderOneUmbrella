@@ -11,7 +11,7 @@ class UNiagaraSystem;
 
 // RainArea처럼 주요 액터가 가진 영역과 상태를 Niagara 이펙트에 전달하는 시각 전용 컴포넌트입니다.
 // 컴포넌트 자신의 Transform을 기준으로 Primary/Secondary Niagara 위치와 User Parameter를 갱신합니다.
-UCLASS(ClassGroup=(Environment), meta=(BlueprintSpawnableComponent, DisplayName="UOU Environment Visual Component"))
+UCLASS(ClassGroup=(Environment), meta=(BlueprintSpawnableComponent, DisplayName="UOU Rain VFX Controller"))
 class UUOUEnvironmentVisualComponent : public USceneComponent
 {
 	GENERATED_BODY()
@@ -22,6 +22,11 @@ public:
 	// 이 컴포넌트가 제어할 Niagara 컴포넌트들을 지정합니다. 보통 소유 Actor 생성자에서 자식 컴포넌트를 연결합니다.
 	UFUNCTION(BlueprintCallable, Category = "Environment Visual")
 	void SetEffectComponents(UNiagaraComponent* NewPrimaryEffect, UNiagaraComponent* NewSecondaryEffect);
+
+	// RainVisual 아래에 추가된 Niagara 컴포넌트들을 한 번에 등록합니다.
+	// Primary/Secondary는 기존 호환용으로 남기고, 이 목록에 들어온 컴포넌트까지 함께 갱신합니다.
+	UFUNCTION(BlueprintCallable, Category = "Environment Visual")
+	void SetEffectComponentList(const TArray<UNiagaraComponent*>& NewEffectComponents);
 
 	UFUNCTION(BlueprintCallable, Category = "Environment Visual")
 	void SetEffectSystems(UNiagaraSystem* NewPrimarySystem, UNiagaraSystem* NewSecondarySystem);
@@ -67,6 +72,9 @@ protected:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UNiagaraComponent> SecondaryEffect = nullptr;
+
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UNiagaraComponent>> EffectComponents;
 
 	UPROPERTY()
 	bool bEnableVisuals = true;
@@ -132,6 +140,12 @@ protected:
 	FName PrimaryAreaSizeParameterName = TEXT("RainAreaSize");
 
 	UPROPERTY()
+	FName RainSpawnAreaSizeParameterName = TEXT("RainSpawnAreaSize");
+
+	UPROPERTY()
+	FName RainSpawnLocalPositionParameterName = TEXT("RainSpawnLocalPosition");
+
+	UPROPERTY()
 	FName RainKillVolumeCenterParameterName = TEXT("RainKillVolumeCenter");
 
 	UPROPERTY()
@@ -139,6 +153,9 @@ protected:
 
 	UPROPERTY()
 	FName SecondaryAreaSizeParameterName = TEXT("GroundSplashAreaSize");
+
+	UPROPERTY()
+	FName GroundSplashLocalPositionParameterName = TEXT("GroundSplashLocalPosition");
 
 	UPROPERTY()
 	FName PrimaryIntensityParameterName = TEXT("RainIntensity");
@@ -178,4 +195,5 @@ protected:
 	bool CanApplyNiagaraState() const;
 	UNiagaraComponent* GetPrimaryEffectComponent() const;
 	UNiagaraComponent* GetSecondaryEffectComponent() const;
+	void GatherRegisteredEffectComponents(TArray<UNiagaraComponent*>& OutEffects) const;
 };
