@@ -62,7 +62,8 @@ enum class EUOUUmbrellaPourReceiverType : uint8
 	UmbrellaWaterTarget,
 	WaterBasinTarget,
 	WaterContainer,
-	PurePourReceiver
+	PurePourReceiver,
+	WaterWheel
 };
 
 // 우산 보유 여부나 상태가 바뀌었을 때 블루프린트와 다른 시스템에 알려주는 이벤트입니다.

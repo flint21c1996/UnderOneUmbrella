@@ -29,7 +29,9 @@ public class UnderOneUmBrella : ModuleRules
 		PrivateDependencyModuleNames.AddRange(new string[]
 		{
 			"RenderCore",
-			"RHI"
+			"RHI",
+			"Slate",
+			"SlateCore"
 		});
 
 		if (Target.bBuildEditor)

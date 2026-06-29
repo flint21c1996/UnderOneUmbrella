@@ -8,6 +8,7 @@
 #include "NiagaraComponent.h"
 #include "NiagaraFunctionLibrary.h"
 #include "Player/UOUWaterContainerComponent.h"
+#include "Puzzle/Water/UOUWaterWheelRainConditionComponent.h"
 #include "UObject/ConstructorHelpers.h"
 #include "UObject/UObjectIterator.h"
 #include "World/Pour/UOUPourReceiverComponent.h"
@@ -429,6 +430,25 @@ bool AUOUPourDropActor::TryDeliverWater(AActor* HitActor, const FVector& ImpactL
 				PourContext.InstigatorActor = SourceInstigatorActor;
 				PourReceiver->ReceivePourInput(PourContext);
 				OutReceiverType = EUOUPourDropReceiverType::PurePourReceiver;
+				return true;
+			}
+		}
+
+		if (UUOUWaterWheelRainConditionComponent* WaterWheelCondition = FindComponentOnActorOrParent<UUOUWaterWheelRainConditionComponent>(HitActor, ReceiverOwner))
+		{
+			if (WaterWheelCondition->CanReceivePouredWaterInput())
+			{
+				FUOUWaterWheelRainInputContext WaterWheelContext;
+				WaterWheelContext.Strength = CurrentDuration > KINDA_SMALL_NUMBER
+					? CurrentVolume / CurrentDuration
+					: CurrentVolume;
+				WaterWheelContext.Duration = CurrentDuration;
+				WaterWheelContext.WorldDirection = CurrentWorldDirection;
+				WaterWheelContext.WorldLocation = ImpactLocation;
+				WaterWheelContext.bHasValidWorldLocation = true;
+				WaterWheelContext.InstigatorActor = SourceInstigatorActor;
+				WaterWheelCondition->ReceivePouredWaterInput(WaterWheelContext);
+				OutReceiverType = EUOUPourDropReceiverType::WaterWheel;
 				return true;
 			}
 		}

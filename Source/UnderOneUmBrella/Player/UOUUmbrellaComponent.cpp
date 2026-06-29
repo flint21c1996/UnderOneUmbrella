@@ -42,6 +42,8 @@ const TCHAR* GetPourReceiverTypeText(EUOUUmbrellaPourReceiverType ReceiverType)
 		return TEXT("WaterBasinTarget");
 	case EUOUUmbrellaPourReceiverType::WaterContainer:
 		return TEXT("WaterContainer");
+	case EUOUUmbrellaPourReceiverType::WaterWheel:
+		return TEXT("WaterWheel");
 	case EUOUUmbrellaPourReceiverType::None:
 	default:
 		return TEXT("None");
@@ -60,6 +62,8 @@ EUOUUmbrellaPourReceiverType ConvertPourDropReceiverType(EUOUPourDropReceiverTyp
 		return EUOUUmbrellaPourReceiverType::WaterBasinTarget;
 	case EUOUPourDropReceiverType::WaterContainer:
 		return EUOUUmbrellaPourReceiverType::WaterContainer;
+	case EUOUPourDropReceiverType::WaterWheel:
+		return EUOUUmbrellaPourReceiverType::WaterWheel;
 	case EUOUPourDropReceiverType::None:
 	default:
 		return EUOUUmbrellaPourReceiverType::None;

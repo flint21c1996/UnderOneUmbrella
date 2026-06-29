@@ -15,7 +15,8 @@ enum class EUOUPourDropReceiverType : uint8
 	PurePourReceiver,
 	UmbrellaWaterTarget,
 	WaterBasinTarget,
-	WaterContainer
+	WaterContainer,
+	WaterWheel
 };
 
 USTRUCT(BlueprintType)
