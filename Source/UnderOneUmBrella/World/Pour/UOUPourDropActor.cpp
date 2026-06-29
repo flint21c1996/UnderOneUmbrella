@@ -4,6 +4,8 @@
 
 #include "Components/SphereComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Debug/UOUDebugSubsystem.h"
+#include "DrawDebugHelpers.h"
 #include "GameFramework/ProjectileMovementComponent.h"
 #include "NiagaraComponent.h"
 #include "NiagaraFunctionLibrary.h"
@@ -139,6 +141,8 @@ void AUOUPourDropActor::BeginPlay()
 void AUOUPourDropActor::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+
+	DrawDebugCollisionRadius();
 
 	if (bHasDeliveredWater || CurrentVolume <= 0.0f)
 	{
@@ -290,6 +294,7 @@ void AUOUPourDropActor::ApplyContextVisualSettings(const FUOUPourDropVisualSetti
 	VisualMeshRelativeOffset = VisualSettings.VisualMeshRelativeOffset;
 	VisualMeshRelativeRotation = VisualSettings.VisualMeshRelativeRotation;
 	bShowDebugVisualMesh = VisualSettings.bShowDebugVisualMesh;
+	bDrawDebugCollisionRadius = VisualSettings.bDrawDebugCollisionRadius;
 
 	bActivateTrailEffect = VisualSettings.bActivateTrailEffect;
 
@@ -367,6 +372,35 @@ void AUOUPourDropActor::IgnoreSourceActor()
 	{
 		CollisionComponent->IgnoreActorWhenMoving(SourceInstigatorActor, true);
 	}
+}
+
+void AUOUPourDropActor::DrawDebugCollisionRadius() const
+{
+	if (!bDrawDebugCollisionRadius
+		|| CollisionComponent == nullptr
+		|| !UUOUDebugSubsystem::IsDebugWorldDrawEnabled(this, EUOUDebugCategory::Player))
+	{
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	if (World == nullptr)
+	{
+		return;
+	}
+
+	const float DebugRadius = FMath::Max(1.0f, CollisionComponent->GetScaledSphereRadius());
+	const FColor DebugColor = bHasDeliveredWater ? FColor::Green : FColor::Cyan;
+	DrawDebugSphere(
+		World,
+		CollisionComponent->GetComponentLocation(),
+		DebugRadius,
+		24,
+		DebugColor,
+		false,
+		0.0f,
+		0,
+		1.5f);
 }
 
 void AUOUPourDropActor::HandleImpact(const FHitResult& ImpactResult, AActor* OtherActor, bool bIsBlockingImpact)
