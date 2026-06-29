@@ -17,33 +17,36 @@
 
 namespace
 {
-	AActor* ResolveAttachParentActor(AActor* Actor)
+	AActor* ResolveParentActor(AActor* Actor)
 	{
-		return IsValid(Actor) ? Actor->GetAttachParentActor() : nullptr;
+		if (!IsValid(Actor))
+		{
+			return nullptr;
+		}
+
+		if (AActor* AttachParentActor = Actor->GetAttachParentActor())
+		{
+			return AttachParentActor;
+		}
+
+		AActor* ParentActor = Actor->GetParentActor();
+		return ParentActor != Actor ? ParentActor : nullptr;
 	}
 
 	template<typename ComponentType>
 	ComponentType* FindComponentOnActorOrParent(AActor* Actor, AActor*& OutOwnerActor)
 	{
 		OutOwnerActor = nullptr;
-		if (!IsValid(Actor))
+		AActor* CurrentActor = Actor;
+		while (IsValid(CurrentActor))
 		{
-			return nullptr;
-		}
-
-		if (ComponentType* Component = Actor->FindComponentByClass<ComponentType>())
-		{
-			OutOwnerActor = Actor;
-			return Component;
-		}
-
-		if (AActor* ParentActor = ResolveAttachParentActor(Actor))
-		{
-			if (ComponentType* ParentComponent = ParentActor->FindComponentByClass<ComponentType>())
+			if (ComponentType* Component = CurrentActor->FindComponentByClass<ComponentType>())
 			{
-				OutOwnerActor = ParentActor;
-				return ParentComponent;
+				OutOwnerActor = CurrentActor;
+				return Component;
 			}
+
+			CurrentActor = ResolveParentActor(CurrentActor);
 		}
 
 		return nullptr;
@@ -56,7 +59,7 @@ namespace
 			return WaterTarget;
 		}
 
-		return Cast<AUOUUmbrellaWaterTarget>(ResolveAttachParentActor(Actor));
+		return Cast<AUOUUmbrellaWaterTarget>(ResolveParentActor(Actor));
 	}
 }
 
@@ -414,26 +417,12 @@ bool AUOUPourDropActor::TryDeliverWater(AActor* HitActor, const FVector& ImpactL
 		return false;
 	}
 
+	const FVector DeliveryWorldDirection = ProjectileMovement != nullptr && !ProjectileMovement->Velocity.IsNearlyZero()
+		? ProjectileMovement->Velocity.GetSafeNormal()
+		: CurrentWorldDirection;
 	AActor* ReceiverOwner = nullptr;
 	if (IsValid(HitActor))
 	{
-		if (UUOUPourReceiverComponent* PourReceiver = FindComponentOnActorOrParent<UUOUPourReceiverComponent>(HitActor, ReceiverOwner))
-		{
-			if (PourReceiver->CanReceivePour())
-			{
-				FUOUPourInputContext PourContext;
-				PourContext.Volume = CurrentVolume;
-				PourContext.Duration = CurrentDuration;
-				PourContext.WorldDirection = CurrentWorldDirection;
-				PourContext.WorldLocation = ImpactLocation;
-				PourContext.bHasValidWorldLocation = true;
-				PourContext.InstigatorActor = SourceInstigatorActor;
-				PourReceiver->ReceivePourInput(PourContext);
-				OutReceiverType = EUOUPourDropReceiverType::PurePourReceiver;
-				return true;
-			}
-		}
-
 		if (UUOUWaterWheelRainConditionComponent* WaterWheelCondition = FindComponentOnActorOrParent<UUOUWaterWheelRainConditionComponent>(HitActor, ReceiverOwner))
 		{
 			if (WaterWheelCondition->CanReceivePouredWaterInput())
@@ -443,12 +432,29 @@ bool AUOUPourDropActor::TryDeliverWater(AActor* HitActor, const FVector& ImpactL
 					? CurrentVolume / CurrentDuration
 					: CurrentVolume;
 				WaterWheelContext.Duration = CurrentDuration;
-				WaterWheelContext.WorldDirection = CurrentWorldDirection;
+				WaterWheelContext.WorldDirection = DeliveryWorldDirection;
 				WaterWheelContext.WorldLocation = ImpactLocation;
 				WaterWheelContext.bHasValidWorldLocation = true;
 				WaterWheelContext.InstigatorActor = SourceInstigatorActor;
 				WaterWheelCondition->ReceivePouredWaterInput(WaterWheelContext);
 				OutReceiverType = EUOUPourDropReceiverType::WaterWheel;
+				return true;
+			}
+		}
+
+		if (UUOUPourReceiverComponent* PourReceiver = FindComponentOnActorOrParent<UUOUPourReceiverComponent>(HitActor, ReceiverOwner))
+		{
+			if (PourReceiver->CanReceivePour())
+			{
+				FUOUPourInputContext PourContext;
+				PourContext.Volume = CurrentVolume;
+				PourContext.Duration = CurrentDuration;
+				PourContext.WorldDirection = DeliveryWorldDirection;
+				PourContext.WorldLocation = ImpactLocation;
+				PourContext.bHasValidWorldLocation = true;
+				PourContext.InstigatorActor = SourceInstigatorActor;
+				PourReceiver->ReceivePourInput(PourContext);
+				OutReceiverType = EUOUPourDropReceiverType::PurePourReceiver;
 				return true;
 			}
 		}
@@ -466,7 +472,7 @@ bool AUOUPourDropActor::TryDeliverWater(AActor* HitActor, const FVector& ImpactL
 			InputContext.Volume = CurrentVolume;
 			InputContext.Duration = CurrentDuration;
 			InputContext.Source = EUOUWaterBasinInputSource::PlayerPour;
-			InputContext.WorldDirection = CurrentWorldDirection;
+			InputContext.WorldDirection = DeliveryWorldDirection;
 			InputContext.WorldLocation = ImpactLocation;
 			InputContext.bHasValidWorldLocation = WaterBasinTarget->IsWorldLocationInsideBasin(ImpactLocation);
 			InputContext.InstigatorActor = SourceInstigatorActor;
