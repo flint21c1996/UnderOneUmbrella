@@ -8,6 +8,8 @@
 #include "Debug/UOUDebugSubsystem.h"
 #include "DrawDebugHelpers.h"
 #include "GameFramework/Actor.h"
+#include "NiagaraComponent.h"
+#include "NiagaraFunctionLibrary.h"
 #include "UObject/UObjectIterator.h"
 
 bool UUOUWaterBasinTargetComponent::bRuntimeDebugOverlayEnabled = false;
@@ -82,6 +84,7 @@ void UUOUWaterBasinTargetComponent::TickComponent(float DeltaTime, ELevelTick Ti
 	}
 
 	ApplyPassiveDrain(DeltaTime);
+	UpdatePlayerPourWaterVisualRipple(DeltaTime);
 	DrawRuntimeDebug();
 }
 
@@ -194,6 +197,7 @@ void UUOUWaterBasinTargetComponent::ReceiveWaterInput(const FUOUWaterBasinInputC
 	SanitizedInputContext.WorldDirection = SanitizedInputContext.WorldDirection.GetSafeNormal();
 
 	NotifyWaterInputReceived(SanitizedInputContext);
+	HandlePlayerPourImpactVisuals(SanitizedInputContext);
 
 	const float Volume = SanitizedInputContext.Volume;
 	const float Duration = SanitizedInputContext.Duration;
@@ -906,6 +910,182 @@ void UUOUWaterBasinTargetComponent::NotifyWaterInputReceived(const FUOUWaterBasi
 				&& Target->IsWorldLocationInsideBasin(InputContext.WorldLocation);
 			Target->OnWaterInputReceived.Broadcast(Target, TargetInputContext);
 		}
+	}
+}
+
+void UUOUWaterBasinTargetComponent::HandlePlayerPourImpactVisuals(const FUOUWaterBasinInputContext& InputContext)
+{
+	if (InputContext.Source != EUOUWaterBasinInputSource::PlayerPour)
+	{
+		return;
+	}
+
+	if (!InputContext.bImpactSplashHandledBySource && bSpawnPlayerPourImpactSplash && PlayerPourImpactSplashEffect)
+	{
+		UWorld* World = GetWorld();
+		const float CurrentTime = World != nullptr ? World->GetTimeSeconds() : 0.0f;
+		const float SplashCooldown = FMath::Max(PlayerPourImpactSplashCooldown, 0.0f);
+		const bool bCanSpawnSplash = World != nullptr
+			&& (SplashCooldown <= KINDA_SMALL_NUMBER || CurrentTime - LastPlayerPourImpactSplashTime >= SplashCooldown);
+		if (bCanSpawnSplash)
+		{
+			FVector ImpactLocation = ResolvePlayerPourImpactLocation(InputContext);
+			const float SurfaceZAfterInput = EstimatePlayerPourSurfaceWorldZAfterInput(InputContext);
+			const float SplashSurfaceZ = FMath::Max(WaterSurfaceWorldZ, SurfaceZAfterInput) + PlayerPourImpactSplashSurfaceOffset;
+			if (FMath::IsFinite(SplashSurfaceZ))
+			{
+				ImpactLocation.Z = FMath::Max(ImpactLocation.Z, SplashSurfaceZ);
+			}
+
+			const FVector RawImpactNormal = -InputContext.WorldDirection;
+			const FVector ImpactNormal = RawImpactNormal.IsNearlyZero()
+				? FVector::UpVector
+				: RawImpactNormal.GetSafeNormal();
+			UNiagaraComponent* SplashComponent = UNiagaraFunctionLibrary::SpawnSystemAtLocation(
+				World,
+				PlayerPourImpactSplashEffect,
+				ImpactLocation,
+				ImpactNormal.Rotation(),
+				FVector(FMath::Max(PlayerPourImpactSplashScale, 0.0f)));
+			if (SplashComponent)
+			{
+				SplashComponent->SetAutoDestroy(true);
+				SplashComponent->OnSystemFinished.AddDynamic(this, &UUOUWaterBasinTargetComponent::HandlePlayerPourImpactSplashFinished);
+			}
+			LastPlayerPourImpactSplashTime = CurrentTime;
+		}
+	}
+
+	if (bAnimateWaterVisualOnPlayerPour
+		&& PlayerPourWaterVisualRippleDuration > KINDA_SMALL_NUMBER
+		&& PlayerPourWaterVisualRippleHeight > 0.0f)
+	{
+		ActivePlayerPourWaterVisualRippleTime = ActivePlayerPourWaterVisualRippleTime <= 0.0f
+			? PlayerPourWaterVisualRippleDuration
+			: FMath::Max(ActivePlayerPourWaterVisualRippleTime, PlayerPourWaterVisualRippleDuration * 0.5f);
+	}
+}
+
+void UUOUWaterBasinTargetComponent::HandlePlayerPourImpactSplashFinished(UNiagaraComponent* FinishedComponent)
+{
+	if (!IsValid(FinishedComponent))
+	{
+		return;
+	}
+
+	FinishedComponent->OnSystemFinished.RemoveAll(this);
+	FinishedComponent->DestroyComponent();
+}
+
+void UUOUWaterBasinTargetComponent::UpdatePlayerPourWaterVisualRipple(float DeltaTime)
+{
+	if (ActivePlayerPourWaterVisualRippleTime <= 0.0f)
+	{
+		return;
+	}
+
+	const float RippleDuration = FMath::Max(PlayerPourWaterVisualRippleDuration, KINDA_SMALL_NUMBER);
+	ActivePlayerPourWaterVisualRippleTime = FMath::Max(ActivePlayerPourWaterVisualRippleTime - DeltaTime, 0.0f);
+
+	// Reset to the current water-state transform first so the ripple offset never accumulates.
+	UpdateWaterVisual();
+	if (ActivePlayerPourWaterVisualRippleTime <= 0.0f)
+	{
+		return;
+	}
+
+	ResolveWaterVisualComponent();
+	if (!WaterVisualComponent)
+	{
+		return;
+	}
+
+	const float RippleAlpha = 1.0f - (ActivePlayerPourWaterVisualRippleTime / RippleDuration);
+	const float RippleOffsetZ = FMath::Sin(RippleAlpha * PI) * PlayerPourWaterVisualRippleHeight;
+	WaterVisualComponent->AddWorldOffset(FVector(0.0f, 0.0f, RippleOffsetZ), false);
+}
+
+FVector UUOUWaterBasinTargetComponent::ResolvePlayerPourImpactLocation(const FUOUWaterBasinInputContext& InputContext) const
+{
+	if (InputContext.bHasValidWorldLocation && IsFiniteVector(InputContext.WorldLocation))
+	{
+		return InputContext.WorldLocation;
+	}
+
+	FVector ImpactLocation = GetDebugCenterWorld();
+	const float SurfaceZ = CurrentWaterDepth > KINDA_SMALL_NUMBER
+		? WaterSurfaceWorldZ
+		: GetBottomWorldZ();
+	if (FMath::IsFinite(SurfaceZ))
+	{
+		ImpactLocation.Z = SurfaceZ;
+	}
+	return ImpactLocation;
+}
+
+float UUOUWaterBasinTargetComponent::EstimatePlayerPourSurfaceWorldZAfterInput(const FUOUWaterBasinInputContext& InputContext) const
+{
+	const float Duration = FMath::Max(InputContext.Duration, 0.0f);
+	const bool bApplyToConnectedGroup = InputContext.bApplyToConnectedGroup;
+
+	if (bApplyToConnectedGroup)
+	{
+		TArray<UUOUWaterBasinTargetComponent*> Group;
+		GetConnectedGroup(Group);
+		const FUOUWaterBasinGroupDebugData GroupData = BuildGroupDebugData(Group);
+		if (GroupData.TotalCapacity <= KINDA_SMALL_NUMBER)
+		{
+			return GroupData.SurfaceWorldZ;
+		}
+
+		switch (PouredWaterFillMode)
+		{
+		case EUOUWaterBasinPouredWaterFillMode::Volume:
+			return SolveSurfaceWorldZForVolume(Group, GroupData.TotalVolume + FMath::Max(InputContext.Volume, 0.0f));
+
+		case EUOUWaterBasinPouredWaterFillMode::FillRatio:
+		{
+			const float RatioDelta = FMath::Max(PouredWaterFillRatioPerSecond, 0.0f) * Duration;
+			const float NewFillRatio = FMath::Clamp(GroupData.FillRatio + RatioDelta, 0.0f, 1.0f);
+			return SolveSurfaceWorldZForVolume(Group, GroupData.TotalCapacity * NewFillRatio);
+		}
+
+		case EUOUWaterBasinPouredWaterFillMode::WaterDepth:
+		{
+			const float SurfaceDeltaWorld = FMath::Max(PouredWaterDepthPerSecond, 0.0f) * Duration * FMath::Max(WorldUnitsPerTile, MinWorldUnitsPerTile);
+			return GroupData.SurfaceWorldZ + SurfaceDeltaWorld;
+		}
+
+		case EUOUWaterBasinPouredWaterFillMode::SurfaceWorldZ:
+			return GroupData.SurfaceWorldZ + FMath::Max(PouredWaterSurfaceWorldZPerSecond, 0.0f) * Duration;
+
+		default:
+			return GroupData.SurfaceWorldZ;
+		}
+	}
+
+	switch (PouredWaterFillMode)
+	{
+	case EUOUWaterBasinPouredWaterFillMode::Volume:
+		return GetBottomWorldZ()
+			+ (FMath::Clamp(CurrentWaterVolume + FMath::Max(InputContext.Volume, 0.0f), 0.0f, GetCapacity()) / GetSurfaceArea())
+			* FMath::Max(WorldUnitsPerTile, MinWorldUnitsPerTile);
+
+	case EUOUWaterBasinPouredWaterFillMode::FillRatio:
+	{
+		const float RatioDelta = FMath::Max(PouredWaterFillRatioPerSecond, 0.0f) * Duration;
+		const float NewFillRatio = FMath::Clamp(CurrentFillRatio + RatioDelta, 0.0f, 1.0f);
+		return GetBottomWorldZ() + (NewFillRatio * GetMaxWaterHeight() * FMath::Max(WorldUnitsPerTile, MinWorldUnitsPerTile));
+	}
+
+	case EUOUWaterBasinPouredWaterFillMode::WaterDepth:
+		return WaterSurfaceWorldZ + FMath::Max(PouredWaterDepthPerSecond, 0.0f) * Duration * FMath::Max(WorldUnitsPerTile, MinWorldUnitsPerTile);
+
+	case EUOUWaterBasinPouredWaterFillMode::SurfaceWorldZ:
+		return WaterSurfaceWorldZ + FMath::Max(PouredWaterSurfaceWorldZPerSecond, 0.0f) * Duration;
+
+	default:
+		return WaterSurfaceWorldZ;
 	}
 }
 

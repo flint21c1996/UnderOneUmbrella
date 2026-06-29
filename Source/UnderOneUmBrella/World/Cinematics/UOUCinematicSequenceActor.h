@@ -9,6 +9,7 @@
 
 class ALevelSequenceActor;
 class APlayerController;
+class UUOUPlayerInteractionExecutorComponent;
 class ULevelSequencePlayer;
 class USceneComponent;
 
@@ -68,6 +69,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Cinematic|Playback", meta = (EditCondition = "bUseCinematicMode", ToolTip = "시네마틱 재생 중 플레이어 Pawn을 숨깁니다."))
 	bool bHidePlayerDuringPlayback = false;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Cinematic|Playback", meta = (ToolTip = "시네마틱 재생 중 UOU 캐릭터 입력 게이트를 통해 플레이어 조작을 막습니다."))
+	bool bBlockPlayerInputDuringPlayback = true;
+
 	UPROPERTY(BlueprintAssignable, Category = "Cinematic|Events")
 	FUOUCinematicSequenceEvent OnCinematicStarted;
 
@@ -110,6 +114,9 @@ protected:
 	UPROPERTY(Transient)
 	TObjectPtr<AActor> PreviousViewTarget = nullptr;
 
+	UPROPERTY(Transient)
+	TObjectPtr<UUOUPlayerInteractionExecutorComponent> LockedInputExecutorComponent = nullptr;
+
 	UFUNCTION()
 	void HandleSequenceFinished();
 
@@ -121,6 +128,8 @@ protected:
 	void EnterCinematicState(APlayerController* PlayerController);
 	void ExitCinematicState(APlayerController* PlayerController);
 	void RestoreViewTarget(APlayerController* PlayerController);
+	void RequestPlayerInputBlock(APlayerController* PlayerController);
+	void ReleasePlayerInputBlock();
 	void FinishCinematic(bool bNaturalFinish);
 	void RewindSequencePlayer(ULevelSequencePlayer* SequencePlayer) const;
 };
