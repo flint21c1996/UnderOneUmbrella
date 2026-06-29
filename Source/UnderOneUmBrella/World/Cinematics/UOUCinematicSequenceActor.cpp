@@ -8,6 +8,7 @@
 #include "LevelSequenceActor.h"
 #include "LevelSequencePlayer.h"
 #include "MovieSceneSequencePlayer.h"
+#include "Player/UOUPlayerInteractionExecutorComponent.h"
 
 AUOUCinematicSequenceActor::AUOUCinematicSequenceActor()
 {
@@ -64,6 +65,7 @@ void AUOUCinematicSequenceActor::PlayCinematic()
 	if (PlayerController != nullptr)
 	{
 		EnterCinematicState(PlayerController);
+		RequestPlayerInputBlock(PlayerController);
 
 		if (CinematicViewTarget != nullptr)
 		{
@@ -244,6 +246,35 @@ void AUOUCinematicSequenceActor::RestoreViewTarget(APlayerController* PlayerCont
 	}
 }
 
+void AUOUCinematicSequenceActor::RequestPlayerInputBlock(APlayerController* PlayerController)
+{
+	if (!bBlockPlayerInputDuringPlayback || LockedInputExecutorComponent != nullptr || PlayerController == nullptr)
+	{
+		return;
+	}
+
+	UUOUPlayerInteractionExecutorComponent* InputExecutor =
+		UUOUPlayerInteractionExecutorComponent::FindLocalPlayerExecutor(this);
+	if (InputExecutor == nullptr)
+	{
+		return;
+	}
+
+	InputExecutor->RequestPlayerInputBlock(this, true);
+	LockedInputExecutorComponent = InputExecutor;
+}
+
+void AUOUCinematicSequenceActor::ReleasePlayerInputBlock()
+{
+	if (LockedInputExecutorComponent == nullptr)
+	{
+		return;
+	}
+
+	LockedInputExecutorComponent->ReleasePlayerInputBlock(this);
+	LockedInputExecutorComponent = nullptr;
+}
+
 void AUOUCinematicSequenceActor::FinishCinematic(bool bNaturalFinish)
 {
 	const bool bWasPlaybackActive = bPlaybackActive;
@@ -258,6 +289,7 @@ void AUOUCinematicSequenceActor::FinishCinematic(bool bNaturalFinish)
 		RestoreViewTarget(PlayerController);
 		ExitCinematicState(PlayerController);
 	}
+	ReleasePlayerInputBlock();
 
 	bPlaybackActive = false;
 	CachedPlayerController = nullptr;
