@@ -133,7 +133,19 @@ protected:
 
 	// 가림 메시를 탐지할 때 쓰는 구체 반경이다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Camera|Occlusion", meta = (ClampMin = "0.0"))
-	float OcclusionProbeRadius = 12.0f;
+	float OcclusionProbeRadius = 36.0f;
+
+	// 화면 좌우 가장자리에 가까운 전경 벽까지 잡기 위해 중심 sweep에서 좌우로 벌리는 거리입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Camera|Occlusion", meta = (ClampMin = "0.0"))
+	float OcclusionProbeLateralExtent = 650.0f;
+
+	// 화면 위아래 전경 가림까지 잡기 위해 중심 sweep에서 상하로 벌리는 거리입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Camera|Occlusion", meta = (ClampMin = "0.0"))
+	float OcclusionProbeVerticalExtent = 220.0f;
+
+	// 목표 높이보다 충분히 낮게 끝나는 낮은 발판/바닥 메시를 가림 후보에서 제외하는 여유값입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Camera|Occlusion", meta = (ClampMin = "0.0"))
+	float OcclusionLowObjectIgnoreBelowTarget = 40.0f;
 
 	// 카메라와 플레이어 사이 가림 처리를 사용할지 정한다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Camera|Occlusion")
@@ -141,7 +153,7 @@ protected:
 
 	// 한 번에 투명 처리할 최대 메시 수입니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Camera|Occlusion", meta = (ClampMin = "1"))
-	int32 MaxOccludedMeshCount = 4;
+	int32 MaxOccludedMeshCount = 16;
 
 	// 플레이어 중심보다 약간 위를 가림 탐지 기준으로 보정한다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Camera|Occlusion")
@@ -224,6 +236,11 @@ protected:
 
 	// 플레이어와 카메라 사이를 가리는 메시를 찾아 임시로 투명 처리한다.
 	void UpdateCameraOcclusion();
+	FVector GetCameraOcclusionTraceEnd(const AActor* Owner) const;
+	void BuildCameraOcclusionProbeOffsets(TArray<FVector2D>& OutProbeOffsets) const;
+	bool IsCameraOcclusionCandidate(const UMeshComponent* MeshComponent, const AActor* Owner, const FVector& TraceEnd) const;
+	// 플레이어가 현재 밟고 있는 바닥 컴포넌트는 가림 처리에서 제외한다.
+	bool IsOwnerSupportMesh(const UMeshComponent* MeshComponent, const AActor* Owner) const;
 
 	// 한 메시를 반투명 머티리얼로 바꿔 가림을 완화한다.
 	void ApplyOcclusionToMesh(UMeshComponent* MeshComponent);
