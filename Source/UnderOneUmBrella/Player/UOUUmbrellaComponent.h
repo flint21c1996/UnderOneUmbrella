@@ -338,6 +338,18 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Aim")
 	TEnumAsByte<ECollisionChannel> MouseAimTraceChannel = ECC_Visibility;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Umbrella|Aim", meta = (ToolTip = "Uses the mouse position relative to the player on the 2D screen before falling back to world picking."))
+	bool bUseScreenSpacePourAim = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Umbrella|Aim", meta = (ClampMin = "0.0", EditCondition = "bUseScreenSpacePourAim", EditConditionHides))
+	float ScreenSpacePourAimDeadZone = 12.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Umbrella|Aim", meta = (ToolTip = "Snaps pouring aim to fixed angle steps around the player. 45 degrees gives 8 directions."))
+	bool bSnapPourAimDirection = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Umbrella|Aim", meta = (ClampMin = "1.0", ClampMax = "180.0", EditCondition = "bSnapPourAimDirection", EditConditionHides))
+	float PourAimSnapAngleDegrees = 45.0f;
+
 	// 우산에 저장된 물이 무게 계산에 얼마나 영향을 줄지 정합니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Rain", meta = (ClampMin = "0.0"))
 	float StoredWaterWeightMultiplier = 1.0f;
@@ -683,6 +695,10 @@ protected:
 
 	// 마우스 위치를 기준으로 플레이어가 바라볼 평면 방향을 계산합니다.
 	bool TryGetMouseAimDirection(FVector& AimDirection, FVector& AimPoint) const;
+
+	bool TryGetScreenSpaceMouseAimDirection(APlayerController* PlayerController, FVector& AimDirection, FVector& AimPoint) const;
+
+	FVector SnapPourDirectionToAngleStep(const FVector& Direction) const;
 
 	// 물 붓기 시작 위치와 최종 방향을 계산합니다.
 	bool TryGetPourDirection(FVector& PourOriginLocation, FVector& PourDirection) const;

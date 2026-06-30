@@ -19,6 +19,7 @@
 #include "GameFramework/Character.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
+#include "Camera/PlayerCameraManager.h"
 #include "Materials/MaterialInterface.h"
 #include "NiagaraComponent.h"
 #include "Player/UOURainReceiverComponent.h"
@@ -1640,6 +1641,12 @@ void UUOUUmbrellaComponent::UpdatePourAimFacing()
 		return;
 	}
 
+	AimDirection = SnapPourDirectionToAngleStep(AimDirection);
+	if (AimDirection.IsNearlyZero())
+	{
+		return;
+	}
+
 	FRotator AimRotation = AimDirection.Rotation();
 	// 캐릭터가 위아래로 기울어지지 않도록 평면 회전만 적용합니다.
 	AimRotation.Pitch = 0.0f;
@@ -1896,6 +1903,11 @@ bool UUOUUmbrellaComponent::TryGetMouseAimDirection(FVector& AimDirection, FVect
 		return false;
 	}
 
+	if (TryGetScreenSpaceMouseAimDirection(PlayerController, AimDirection, AimPoint))
+	{
+		return true;
+	}
+
 	FHitResult CursorHit;
 	if (PlayerController->GetHitResultUnderCursorByChannel(UEngineTypes::ConvertToTraceType(MouseAimTraceChannel), true, CursorHit))
 	{
@@ -1937,6 +1949,99 @@ bool UUOUUmbrellaComponent::TryGetMouseAimDirection(FVector& AimDirection, FVect
 }
 
 // 물을 부을 시작점과 방향을 정합니다. 마우스 조준이 가능하면 우산 앞 방향보다 마우스 방향을 우선합니다.
+bool UUOUUmbrellaComponent::TryGetScreenSpaceMouseAimDirection(APlayerController* PlayerController, FVector& AimDirection, FVector& AimPoint) const
+{
+	AimDirection = FVector::ZeroVector;
+	AimPoint = FVector::ZeroVector;
+
+	const AActor* Owner = GetOwner();
+	if (!bUseScreenSpacePourAim || PlayerController == nullptr || Owner == nullptr)
+	{
+		return false;
+	}
+
+	FVector2D OwnerScreenPosition = FVector2D::ZeroVector;
+	if (!PlayerController->ProjectWorldLocationToScreen(Owner->GetActorLocation(), OwnerScreenPosition, true))
+	{
+		return false;
+	}
+
+	float MouseX = 0.0f;
+	float MouseY = 0.0f;
+	if (!PlayerController->GetMousePosition(MouseX, MouseY))
+	{
+		return false;
+	}
+
+	FVector2D ScreenDirection(MouseX - OwnerScreenPosition.X, OwnerScreenPosition.Y - MouseY);
+	if (ScreenDirection.SizeSquared() <= FMath::Square(FMath::Max(0.0f, ScreenSpacePourAimDeadZone)))
+	{
+		return false;
+	}
+
+	ScreenDirection.Normalize();
+	if (bSnapPourAimDirection)
+	{
+		const float SafeStep = FMath::Clamp(PourAimSnapAngleDegrees, 1.0f, 180.0f);
+		const float ScreenAngleDegrees = FMath::RadiansToDegrees(FMath::Atan2(ScreenDirection.Y, ScreenDirection.X));
+		const float SnappedScreenAngleDegrees = FMath::GridSnap(ScreenAngleDegrees, SafeStep);
+		const float SnappedScreenAngleRadians = FMath::DegreesToRadians(SnappedScreenAngleDegrees);
+		ScreenDirection = FVector2D(FMath::Cos(SnappedScreenAngleRadians), FMath::Sin(SnappedScreenAngleRadians));
+	}
+
+	const FRotator CameraRotation = PlayerController->PlayerCameraManager != nullptr
+		? PlayerController->PlayerCameraManager->GetCameraRotation()
+		: PlayerController->GetControlRotation();
+	const FRotationMatrix CameraRotationMatrix(CameraRotation);
+	FVector ScreenRightWorld = CameraRotationMatrix.GetScaledAxis(EAxis::Y);
+	FVector ScreenUpWorld = CameraRotationMatrix.GetScaledAxis(EAxis::Z);
+	ScreenRightWorld.Z = 0.0f;
+	ScreenUpWorld.Z = 0.0f;
+
+	if (ScreenRightWorld.IsNearlyZero())
+	{
+		ScreenRightWorld = FVector::RightVector;
+	}
+	if (ScreenUpWorld.IsNearlyZero())
+	{
+		ScreenUpWorld = CameraRotationMatrix.GetScaledAxis(EAxis::X);
+		ScreenUpWorld.Z = 0.0f;
+	}
+	if (ScreenUpWorld.IsNearlyZero())
+	{
+		ScreenUpWorld = FVector::ForwardVector;
+	}
+
+	ScreenRightWorld.Normalize();
+	ScreenUpWorld.Normalize();
+
+	FVector WorldDirection = ScreenRightWorld * ScreenDirection.X + ScreenUpWorld * ScreenDirection.Y;
+	WorldDirection.Z = 0.0f;
+	if (WorldDirection.IsNearlyZero())
+	{
+		return false;
+	}
+
+	AimDirection = WorldDirection.GetSafeNormal();
+	AimPoint = Owner->GetActorLocation() + AimDirection * MouseAimRayDistance;
+	return true;
+}
+
+FVector UUOUUmbrellaComponent::SnapPourDirectionToAngleStep(const FVector& Direction) const
+{
+	FVector FlatDirection(Direction.X, Direction.Y, 0.0f);
+	if (!bSnapPourAimDirection || FlatDirection.IsNearlyZero())
+	{
+		return FlatDirection.GetSafeNormal();
+	}
+
+	const float SafeStep = FMath::Clamp(PourAimSnapAngleDegrees, 1.0f, 180.0f);
+	const float AngleDegrees = FMath::RadiansToDegrees(FMath::Atan2(FlatDirection.Y, FlatDirection.X));
+	const float SnappedAngleDegrees = FMath::GridSnap(AngleDegrees, SafeStep);
+	const float SnappedAngleRadians = FMath::DegreesToRadians(SnappedAngleDegrees);
+	return FVector(FMath::Cos(SnappedAngleRadians), FMath::Sin(SnappedAngleRadians), 0.0f).GetSafeNormal();
+}
+
 bool UUOUUmbrellaComponent::TryGetPourDirection(FVector& PourOriginLocation, FVector& PourDirection) const
 {
 	AActor* Owner = GetOwner();
@@ -1991,7 +2096,7 @@ bool UUOUUmbrellaComponent::TryGetPourDirection(FVector& PourOriginLocation, FVe
 		PourDirection = FVector::ForwardVector;
 	}
 
-	PourDirection.Normalize();
+	PourDirection = SnapPourDirectionToAngleStep(PourDirection);
 	return !PourDirection.IsNearlyZero();
 }
 
