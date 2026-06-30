@@ -815,6 +815,7 @@ void UUOUUmbrellaComponent::RefreshSkeletalVisual()
 
 	SkeletalHeldVisual->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	SkeletalHeldVisual->SetGenerateOverlapEvents(false);
+	SkeletalHeldVisual->SetCastShadow(true);
 
 	if (!bHasUmbrella)
 	{
@@ -1031,7 +1032,7 @@ void UUOUUmbrellaComponent::EnsureRuntimeHeldVisual()
 	Owner->AddInstanceComponent(RuntimeHeldVisual);
 	RuntimeHeldVisual->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	RuntimeHeldVisual->SetGenerateOverlapEvents(false);
-	RuntimeHeldVisual->SetCastShadow(false);
+	RuntimeHeldVisual->SetCastShadow(true);
 	RuntimeHeldVisual->SetVisibility(false, true);
 
 	USceneComponent* AttachParent = PickupAttachPoint != nullptr ? PickupAttachPoint.Get() : Owner->GetRootComponent();

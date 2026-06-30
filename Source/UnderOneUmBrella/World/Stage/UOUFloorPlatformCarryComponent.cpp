@@ -57,7 +57,7 @@ void UUOUFloorPlatformCarryComponent::AttachCarriedActors()
 	DetachCarriedActors();
 	AttachPermanentCarriedActors();
 
-	if (!bCarryActorsOnMove || DetectionBox == nullptr)
+	if (!bCarryActorsOnMove || !bUseCarryDetectionBox || DetectionBox == nullptr)
 	{
 		return;
 	}
@@ -83,7 +83,7 @@ void UUOUFloorPlatformCarryComponent::AttachLastMovedActors()
 	DetachCarriedActors();
 	AttachPermanentCarriedActors();
 
-	if (!bCarryActorsOnMove)
+	if (!bCarryActorsOnMove || !bUseCarryDetectionBox)
 	{
 		return;
 	}
@@ -529,6 +529,11 @@ bool UUOUFloorPlatformCarryComponent::MatchesCarryFilters(AActor* CandidateActor
 void UUOUFloorPlatformCarryComponent::CacheLastMovedActors()
 {
 	LastMovedActors.Reset();
+
+	if (!bUseCarryDetectionBox)
+	{
+		return;
+	}
 
 	for (AActor* CarriedActor : CarriedActors)
 	{

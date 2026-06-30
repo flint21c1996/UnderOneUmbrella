@@ -142,6 +142,12 @@ void AUOUCharacter::BeginPlay()
 {
 	Super::BeginPlay();
 
+	if (USkeletalMeshComponent* CharacterMesh = GetMesh())
+	{
+		CharacterMesh->SetCastShadow(true);
+		CharacterMesh->bCastDynamicShadow = true;
+	}
+
 	PushPullInteractorComponent = FindComponentByClass<UUOUPushPullInteractorComponent>();
 
 	TInlineComponentArray<UArrowComponent*> ArrowComponents(this);
