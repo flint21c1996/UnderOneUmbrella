@@ -58,6 +58,9 @@ public:
 	// 통합 플레이어 디버그 HUD에서 목표 yaw 값을 확인합니다.
 	float GetTargetCameraYaw() const { return TargetCameraYaw; }
 
+	// 스냅 카메라가 아직 목표 yaw까지 보간 중인지 확인합니다.
+	bool IsSnapCameraRotationInProgress() const;
+
 	// 통합 플레이어 디버그 HUD에서 현재 카메라 거리를 확인합니다.
 	float GetCurrentCameraDistance() const;
 
