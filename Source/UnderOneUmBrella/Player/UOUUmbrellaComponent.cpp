@@ -8,6 +8,7 @@
 #include "Components/PrimitiveComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Components/SphereComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Debug/UOUDebugSubsystem.h"
 #include "Engine/GameInstance.h"
@@ -1702,6 +1703,15 @@ bool UUOUUmbrellaComponent::SpawnPendingPourDrop()
 		DropContext.VisualSettings = ContentProfile->DropVisual;
 	}
 	DropActor->InitializePourDrop(DropContext);
+	DropActor->bDrawDebugCollisionRadius = bDrawPourDropCollisionDebug;
+	if (bOverridePourDropCollisionRadius)
+	{
+		DropActor->CollisionRadius = FMath::Max(0.0f, PourDropCollisionRadiusOverride);
+		if (DropActor->CollisionComponent != nullptr)
+		{
+			DropActor->CollisionComponent->SetSphereRadius(DropActor->CollisionRadius, true);
+		}
+	}
 
 	LastPourTraceStart = DropLocation;
 	LastPourTraceEnd = DropLocation + DropDirection * PourDistance;
