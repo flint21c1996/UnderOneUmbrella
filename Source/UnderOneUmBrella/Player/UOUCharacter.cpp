@@ -217,8 +217,8 @@ void AUOUCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompon
 
 	PlayerInputComponent->BindKey(EKeys::Q, IE_Pressed, this, &AUOUCharacter::RotateCameraLeft);
 	PlayerInputComponent->BindKey(EKeys::E, IE_Pressed, this, &AUOUCharacter::RotateCameraRight);
-	PlayerInputComponent->BindKey(EKeys::MouseScrollUp, IE_Pressed, this, &AUOUCharacter::ZoomCameraIn);
-	PlayerInputComponent->BindKey(EKeys::MouseScrollDown, IE_Pressed, this, &AUOUCharacter::ZoomCameraOut);
+	PlayerInputComponent->BindKey(EKeys::MouseScrollUp, IE_Pressed, this, &AUOUCharacter::RotateCameraLeftByMouseWheel);
+	PlayerInputComponent->BindKey(EKeys::MouseScrollDown, IE_Pressed, this, &AUOUCharacter::RotateCameraRightByMouseWheel);
 	PlayerInputComponent->BindKey(EKeys::LeftMouseButton, IE_Pressed, this, &AUOUCharacter::HandleDialogueAdvancePressed);
 
 	if (UUOUUmbrellaComponent* UmbrellaComponent = FindUmbrellaComponent())
@@ -315,6 +315,26 @@ void AUOUCharacter::RotateCameraRight()
 	{
 		CameraControllerComponent->RotateCameraRight();
 	}
+}
+
+void AUOUCharacter::RotateCameraLeftByMouseWheel()
+{
+	if (CameraControllerComponent != nullptr && CameraControllerComponent->IsSnapCameraRotationInProgress())
+	{
+		return;
+	}
+
+	RotateCameraLeft();
+}
+
+void AUOUCharacter::RotateCameraRightByMouseWheel()
+{
+	if (CameraControllerComponent != nullptr && CameraControllerComponent->IsSnapCameraRotationInProgress())
+	{
+		return;
+	}
+
+	RotateCameraRight();
 }
 
 void AUOUCharacter::ZoomCameraIn()

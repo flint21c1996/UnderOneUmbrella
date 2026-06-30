@@ -8,6 +8,8 @@
 
 class USceneComponent;
 class AActor;
+class UNiagaraComponent;
+class UNiagaraSystem;
 class UUOUWaterBasinTargetComponent;
 
 // 물 바닥 높이(BottomWorldZ)를 어떤 기준으로 잡을지 정합니다.
@@ -93,6 +95,9 @@ struct FUOUWaterBasinInputContext
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Input")
 	bool bApplyToConnectedGroup = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Input", meta = (ToolTip = "True when the pour source already spawned its own impact splash. WaterBasinTarget should still react with ripple, but skip its fallback splash."))
+	bool bImpactSplashHandledBySource = false;
 };
 
 // 런타임 디버그 표시 범위입니다.
@@ -244,6 +249,30 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, AdvancedDisplay, Category = "Water Basin|Visual", meta = (EditCondition = "bUpdateWaterVisual", EditConditionHides, ToolTip = "물이 없을 때 Water Visual을 숨깁니다."))
 	bool bHideWaterVisualWhenEmpty = true;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin|Pour Impact", meta = (ToolTip = "PlayerPour 입력이 유효한 위치에 들어왔을 때 착수 Niagara를 재생합니다."))
+	bool bSpawnPlayerPourImpactSplash = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin|Pour Impact", meta = (EditCondition = "bSpawnPlayerPourImpactSplash", EditConditionHides, ToolTip = "우산 pour 물방울이 수면에 닿을 때 재생할 Niagara System입니다."))
+	TObjectPtr<UNiagaraSystem> PlayerPourImpactSplashEffect = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin|Pour Impact", meta = (ClampMin = "0.0", EditCondition = "bSpawnPlayerPourImpactSplash", EditConditionHides, ToolTip = "착수 Niagara 크기 배율입니다."))
+	float PlayerPourImpactSplashScale = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin|Pour Impact", meta = (ClampMin = "0.0", EditCondition = "bSpawnPlayerPourImpactSplash", EditConditionHides, ToolTip = "PlayerPour 착수 Niagara를 다시 재생하기 전까지 기다릴 시간입니다. 0이면 입력마다 재생합니다."))
+	float PlayerPourImpactSplashCooldown = 0.15f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin|Pour Impact", meta = (EditCondition = "bSpawnPlayerPourImpactSplash", EditConditionHides, ToolTip = "착수 Niagara가 수면 상승에 묻히지 않도록 수면보다 위로 올릴 월드 Z 오프셋입니다."))
+	float PlayerPourImpactSplashSurfaceOffset = 8.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin|Pour Impact", meta = (ToolTip = "PlayerPour 입력이 들어오면 Water Visual을 짧게 위아래로 흔들어 착수감을 줍니다."))
+	bool bAnimateWaterVisualOnPlayerPour = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin|Pour Impact", meta = (ClampMin = "0.0", EditCondition = "bAnimateWaterVisualOnPlayerPour", EditConditionHides, ToolTip = "착수 수면 흔들림 지속 시간입니다."))
+	float PlayerPourWaterVisualRippleDuration = 0.28f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin|Pour Impact", meta = (ClampMin = "0.0", EditCondition = "bAnimateWaterVisualOnPlayerPour", EditConditionHides, ToolTip = "착수 수면 흔들림의 최대 월드 Z 오프셋입니다."))
+	float PlayerPourWaterVisualRippleHeight = 3.0f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Transient, AdvancedDisplay, Category = "Water Basin|Runtime Test", meta = (ClampMin = "0.0", ToolTip = "테스트용 현재 물 부피입니다. 에디터에서 바꾸면 깊이, 비율, 수면 Z, Water Visual이 즉시 갱신됩니다."))
 	float CurrentWaterVolume = 0.0f;
 
@@ -377,6 +406,8 @@ private:
 
 	bool bPendingInitialRedistribution = false;
 	bool bCapturedWaterVisualTransform = false;
+	float ActivePlayerPourWaterVisualRippleTime = 0.0f;
+	float LastPlayerPourImpactSplashTime = -TNumericLimits<float>::Max();
 	FVector InitialWaterVisualScale = FVector::OneVector;
 	FVector InitialWaterVisualLocation = FVector::ZeroVector;
 
@@ -421,6 +452,16 @@ private:
 
 	// 실제 수위 변화 여부와 무관하게 물 입력이 들어왔음을 대상 범위에 알립니다.
 	void NotifyWaterInputReceived(const FUOUWaterBasinInputContext& InputContext);
+
+	// PlayerPour input uses the drop impact point to drive local splash/ripple feedback.
+	void HandlePlayerPourImpactVisuals(const FUOUWaterBasinInputContext& InputContext);
+
+	UFUNCTION()
+	void HandlePlayerPourImpactSplashFinished(UNiagaraComponent* FinishedComponent);
+
+	void UpdatePlayerPourWaterVisualRipple(float DeltaTime);
+	FVector ResolvePlayerPourImpactLocation(const FUOUWaterBasinInputContext& InputContext) const;
+	float EstimatePlayerPourSurfaceWorldZAfterInput(const FUOUWaterBasinInputContext& InputContext) const;
 
 	// CurrentWaterDepth를 기준으로 WaterVisual의 크기, 위치, 표시 상태를 갱신합니다.
 	void UpdateWaterVisual();

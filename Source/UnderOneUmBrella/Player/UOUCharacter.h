@@ -124,6 +124,10 @@ protected:
 	// 카메라를 오른쪽 방향으로 한 단계 회전시킨다.
 	void RotateCameraRight();
 
+	// 마우스 휠 회전은 카메라가 이미 회전 중이면 무시합니다.
+	void RotateCameraLeftByMouseWheel();
+	void RotateCameraRightByMouseWheel();
+
 	// 카메라를 플레이어 쪽으로 더 당긴다.
 	void ZoomCameraIn();
 

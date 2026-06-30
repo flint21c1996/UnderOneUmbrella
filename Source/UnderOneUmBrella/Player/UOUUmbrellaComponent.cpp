@@ -19,13 +19,13 @@
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
 #include "Materials/MaterialInterface.h"
+#include "NiagaraComponent.h"
 #include "Player/UOURainReceiverComponent.h"
 #include "Player/UOUUmbrellaAnimInstance.h"
 #include "Player/UOUWaterContainerComponent.h"
-#include "Puzzle/Water/UOUWaterWheelRainConditionComponent.h"
-#include "World/Pour/UOUPourReceiverComponent.h"
+#include "World/Pour/UOUPourContentProfile.h"
+#include "World/Pour/UOUPourDropActor.h"
 #include "World/WaterTarget/UOUWaterBasinTargetComponent.h"
-#include "World/WaterTarget/UOUUmbrellaWaterTarget.h"
 
 namespace
 {
@@ -49,6 +49,26 @@ const TCHAR* GetPourReceiverTypeText(EUOUUmbrellaPourReceiverType ReceiverType)
 		return TEXT("None");
 	}
 }
+
+EUOUUmbrellaPourReceiverType ConvertPourDropReceiverType(EUOUPourDropReceiverType ReceiverType)
+{
+	switch (ReceiverType)
+	{
+	case EUOUPourDropReceiverType::PurePourReceiver:
+		return EUOUUmbrellaPourReceiverType::PurePourReceiver;
+	case EUOUPourDropReceiverType::UmbrellaWaterTarget:
+		return EUOUUmbrellaPourReceiverType::UmbrellaWaterTarget;
+	case EUOUPourDropReceiverType::WaterBasinTarget:
+		return EUOUUmbrellaPourReceiverType::WaterBasinTarget;
+	case EUOUPourDropReceiverType::WaterContainer:
+		return EUOUUmbrellaPourReceiverType::WaterContainer;
+	case EUOUPourDropReceiverType::WaterWheel:
+		return EUOUUmbrellaPourReceiverType::WaterWheel;
+	case EUOUPourDropReceiverType::None:
+	default:
+		return EUOUUmbrellaPourReceiverType::None;
+	}
+}
 }
 
 // 우산 컴포넌트는 물 붓기, 조준 회전, 디버그 표시를 계속 갱신해야 해서 틱을 켭니다.
@@ -65,11 +85,14 @@ void UUOUUmbrellaComponent::BeginPlay()
 	// 블루프린트에서 직접 연결하지 않은 참조는 컴포넌트 이름과 타입으로 보완합니다.
 	ResolveReferences();
 	EnsureRuntimeHeldVisual();
+	EnsurePouringEffect();
 
 	if (StoredWaterContainer != nullptr)
 	{
 		// 우산에 저장된 물이 퍼즐 무게로 환산될 때 쓰는 배율을 동기화합니다.
 		StoredWaterContainer->WeightMultiplier = FMath::Max(0.0f, StoredWaterWeightMultiplier);
+		StoredWaterContainer->OnPourContentProfileChanged.RemoveDynamic(this, &UUOUUmbrellaComponent::HandlePourContentProfileChanged);
+		StoredWaterContainer->OnPourContentProfileChanged.AddDynamic(this, &UUOUUmbrellaComponent::HandlePourContentProfileChanged);
 	}
 
 	bHasUmbrella = bStartWithUmbrella;
@@ -82,6 +105,7 @@ void UUOUUmbrellaComponent::BeginPlay()
 	}
 
 	RefreshVisuals();
+	UpdatePouringEffectState();
 }
 
 // 매 프레임 우산 상태에 따라 물 붓기, 마우스 조준 회전, 디버그 표시를 갱신합니다.
@@ -101,6 +125,7 @@ void UUOUUmbrellaComponent::TickComponent(float DeltaTime, ELevelTick TickType, 
 
 	UpdatePourAimFacing();
 	UpdatePouring(DeltaTime);
+	UpdatePouringEffectState();
 	DrawScreenDebug();
 	DrawRainBlockerDebug();
 	DrawPourTraceDebug();
@@ -548,10 +573,24 @@ void UUOUUmbrellaComponent::SetState(EUOUUmbrellaState NewState)
 		CurrentDirectionState = EUOUUmbrellaDirectionState::Reversed;
 	}
 
+	if (PreviousState != EUOUUmbrellaState::Pouring && ResolvedState == EUOUUmbrellaState::Pouring)
+	{
+		ResetPendingPourDrop();
+		PrimeNextPourDropSpawn();
+	}
+	else if (PreviousState == EUOUUmbrellaState::Pouring && ResolvedState != EUOUUmbrellaState::Pouring)
+	{
+		if (!SpawnPendingPourDrop())
+		{
+			ResetPendingPourDrop();
+		}
+	}
+
 	if (PreviousState == ResolvedState)
 	{
 		// 같은 상태여도 에디터 세팅 변경 뒤 비주얼을 다시 맞출 수 있게 갱신은 수행합니다.
 		RefreshVisuals();
+		UpdatePouringEffectState();
 		return;
 	}
 
@@ -585,6 +624,7 @@ void UUOUUmbrellaComponent::SetState(EUOUUmbrellaState NewState)
 	}
 
 	RefreshVisuals();
+	UpdatePouringEffectState();
 	OnUmbrellaStateChanged.Broadcast(CurrentState, bHasUmbrella);
 }
 
@@ -1002,6 +1042,203 @@ void UUOUUmbrellaComponent::EnsureRuntimeHeldVisual()
 	RuntimeHeldVisual->SetRelativeTransform(RuntimeHeldVisualBaseRelativeTransform);
 }
 
+void UUOUUmbrellaComponent::EnsurePouringEffect()
+{
+	AActor* Owner = GetOwner();
+	const UUOUPourContentProfile* ContentProfile = ResolvePourContentProfile();
+	if (Owner == nullptr || ContentProfile == nullptr || ContentProfile->StreamEffect == nullptr)
+	{
+		return;
+	}
+
+	USceneComponent* AttachParent = nullptr;
+	FName AttachSocketName = NAME_None;
+	if (SkeletalHeldVisual != nullptr && SkeletalHeldVisual->DoesSocketExist(PouringSocketName))
+	{
+		AttachParent = SkeletalHeldVisual;
+		AttachSocketName = PouringSocketName;
+	}
+	else
+	{
+		AttachParent = PourOrigin != nullptr
+			? static_cast<USceneComponent*>(PourOrigin.Get())
+			: HeldVisualAnchor.Get();
+	}
+	if (AttachParent == nullptr)
+	{
+		AttachParent = Owner->GetRootComponent();
+	}
+
+	if (PouringEffectComponent == nullptr)
+	{
+		PouringEffectComponent = NewObject<UNiagaraComponent>(Owner, TEXT("PouringNiagaraEffect"));
+		if (PouringEffectComponent == nullptr)
+		{
+			return;
+		}
+
+		Owner->AddInstanceComponent(PouringEffectComponent);
+		PouringEffectComponent->SetAutoActivate(false);
+		PouringEffectComponent->SetAutoDestroy(false);
+		PouringEffectComponent->SetVisibility(false, true);
+		PouringEffectComponent->SetHiddenInGame(true, true);
+		PouringEffectComponent->SetupAttachment(AttachParent, AttachSocketName);
+		PouringEffectComponent->RegisterComponent();
+	}
+	else if (AttachParent != nullptr
+		&& (PouringEffectComponent->GetAttachParent() != AttachParent
+			|| PouringEffectComponent->GetAttachSocketName() != AttachSocketName))
+	{
+		PouringEffectComponent->AttachToComponent(AttachParent, FAttachmentTransformRules::KeepRelativeTransform, AttachSocketName);
+	}
+
+	PouringEffectComponent->SetAsset(ContentProfile->StreamEffect);
+	PouringEffectComponent->SetWorldScale3D(ContentProfile->StreamRelativeScale);
+	UpdatePouringEffectTransform();
+}
+
+void UUOUUmbrellaComponent::UpdatePouringEffectState()
+{
+	const UUOUPourContentProfile* ContentProfile = ResolvePourContentProfile();
+	const bool bShouldPlayPouringEffect = bHasUmbrella
+		&& CurrentState == EUOUUmbrellaState::Pouring
+		&& ContentProfile != nullptr
+		&& ContentProfile->StreamEffect != nullptr;
+
+	if (bShouldPlayPouringEffect)
+	{
+		EnsurePouringEffect();
+		if (PouringEffectComponent != nullptr)
+		{
+			UpdatePouringEffectTransform();
+			PouringEffectComponent->SetHiddenInGame(false, true);
+			PouringEffectComponent->SetVisibility(true, true);
+			if (!PouringEffectComponent->IsActive())
+			{
+				PouringEffectComponent->Activate(true);
+			}
+		}
+		return;
+	}
+
+	if (PouringEffectComponent != nullptr)
+	{
+		if (PouringEffectComponent->IsActive())
+		{
+			PouringEffectComponent->DeactivateImmediate();
+		}
+
+		PouringEffectComponent->SetVisibility(false, true);
+		PouringEffectComponent->SetHiddenInGame(true, true);
+	}
+}
+
+bool UUOUUmbrellaComponent::TryGetPouringPointTransform(FTransform& OutTransform) const
+{
+	const USkeletalMeshComponent* PouringSocketSource = SkeletalHeldVisual.Get();
+	if (PouringSocketSource == nullptr && !PouringSocketSourceComponentName.IsNone())
+	{
+		if (const AActor* Owner = GetOwner())
+		{
+			TInlineComponentArray<USkeletalMeshComponent*> SkeletalMeshComponents(Owner);
+			for (const USkeletalMeshComponent* SkeletalMeshComponent : SkeletalMeshComponents)
+			{
+				if (SkeletalMeshComponent != nullptr
+					&& (SkeletalMeshComponent->GetFName() == PouringSocketSourceComponentName
+						|| SkeletalMeshComponent->ComponentTags.Contains(PouringSocketSourceComponentName)))
+				{
+					PouringSocketSource = SkeletalMeshComponent;
+					break;
+				}
+			}
+		}
+	}
+
+	if (PouringSocketSource == nullptr || PouringSocketName.IsNone() || !PouringSocketSource->DoesSocketExist(PouringSocketName))
+	{
+		return false;
+	}
+
+	OutTransform = PouringSocketSource->GetSocketTransform(PouringSocketName, RTS_World);
+	return true;
+}
+
+void UUOUUmbrellaComponent::UpdatePouringEffectTransform()
+{
+	if (PouringEffectComponent == nullptr)
+	{
+		return;
+	}
+
+	FVector DropLocation = FVector::ZeroVector;
+	FVector DropDirection = FVector::ForwardVector;
+	if (!TryGetPourDropSpawnPlacement(DropLocation, DropDirection))
+	{
+		return;
+	}
+
+	FVector StreamForward = FVector(DropDirection.X, DropDirection.Y, 0.0f);
+	if (StreamForward.IsNearlyZero())
+	{
+		if (const AActor* Owner = GetOwner())
+		{
+			StreamForward = FVector(Owner->GetActorForwardVector().X, Owner->GetActorForwardVector().Y, 0.0f);
+		}
+	}
+
+	if (StreamForward.IsNearlyZero())
+	{
+		StreamForward = FVector::ForwardVector;
+	}
+
+	StreamForward.Normalize();
+
+	const FQuat DirectionRotation = FRotationMatrix::MakeFromYZ(StreamForward, FVector::UpVector).ToQuat();
+	const UUOUPourContentProfile* ContentProfile = ResolvePourContentProfile();
+	const FRotator RelativeRotation = ContentProfile != nullptr ? ContentProfile->StreamRelativeRotation : FRotator::ZeroRotator;
+	const FVector RelativeScale = ContentProfile != nullptr ? ContentProfile->StreamRelativeScale : FVector::OneVector;
+	const FQuat EffectRotation = DirectionRotation * FRotator(0.0f, RelativeRotation.Yaw, 0.0f).Quaternion();
+
+	PouringEffectComponent->SetWorldLocationAndRotation(DropLocation, EffectRotation.Rotator());
+	PouringEffectComponent->SetWorldScale3D(RelativeScale);
+}
+
+bool UUOUUmbrellaComponent::TryGetPourDropSpawnPlacement(FVector& OutDropLocation, FVector& OutDropDirection) const
+{
+	FVector DropOrigin = FVector::ZeroVector;
+	FVector DropDirection = FVector::ForwardVector;
+	if (!TryGetPourDirection(DropOrigin, DropDirection))
+	{
+		return false;
+	}
+
+	if (DropDirection.IsNearlyZero())
+	{
+		return false;
+	}
+
+	DropDirection = DropDirection.GetSafeNormal();
+	OutDropLocation = DropOrigin;
+	OutDropDirection = DropDirection;
+	return true;
+}
+
+const UUOUPourContentProfile* UUOUUmbrellaComponent::ResolvePourContentProfile() const
+{
+	return StoredWaterContainer != nullptr ? StoredWaterContainer->PourContentProfile.Get() : nullptr;
+}
+
+TSubclassOf<AUOUPourDropActor> UUOUUmbrellaComponent::ResolvePourDropActorClass() const
+{
+	const UUOUPourContentProfile* ContentProfile = ResolvePourContentProfile();
+	if (ContentProfile != nullptr && ContentProfile->DropActorClass != nullptr)
+	{
+		return ContentProfile->DropActorClass;
+	}
+
+	return AUOUPourDropActor::StaticClass();
+}
+
 // 월드 픽업 메쉬에서 스태틱 메쉬와 머티리얼을 읽어 손에 든 비주얼로 복사합니다.
 void UUOUUmbrellaComponent::ApplyHeldVisualFromMeshComponent(UStaticMeshComponent* SourceMeshComponent)
 {
@@ -1355,18 +1592,151 @@ void UUOUUmbrellaComponent::ClearPourAimFacing()
 {
 }
 
-// 붓기 상태에서 저장된 물을 줄이고, 라인트레이스로 맞은 대상에 물을 전달합니다.
+bool UUOUUmbrellaComponent::SpawnPendingPourDrop()
+{
+	if (PendingPourDropVolume <= KINDA_SMALL_NUMBER || PendingPourDropDuration <= KINDA_SMALL_NUMBER)
+	{
+		return false;
+	}
+
+	UWorld* World = GetWorld();
+	AActor* Owner = GetOwner();
+	TSubclassOf<AUOUPourDropActor> ResolvedPourDropActorClass = ResolvePourDropActorClass();
+	if (World == nullptr || Owner == nullptr || ResolvedPourDropActorClass == nullptr)
+	{
+		return false;
+	}
+
+	FVector DropLocation = FVector::ZeroVector;
+	FVector DropDirection = FVector::ForwardVector;
+	if (!TryGetPourDropSpawnPlacement(DropLocation, DropDirection))
+	{
+		return false;
+	}
+
+	FActorSpawnParameters SpawnParameters;
+	SpawnParameters.Owner = Owner;
+	SpawnParameters.Instigator = Cast<APawn>(Owner);
+	SpawnParameters.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+	AUOUPourDropActor* DropActor = World->SpawnActor<AUOUPourDropActor>(
+		ResolvedPourDropActorClass,
+		DropLocation,
+		DropDirection.Rotation(),
+		SpawnParameters);
+	if (DropActor == nullptr)
+	{
+		return false;
+	}
+
+	DropActor->OnPourDropImpacted.RemoveDynamic(this, &UUOUUmbrellaComponent::HandlePourDropImpacted);
+	DropActor->OnPourDropImpacted.AddDynamic(this, &UUOUUmbrellaComponent::HandlePourDropImpacted);
+
+	FUOUPourDropContext DropContext;
+	DropContext.Volume = PendingPourDropVolume;
+	DropContext.Duration = PendingPourDropDuration;
+	DropContext.WorldDirection = DropDirection;
+	DropContext.InstigatorActor = Owner;
+	DropContext.bApplyToConnectedWaterBasinGroup = bPourDropAppliesToConnectedWaterBasinGroup;
+	if (const UUOUPourContentProfile* ContentProfile = ResolvePourContentProfile())
+	{
+		DropContext.VisualSettings = ContentProfile->DropVisual;
+	}
+	DropActor->InitializePourDrop(DropContext);
+
+	LastPourTraceStart = DropLocation;
+	LastPourTraceEnd = DropLocation + DropDirection * PourDistance;
+	LastPourTraceImpactPoint = LastPourTraceEnd;
+	bHasLastPourTrace = true;
+	bLastPourTraceHit = false;
+	bLastPourDeliveredWater = false;
+	bLastPourCheckedWaterBasinImpactPoint = false;
+	bLastPourImpactPointInsideWaterBasin = false;
+	LastPourHitName = TEXT("PourDrop Spawned");
+	LastPourTargetName = DropActor->GetName();
+	LastPourReceiverType = EUOUUmbrellaPourReceiverType::None;
+	LastPourAmount = PendingPourDropVolume;
+	LastPourStoredWaterAfter = GetCurrentStoredWater();
+
+	ResetPendingPourDrop();
+	return true;
+}
+
+void UUOUUmbrellaComponent::ResetPendingPourDrop()
+{
+	PendingPourDropVolume = 0.0f;
+	PendingPourDropDuration = 0.0f;
+	TimeSinceLastPourDropSpawn = 0.0f;
+}
+
+void UUOUUmbrellaComponent::PrimeNextPourDropSpawn()
+{
+	TimeSinceLastPourDropSpawn = FMath::Max(0.0f, PourDropSpawnInterval);
+}
+
+// Drop impact delegate updates the existing pour debug fields after the spawned actor reaches a receiver.
+void UUOUUmbrellaComponent::HandlePourDropImpacted(
+	AUOUPourDropActor* DropActor,
+	AActor* ImpactActor,
+	FVector ImpactLocation,
+	EUOUPourDropReceiverType ReceiverType,
+	bool bDeliveredWater)
+{
+	LastPourTraceImpactPoint = ImpactLocation;
+	LastPourTraceEnd = ImpactLocation;
+	bHasLastPourTrace = true;
+	bLastPourTraceHit = ImpactActor != nullptr;
+	bLastPourDeliveredWater = bDeliveredWater;
+	LastPourHitName = bDeliveredWater ? TEXT("PourDrop Delivered") : TEXT("PourDrop Impact");
+	LastPourTargetName = IsValid(ImpactActor) ? ImpactActor->GetName() : TEXT("None");
+	LastPourReceiverType = ConvertPourDropReceiverType(ReceiverType);
+	LastPourAmount = IsValid(DropActor) ? DropActor->CurrentVolume : 0.0f;
+	LastPourStoredWaterAfter = GetCurrentStoredWater();
+
+	bLastPourCheckedWaterBasinImpactPoint = false;
+	bLastPourImpactPointInsideWaterBasin = false;
+	if (ReceiverType == EUOUPourDropReceiverType::WaterBasinTarget && IsValid(ImpactActor))
+	{
+		UUOUWaterBasinTargetComponent* WaterBasinTarget = ImpactActor->FindComponentByClass<UUOUWaterBasinTargetComponent>();
+		if (WaterBasinTarget == nullptr)
+		{
+			if (AActor* ParentActor = ImpactActor->GetAttachParentActor())
+			{
+				WaterBasinTarget = ParentActor->FindComponentByClass<UUOUWaterBasinTargetComponent>();
+			}
+		}
+
+		if (WaterBasinTarget != nullptr)
+		{
+			bLastPourCheckedWaterBasinImpactPoint = true;
+			bLastPourImpactPointInsideWaterBasin = WaterBasinTarget->IsWorldLocationInsideBasin(ImpactLocation);
+		}
+	}
+}
+
+// 붓기 상태에서 저장된 물을 줄이고, 일정 간격으로 낙하 물 액터를 생성합니다.
+void UUOUUmbrellaComponent::HandlePourContentProfileChanged(UUOUPourContentProfile* NewProfile)
+{
+	(void)NewProfile;
+	UpdatePouringEffectState();
+}
+
 void UUOUUmbrellaComponent::UpdatePouring(float DeltaTime)
 {
 	if (CurrentState != EUOUUmbrellaState::Pouring || StoredWaterContainer == nullptr)
 	{
 		ClearPourTraceDebug();
+		ResetPendingPourDrop();
 		return;
 	}
 
 	const float StoredWaterBefore = GetCurrentStoredWater();
 	if (StoredWaterBefore <= KINDA_SMALL_NUMBER)
 	{
+		if (!SpawnPendingPourDrop())
+		{
+			ResetPendingPourDrop();
+		}
 		EndPour();
 		return;
 	}
@@ -1392,9 +1762,13 @@ void UUOUUmbrellaComponent::UpdatePouring(float DeltaTime)
 	StoredWaterContainer->RemoveAmount(ConsumedStoredWater);
 	const float StoredWaterAfter = GetCurrentStoredWater();
 
-	FVector TraceStart = FVector::ZeroVector;
-	FVector TraceDirection = FVector::ForwardVector;
-	LastPourHitName = TEXT("No Hit");
+	PendingPourDropVolume += PourAmount;
+	PendingPourDropDuration += EffectivePourDuration;
+	TimeSinceLastPourDropSpawn += FMath::Max(0.0f, DeltaTime);
+
+	FVector DropOrigin = FVector::ZeroVector;
+	FVector DropDirection = FVector::ForwardVector;
+	LastPourHitName = TEXT("PourDrop Pending");
 	LastPourTargetName = TEXT("None");
 	LastPourReceiverType = EUOUUmbrellaPourReceiverType::None;
 	bHasLastPourTrace = false;
@@ -1406,63 +1780,36 @@ void UUOUUmbrellaComponent::UpdatePouring(float DeltaTime)
 	LastPourStoredWaterBefore = StoredWaterBefore;
 	LastPourStoredWaterAfter = StoredWaterAfter;
 
-	if (TryGetPourDirection(TraceStart, TraceDirection))
+	if (TryGetPourDropSpawnPlacement(DropOrigin, DropDirection))
 	{
-		UWorld* World = GetWorld();
-		AActor* Owner = GetOwner();
-		if (World != nullptr && Owner != nullptr)
-		{
-			FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(UmbrellaPourTrace), false, Owner);
-			QueryParams.AddIgnoredActor(Owner);
-
-			const FVector TraceEnd = TraceStart + TraceDirection * PourDistance;
-			LastPourTraceStart = TraceStart;
-			LastPourTraceEnd = TraceEnd;
-			LastPourTraceImpactPoint = TraceEnd;
-			bHasLastPourTrace = true;
-
-			TArray<FHitResult> HitResults;
-			if (World->LineTraceMultiByChannel(HitResults, TraceStart, TraceEnd, PourTraceChannel, QueryParams))
-			{
-				// 여러 대상이 겹쳐 맞을 수 있으므로 가까운 히트부터 검사합니다.
-				HitResults.Sort([](const FHitResult& Left, const FHitResult& Right)
-				{
-					return Left.Distance < Right.Distance;
-				});
-
-				for (const FHitResult& HitResult : HitResults)
-				{
-					AActor* HitActor = HitResult.GetActor();
-					if (HitActor == nullptr || HitActor == Owner)
-					{
-						continue;
-					}
-
-					LastPourHitName = GetNameSafe(HitResult.GetComponent());
-					LastPourTraceImpactPoint = HitResult.ImpactPoint;
-					bLastPourTraceHit = true;
-
-					EUOUUmbrellaPourReceiverType ReceiverType = EUOUUmbrellaPourReceiverType::None;
-					bLastPourDeliveredWater = TryReceiveWaterAtHit(HitResult, PourAmount, EffectivePourDuration, TraceDirection, ReceiverType);
-					LastPourReceiverType = ReceiverType;
-					if (bLastPourDeliveredWater || HitResult.bBlockingHit)
-					{
-						break;
-					}
-				}
-			}
-		}
+		LastPourTraceStart = DropOrigin;
+		LastPourTraceEnd = DropOrigin + DropDirection * PourDistance;
+		LastPourTraceImpactPoint = LastPourTraceEnd;
+		bHasLastPourTrace = true;
 	}
 	else
 	{
 		ClearPourTraceDebug();
-		LastPourHitName = TEXT("Invalid Ray");
+		LastPourHitName = TEXT("Invalid Pour Direction");
 		LastPourTargetName = TEXT("None");
+		ResetPendingPourDrop();
+	}
+
+	const float SafeSpawnInterval = FMath::Max(0.0f, PourDropSpawnInterval);
+	if (PendingPourDropVolume > KINDA_SMALL_NUMBER
+		&& (SafeSpawnInterval <= KINDA_SMALL_NUMBER || TimeSinceLastPourDropSpawn >= SafeSpawnInterval)
+		&& !SpawnPendingPourDrop())
+	{
+		LastPourHitName = ResolvePourDropActorClass() == nullptr ? TEXT("Missing PourDrop Class") : TEXT("PourDrop Spawn Failed");
 	}
 
 	if (GetCurrentStoredWater() <= 0.0f)
 	{
 		// 물이 다 떨어지면 입력을 계속 누르고 있어도 붓기를 종료합니다.
+		if (!SpawnPendingPourDrop())
+		{
+			ResetPendingPourDrop();
+		}
 		EndPour();
 	}
 }
@@ -1524,224 +1871,59 @@ bool UUOUUmbrellaComponent::TryGetMouseAimDirection(FVector& AimDirection, FVect
 bool UUOUUmbrellaComponent::TryGetPourDirection(FVector& PourOriginLocation, FVector& PourDirection) const
 {
 	AActor* Owner = GetOwner();
-	const USceneComponent* OriginComponent = nullptr;
-	if (PourOrigin != nullptr)
+	FTransform PouringPointTransform = FTransform::Identity;
+	if (TryGetPouringPointTransform(PouringPointTransform))
 	{
-		OriginComponent = PourOrigin;
+		PourOriginLocation = PouringPointTransform.GetLocation();
+		PourDirection = PouringPointTransform.GetRotation().GetForwardVector();
+		PourDirection.Z = 0.0f;
 	}
-	else if (Owner != nullptr)
+	else
 	{
-		OriginComponent = Cast<USceneComponent>(Owner->GetRootComponent());
-	}
+		const USceneComponent* OriginComponent = nullptr;
+		if (PourOrigin != nullptr)
+		{
+			OriginComponent = PourOrigin;
+		}
+		else if (Owner != nullptr)
+		{
+			OriginComponent = Cast<USceneComponent>(Owner->GetRootComponent());
+		}
 
-	if (OriginComponent == nullptr)
-	{
-		return false;
-	}
+		if (OriginComponent == nullptr)
+		{
+			return false;
+		}
 
-	PourOriginLocation = OriginComponent->GetComponentLocation();
-	PourDirection = OriginComponent->GetForwardVector();
+		PourOriginLocation = OriginComponent->GetComponentLocation();
+		PourDirection = OriginComponent->GetForwardVector();
+		PourDirection.Z = 0.0f;
+	}
 
 	FVector AimDirection = FVector::ZeroVector;
 	FVector AimPoint = FVector::ZeroVector;
 	if (TryGetMouseAimDirection(AimDirection, AimPoint))
 	{
 		// 물줄기가 손 위치에서 마우스가 가리키는 지점으로 향하도록 방향을 다시 계산합니다.
-		const FVector MouseAimDirection = AimPoint - PourOriginLocation;
-		if (!MouseAimDirection.IsNearlyZero())
+		if (!AimDirection.IsNearlyZero())
 		{
-			PourDirection = MouseAimDirection.GetSafeNormal();
+			PourDirection = AimDirection.GetSafeNormal();
 		}
 	}
 
+	if (PourDirection.IsNearlyZero() && Owner != nullptr)
+	{
+		PourDirection = Owner->GetActorForwardVector();
+		PourDirection.Z = 0.0f;
+	}
+
+	if (PourDirection.IsNearlyZero())
+	{
+		PourDirection = FVector::ForwardVector;
+	}
+
+	PourDirection.Normalize();
 	return !PourDirection.IsNearlyZero();
-}
-
-// 라인트레이스에 맞은 액터가 물을 받을 수 있는 타입이면 물을 전달하고 받은 대상 종류를 기록합니다.
-bool UUOUUmbrellaComponent::TryReceiveWaterAtHit(const FHitResult& HitResult, float WaterAmount, float PourDuration, const FVector& PourDirection, EUOUUmbrellaPourReceiverType& OutReceiverType)
-{
-	OutReceiverType = EUOUUmbrellaPourReceiverType::None;
-
-	AActor* HitActor = HitResult.GetActor();
-	if (HitActor == nullptr)
-	{
-		return false;
-	}
-
-	auto BuildPourInputContext = [this, &HitResult, WaterAmount, PourDuration, &PourDirection]()
-	{
-		FUOUPourInputContext PourContext;
-		PourContext.Volume = WaterAmount;
-		PourContext.Duration = PourDuration;
-		PourContext.WorldDirection = PourDirection;
-		PourContext.WorldLocation = HitResult.ImpactPoint;
-		PourContext.bHasValidWorldLocation = HitResult.bBlockingHit;
-		PourContext.InstigatorActor = GetOwner();
-		return PourContext;
-	};
-
-	auto BuildWaterWheelInputContext = [this, &HitResult, WaterAmount, PourDuration, &PourDirection]()
-	{
-		FUOUWaterWheelRainInputContext WaterWheelContext;
-		WaterWheelContext.Strength = PourDuration > KINDA_SMALL_NUMBER
-			? WaterAmount / PourDuration
-			: WaterAmount;
-		WaterWheelContext.Duration = PourDuration;
-		WaterWheelContext.WorldDirection = PourDirection;
-		WaterWheelContext.WorldLocation = HitResult.ImpactPoint;
-		WaterWheelContext.bHasValidWorldLocation = HitResult.bBlockingHit;
-		WaterWheelContext.InstigatorActor = GetOwner();
-		return WaterWheelContext;
-	};
-
-	auto TryReceiveWaterWheelInput = [this, &BuildWaterWheelInputContext, &OutReceiverType](AActor* TargetActor)
-	{
-		if (TargetActor == nullptr)
-		{
-			return false;
-		}
-
-		if (UUOUWaterWheelRainConditionComponent* WaterWheelCondition =
-			TargetActor->FindComponentByClass<UUOUWaterWheelRainConditionComponent>())
-		{
-			if (!WaterWheelCondition->CanReceivePouredWaterInput())
-			{
-				return false;
-			}
-
-			LastPourTargetName = TargetActor->GetName();
-			OutReceiverType = EUOUUmbrellaPourReceiverType::WaterWheel;
-			WaterWheelCondition->ReceivePouredWaterInput(BuildWaterWheelInputContext());
-			return true;
-		}
-
-		return false;
-	};
-
-	if (UUOUPourReceiverComponent* PourReceiver = HitActor->FindComponentByClass<UUOUPourReceiverComponent>())
-	{
-		if (PourReceiver->CanReceivePour())
-		{
-			LastPourTargetName = HitActor->GetName();
-			OutReceiverType = EUOUUmbrellaPourReceiverType::PurePourReceiver;
-			PourReceiver->ReceivePourInput(BuildPourInputContext());
-			return true;
-		}
-	}
-
-	if (AActor* ParentActor = HitActor->GetAttachParentActor())
-	{
-		if (UUOUPourReceiverComponent* ParentPourReceiver = ParentActor->FindComponentByClass<UUOUPourReceiverComponent>())
-		{
-			if (ParentPourReceiver->CanReceivePour())
-			{
-				LastPourTargetName = ParentActor->GetName();
-				OutReceiverType = EUOUUmbrellaPourReceiverType::PurePourReceiver;
-				ParentPourReceiver->ReceivePourInput(BuildPourInputContext());
-				return true;
-			}
-		}
-	}
-
-	if (TryReceiveWaterWheelInput(HitActor))
-	{
-		return true;
-	}
-
-	if (AActor* ParentActor = HitActor->GetAttachParentActor())
-	{
-		if (TryReceiveWaterWheelInput(ParentActor))
-		{
-			return true;
-		}
-	}
-
-	if (AUOUUmbrellaWaterTarget* WaterTargetActor = Cast<AUOUUmbrellaWaterTarget>(HitActor))
-	{
-		// 전용 물 받기 액터는 ReceiveWater 함수로 물을 넘깁니다.
-		LastPourTargetName = HitActor->GetName();
-		OutReceiverType = EUOUUmbrellaPourReceiverType::UmbrellaWaterTarget;
-		WaterTargetActor->ReceiveWater(WaterAmount);
-		return true;
-	}
-
-	if (AUOUUmbrellaWaterTarget* ParentWaterTargetActor = HitActor->GetAttachParentActor() != nullptr ? Cast<AUOUUmbrellaWaterTarget>(HitActor->GetAttachParentActor()) : nullptr)
-	{
-		// 맞은 액터가 자식 액터일 수 있어 부모 물 받기 액터도 한 번 더 확인합니다.
-		LastPourTargetName = ParentWaterTargetActor->GetName();
-		OutReceiverType = EUOUUmbrellaPourReceiverType::UmbrellaWaterTarget;
-		ParentWaterTargetActor->ReceiveWater(WaterAmount);
-		return true;
-	}
-
-	if (UUOUWaterBasinTargetComponent* WaterBasinTarget = HitActor->FindComponentByClass<UUOUWaterBasinTargetComponent>())
-	{
-		// 물 조절 장치 쪽 타겟 컴포넌트도 우산 물 붓기를 받을 수 있게 처리합니다.
-		LastPourTargetName = HitActor->GetName();
-		OutReceiverType = EUOUUmbrellaPourReceiverType::WaterBasinTarget;
-		const bool bHasValidImpactPoint = HitResult.bBlockingHit
-			&& WaterBasinTarget->IsWorldLocationInsideBasin(HitResult.ImpactPoint);
-		bLastPourCheckedWaterBasinImpactPoint = true;
-		bLastPourImpactPointInsideWaterBasin = bHasValidImpactPoint;
-		FUOUWaterBasinInputContext InputContext;
-		InputContext.Volume = WaterAmount;
-		InputContext.Duration = PourDuration;
-		InputContext.Source = EUOUWaterBasinInputSource::PlayerPour;
-		InputContext.WorldDirection = PourDirection;
-		InputContext.WorldLocation = HitResult.ImpactPoint;
-		InputContext.bHasValidWorldLocation = bHasValidImpactPoint;
-		InputContext.InstigatorActor = GetOwner();
-		InputContext.bApplyToConnectedGroup = true;
-		WaterBasinTarget->ReceiveWaterInput(InputContext);
-		return true;
-	}
-
-	if (AActor* ParentActor = HitActor->GetAttachParentActor())
-	{
-		if (UUOUWaterBasinTargetComponent* ParentWaterBasinTarget = ParentActor->FindComponentByClass<UUOUWaterBasinTargetComponent>())
-		{
-			// 히트된 자식 액터 대신 부모가 물 조절 컴포넌트를 들고 있는 경우를 처리합니다.
-			LastPourTargetName = ParentActor->GetName();
-			OutReceiverType = EUOUUmbrellaPourReceiverType::WaterBasinTarget;
-			const bool bHasValidImpactPoint = HitResult.bBlockingHit
-				&& ParentWaterBasinTarget->IsWorldLocationInsideBasin(HitResult.ImpactPoint);
-			bLastPourCheckedWaterBasinImpactPoint = true;
-			bLastPourImpactPointInsideWaterBasin = bHasValidImpactPoint;
-			FUOUWaterBasinInputContext InputContext;
-			InputContext.Volume = WaterAmount;
-			InputContext.Duration = PourDuration;
-			InputContext.Source = EUOUWaterBasinInputSource::PlayerPour;
-			InputContext.WorldDirection = PourDirection;
-			InputContext.WorldLocation = HitResult.ImpactPoint;
-			InputContext.bHasValidWorldLocation = bHasValidImpactPoint;
-			InputContext.InstigatorActor = GetOwner();
-			InputContext.bApplyToConnectedGroup = true;
-			ParentWaterBasinTarget->ReceiveWaterInput(InputContext);
-			return true;
-		}
-	}
-
-	if (UUOUWaterContainerComponent* WaterTargetContainer = HitActor->FindComponentByClass<UUOUWaterContainerComponent>())
-	{
-		// 상자처럼 물 저장 컴포넌트만 가진 액터도 직접 물을 받을 수 있게 처리합니다.
-		LastPourTargetName = HitActor->GetName();
-		OutReceiverType = EUOUUmbrellaPourReceiverType::WaterContainer;
-		WaterTargetContainer->AddAmount(WaterAmount);
-		return true;
-	}
-
-	if (AActor* ParentActor = HitActor->GetAttachParentActor())
-	{
-		if (UUOUWaterContainerComponent* ParentWaterTargetContainer = ParentActor->FindComponentByClass<UUOUWaterContainerComponent>())
-		{
-			LastPourTargetName = ParentActor->GetName();
-			OutReceiverType = EUOUUmbrellaPourReceiverType::WaterContainer;
-			ParentWaterTargetContainer->AddAmount(WaterAmount);
-			return true;
-		}
-	}
-
-	return false;
 }
 
 // 물을 담고 있던 상태에서 닫힘이나 펼침으로 바뀌면 더 이상 담을 수 없으므로 버려야 합니다.
