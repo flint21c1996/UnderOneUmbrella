@@ -5,6 +5,8 @@
 #include "Camera/CameraComponent.h"
 #include "Components/MeshComponent.h"
 #include "GameFramework/Actor.h"
+#include "GameFramework/Character.h"
+#include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "Materials/MaterialInterface.h"
 #include "UObject/ConstructorHelpers.h"
@@ -328,66 +330,87 @@ void UUOUCameraControllerComponent::UpdateCameraOcclusion()
 	}
 
 	const FVector TraceStart = FollowCamera->GetComponentLocation();
-	const FVector TraceEnd = Owner->GetActorLocation() + OcclusionTargetOffset;
+	const FVector TraceEnd = GetCameraOcclusionTraceEnd(Owner);
+	const FVector CameraRight = FollowCamera->GetRightVector();
+	const FVector CameraUp = FollowCamera->GetUpVector();
+
+	TArray<FVector2D> ProbeOffsets;
+	BuildCameraOcclusionProbeOffsets(ProbeOffsets);
 
 	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(CameraOcclusionTrace), false, Owner);
 	QueryParams.AddIgnoredActor(Owner);
+	if (bDialogueFocusActive && DialogueSpeakerActor != nullptr)
+	{
+		QueryParams.AddIgnoredActor(DialogueSpeakerActor);
+	}
 
 	TSet<TObjectPtr<UMeshComponent>> DesiredOccludedMeshes;
 	const int32 OccluderLimit = FMath::Max(1, MaxOccludedMeshCount);
 
-	for (int32 SweepIndex = 0; SweepIndex < OccluderLimit; ++SweepIndex)
+	for (int32 SweepPassIndex = 0; SweepPassIndex < OccluderLimit; ++SweepPassIndex)
 	{
-		TArray<FHitResult> HitResults;
-		const bool bHitAnything = World->SweepMultiByChannel(
-			HitResults,
-			TraceStart,
-			TraceEnd,
-			FQuat::Identity,
-			ECC_Visibility,
-			FCollisionShape::MakeSphere(OcclusionProbeRadius),
-			QueryParams);
+		bool bAddedMeshThisPass = false;
 
-		if (!bHitAnything)
+		for (const FVector2D& ProbeOffset : ProbeOffsets)
 		{
-			break;
-		}
-
-		HitResults.Sort([](const FHitResult& Left, const FHitResult& Right)
-		{
-			return Left.Distance < Right.Distance;
-		});
-
-		bool bAddedMeshThisSweep = false;
-		for (const FHitResult& HitResult : HitResults)
-		{
-			UMeshComponent* MeshComponent = Cast<UMeshComponent>(HitResult.GetComponent());
-			if (MeshComponent == nullptr)
-			{
-				continue;
-			}
-
-			if (MeshComponent->GetOwner() == Owner)
-			{
-				continue;
-			}
-
-			if (DesiredOccludedMeshes.Contains(MeshComponent))
-			{
-				continue;
-			}
-
-			DesiredOccludedMeshes.Add(MeshComponent);
-			QueryParams.AddIgnoredComponent(MeshComponent);
-			bAddedMeshThisSweep = true;
-
 			if (DesiredOccludedMeshes.Num() >= OccluderLimit)
 			{
 				break;
 			}
+
+			const FVector WorldProbeOffset = CameraRight * ProbeOffset.X + CameraUp * ProbeOffset.Y;
+
+			TArray<FHitResult> HitResults;
+			const bool bHitAnything = World->SweepMultiByChannel(
+				HitResults,
+				TraceStart + WorldProbeOffset,
+				TraceEnd + WorldProbeOffset,
+				FQuat::Identity,
+				ECC_Visibility,
+				FCollisionShape::MakeSphere(OcclusionProbeRadius),
+				QueryParams);
+
+			if (!bHitAnything)
+			{
+				continue;
+			}
+
+			HitResults.Sort([](const FHitResult& Left, const FHitResult& Right)
+			{
+				return Left.Distance < Right.Distance;
+			});
+
+			for (const FHitResult& HitResult : HitResults)
+			{
+				UMeshComponent* MeshComponent = Cast<UMeshComponent>(HitResult.GetComponent());
+				if (MeshComponent == nullptr)
+				{
+					continue;
+				}
+
+				if (DesiredOccludedMeshes.Contains(MeshComponent))
+				{
+					continue;
+				}
+
+				if (!IsCameraOcclusionCandidate(MeshComponent, Owner, TraceEnd))
+				{
+					QueryParams.AddIgnoredComponent(MeshComponent);
+					continue;
+				}
+
+				DesiredOccludedMeshes.Add(MeshComponent);
+				QueryParams.AddIgnoredComponent(MeshComponent);
+				bAddedMeshThisPass = true;
+
+				if (DesiredOccludedMeshes.Num() >= OccluderLimit)
+				{
+					break;
+				}
+			}
 		}
 
-		if (!bAddedMeshThisSweep || DesiredOccludedMeshes.Num() >= OccluderLimit)
+		if (!bAddedMeshThisPass || DesiredOccludedMeshes.Num() >= OccluderLimit)
 		{
 			break;
 		}
@@ -411,6 +434,107 @@ void UUOUCameraControllerComponent::UpdateCameraOcclusion()
 	{
 		ApplyOcclusionToMesh(MeshComponent);
 	}
+}
+
+FVector UUOUCameraControllerComponent::GetCameraOcclusionTraceEnd(const AActor* Owner) const
+{
+	if (Owner == nullptr)
+	{
+		return FVector::ZeroVector;
+	}
+
+	if (bDialogueFocusActive)
+	{
+		return Owner->GetActorLocation() + TargetCameraOffset;
+	}
+
+	return Owner->GetActorLocation() + OcclusionTargetOffset;
+}
+
+void UUOUCameraControllerComponent::BuildCameraOcclusionProbeOffsets(TArray<FVector2D>& OutProbeOffsets) const
+{
+	OutProbeOffsets.Reset();
+	OutProbeOffsets.Add(FVector2D::ZeroVector);
+
+	const float LateralExtent = FMath::Max(0.0f, OcclusionProbeLateralExtent);
+	const float VerticalExtent = FMath::Max(0.0f, OcclusionProbeVerticalExtent);
+
+	if (LateralExtent > KINDA_SMALL_NUMBER)
+	{
+		OutProbeOffsets.Add(FVector2D(LateralExtent, 0.0f));
+		OutProbeOffsets.Add(FVector2D(-LateralExtent, 0.0f));
+	}
+
+	if (VerticalExtent > KINDA_SMALL_NUMBER)
+	{
+		OutProbeOffsets.Add(FVector2D(0.0f, VerticalExtent));
+		OutProbeOffsets.Add(FVector2D(0.0f, -VerticalExtent));
+	}
+
+	if (LateralExtent > KINDA_SMALL_NUMBER && VerticalExtent > KINDA_SMALL_NUMBER)
+	{
+		OutProbeOffsets.Add(FVector2D(LateralExtent, VerticalExtent));
+		OutProbeOffsets.Add(FVector2D(LateralExtent, -VerticalExtent));
+		OutProbeOffsets.Add(FVector2D(-LateralExtent, VerticalExtent));
+		OutProbeOffsets.Add(FVector2D(-LateralExtent, -VerticalExtent));
+	}
+}
+
+bool UUOUCameraControllerComponent::IsCameraOcclusionCandidate(const UMeshComponent* MeshComponent, const AActor* Owner, const FVector& TraceEnd) const
+{
+	if (MeshComponent == nullptr)
+	{
+		return false;
+	}
+
+	if (MeshComponent->GetOwner() == Owner)
+	{
+		return false;
+	}
+
+	if (IsOwnerSupportMesh(MeshComponent, Owner))
+	{
+		return false;
+	}
+
+	const FBoxSphereBounds& MeshBounds = MeshComponent->Bounds;
+	const float MeshTopZ = MeshBounds.Origin.Z + MeshBounds.BoxExtent.Z;
+	const float RequiredTopZ = TraceEnd.Z - FMath::Max(0.0f, OcclusionLowObjectIgnoreBelowTarget);
+	if (MeshTopZ < RequiredTopZ)
+	{
+		return false;
+	}
+
+	return true;
+}
+
+bool UUOUCameraControllerComponent::IsOwnerSupportMesh(const UMeshComponent* MeshComponent, const AActor* Owner) const
+{
+	if (MeshComponent == nullptr || Owner == nullptr)
+	{
+		return false;
+	}
+
+	const ACharacter* CharacterOwner = Cast<ACharacter>(Owner);
+	if (CharacterOwner == nullptr)
+	{
+		return false;
+	}
+
+	if (const UPrimitiveComponent* MovementBaseComponent = CharacterOwner->GetMovementBase())
+	{
+		if (MeshComponent == MovementBaseComponent)
+		{
+			return true;
+		}
+	}
+
+	const UCharacterMovementComponent* CharacterMovement = CharacterOwner->GetCharacterMovement();
+	const UPrimitiveComponent* FloorComponent = CharacterMovement != nullptr
+		? CharacterMovement->CurrentFloor.HitResult.GetComponent()
+		: nullptr;
+
+	return MeshComponent == FloorComponent;
 }
 
 void UUOUCameraControllerComponent::ApplyOcclusionToMesh(UMeshComponent* MeshComponent)
