@@ -183,6 +183,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Pour Socket", meta = (ToolTip = "Stream Visual과 DropActor가 시작되는 소켓 이름입니다. 우산 리소스마다 이 소켓 위치를 맞추면 붓기 시작점이 일관됩니다."))
 	FName PouringSocketName = TEXT("PouringPoint");
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Umbrella|Pour Socket", meta = (ToolTip = "Socket-space offset in world units applied after resolving PouringSocketName. This is not reduced by the skeletal mesh component scale."))
+	FVector PouringSocketWorldUnitOffset = FVector::ZeroVector;
+
 	// 픽업한 우산 메쉬를 런타임에 복사해서 플레이어 손에 보여주는 컴포넌트입니다.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Umbrella|References")
 	TObjectPtr<UStaticMeshComponent> RuntimeHeldVisual = nullptr;
@@ -282,6 +285,24 @@ public:
 	// 물 붓기 디버그 선과 라벨이 유지되는 시간입니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Debug", meta = (ClampMin = "0.0"))
 	float PourTraceDebugLifeTime = 0.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Umbrella|Debug|Pour", meta = (ToolTip = "Draws the resolved PouringPoint socket in the world while the umbrella is held."))
+	bool bDrawPourSocketDebug = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Umbrella|Debug|Pour", meta = (ToolTip = "Draws the exact PourDropActor spawn point and direction in the world."))
+	bool bDrawPourDropSpawnDebug = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Umbrella|Debug|Pour", meta = (ToolTip = "Draws spawned PourDropActor collision spheres in the world."))
+	bool bDrawPourDropCollisionDebug = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Umbrella|Pour Drop", meta = (ToolTip = "Overrides spawned PourDropActor collision radius after profile and Blueprint defaults are applied."))
+	bool bOverridePourDropCollisionRadius = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Umbrella|Pour Drop", meta = (ClampMin = "0.0", EditCondition = "bOverridePourDropCollisionRadius", EditConditionHides))
+	float PourDropCollisionRadiusOverride = 4.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Umbrella|Debug|Pour", meta = (ClampMin = "0.0"))
+	float PourSocketDebugRadius = 10.0f;
 
 	// 초당 붓는 물의 양입니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Water", meta = (ClampMin = "0.0"))
@@ -602,6 +623,8 @@ protected:
 
 	bool TryGetPouringPointTransform(FTransform& OutTransform) const;
 
+	const USkeletalMeshComponent* ResolvePouringSocketSourceComponent() const;
+
 	bool TryGetPourDropSpawnPlacement(FVector& OutDropLocation, FVector& OutDropDirection) const;
 
 	const UUOUPourContentProfile* ResolvePourContentProfile() const;
@@ -634,6 +657,8 @@ protected:
 
 	// 물 붓기 디버그에 사용하는 마지막 트레이스 기록을 비웁니다.
 	void ClearPourTraceDebug();
+
+	void DrawPourSocketAndDropSpawnDebug() const;
 
 	// 물을 붓는 동안 플레이어가 마우스 방향을 바라보도록 회전을 보정합니다.
 	void UpdatePourAimFacing();

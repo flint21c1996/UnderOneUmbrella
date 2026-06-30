@@ -128,6 +128,7 @@ void UUOUUmbrellaComponent::TickComponent(float DeltaTime, ELevelTick TickType, 
 	UpdatePouringEffectState();
 	DrawScreenDebug();
 	DrawRainBlockerDebug();
+	DrawPourSocketAndDropSpawnDebug();
 	DrawPourTraceDebug();
 }
 
@@ -1136,8 +1137,23 @@ void UUOUUmbrellaComponent::UpdatePouringEffectState()
 
 bool UUOUUmbrellaComponent::TryGetPouringPointTransform(FTransform& OutTransform) const
 {
-	const USkeletalMeshComponent* PouringSocketSource = SkeletalHeldVisual.Get();
-	if (PouringSocketSource == nullptr && !PouringSocketSourceComponentName.IsNone())
+	const USkeletalMeshComponent* PouringSocketSource = ResolvePouringSocketSourceComponent();
+	if (PouringSocketSource == nullptr || PouringSocketName.IsNone() || !PouringSocketSource->DoesSocketExist(PouringSocketName))
+	{
+		return false;
+	}
+
+	OutTransform = PouringSocketSource->GetSocketTransform(PouringSocketName, RTS_World);
+	if (!PouringSocketWorldUnitOffset.IsNearlyZero())
+	{
+		OutTransform.AddToTranslation(OutTransform.GetRotation().RotateVector(PouringSocketWorldUnitOffset));
+	}
+	return true;
+}
+
+const USkeletalMeshComponent* UUOUUmbrellaComponent::ResolvePouringSocketSourceComponent() const
+{
+	if (!PouringSocketSourceComponentName.IsNone())
 	{
 		if (const AActor* Owner = GetOwner())
 		{
@@ -1148,20 +1164,13 @@ bool UUOUUmbrellaComponent::TryGetPouringPointTransform(FTransform& OutTransform
 					&& (SkeletalMeshComponent->GetFName() == PouringSocketSourceComponentName
 						|| SkeletalMeshComponent->ComponentTags.Contains(PouringSocketSourceComponentName)))
 				{
-					PouringSocketSource = SkeletalMeshComponent;
-					break;
+					return SkeletalMeshComponent;
 				}
 			}
 		}
 	}
 
-	if (PouringSocketSource == nullptr || PouringSocketName.IsNone() || !PouringSocketSource->DoesSocketExist(PouringSocketName))
-	{
-		return false;
-	}
-
-	OutTransform = PouringSocketSource->GetSocketTransform(PouringSocketName, RTS_World);
-	return true;
+	return SkeletalHeldVisual.Get();
 }
 
 void UUOUUmbrellaComponent::UpdatePouringEffectTransform()
@@ -1559,6 +1568,55 @@ void UUOUUmbrellaComponent::ClearPourTraceDebug()
 }
 
 // 물을 붓는 동안 캐릭터 몸 방향을 마우스 조준 방향에 맞춥니다.
+void UUOUUmbrellaComponent::DrawPourSocketAndDropSpawnDebug() const
+{
+	if (!bHasUmbrella || (!bDrawPourSocketDebug && !bDrawPourDropSpawnDebug))
+	{
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	if (World == nullptr)
+	{
+		return;
+	}
+
+	const float Radius = FMath::Max(1.0f, PourSocketDebugRadius);
+	const float LifeTime = 0.0f;
+	const float Thickness = 2.0f;
+
+	FTransform SocketTransform = FTransform::Identity;
+	if (bDrawPourSocketDebug && TryGetPouringPointTransform(SocketTransform))
+	{
+		const FVector SocketLocation = SocketTransform.GetLocation();
+		const USkeletalMeshComponent* SocketSource = ResolvePouringSocketSourceComponent();
+		const FString SocketSourceName = GetNameSafe(SocketSource);
+		const FString SocketMeshName = SocketSource != nullptr ? GetNameSafe(SocketSource->GetSkeletalMeshAsset()) : TEXT("None");
+		const FString SocketDebugText = FString::Printf(
+			TEXT("PourSocket\nComponent: %s\nMesh: %s\nSocket: %s\nOffset: %.1f %.1f %.1f"),
+			*SocketSourceName,
+			*SocketMeshName,
+			*PouringSocketName.ToString(),
+			PouringSocketWorldUnitOffset.X,
+			PouringSocketWorldUnitOffset.Y,
+			PouringSocketWorldUnitOffset.Z);
+		DrawDebugSphere(World, SocketLocation, Radius, 16, FColor::Magenta, false, LifeTime, 0, Thickness);
+		DrawDebugCoordinateSystem(World, SocketLocation, SocketTransform.Rotator(), Radius * 2.5f, false, LifeTime, 0, Thickness);
+		DrawDebugString(World, SocketLocation + FVector(0.0f, 0.0f, Radius + 18.0f), SocketDebugText, nullptr, FColor::Magenta, LifeTime, true);
+	}
+
+	FVector DropLocation = FVector::ZeroVector;
+	FVector DropDirection = FVector::ForwardVector;
+	if (bDrawPourDropSpawnDebug && TryGetPourDropSpawnPlacement(DropLocation, DropDirection))
+	{
+		const FVector SafeDirection = DropDirection.IsNearlyZero() ? FVector::DownVector : DropDirection.GetSafeNormal();
+		DrawDebugSphere(World, DropLocation, Radius * 0.7f, 16, FColor::Yellow, false, LifeTime, 0, Thickness);
+		DrawDebugLine(World, DropLocation, DropLocation + SafeDirection * 120.0f, FColor::Yellow, false, LifeTime, 0, Thickness);
+		DrawDebugLine(World, DropLocation, DropLocation + FVector::DownVector * 120.0f, FColor::Cyan, false, LifeTime, 0, Thickness);
+		DrawDebugString(World, DropLocation + FVector(0.0f, 0.0f, Radius + 36.0f), TEXT("DropSpawn"), nullptr, FColor::Yellow, LifeTime, true);
+	}
+}
+
 void UUOUUmbrellaComponent::UpdatePourAimFacing()
 {
 	if (!bRotateOwnerTowardsPourDirection || CurrentState != EUOUUmbrellaState::Pouring)
