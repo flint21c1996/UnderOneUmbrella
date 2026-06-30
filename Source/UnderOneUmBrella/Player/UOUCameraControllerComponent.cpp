@@ -9,6 +9,11 @@
 #include "Materials/MaterialInterface.h"
 #include "UObject/ConstructorHelpers.h"
 
+namespace
+{
+	constexpr float CameraRotationCompleteToleranceDegrees = 1.0f;
+}
+
 UUOUCameraControllerComponent::UUOUCameraControllerComponent()
 {
 	PrimaryComponentTick.bCanEverTick = true;
@@ -74,6 +79,18 @@ void UUOUCameraControllerComponent::ZoomCameraOut()
 float UUOUCameraControllerComponent::GetMovementYaw() const
 {
 	return CameraBoom != nullptr ? CameraBoom->GetComponentRotation().Yaw : 0.0f;
+}
+
+bool UUOUCameraControllerComponent::IsSnapCameraRotationInProgress() const
+{
+	if (CameraBoom == nullptr || bDialogueFocusActive)
+	{
+		return false;
+	}
+
+	const float CurrentYaw = CameraBoom->GetComponentRotation().Yaw;
+	const float DeltaYaw = FMath::FindDeltaAngleDegrees(CurrentYaw, TargetCameraYaw);
+	return FMath::Abs(DeltaYaw) > CameraRotationCompleteToleranceDegrees;
 }
 
 float UUOUCameraControllerComponent::GetCurrentCameraDistance() const
