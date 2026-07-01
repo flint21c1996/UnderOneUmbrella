@@ -140,8 +140,11 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pour Drop|Impact", meta = (ToolTip = "DropActor impact 시 재생할 splash Niagara입니다. 각 impact 인스턴스별로 한 번 재생되는 one-shot 에셋을 권장합니다."))
 	TObjectPtr<UNiagaraSystem> ImpactSplashEffect = nullptr;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pour Drop|Impact", meta = (ClampMin = "0.0", ToolTip = "Impact splash Niagara의 월드 스케일입니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pour Drop|Impact", meta = (ClampMin = "0.0", ToolTip = "Impact splash Niagara의 float scale User Parameter에 전달할 값입니다. 이 값은 컴포넌트 월드 스케일이 아니라 Niagara 내부 파라미터로 사용됩니다."))
 	float ImpactSplashScale = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pour Drop|Impact", meta = (ToolTip = "Impact splash Niagara에 전달할 float User Parameter 이름입니다. 기본값 User.scale은 Niagara User Parameters의 scale 항목과 연결됩니다."))
+	FName ImpactSplashScaleParameterName = TEXT("User.Scale");
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Pour Drop|Runtime")
 	float CurrentVolume = 0.0f;
