@@ -59,6 +59,8 @@ public:
 		const TArray<TObjectPtr<AUOUFloorPlatformTargetActor>>& TargetMarkers,
 		bool bLoopMoveSteps,
 		bool bLoopThroughStart,
+		bool bPingPongMoveSteps,
+		int32& InOutMoveDirection,
 		int32& InOutCurrentTargetIndex);
 
 private:
