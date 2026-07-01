@@ -310,6 +310,7 @@ void AUOUPourDropActor::ApplyContextVisualSettings(const FUOUPourDropVisualSetti
 	bDestroyOnBlockingHitWithoutReceiver = VisualSettings.bDestroyOnBlockingHitWithoutReceiver;
 	bSpawnSplashOnlyWhenDelivered = VisualSettings.bSpawnSplashOnlyWhenDelivered;
 	ImpactSplashScale = VisualSettings.ImpactSplashScale;
+	ImpactSplashScaleParameterName = VisualSettings.ImpactSplashScaleParameterName;
 }
 
 void AUOUPourDropActor::ApplyMovementSettings()
@@ -603,12 +604,26 @@ void AUOUPourDropActor::SpawnImpactSplash(const FVector& ImpactLocation, const F
 	}
 
 	const FVector SafeNormal = ImpactNormal.IsNearlyZero() ? FVector::UpVector : ImpactNormal.GetSafeNormal();
-	UNiagaraFunctionLibrary::SpawnSystemAtLocation(
+	UNiagaraComponent* SplashComponent = UNiagaraFunctionLibrary::SpawnSystemAtLocation(
 		World,
 		ImpactSplashEffect,
 		ImpactLocation,
 		SafeNormal.Rotation(),
-		FVector(FMath::Max(0.0f, ImpactSplashScale)));
+		FVector::OneVector,
+		true,
+		false);
+
+	if (SplashComponent == nullptr)
+	{
+		return;
+	}
+
+	if (!ImpactSplashScaleParameterName.IsNone())
+	{
+		SplashComponent->SetVariableFloat(ImpactSplashScaleParameterName, FMath::Max(0.0f, ImpactSplashScale));
+	}
+
+	SplashComponent->Activate(true);
 }
 
 bool AUOUPourDropActor::ShouldIgnoreActor(const AActor* OtherActor) const
