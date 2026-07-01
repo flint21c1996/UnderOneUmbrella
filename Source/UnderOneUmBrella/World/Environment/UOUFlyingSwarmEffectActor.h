@@ -362,10 +362,11 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Paper Plane Swarm|Effect", meta = (ToolTip = "Code Driven Mesh는 C++ Tick에서 종이비행기 위치와 회전을 직접 계산합니다. Niagara는 기존 시스템 호환용입니다."))
 	EUOUPaperPlaneSwarmRenderMode RenderMode = EUOUPaperPlaneSwarmRenderMode::CodeDrivenMesh;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Paper Plane Swarm|Effect", meta = (EditCondition = "RenderMode == EUOUPaperPlaneSwarmRenderMode::CodeDrivenMesh", ToolTip = "켜면 PaperPlaneMesh에 저장된 값과 관계없이 Engine BasicShapes Cone을 사용합니다."))
-	bool bUseDefaultConeMesh = true;
+	// 기존 액터 호환용입니다. 실제 메시는 PaperPlaneMesh가 기준이고, 비어 있으면 기본 Cone을 사용합니다.
+	UPROPERTY()
+	bool bUseDefaultConeMesh = false;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Paper Plane Swarm|Effect", meta = (EditCondition = "RenderMode == EUOUPaperPlaneSwarmRenderMode::CodeDrivenMesh", ToolTip = "C++ 렌더링 모드에서 인스턴스로 표시할 Static Mesh입니다. 기본값은 Engine BasicShapes Cone입니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Paper Plane Swarm|Effect", meta = (EditCondition = "RenderMode == EUOUPaperPlaneSwarmRenderMode::CodeDrivenMesh", ToolTip = "C++ 렌더링 모드에서 인스턴스로 표시할 Static Mesh입니다. 비워 두면 PaperPlaneInstances 컴포넌트의 Static Mesh를 사용하고, 그것도 비어 있으면 Engine BasicShapes Cone을 사용합니다."))
 	TObjectPtr<UStaticMesh> PaperPlaneMesh = nullptr;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Paper Plane Swarm|Effect", meta = (EditCondition = "RenderMode == EUOUPaperPlaneSwarmRenderMode::CodeDrivenMesh", ToolTip = "Mesh의 로컬 진행 방향을 C++ 계산 방향에 맞추는 회전 보정값입니다. Cone은 로컬 +Z가 끝 방향이라 기본 -90 Pitch를 사용합니다."))
@@ -661,6 +662,7 @@ protected:
 	virtual void OnConstruction(const FTransform& Transform) override;
 
 #if WITH_EDITOR
+	virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
 	virtual bool ShouldTickIfViewportsOnly() const override;
 #endif
 
@@ -675,6 +677,7 @@ private:
 	void ApplyEffectSystem();
 	void ApplyNiagaraParameters();
 	void ApplyRenderMode();
+	UStaticMesh* GetResolvedPaperPlaneMesh() const;
 	bool EnsurePaperPlaneMesh();
 	void ClearCodeDrivenPlaneComponents();
 	void RebuildCodeDrivenPlaneInstances();
@@ -684,6 +687,10 @@ private:
 	void DrawRuntimeDebug() const;
 	FTransform GetCurrentStartTransform() const;
 	FTransform GetCurrentTargetTransform() const;
+
+#if WITH_EDITOR
+	bool ShouldRebuildCodeDrivenPlaneInstancesAfterEditorChange(FName PropertyName) const;
+#endif
 
 	FTransform ResolveSourceTransform() const;
 	FTransform ResolveTargetTransform() const;

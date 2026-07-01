@@ -377,8 +377,7 @@ void AUOUPourDropActor::IgnoreSourceActor()
 void AUOUPourDropActor::DrawDebugCollisionRadius() const
 {
 	if (!bDrawDebugCollisionRadius
-		|| CollisionComponent == nullptr
-		|| !UUOUDebugSubsystem::IsDebugWorldDrawEnabled(this, EUOUDebugCategory::Player))
+		|| CollisionComponent == nullptr)
 	{
 		return;
 	}

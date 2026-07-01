@@ -8,6 +8,7 @@
 #include "Components/PrimitiveComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Components/SphereComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Debug/UOUDebugSubsystem.h"
 #include "Engine/GameInstance.h"
@@ -18,6 +19,7 @@
 #include "GameFramework/Character.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
+#include "Camera/PlayerCameraManager.h"
 #include "Materials/MaterialInterface.h"
 #include "NiagaraComponent.h"
 #include "Player/UOURainReceiverComponent.h"
@@ -128,6 +130,7 @@ void UUOUUmbrellaComponent::TickComponent(float DeltaTime, ELevelTick TickType, 
 	UpdatePouringEffectState();
 	DrawScreenDebug();
 	DrawRainBlockerDebug();
+	DrawPourSocketAndDropSpawnDebug();
 	DrawPourTraceDebug();
 }
 
@@ -1136,8 +1139,23 @@ void UUOUUmbrellaComponent::UpdatePouringEffectState()
 
 bool UUOUUmbrellaComponent::TryGetPouringPointTransform(FTransform& OutTransform) const
 {
-	const USkeletalMeshComponent* PouringSocketSource = SkeletalHeldVisual.Get();
-	if (PouringSocketSource == nullptr && !PouringSocketSourceComponentName.IsNone())
+	const USkeletalMeshComponent* PouringSocketSource = ResolvePouringSocketSourceComponent();
+	if (PouringSocketSource == nullptr || PouringSocketName.IsNone() || !PouringSocketSource->DoesSocketExist(PouringSocketName))
+	{
+		return false;
+	}
+
+	OutTransform = PouringSocketSource->GetSocketTransform(PouringSocketName, RTS_World);
+	if (!PouringSocketWorldUnitOffset.IsNearlyZero())
+	{
+		OutTransform.AddToTranslation(OutTransform.GetRotation().RotateVector(PouringSocketWorldUnitOffset));
+	}
+	return true;
+}
+
+const USkeletalMeshComponent* UUOUUmbrellaComponent::ResolvePouringSocketSourceComponent() const
+{
+	if (!PouringSocketSourceComponentName.IsNone())
 	{
 		if (const AActor* Owner = GetOwner())
 		{
@@ -1148,20 +1166,13 @@ bool UUOUUmbrellaComponent::TryGetPouringPointTransform(FTransform& OutTransform
 					&& (SkeletalMeshComponent->GetFName() == PouringSocketSourceComponentName
 						|| SkeletalMeshComponent->ComponentTags.Contains(PouringSocketSourceComponentName)))
 				{
-					PouringSocketSource = SkeletalMeshComponent;
-					break;
+					return SkeletalMeshComponent;
 				}
 			}
 		}
 	}
 
-	if (PouringSocketSource == nullptr || PouringSocketName.IsNone() || !PouringSocketSource->DoesSocketExist(PouringSocketName))
-	{
-		return false;
-	}
-
-	OutTransform = PouringSocketSource->GetSocketTransform(PouringSocketName, RTS_World);
-	return true;
+	return SkeletalHeldVisual.Get();
 }
 
 void UUOUUmbrellaComponent::UpdatePouringEffectTransform()
@@ -1559,6 +1570,55 @@ void UUOUUmbrellaComponent::ClearPourTraceDebug()
 }
 
 // 물을 붓는 동안 캐릭터 몸 방향을 마우스 조준 방향에 맞춥니다.
+void UUOUUmbrellaComponent::DrawPourSocketAndDropSpawnDebug() const
+{
+	if (!bHasUmbrella || (!bDrawPourSocketDebug && !bDrawPourDropSpawnDebug))
+	{
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	if (World == nullptr)
+	{
+		return;
+	}
+
+	const float Radius = FMath::Max(1.0f, PourSocketDebugRadius);
+	const float LifeTime = 0.0f;
+	const float Thickness = 2.0f;
+
+	FTransform SocketTransform = FTransform::Identity;
+	if (bDrawPourSocketDebug && TryGetPouringPointTransform(SocketTransform))
+	{
+		const FVector SocketLocation = SocketTransform.GetLocation();
+		const USkeletalMeshComponent* SocketSource = ResolvePouringSocketSourceComponent();
+		const FString SocketSourceName = GetNameSafe(SocketSource);
+		const FString SocketMeshName = SocketSource != nullptr ? GetNameSafe(SocketSource->GetSkeletalMeshAsset()) : TEXT("None");
+		const FString SocketDebugText = FString::Printf(
+			TEXT("PourSocket\nComponent: %s\nMesh: %s\nSocket: %s\nOffset: %.1f %.1f %.1f"),
+			*SocketSourceName,
+			*SocketMeshName,
+			*PouringSocketName.ToString(),
+			PouringSocketWorldUnitOffset.X,
+			PouringSocketWorldUnitOffset.Y,
+			PouringSocketWorldUnitOffset.Z);
+		DrawDebugSphere(World, SocketLocation, Radius, 16, FColor::Magenta, false, LifeTime, 0, Thickness);
+		DrawDebugCoordinateSystem(World, SocketLocation, SocketTransform.Rotator(), Radius * 2.5f, false, LifeTime, 0, Thickness);
+		DrawDebugString(World, SocketLocation + FVector(0.0f, 0.0f, Radius + 18.0f), SocketDebugText, nullptr, FColor::Magenta, LifeTime, true);
+	}
+
+	FVector DropLocation = FVector::ZeroVector;
+	FVector DropDirection = FVector::ForwardVector;
+	if (bDrawPourDropSpawnDebug && TryGetPourDropSpawnPlacement(DropLocation, DropDirection))
+	{
+		const FVector SafeDirection = DropDirection.IsNearlyZero() ? FVector::DownVector : DropDirection.GetSafeNormal();
+		DrawDebugSphere(World, DropLocation, Radius * 0.7f, 16, FColor::Yellow, false, LifeTime, 0, Thickness);
+		DrawDebugLine(World, DropLocation, DropLocation + SafeDirection * 120.0f, FColor::Yellow, false, LifeTime, 0, Thickness);
+		DrawDebugLine(World, DropLocation, DropLocation + FVector::DownVector * 120.0f, FColor::Cyan, false, LifeTime, 0, Thickness);
+		DrawDebugString(World, DropLocation + FVector(0.0f, 0.0f, Radius + 36.0f), TEXT("DropSpawn"), nullptr, FColor::Yellow, LifeTime, true);
+	}
+}
+
 void UUOUUmbrellaComponent::UpdatePourAimFacing()
 {
 	if (!bRotateOwnerTowardsPourDirection || CurrentState != EUOUUmbrellaState::Pouring)
@@ -1577,6 +1637,12 @@ void UUOUUmbrellaComponent::UpdatePourAimFacing()
 
 	AActor* Owner = GetOwner();
 	if (Owner == nullptr)
+	{
+		return;
+	}
+
+	AimDirection = SnapPourDirectionToAngleStep(AimDirection);
+	if (AimDirection.IsNearlyZero())
 	{
 		return;
 	}
@@ -1644,6 +1710,15 @@ bool UUOUUmbrellaComponent::SpawnPendingPourDrop()
 		DropContext.VisualSettings = ContentProfile->DropVisual;
 	}
 	DropActor->InitializePourDrop(DropContext);
+	DropActor->bDrawDebugCollisionRadius = bDrawPourDropCollisionDebug;
+	if (bOverridePourDropCollisionRadius)
+	{
+		DropActor->CollisionRadius = FMath::Max(0.0f, PourDropCollisionRadiusOverride);
+		if (DropActor->CollisionComponent != nullptr)
+		{
+			DropActor->CollisionComponent->SetSphereRadius(DropActor->CollisionRadius, true);
+		}
+	}
 
 	LastPourTraceStart = DropLocation;
 	LastPourTraceEnd = DropLocation + DropDirection * PourDistance;
@@ -1828,6 +1903,11 @@ bool UUOUUmbrellaComponent::TryGetMouseAimDirection(FVector& AimDirection, FVect
 		return false;
 	}
 
+	if (TryGetScreenSpaceMouseAimDirection(PlayerController, AimDirection, AimPoint))
+	{
+		return true;
+	}
+
 	FHitResult CursorHit;
 	if (PlayerController->GetHitResultUnderCursorByChannel(UEngineTypes::ConvertToTraceType(MouseAimTraceChannel), true, CursorHit))
 	{
@@ -1869,6 +1949,99 @@ bool UUOUUmbrellaComponent::TryGetMouseAimDirection(FVector& AimDirection, FVect
 }
 
 // 물을 부을 시작점과 방향을 정합니다. 마우스 조준이 가능하면 우산 앞 방향보다 마우스 방향을 우선합니다.
+bool UUOUUmbrellaComponent::TryGetScreenSpaceMouseAimDirection(APlayerController* PlayerController, FVector& AimDirection, FVector& AimPoint) const
+{
+	AimDirection = FVector::ZeroVector;
+	AimPoint = FVector::ZeroVector;
+
+	const AActor* Owner = GetOwner();
+	if (!bUseScreenSpacePourAim || PlayerController == nullptr || Owner == nullptr)
+	{
+		return false;
+	}
+
+	FVector2D OwnerScreenPosition = FVector2D::ZeroVector;
+	if (!PlayerController->ProjectWorldLocationToScreen(Owner->GetActorLocation(), OwnerScreenPosition, true))
+	{
+		return false;
+	}
+
+	float MouseX = 0.0f;
+	float MouseY = 0.0f;
+	if (!PlayerController->GetMousePosition(MouseX, MouseY))
+	{
+		return false;
+	}
+
+	FVector2D ScreenDirection(MouseX - OwnerScreenPosition.X, OwnerScreenPosition.Y - MouseY);
+	if (ScreenDirection.SizeSquared() <= FMath::Square(FMath::Max(0.0f, ScreenSpacePourAimDeadZone)))
+	{
+		return false;
+	}
+
+	ScreenDirection.Normalize();
+	if (bSnapPourAimDirection)
+	{
+		const float SafeStep = FMath::Clamp(PourAimSnapAngleDegrees, 1.0f, 180.0f);
+		const float ScreenAngleDegrees = FMath::RadiansToDegrees(FMath::Atan2(ScreenDirection.Y, ScreenDirection.X));
+		const float SnappedScreenAngleDegrees = FMath::GridSnap(ScreenAngleDegrees, SafeStep);
+		const float SnappedScreenAngleRadians = FMath::DegreesToRadians(SnappedScreenAngleDegrees);
+		ScreenDirection = FVector2D(FMath::Cos(SnappedScreenAngleRadians), FMath::Sin(SnappedScreenAngleRadians));
+	}
+
+	const FRotator CameraRotation = PlayerController->PlayerCameraManager != nullptr
+		? PlayerController->PlayerCameraManager->GetCameraRotation()
+		: PlayerController->GetControlRotation();
+	const FRotationMatrix CameraRotationMatrix(CameraRotation);
+	FVector ScreenRightWorld = CameraRotationMatrix.GetScaledAxis(EAxis::Y);
+	FVector ScreenUpWorld = CameraRotationMatrix.GetScaledAxis(EAxis::Z);
+	ScreenRightWorld.Z = 0.0f;
+	ScreenUpWorld.Z = 0.0f;
+
+	if (ScreenRightWorld.IsNearlyZero())
+	{
+		ScreenRightWorld = FVector::RightVector;
+	}
+	if (ScreenUpWorld.IsNearlyZero())
+	{
+		ScreenUpWorld = CameraRotationMatrix.GetScaledAxis(EAxis::X);
+		ScreenUpWorld.Z = 0.0f;
+	}
+	if (ScreenUpWorld.IsNearlyZero())
+	{
+		ScreenUpWorld = FVector::ForwardVector;
+	}
+
+	ScreenRightWorld.Normalize();
+	ScreenUpWorld.Normalize();
+
+	FVector WorldDirection = ScreenRightWorld * ScreenDirection.X + ScreenUpWorld * ScreenDirection.Y;
+	WorldDirection.Z = 0.0f;
+	if (WorldDirection.IsNearlyZero())
+	{
+		return false;
+	}
+
+	AimDirection = WorldDirection.GetSafeNormal();
+	AimPoint = Owner->GetActorLocation() + AimDirection * MouseAimRayDistance;
+	return true;
+}
+
+FVector UUOUUmbrellaComponent::SnapPourDirectionToAngleStep(const FVector& Direction) const
+{
+	FVector FlatDirection(Direction.X, Direction.Y, 0.0f);
+	if (!bSnapPourAimDirection || FlatDirection.IsNearlyZero())
+	{
+		return FlatDirection.GetSafeNormal();
+	}
+
+	const float SafeStep = FMath::Clamp(PourAimSnapAngleDegrees, 1.0f, 180.0f);
+	const float AngleDegrees = FMath::RadiansToDegrees(FMath::Atan2(FlatDirection.Y, FlatDirection.X));
+	const float SnappedAngleDegrees = FMath::GridSnap(AngleDegrees, SafeStep);
+	const float SnappedAngleRadians = FMath::DegreesToRadians(SnappedAngleDegrees);
+	return FVector(FMath::Cos(SnappedAngleRadians), FMath::Sin(SnappedAngleRadians), 0.0f).GetSafeNormal();
+}
+
 bool UUOUUmbrellaComponent::TryGetPourDirection(FVector& PourOriginLocation, FVector& PourDirection) const
 {
 	AActor* Owner = GetOwner();
@@ -1923,7 +2096,7 @@ bool UUOUUmbrellaComponent::TryGetPourDirection(FVector& PourOriginLocation, FVe
 		PourDirection = FVector::ForwardVector;
 	}
 
-	PourDirection.Normalize();
+	PourDirection = SnapPourDirectionToAngleStep(PourDirection);
 	return !PourDirection.IsNearlyZero();
 }
 

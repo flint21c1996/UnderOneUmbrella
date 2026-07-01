@@ -137,8 +137,7 @@ AUOUFlyingSwarmEffectActor::AUOUFlyingSwarmEffectActor()
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> PaperPlaneMeshFinder(DefaultPaperPlaneMeshPath);
 	if (PaperPlaneMeshFinder.Succeeded())
 	{
-		PaperPlaneMesh = PaperPlaneMeshFinder.Object;
-		PaperPlaneInstances->SetStaticMesh(PaperPlaneMesh);
+		PaperPlaneInstances->SetStaticMesh(PaperPlaneMeshFinder.Object);
 	}
 }
 
@@ -249,7 +248,7 @@ void AUOUFlyingSwarmEffectActor::ActivateEffect()
 		UE_LOG(LogTemp, Log, TEXT("UOU Paper Plane Swarm Effect '%s' activated in CodeDrivenMesh mode. Planes=%d Mesh=%s"),
 			*GetNameSafe(this),
 			RuntimePlaneMeshComponents.Num(),
-			*GetNameSafe(PaperPlaneMesh));
+			*GetNameSafe(GetResolvedPaperPlaneMesh()));
 	}
 	else
 	{
@@ -361,9 +360,62 @@ TArray<FString> AUOUFlyingSwarmEffectActor::GetPuzzleDebugInfo_Implementation() 
 }
 
 #if WITH_EDITOR
+void AUOUFlyingSwarmEffectActor::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent)
+{
+	const FProperty* ChangedProperty = PropertyChangedEvent.MemberProperty != nullptr
+		? PropertyChangedEvent.MemberProperty
+		: PropertyChangedEvent.Property;
+	const FName PropertyName = ChangedProperty != nullptr
+		? ChangedProperty->GetFName()
+		: NAME_None;
+
+	Super::PostEditChangeProperty(PropertyChangedEvent);
+
+	if (bIsEffectActive)
+	{
+		ActiveStartTransform = ResolveSourceTransform();
+		if (!bFollowTarget)
+		{
+			ActiveTargetTransform = ResolveTargetTransform();
+		}
+	}
+
+	ApplyEffectSystem();
+	ApplyRenderMode();
+	ApplyNiagaraParameters();
+
+	if (RenderMode == EUOUPaperPlaneSwarmRenderMode::CodeDrivenMesh && bIsEffectActive)
+	{
+		if (ShouldRebuildCodeDrivenPlaneInstancesAfterEditorChange(PropertyName))
+		{
+			RebuildCodeDrivenPlaneInstances();
+		}
+
+		UpdateCodeDrivenPlaneInstances(1.0f / 60.0f);
+	}
+}
+
 bool AUOUFlyingSwarmEffectActor::ShouldTickIfViewportsOnly() const
 {
 	return bIsEffectActive;
+}
+
+bool AUOUFlyingSwarmEffectActor::ShouldRebuildCodeDrivenPlaneInstancesAfterEditorChange(FName PropertyName) const
+{
+	return PropertyName.IsNone()
+		|| PropertyName == GET_MEMBER_NAME_CHECKED(AUOUFlyingSwarmEffectActor, RenderMode)
+		|| PropertyName == GET_MEMBER_NAME_CHECKED(AUOUFlyingSwarmEffectActor, PaperPlaneMesh)
+		|| PropertyName == GET_MEMBER_NAME_CHECKED(AUOUFlyingSwarmEffectActor, PlaneCount)
+		|| PropertyName == GET_MEMBER_NAME_CHECKED(AUOUFlyingSwarmEffectActor, OrbitSpeedRandomMin)
+		|| PropertyName == GET_MEMBER_NAME_CHECKED(AUOUFlyingSwarmEffectActor, OrbitSpeedRandomMax)
+		|| PropertyName == GET_MEMBER_NAME_CHECKED(AUOUFlyingSwarmEffectActor, PlaneScaleRandomMin)
+		|| PropertyName == GET_MEMBER_NAME_CHECKED(AUOUFlyingSwarmEffectActor, PlaneScaleRandomMax)
+		|| PropertyName == GET_MEMBER_NAME_CHECKED(AUOUFlyingSwarmEffectActor, FlightPatternCount)
+		|| PropertyName == GET_MEMBER_NAME_CHECKED(AUOUFlyingSwarmEffectActor, FarPointMin)
+		|| PropertyName == GET_MEMBER_NAME_CHECKED(AUOUFlyingSwarmEffectActor, FarPointMax)
+		|| PropertyName == GET_MEMBER_NAME_CHECKED(AUOUFlyingSwarmEffectActor, bUseFixedRandomSeed)
+		|| PropertyName == GET_MEMBER_NAME_CHECKED(AUOUFlyingSwarmEffectActor, RandomSeed)
+		|| PropertyName == GET_MEMBER_NAME_CHECKED(AUOUFlyingSwarmEffectActor, bAdvanceRandomSeedOnActivate);
 }
 #endif
 
@@ -374,16 +426,10 @@ void AUOUFlyingSwarmEffectActor::ApplyEffectSystem()
 		return;
 	}
 
-	if (SwarmEffectSystem != nullptr)
+	if (SwarmEffectSystem != nullptr && SwarmEffect->GetAsset() != SwarmEffectSystem)
 	{
-		if (SwarmEffect->GetAsset() != SwarmEffectSystem)
-		{
-			SwarmEffect->SetAsset(SwarmEffectSystem);
-		}
-		return;
+		SwarmEffect->SetAsset(SwarmEffectSystem);
 	}
-
-	SwarmEffectSystem = SwarmEffect->GetAsset();
 }
 
 void AUOUFlyingSwarmEffectActor::ApplyNiagaraParameters()
@@ -481,6 +527,7 @@ void AUOUFlyingSwarmEffectActor::ApplyNiagaraParameters()
 void AUOUFlyingSwarmEffectActor::ApplyRenderMode()
 {
 	const bool bUseCodeDrivenMesh = RenderMode == EUOUPaperPlaneSwarmRenderMode::CodeDrivenMesh;
+	UStaticMesh* ResolvedPaperPlaneMesh = GetResolvedPaperPlaneMesh();
 
 	if (PaperPlaneInstances != nullptr)
 	{
@@ -489,9 +536,9 @@ void AUOUFlyingSwarmEffectActor::ApplyRenderMode()
 			EnsurePaperPlaneMesh();
 		}
 
-		if (PaperPlaneMesh != nullptr && PaperPlaneInstances->GetStaticMesh() != PaperPlaneMesh)
+		if (ResolvedPaperPlaneMesh != nullptr && PaperPlaneInstances->GetStaticMesh() != ResolvedPaperPlaneMesh)
 		{
-			PaperPlaneInstances->SetStaticMesh(PaperPlaneMesh);
+			PaperPlaneInstances->SetStaticMesh(ResolvedPaperPlaneMesh);
 		}
 
 		const bool bShowCodeInstances = false;
@@ -536,19 +583,31 @@ void AUOUFlyingSwarmEffectActor::ApplyRenderMode()
 	}
 }
 
+UStaticMesh* AUOUFlyingSwarmEffectActor::GetResolvedPaperPlaneMesh() const
+{
+	if (PaperPlaneMesh != nullptr)
+	{
+		return PaperPlaneMesh.Get();
+	}
+
+	if (PaperPlaneInstances != nullptr && PaperPlaneInstances->GetStaticMesh() != nullptr)
+	{
+		return PaperPlaneInstances->GetStaticMesh();
+	}
+
+	return LoadObject<UStaticMesh>(nullptr, DefaultPaperPlaneMeshPath);
+}
+
 bool AUOUFlyingSwarmEffectActor::EnsurePaperPlaneMesh()
 {
-	if (bUseDefaultConeMesh || PaperPlaneMesh == nullptr)
+	UStaticMesh* ResolvedPaperPlaneMesh = GetResolvedPaperPlaneMesh();
+
+	if (PaperPlaneInstances != nullptr && ResolvedPaperPlaneMesh != nullptr && PaperPlaneInstances->GetStaticMesh() != ResolvedPaperPlaneMesh)
 	{
-		PaperPlaneMesh = LoadObject<UStaticMesh>(nullptr, DefaultPaperPlaneMeshPath);
+		PaperPlaneInstances->SetStaticMesh(ResolvedPaperPlaneMesh);
 	}
 
-	if (PaperPlaneInstances != nullptr && PaperPlaneMesh != nullptr && PaperPlaneInstances->GetStaticMesh() != PaperPlaneMesh)
-	{
-		PaperPlaneInstances->SetStaticMesh(PaperPlaneMesh);
-	}
-
-	return PaperPlaneMesh != nullptr;
+	return ResolvedPaperPlaneMesh != nullptr;
 }
 
 void AUOUFlyingSwarmEffectActor::ClearCodeDrivenPlaneComponents()
@@ -618,11 +677,11 @@ void AUOUFlyingSwarmEffectActor::RebuildCodeDrivenPlaneInstances()
 		return;
 	}
 
-	EnsurePaperPlaneMesh();
+	UStaticMesh* ResolvedPaperPlaneMesh = GetResolvedPaperPlaneMesh();
 
-	if (PaperPlaneMesh != nullptr && PaperPlaneInstances->GetStaticMesh() != PaperPlaneMesh)
+	if (ResolvedPaperPlaneMesh != nullptr && PaperPlaneInstances->GetStaticMesh() != ResolvedPaperPlaneMesh)
 	{
-		PaperPlaneInstances->SetStaticMesh(PaperPlaneMesh);
+		PaperPlaneInstances->SetStaticMesh(ResolvedPaperPlaneMesh);
 	}
 
 	ClearCodeDrivenPlaneComponents();
@@ -630,7 +689,7 @@ void AUOUFlyingSwarmEffectActor::RebuildCodeDrivenPlaneInstances()
 	RuntimePreviousPositions.Reset();
 
 	const int32 SafePlaneCount = FMath::Max(0, PlaneCount);
-	if (SafePlaneCount <= 0 || PaperPlaneMesh == nullptr)
+	if (SafePlaneCount <= 0 || ResolvedPaperPlaneMesh == nullptr)
 	{
 		ApplyRenderMode();
 		return;
@@ -662,7 +721,7 @@ void AUOUFlyingSwarmEffectActor::RebuildCodeDrivenPlaneInstances()
 		{
 			PlaneComponent->SetupAttachment(RootScene);
 			PlaneComponent->SetMobility(EComponentMobility::Movable);
-			PlaneComponent->SetStaticMesh(PaperPlaneMesh);
+			PlaneComponent->SetStaticMesh(ResolvedPaperPlaneMesh);
 			PlaneComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 			PlaneComponent->SetGenerateOverlapEvents(false);
 			PlaneComponent->SetCanEverAffectNavigation(false);
@@ -680,9 +739,20 @@ void AUOUFlyingSwarmEffectActor::RebuildCodeDrivenPlaneInstances()
 
 void AUOUFlyingSwarmEffectActor::UpdateCodeDrivenPlaneInstances(float DeltaSeconds)
 {
-	if (PaperPlaneInstances == nullptr || !EnsurePaperPlaneMesh())
+	if (PaperPlaneInstances == nullptr)
 	{
 		return;
+	}
+
+	UStaticMesh* ResolvedPaperPlaneMesh = GetResolvedPaperPlaneMesh();
+	if (ResolvedPaperPlaneMesh == nullptr)
+	{
+		return;
+	}
+
+	if (PaperPlaneInstances->GetStaticMesh() != ResolvedPaperPlaneMesh)
+	{
+		PaperPlaneInstances->SetStaticMesh(ResolvedPaperPlaneMesh);
 	}
 
 	const int32 SafePlaneCount = FMath::Max(0, PlaneCount);
@@ -714,6 +784,10 @@ void AUOUFlyingSwarmEffectActor::UpdateCodeDrivenPlaneInstances(float DeltaSecon
 
 		if (UStaticMeshComponent* PlaneComponent = RuntimePlaneMeshComponents.IsValidIndex(PlaneIndex) ? RuntimePlaneMeshComponents[PlaneIndex].Get() : nullptr)
 		{
+			if (PlaneComponent->GetStaticMesh() != ResolvedPaperPlaneMesh)
+			{
+				PlaneComponent->SetStaticMesh(ResolvedPaperPlaneMesh);
+			}
 			PlaneComponent->SetWorldTransform(InstanceTransform, false, nullptr, ETeleportType::None);
 		}
 		RuntimePreviousPositions[PlaneIndex] = MotionResult.Position;
