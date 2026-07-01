@@ -44,6 +44,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Carry")
 	bool bCarryActorsOnMove = true;
 
+	// If disabled, the platform ignores the carry detection box and only moves itself plus explicit permanent actors.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Carry", meta = (DisplayName = "Use Carry Detection Box"))
+	bool bUseCarryDetectionBox = true;
+
 	// 캐릭터 계열은 CharacterMovement가 움직이는 바닥을 따라가므로 기본 운반 대상에서 제외합니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Carry")
 	bool bCarryPlayerCharacters = false;

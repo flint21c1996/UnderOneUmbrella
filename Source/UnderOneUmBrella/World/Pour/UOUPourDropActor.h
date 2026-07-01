@@ -98,8 +98,8 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pour Drop|Debug", meta = (ToolTip = "켜면 DropActor의 mesh를 디버그용으로 표시합니다. 꺼져 있어도 충돌/물 전달 판정은 계속 동작합니다."))
 	bool bShowDebugVisualMesh = false;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pour Drop|Debug", meta = (ToolTip = "켜면 DropActor의 실제 충돌 판정 구체를 월드 디버그로 표시합니다. Debug Controller의 Player World Draw가 켜져 있어야 보입니다."))
-	bool bDrawDebugCollisionRadius = false;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pour Drop|Debug", meta = (ToolTip = "켜면 DropActor의 실제 충돌 판정 구체를 월드 디버그로 표시합니다."))
+	bool bDrawDebugCollisionRadius = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pour Drop|Visual", meta = (ToolTip = "DropActor에 붙일 보조 trail Niagara입니다. 기본 물줄기 표현은 Stream Visual이 담당합니다."))
 	TObjectPtr<UNiagaraSystem> TrailEffectAsset = nullptr;
