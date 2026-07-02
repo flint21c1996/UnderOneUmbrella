@@ -17,6 +17,7 @@ AUOUPlayerController::AUOUPlayerController()
 {
 	// 인게임 설정창에서는 타이틀 복귀 버튼을 보여줘야 합니다.
 	SetCanReturnToTitle(true);
+	SetCanRestartCurrentStage(true);
 }
 
 void AUOUPlayerController::BeginPlay()

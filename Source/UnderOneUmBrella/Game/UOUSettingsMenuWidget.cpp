@@ -42,12 +42,23 @@ void UUOUSettingsMenuWidget::ReturnToTitle()
 	}
 }
 
-void UUOUSettingsMenuWidget::ToggleTestSetting()
+void UUOUSettingsMenuWidget::RestartCurrentStage()
 {
 	if (AUOUMenuPlayerController* MenuPlayerController = GetMenuPlayerController())
 	{
-		MenuPlayerController->ToggleTestSetting();
+		MenuPlayerController->RestartCurrentStage();
 	}
+}
+
+void UUOUSettingsMenuWidget::ToggleTestSetting()
+{
+	RestartCurrentStage();
+}
+
+bool UUOUSettingsMenuWidget::CanRestartCurrentStage() const
+{
+	const AUOUMenuPlayerController* MenuPlayerController = GetMenuPlayerController();
+	return MenuPlayerController != nullptr && MenuPlayerController->CanRestartCurrentStage();
 }
 
 bool UUOUSettingsMenuWidget::IsTestSettingEnabled() const

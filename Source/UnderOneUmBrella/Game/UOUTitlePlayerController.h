@@ -6,6 +6,7 @@
 #include "UOUMenuPlayerController.h"
 #include "UOUTitlePlayerController.generated.h"
 
+class AUOULevelTransitionSettingsActor;
 class AUOUTitleLevelTransitionActor;
 class UWorld;
 class UUserWidget;
@@ -32,6 +33,7 @@ protected:
 
 private:
 	void ApplyTitleMenuInputMode();
+	const AUOULevelTransitionSettingsActor* FindLevelTransitionSettingsActor() const;
 	AUOUTitleLevelTransitionActor* FindTitleLevelTransitionActor() const;
 
 	// Start 버튼을 눌렀을 때 넘어갈 임시 플레이 맵입니다.
