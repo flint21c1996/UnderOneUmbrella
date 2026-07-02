@@ -103,6 +103,10 @@ AUOUCharacter::AUOUCharacter()
 	FollowCamera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
 	FollowCamera->bUsePawnControlRotation = false;
 
+	AudioListenerComponent = CreateDefaultSubobject<USceneComponent>(TEXT("AudioListener"));
+	AudioListenerComponent->SetupAttachment(RootComponent);
+	AudioListenerComponent->SetRelativeLocation(FVector(0.0f, 0.0f, 80.0f));
+
 	CameraControllerComponent = CreateDefaultSubobject<UUOUCameraControllerComponent>(TEXT("CameraControllerComponent"));
 	InteractionExecutorComponent = CreateDefaultSubobject<UUOUPlayerInteractionExecutorComponent>(
 		TEXT("InteractionExecutorComponent"));
@@ -141,6 +145,7 @@ AUOUCharacter::AUOUCharacter()
 void AUOUCharacter::BeginPlay()
 {
 	Super::BeginPlay();
+	ApplyPlayerAudioListenerOverride();
 
 	if (USkeletalMeshComponent* CharacterMesh = GetMesh())
 	{
@@ -162,6 +167,12 @@ void AUOUCharacter::BeginPlay()
 	LogPushPullComponentState(this, TEXT("BeginPlay"));
 }
 
+void AUOUCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	ClearPlayerAudioListenerOverride();
+	Super::EndPlay(EndPlayReason);
+}
+
 void AUOUCharacter::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
@@ -176,6 +187,7 @@ void AUOUCharacter::Tick(float DeltaSeconds)
 void AUOUCharacter::NotifyControllerChanged()
 {
 	Super::NotifyControllerChanged();
+	ApplyPlayerAudioListenerOverride();
 
 	if (APlayerController* PlayerController = Cast<APlayerController>(Controller))
 	{
@@ -621,6 +633,29 @@ void AUOUCharacter::HandleDialogueAdvancePressed()
 UUOUUmbrellaComponent* AUOUCharacter::FindUmbrellaComponent() const
 {
 	return FindComponentByClass<UUOUUmbrellaComponent>();
+}
+
+void AUOUCharacter::ApplyPlayerAudioListenerOverride()
+{
+	APlayerController* PlayerController = Cast<APlayerController>(Controller);
+	if (PlayerController == nullptr || AudioListenerComponent == nullptr)
+	{
+		return;
+	}
+
+	PlayerController->SetAudioListenerOverride(
+		AudioListenerComponent,
+		FVector::ZeroVector,
+		FRotator::ZeroRotator);
+}
+
+void AUOUCharacter::ClearPlayerAudioListenerOverride()
+{
+	APlayerController* PlayerController = Cast<APlayerController>(Controller);
+	if (PlayerController != nullptr)
+	{
+		PlayerController->ClearAudioListenerOverride();
+	}
 }
 
 bool AUOUCharacter::IsPlayerInteractionInputBlocked() const

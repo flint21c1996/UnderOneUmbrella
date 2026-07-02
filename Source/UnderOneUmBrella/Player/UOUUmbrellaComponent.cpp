@@ -32,6 +32,8 @@
 namespace
 {
 // 물 붓기 디버그 라벨에 표시할 수 있도록 수신 대상 enum을 짧은 문자열로 바꿉니다.
+constexpr float RainBlockedAudioRefreshInterval = 0.1f;
+
 const TCHAR* GetPourReceiverTypeText(EUOUUmbrellaPourReceiverType ReceiverType)
 {
 	switch (ReceiverType)
@@ -70,6 +72,19 @@ EUOUUmbrellaPourReceiverType ConvertPourDropReceiverType(EUOUPourDropReceiverTyp
 	default:
 		return EUOUUmbrellaPourReceiverType::None;
 	}
+}
+
+bool ShouldLogRainBlockedAudioDiagnostic(const UObject* WorldContext, double& LastLogTime, double IntervalSeconds = 0.5)
+{
+	const UWorld* World = WorldContext != nullptr ? WorldContext->GetWorld() : nullptr;
+	const double CurrentTime = World != nullptr ? World->GetTimeSeconds() : FPlatformTime::Seconds();
+	if (CurrentTime - LastLogTime < IntervalSeconds)
+	{
+		return false;
+	}
+
+	LastLogTime = CurrentTime;
+	return true;
 }
 }
 
@@ -110,6 +125,13 @@ void UUOUUmbrellaComponent::BeginPlay()
 	UpdatePouringEffectState();
 }
 
+void UUOUUmbrellaComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	StopRainBlockedAudio();
+
+	Super::EndPlay(EndPlayReason);
+}
+
 // 매 프레임 우산 상태에 따라 물 붓기, 마우스 조준 회전, 디버그 표시를 갱신합니다.
 void UUOUUmbrellaComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
@@ -117,6 +139,7 @@ void UUOUUmbrellaComponent::TickComponent(float DeltaTime, ELevelTick TickType, 
 
 	if (!bHasUmbrella)
 	{
+		StopRainBlockedAudio();
 		// 우산이 없어도 디버그는 상태 확인용으로 남기고, 조준과 물줄기 기록은 정리합니다.
 		ClearPourAimFacing();
 		ClearPourTraceDebug();
@@ -132,6 +155,7 @@ void UUOUUmbrellaComponent::TickComponent(float DeltaTime, ELevelTick TickType, 
 	DrawRainBlockerDebug();
 	DrawPourSocketAndDropSpawnDebug();
 	DrawPourTraceDebug();
+	UpdateRainBlockedAudioState();
 }
 
 // 우산을 새로 획득했을 때 보유 상태와 저장 물을 초기화합니다.
@@ -170,6 +194,7 @@ void UUOUUmbrellaComponent::RemoveUmbrella()
 		return;
 	}
 
+	StopRainBlockedAudio();
 	bHasUmbrella = false;
 	CurrentDirectionState = EUOUUmbrellaDirectionState::Normal;
 	SetState(EUOUUmbrellaState::Closed);
@@ -268,9 +293,26 @@ void UUOUUmbrellaComponent::ApplyRainExposure(float ExposureAmount)
 		return;
 	}
 
+	static double LastApplyRainExposureLogTime = -1000.0;
+	if (ShouldLogRainBlockedAudioDiagnostic(this, LastApplyRainExposureLogTime))
+	{
+		UE_LOG(
+			LogUOUAudio,
+			Warning,
+			TEXT("[RainBlockedAudio][ApplyRainExposure] Owner=%s Exposure=%.4f HasUmbrella=%s State=%d IsOpen=%s Cue=%s Event=%s"),
+			*GetNameSafe(GetOwner()),
+			ExposureAmount,
+			bHasUmbrella ? TEXT("true") : TEXT("false"),
+			static_cast<int32>(CurrentState),
+			IsOpen() ? TEXT("true") : TEXT("false"),
+			*RainBlockedAudioCueId.ToString(),
+			*RainBlockedAudioEventId.ToString());
+	}
+
 	if (IsOpen())
 	{
 		// 펼친 우산은 플레이어에게 비를 넘기지 않고 차단 이벤트만 보냅니다.
+		MarkRainBlockedAudioActive();
 		OnRainBlocked.Broadcast(ExposureAmount);
 		return;
 	}
@@ -591,6 +633,11 @@ void UUOUUmbrellaComponent::SetState(EUOUUmbrellaState NewState)
 
 	if (PreviousState == ResolvedState)
 	{
+		if (ResolvedState != EUOUUmbrellaState::Open)
+		{
+			StopRainBlockedAudio();
+		}
+
 		// 같은 상태여도 에디터 세팅 변경 뒤 비주얼을 다시 맞출 수 있게 갱신은 수행합니다.
 		RefreshVisuals();
 		UpdatePouringEffectState();
@@ -604,6 +651,10 @@ void UUOUUmbrellaComponent::SetState(EUOUUmbrellaState NewState)
 	}
 
 	CurrentState = ResolvedState;
+	if (CurrentState != EUOUUmbrellaState::Open)
+	{
+		StopRainBlockedAudio();
+	}
 
 	if (bHasUmbrella)
 	{
@@ -919,6 +970,240 @@ void UUOUUmbrellaComponent::PlayUmbrellaAudioCue(FName CueId, FName FallbackAudi
 	}
 
 	PlayUmbrellaAudioEvent(FallbackAudioEventId);
+}
+
+void UUOUUmbrellaComponent::MarkRainBlockedAudioActive()
+{
+	if (UWorld* World = GetWorld())
+	{
+		LastRainBlockedAudioTime = World->GetTimeSeconds();
+	}
+	else
+	{
+		LastRainBlockedAudioTime = 0.0f;
+	}
+
+	static double LastMarkLogTime = -1000.0;
+	if (ShouldLogRainBlockedAudioDiagnostic(this, LastMarkLogTime))
+	{
+		UE_LOG(
+			LogUOUAudio,
+			Warning,
+			TEXT("[RainBlockedAudio][MarkActive] Owner=%s Time=%.3f Playing=%s IsOpen=%s"),
+			*GetNameSafe(GetOwner()),
+			LastRainBlockedAudioTime,
+			bRainBlockedAudioPlaying ? TEXT("true") : TEXT("false"),
+			IsOpen() ? TEXT("true") : TEXT("false"));
+	}
+
+	StartRainBlockedAudio();
+}
+
+void UUOUUmbrellaComponent::StartRainBlockedAudio()
+{
+	const UWorld* CurrentWorld = GetWorld();
+	const float CurrentAudioTime = CurrentWorld != nullptr
+		? CurrentWorld->GetTimeSeconds()
+		: static_cast<float>(FPlatformTime::Seconds());
+	if (CurrentAudioTime - LastRainBlockedAudioRefreshAttemptTime < RainBlockedAudioRefreshInterval)
+	{
+		return;
+	}
+	LastRainBlockedAudioRefreshAttemptTime = CurrentAudioTime;
+
+	if (!IsOpen())
+	{
+		UE_LOG(
+			LogUOUAudio,
+			Warning,
+			TEXT("[RainBlockedAudio][StartFailed] Owner=%s Reason=NotOpen HasUmbrella=%s State=%d"),
+			*GetNameSafe(GetOwner()),
+			bHasUmbrella ? TEXT("true") : TEXT("false"),
+			static_cast<int32>(CurrentState));
+		return;
+	}
+
+	const FVector AudioLocation = GetUmbrellaAudioLocation();
+	const FName AudioInstanceId = BuildRainBlockedAudioInstanceId();
+	const FName AudioEventId = ResolveRainBlockedAudioEventId();
+
+	UE_LOG(
+		LogUOUAudio,
+		Warning,
+		TEXT("[RainBlockedAudio][Start] Owner=%s Cue=%s ResolvedEvent=%s Instance=%s Location=(%.1f %.1f %.1f)"),
+		*GetNameSafe(GetOwner()),
+		*RainBlockedAudioCueId.ToString(),
+		*AudioEventId.ToString(),
+		*AudioInstanceId.ToString(),
+		AudioLocation.X,
+		AudioLocation.Y,
+		AudioLocation.Z);
+
+	bool bPlayed = false;
+	if (!AudioEventId.IsNone())
+	{
+		UWorld* World = GetWorld();
+		UGameInstance* GameInstance = World != nullptr ? World->GetGameInstance() : nullptr;
+		if (UUOUAudioSubsystem* AudioSubsystem = GameInstance != nullptr ? GameInstance->GetSubsystem<UUOUAudioSubsystem>() : nullptr)
+		{
+			bPlayed = AudioSubsystem->PlayManagedAudioEventInstance(AudioEventId, AudioInstanceId, AudioLocation);
+		}
+		else
+		{
+			UE_LOG(
+				LogUOUAudio,
+				Warning,
+				TEXT("[RainBlockedAudio][StartFailed] Owner=%s Reason=MissingAudioSubsystem World=%s GameInstance=%s Event=%s"),
+				*GetNameSafe(GetOwner()),
+				World != nullptr ? TEXT("valid") : TEXT("null"),
+				GameInstance != nullptr ? TEXT("valid") : TEXT("null"),
+				*AudioEventId.ToString());
+		}
+	}
+	else
+	{
+		UE_LOG(
+			LogUOUAudio,
+			Warning,
+			TEXT("[RainBlockedAudio][StartFailed] Owner=%s Reason=NoneEvent Cue=%s FallbackEvent=%s"),
+			*GetNameSafe(GetOwner()),
+			*RainBlockedAudioCueId.ToString(),
+			*RainBlockedAudioEventId.ToString());
+	}
+
+	bRainBlockedAudioPlaying = bPlayed;
+	ActiveRainBlockedAudioEventId = bPlayed ? AudioEventId : NAME_None;
+
+	UE_LOG(
+		LogUOUAudio,
+		Warning,
+		TEXT("[RainBlockedAudio][StartResult] Owner=%s Event=%s Instance=%s Played=%s"),
+		*GetNameSafe(GetOwner()),
+		*AudioEventId.ToString(),
+		*AudioInstanceId.ToString(),
+		bPlayed ? TEXT("true") : TEXT("false"));
+}
+
+void UUOUUmbrellaComponent::StopRainBlockedAudio()
+{
+	if (!bRainBlockedAudioPlaying)
+	{
+		return;
+	}
+
+	const FName AudioInstanceId = BuildRainBlockedAudioInstanceId();
+	const FName AudioEventId = !ActiveRainBlockedAudioEventId.IsNone()
+		? ActiveRainBlockedAudioEventId
+		: ResolveRainBlockedAudioEventId();
+
+	if (!AudioEventId.IsNone())
+	{
+		UWorld* World = GetWorld();
+		UGameInstance* GameInstance = World != nullptr ? World->GetGameInstance() : nullptr;
+		if (UUOUAudioSubsystem* AudioSubsystem = GameInstance != nullptr ? GameInstance->GetSubsystem<UUOUAudioSubsystem>() : nullptr)
+		{
+			UE_LOG(
+				LogUOUAudio,
+				Warning,
+				TEXT("[RainBlockedAudio][Stop] Owner=%s Event=%s Instance=%s"),
+				*GetNameSafe(GetOwner()),
+				*AudioEventId.ToString(),
+				*AudioInstanceId.ToString());
+			AudioSubsystem->StopAudioEvent(AudioEventId, AudioInstanceId, 0.0f);
+		}
+	}
+
+	bRainBlockedAudioPlaying = false;
+	LastRainBlockedAudioTime = -1000.0f;
+	LastRainBlockedAudioRefreshAttemptTime = -1000.0f;
+	ActiveRainBlockedAudioEventId = NAME_None;
+}
+
+void UUOUUmbrellaComponent::UpdateRainBlockedAudioState()
+{
+	if (!bRainBlockedAudioPlaying)
+	{
+		return;
+	}
+
+	if (!IsOpen())
+	{
+		StopRainBlockedAudio();
+		return;
+	}
+
+	const UWorld* World = GetWorld();
+	if (World == nullptr)
+	{
+		return;
+	}
+
+	const float StopDelay = FMath::Max(0.0f, RainBlockedAudioStopDelay);
+	if (World->GetTimeSeconds() - LastRainBlockedAudioTime > StopDelay)
+	{
+		StopRainBlockedAudio();
+	}
+}
+
+FName UUOUUmbrellaComponent::ResolveRainBlockedAudioEventId() const
+{
+	if (!RainBlockedAudioCueId.IsNone())
+	{
+		if (UUOUAudioCueComponent* AudioCueComponent = GetAudioCueComponent())
+		{
+			FName CueAudioEventId = NAME_None;
+			if (AudioCueComponent->ResolveAudioEventId(RainBlockedAudioCueId, CueAudioEventId))
+			{
+				UE_LOG(
+					LogUOUAudio,
+					Warning,
+					TEXT("[RainBlockedAudio][ResolveEvent] Owner=%s Source=Cue Cue=%s Event=%s AudioCueComponent=%s"),
+					*GetNameSafe(GetOwner()),
+					*RainBlockedAudioCueId.ToString(),
+					*CueAudioEventId.ToString(),
+					*GetNameSafe(AudioCueComponent));
+				return CueAudioEventId;
+			}
+
+			UE_LOG(
+				LogUOUAudio,
+				Warning,
+				TEXT("[RainBlockedAudio][ResolveEvent] Owner=%s Source=CueFailed Cue=%s FallbackEvent=%s AudioCueComponent=%s"),
+				*GetNameSafe(GetOwner()),
+				*RainBlockedAudioCueId.ToString(),
+				*RainBlockedAudioEventId.ToString(),
+				*GetNameSafe(AudioCueComponent));
+		}
+		else
+		{
+			UE_LOG(
+				LogUOUAudio,
+				Warning,
+				TEXT("[RainBlockedAudio][ResolveEvent] Owner=%s Source=NoCueComponent Cue=%s FallbackEvent=%s"),
+				*GetNameSafe(GetOwner()),
+				*RainBlockedAudioCueId.ToString(),
+				*RainBlockedAudioEventId.ToString());
+		}
+	}
+
+	UE_LOG(
+		LogUOUAudio,
+		Warning,
+		TEXT("[RainBlockedAudio][ResolveEvent] Owner=%s Source=Fallback Event=%s"),
+		*GetNameSafe(GetOwner()),
+		*RainBlockedAudioEventId.ToString());
+	return RainBlockedAudioEventId;
+}
+
+FName UUOUUmbrellaComponent::BuildRainBlockedAudioInstanceId() const
+{
+	const AActor* Owner = GetOwner();
+	if (Owner == nullptr)
+	{
+		return TEXT("Umbrella.RainBlocked");
+	}
+
+	return FName(*FString::Printf(TEXT("%s.RainBlocked"), *Owner->GetName()));
 }
 
 UUOUAudioCueComponent* UUOUUmbrellaComponent::GetAudioCueComponent() const

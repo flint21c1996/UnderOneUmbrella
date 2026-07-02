@@ -37,6 +37,10 @@ class AUOUCharacter : public ACharacter
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Camera, meta = (AllowPrivateAccess = "true"))
 	UCameraComponent* FollowCamera;
 
+	// 3D sound attenuation should follow the playable character, not the orthographic camera.
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Audio, meta = (AllowPrivateAccess = "true"))
+	USceneComponent* AudioListenerComponent;
+
 	// 캐릭터 시작 시 적용할 입력 매핑 컨텍스트다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input, meta = (AllowPrivateAccess = "true"))
 	UInputMappingContext* DefaultMappingContext;
@@ -108,6 +112,7 @@ public:
 protected:
 	// 시작 시점에 입력과 필수 참조가 제대로 연결됐는지 확인한다.
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 	// 런타임 참조 복구와 디버그 보조 갱신을 처리한다.
 	virtual void Tick(float DeltaSeconds) override;
@@ -178,11 +183,14 @@ protected:
 
 	// 현재 캐릭터에 붙어 있는 우산 컴포넌트를 편하게 찾는다.
 	UUOUUmbrellaComponent* FindUmbrellaComponent() const;
+	void ApplyPlayerAudioListenerOverride();
+	void ClearPlayerAudioListenerOverride();
 	bool IsPlayerInteractionInputBlocked() const;
 
 public:
 	FORCEINLINE class USpringArmComponent* GetCameraBoom() const { return CameraBoom; }
 	FORCEINLINE class UCameraComponent* GetFollowCamera() const { return FollowCamera; }
+	FORCEINLINE class USceneComponent* GetAudioListenerComponent() const { return AudioListenerComponent; }
 	FORCEINLINE class UUOUCameraControllerComponent* GetCameraControllerComponent() const { return CameraControllerComponent; }
 	FORCEINLINE class UUOUPushPullInteractorComponent* GetPushPullInteractorComponent() const { return PushPullInteractorComponent; }
 	FORCEINLINE class UUOUPlayerInteractionExecutorComponent* GetInteractionExecutorComponent() const { return InteractionExecutorComponent; }
