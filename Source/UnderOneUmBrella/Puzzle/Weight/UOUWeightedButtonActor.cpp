@@ -88,7 +88,7 @@ AUOUWeightedButtonActor::AUOUWeightedButtonActor()
 	WeightedButtonComponent->bAutoFindSensor = true;
 	WeightedButtonComponent->Sensor = WeightSensorComponent;
 	WeightedButtonComponent->bAutoFindMotionReferences = true;
-	WeightedButtonComponent->ButtonVisual = ButtonMotionRoot;
+	WeightedButtonComponent->ButtonVisual = ButtonVisual;
 	WeightedButtonComponent->ReleasedPoint = ReleasedPoint;
 	WeightedButtonComponent->PressedPoint = PressedPoint;
 }
@@ -97,21 +97,20 @@ void AUOUWeightedButtonActor::OnConstruction(const FTransform& Transform)
 {
 	Super::OnConstruction(Transform);
 
+	ConfigureWeightedButtonMotionReferences();
 	ConfigureButtonCollisionLayout();
 	ConfigureButtonCollision();
+	SyncButtonCollisionToVisual();
 }
 
 void AUOUWeightedButtonActor::PostInitializeComponents()
 {
 	Super::PostInitializeComponents();
 
-	if (WeightedButtonComponent != nullptr && ButtonMotionRoot != nullptr)
-	{
-		WeightedButtonComponent->ButtonVisual = ButtonMotionRoot;
-	}
-
+	ConfigureWeightedButtonMotionReferences();
 	ConfigureButtonCollisionLayout();
 	ConfigureButtonCollision();
+	SyncButtonCollisionToVisual();
 }
 
 void AUOUWeightedButtonActor::BeginPlay()
@@ -134,6 +133,7 @@ void AUOUWeightedButtonActor::BeginPlay()
 		bResultSinkActive = false;
 	}
 
+	ConfigureWeightedButtonMotionReferences();
 	RefreshButtonMotionTickState();
 
 	if (bFollowSurfaceTarget && bCaptureSurfaceOffsetOnBeginPlay)
@@ -143,6 +143,7 @@ void AUOUWeightedButtonActor::BeginPlay()
 
 	ConfigureButtonCollisionLayout();
 	ConfigureButtonCollision();
+	SyncButtonCollisionToVisual();
 }
 
 void AUOUWeightedButtonActor::Tick(float DeltaSeconds)
@@ -151,6 +152,7 @@ void AUOUWeightedButtonActor::Tick(float DeltaSeconds)
 
 	UpdateSurfaceFollow(DeltaSeconds);
 	MoveResultSinkVisual(DeltaSeconds);
+	SyncButtonCollisionToVisual();
 }
 
 void AUOUWeightedButtonActor::CaptureCurrentSurfaceOffset()
@@ -214,6 +216,18 @@ void AUOUWeightedButtonActor::ApplyPuzzleResult_Implementation(EOUUPuzzleResultA
 	RefreshButtonMotionTickState();
 }
 
+void AUOUWeightedButtonActor::ConfigureWeightedButtonMotionReferences() const
+{
+	if (WeightedButtonComponent == nullptr)
+	{
+		return;
+	}
+
+	WeightedButtonComponent->ButtonVisual = ButtonVisual;
+	WeightedButtonComponent->ReleasedPoint = ReleasedPoint;
+	WeightedButtonComponent->PressedPoint = PressedPoint;
+}
+
 void AUOUWeightedButtonActor::ConfigureButtonCollisionLayout() const
 {
 	if (ButtonSurfaceCollision != nullptr)
@@ -267,6 +281,22 @@ void AUOUWeightedButtonActor::ConfigureBlockingCollision(UBoxComponent* Collisio
 	CollisionComponent->SetHiddenInGame(true);
 	CollisionComponent->CanCharacterStepUpOn = ECB_Yes;
 	CollisionComponent->SetCanEverAffectNavigation(false);
+}
+
+void AUOUWeightedButtonActor::SyncButtonCollisionToVisual() const
+{
+	if (ButtonSurfaceCollision == nullptr || ButtonVisual == nullptr)
+	{
+		return;
+	}
+
+	const USceneComponent* CollisionParent = ButtonSurfaceCollision->GetAttachParent();
+	const FTransform ParentTransform = CollisionParent != nullptr
+		? CollisionParent->GetComponentTransform()
+		: FTransform::Identity;
+
+	const FVector TargetRelativeLocation = ParentTransform.InverseTransformPosition(ButtonVisual->GetComponentLocation());
+	ButtonSurfaceCollision->SetRelativeLocation(TargetRelativeLocation, false, nullptr, ETeleportType::TeleportPhysics);
 }
 
 void AUOUWeightedButtonActor::MoveResultSinkVisual(float DeltaSeconds)
