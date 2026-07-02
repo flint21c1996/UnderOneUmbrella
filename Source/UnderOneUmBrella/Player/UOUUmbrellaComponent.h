@@ -86,6 +86,8 @@ public:
 	// 시작 시 참조 컴포넌트를 찾고 초기 우산 보유 상태와 비주얼을 맞춥니다.
 	virtual void BeginPlay() override;
 
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
 	// 물 붓기 진행, 마우스 조준 회전, 화면과 월드 디버그 표시를 갱신합니다.
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
@@ -148,6 +150,15 @@ public:
 	// AudioCueComponent가 있을 때 우산 접힘 상황에 사용할 Cue ID입니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Audio", meta = (ToolTip = "Owner에 AudioCueComponent가 있으면 이 Cue를 먼저 재생합니다. 실패하면 CloseAudioEventId를 fallback으로 사용합니다."))
 	FName CloseAudioCueId = TEXT("Close");
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Audio", meta = (ToolTip = "Cue played while an open umbrella is actively blocking rain from a RainArea."))
+	FName RainBlockedAudioCueId = TEXT("UmbrellaBlock");
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Audio", meta = (ToolTip = "Fallback audio event played while an open umbrella is actively blocking rain from a RainArea. Configure this event as a managed loop for continuous rain sound."))
+	FName RainBlockedAudioEventId = TEXT("RainOnUmbrella");
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Audio", meta = (ClampMin = "0.0", ToolTip = "Seconds to keep the rain block loop alive after the latest RainArea exposure tick."))
+	float RainBlockedAudioStopDelay = 0.15f;
 
 	// 우산을 캐릭터에 붙일 기준 위치입니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|References")
@@ -615,6 +626,18 @@ protected:
 	// AudioCueComponent가 있으면 Cue를 우선 재생하고, 없으면 기존 EventId를 재생합니다.
 	void PlayUmbrellaAudioCue(FName CueId, FName FallbackAudioEventId) const;
 
+	void MarkRainBlockedAudioActive();
+
+	void StartRainBlockedAudio();
+
+	void StopRainBlockedAudio();
+
+	void UpdateRainBlockedAudioState();
+
+	FName ResolveRainBlockedAudioEventId() const;
+
+	FName BuildRainBlockedAudioInstanceId() const;
+
 	// Owner에 붙은 AudioCueComponent를 반환합니다.
 	UUOUAudioCueComponent* GetAudioCueComponent() const;
 
@@ -725,4 +748,12 @@ protected:
 	float PendingPourDropDuration = 0.0f;
 
 	float TimeSinceLastPourDropSpawn = 0.0f;
+
+	bool bRainBlockedAudioPlaying = false;
+
+	float LastRainBlockedAudioTime = -1000.0f;
+
+	float LastRainBlockedAudioRefreshAttemptTime = -1000.0f;
+
+	FName ActiveRainBlockedAudioEventId = NAME_None;
 };
