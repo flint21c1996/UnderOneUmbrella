@@ -142,7 +142,7 @@ protected:
 	bool bRequireWaterWheelCatchPointCenterInsideRainVolume = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Water Wheel|Debug", meta = (ToolTip = "켜져 있으면 물레방아 비 입력 샘플 위치와 판정 결과를 월드에 표시합니다."))
-	bool bDrawWaterWheelRainInputDebug = true;
+	bool bDrawWaterWheelRainInputDebug = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Water Wheel|Debug", meta = (ClampMin = "0.0", ToolTip = "물레방아 비 입력 디버그 표시 유지 시간입니다. 0이면 매 프레임 갱신됩니다."))
 	float WaterWheelRainInputDebugLifeTime = 0.0f;
