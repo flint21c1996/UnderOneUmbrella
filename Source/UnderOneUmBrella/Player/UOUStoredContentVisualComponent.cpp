@@ -3,6 +3,7 @@
 #include "Player/UOUStoredContentVisualComponent.h"
 
 #include "Components/MeshComponent.h"
+#include "Components/PrimitiveComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "GameFramework/Actor.h"
@@ -243,6 +244,7 @@ void UUOUStoredContentVisualComponent::ResolveStoredVisualComponent()
 	{
 		bResolvedStoredVisualComponent = true;
 		ResolvedStoredVisualComponentName = StoredVisualComponent->GetName();
+		ApplyStoredVisualCollisionSettings();
 		CaptureStoredVisualTransformIfNeeded();
 		return;
 	}
@@ -260,6 +262,7 @@ void UUOUStoredContentVisualComponent::ResolveStoredVisualComponent()
 	StoredVisualComponent = FindStoredVisualComponent();
 	bResolvedStoredVisualComponent = StoredVisualComponent != nullptr;
 	ResolvedStoredVisualComponentName = StoredVisualComponent != nullptr ? StoredVisualComponent->GetName() : TEXT("None");
+	ApplyStoredVisualCollisionSettings();
 	CaptureStoredVisualTransformIfNeeded();
 }
 
@@ -385,6 +388,20 @@ void UUOUStoredContentVisualComponent::CaptureStoredVisualTransformIfNeeded()
 	bCapturedStoredVisualTransform = true;
 }
 
+void UUOUStoredContentVisualComponent::ApplyStoredVisualCollisionSettings() const
+{
+	UPrimitiveComponent* StoredVisualPrimitive = Cast<UPrimitiveComponent>(StoredVisualComponent.Get());
+	if (StoredVisualPrimitive == nullptr)
+	{
+		return;
+	}
+
+	// 저장 내용물 비주얼은 표시 전용이므로 플레이어 주변에 추가 충돌체를 만들지 않습니다.
+	StoredVisualPrimitive->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	StoredVisualPrimitive->SetCollisionResponseToAllChannels(ECR_Ignore);
+	StoredVisualPrimitive->SetGenerateOverlapEvents(false);
+}
+
 void UUOUStoredContentVisualComponent::ApplyStoredVisualContentProfile()
 {
 	if (StoredVisualComponent == nullptr)
@@ -421,6 +438,8 @@ void UUOUStoredContentVisualComponent::ApplyStoredVisualContentProfile()
 			StoredVisualNiagara->SetAsset(StoredVisualSettings->NiagaraSystem);
 		}
 	}
+
+	ApplyStoredVisualCollisionSettings();
 }
 
 void UUOUStoredContentVisualComponent::UpdateStoredVisual(float DeltaTime, bool bSnapToTarget)
