@@ -146,9 +146,20 @@ void UUOUWeightedButtonComponent::ResolveReferences()
 		Sensor = Cast<UUOUWeightSensorComponent>(SensorComponent);
 	}
 
-	ButtonVisual = ResolveMotionComponent(ButtonVisualReference);
-	ReleasedPoint = ResolveMotionComponent(ReleasedPointReference);
-	PressedPoint = ResolveMotionComponent(PressedPointReference);
+	if (USceneComponent* ResolvedButtonVisual = ResolveMotionComponent(ButtonVisualReference))
+	{
+		ButtonVisual = ResolvedButtonVisual;
+	}
+
+	if (USceneComponent* ResolvedReleasedPoint = ResolveMotionComponent(ReleasedPointReference))
+	{
+		ReleasedPoint = ResolvedReleasedPoint;
+	}
+
+	if (USceneComponent* ResolvedPressedPoint = ResolveMotionComponent(PressedPointReference))
+	{
+		PressedPoint = ResolvedPressedPoint;
+	}
 
 	if (!IsOwnedComponent(Sensor))
 	{
