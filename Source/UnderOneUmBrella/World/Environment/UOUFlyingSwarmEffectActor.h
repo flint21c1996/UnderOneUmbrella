@@ -65,7 +65,7 @@ struct FUOUPaperPlaneSwarmParticleRandom
 	float HeightOffset = 0.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Paper Plane Swarm|Particle")
-	float BankAmount = 20.0f;
+	float BankAmount = 6.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Paper Plane Swarm|Particle")
 	float ScaleRandom = 1.0f;
@@ -149,10 +149,10 @@ struct FUOUPaperPlaneSwarmRandomRanges
 	float HeightOffsetMax = 600.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Paper Plane Swarm|Random")
-	float BankAmountMin = 10.0f;
+	float BankAmountMin = 0.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Paper Plane Swarm|Random")
-	float BankAmountMax = 35.0f;
+	float BankAmountMax = 8.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Paper Plane Swarm|Random")
 	float ScaleRandomMin = 0.8f;
@@ -362,17 +362,17 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Paper Plane Swarm|Effect", meta = (ToolTip = "Code Driven Mesh는 C++ Tick에서 종이비행기 위치와 회전을 직접 계산합니다. Niagara는 기존 시스템 호환용입니다."))
 	EUOUPaperPlaneSwarmRenderMode RenderMode = EUOUPaperPlaneSwarmRenderMode::CodeDrivenMesh;
 
-	// 기존 액터 호환용입니다. 실제 메시는 PaperPlaneMesh가 기준이고, 비어 있으면 기본 Cone을 사용합니다.
+	// 기존 액터 호환용입니다. 실제 메시는 PaperPlaneInstances 컴포넌트의 Static Mesh가 우선입니다.
 	UPROPERTY()
 	bool bUseDefaultConeMesh = false;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Paper Plane Swarm|Effect", meta = (EditCondition = "RenderMode == EUOUPaperPlaneSwarmRenderMode::CodeDrivenMesh", ToolTip = "C++ 렌더링 모드에서 인스턴스로 표시할 Static Mesh입니다. 비워 두면 PaperPlaneInstances 컴포넌트의 Static Mesh를 사용하고, 그것도 비어 있으면 Engine BasicShapes Cone을 사용합니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Paper Plane Swarm|Effect", meta = (EditCondition = "RenderMode == EUOUPaperPlaneSwarmRenderMode::CodeDrivenMesh", ToolTip = "기존 액터 호환용 fallback Static Mesh입니다. CodeDrivenMesh에서는 PaperPlaneInstances 컴포넌트의 Static Mesh가 우선이고, 컴포넌트 mesh가 비어 있을 때만 이 값을 사용합니다."))
 	TObjectPtr<UStaticMesh> PaperPlaneMesh = nullptr;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Paper Plane Swarm|Effect", meta = (EditCondition = "RenderMode == EUOUPaperPlaneSwarmRenderMode::CodeDrivenMesh", ToolTip = "Mesh의 로컬 진행 방향을 C++ 계산 방향에 맞추는 회전 보정값입니다. Cone은 로컬 +Z가 끝 방향이라 기본 -90 Pitch를 사용합니다."))
-	FRotator PaperPlaneMeshRotationOffset = FRotator(-90.0f, 0.0f, 0.0f);
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Paper Plane Swarm|Effect", meta = (EditCondition = "RenderMode == EUOUPaperPlaneSwarmRenderMode::CodeDrivenMesh", ToolTip = "Mesh의 로컬 진행 방향을 C++ 계산 방향에 맞추는 추가 회전 보정값입니다. 최종 회전은 이 값과 PaperPlaneInstances 컴포넌트 Rotation을 함께 곱해 계산합니다. 실제 종이비행기 mesh처럼 기수가 로컬 +X를 향하면 0,0,0을 사용합니다."))
+	FRotator PaperPlaneMeshRotationOffset = FRotator::ZeroRotator;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Paper Plane Swarm|Effect", meta = (EditCondition = "RenderMode == EUOUPaperPlaneSwarmRenderMode::CodeDrivenMesh", ClampMin = "0.001", ToolTip = "C++ 렌더링 모드에서 종이비행기 인스턴스에 곱할 기본 스케일입니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Paper Plane Swarm|Effect", meta = (EditCondition = "RenderMode == EUOUPaperPlaneSwarmRenderMode::CodeDrivenMesh", ClampMin = "0.001", ToolTip = "C++ 렌더링 모드에서 종이비행기 인스턴스에 곱할 추가 스케일입니다. 최종 스케일은 이 값과 PaperPlaneInstances 컴포넌트 Scale, 개별 랜덤 스케일을 함께 곱해 계산합니다."))
 	FVector PaperPlaneMeshScale = FVector(1.0f);
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Paper Plane Swarm|Scale", meta = (ClampMin = "0.001", ToolTip = "각 종이비행기에 적용할 무작위 크기 배율의 최소값입니다."))
@@ -679,6 +679,8 @@ private:
 	void ApplyRenderMode();
 	UStaticMesh* GetResolvedPaperPlaneMesh() const;
 	bool EnsurePaperPlaneMesh();
+	FQuat GetResolvedPaperPlaneMeshRotationOffset() const;
+	FVector GetResolvedPaperPlaneBaseScale() const;
 	void ClearCodeDrivenPlaneComponents();
 	void RebuildCodeDrivenPlaneInstances();
 	void UpdateCodeDrivenPlaneInstances(float DeltaSeconds);
