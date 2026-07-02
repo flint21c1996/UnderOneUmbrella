@@ -7,6 +7,8 @@
 #include "World/Pour/UOUPourContentProfile.h"
 #include "UOUWaterContainerComponent.generated.h"
 
+class UMaterialInterface;
+class UMeshComponent;
 class USceneComponent;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnWaterAmountChangedSignature, float, NewAmount, float, MaxAmount);
@@ -51,6 +53,33 @@ public:
 	// 현재 실제로 저장된 물 양이다.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Water")
 	float CurrentAmount = 0.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water|Container Material", meta = (ToolTip = "물 저장 상태에 따라 머티리얼을 교체할 대상 MeshComponent입니다. 비워두면 Owner에서 자동으로 찾습니다."))
+	TObjectPtr<UMeshComponent> MaterialVisualComponent = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water|Container Material", meta = (ToolTip = "MaterialVisualComponent를 자동으로 찾을 때 사용할 컴포넌트 이름 또는 태그입니다. None이면 Root Mesh 또는 첫 MeshComponent를 사용합니다."))
+	FName MaterialVisualComponentName = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water|Container Material", meta = (ToolTip = "MaterialVisualComponent가 비어 있을 때 Owner에서 MeshComponent를 자동으로 찾습니다."))
+	bool bAutoFindMaterialVisualComponent = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water|Container Material", meta = (ToolTip = "켜면 물이 들어있는지 여부에 따라 대상 메시의 머티리얼을 교체합니다."))
+	bool bUpdateMaterialVisual = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water|Container Material", meta = (ToolTip = "물이 들어있을 때 적용할 머티리얼 목록입니다. 인덱스가 슬롯 번호와 대응됩니다."))
+	TArray<TObjectPtr<UMaterialInterface>> FilledMaterials;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water|Container Material", meta = (ToolTip = "비어 있을 때 적용할 머티리얼 목록입니다. 비워두면 시작 시점의 원래 머티리얼로 복구합니다."))
+	TArray<TObjectPtr<UMaterialInterface>> EmptyMaterials;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water|Container Material", meta = (ToolTip = "EmptyMaterials가 비어 있을 때 시작 시점의 원래 머티리얼로 복구합니다."))
+	bool bRestoreOriginalMaterialsWhenEmpty = true;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Water|Container Material")
+	bool bResolvedMaterialVisualComponent = false;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Water|Container Material")
+	FString ResolvedMaterialVisualComponentName = TEXT("None");
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water|Fill Visual", meta = (ToolTip = "Visual component driven by this container fill ratio. Mesh and Niagara components are both supported."))
 	TObjectPtr<USceneComponent> FillVisualComponent = nullptr;
@@ -129,6 +158,14 @@ protected:
 
 	void BroadcastPourContentProfileChanged();
 
+	void ResolveMaterialVisualComponent();
+
+	UMeshComponent* FindMaterialVisualComponent() const;
+
+	void CaptureOriginalMaterialVisualMaterialsIfNeeded();
+
+	void RefreshMaterialVisual();
+
 	void ResolveFillVisualComponent();
 
 	USceneComponent* FindFillVisualComponent() const;
@@ -144,6 +181,11 @@ protected:
 	const FUOUPourStoredVisualSettings* GetActiveStoredVisualSettings() const;
 
 	void ApplyFillVisualContentProfile();
+
+	bool bCapturedOriginalMaterialVisualMaterials = false;
+
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UMaterialInterface>> OriginalMaterialVisualMaterials;
 
 	bool bCapturedFillVisualTransform = false;
 

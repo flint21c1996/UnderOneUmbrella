@@ -6,6 +6,7 @@
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "GameFramework/Actor.h"
+#include "Materials/MaterialInterface.h"
 #include "NiagaraComponent.h"
 
 UUOUWaterContainerComponent::UUOUWaterContainerComponent()
@@ -82,11 +83,13 @@ void UUOUWaterContainerComponent::SetAmount(float NewAmount)
 	{
 		CurrentAmount = ClampedAmount;
 		RefreshFillVisualTarget();
+		RefreshMaterialVisual();
 		return;
 	}
 
 	CurrentAmount = ClampedAmount;
 	RefreshFillVisualTarget();
+	RefreshMaterialVisual();
 	BroadcastAmountChanged();
 }
 
@@ -128,6 +131,137 @@ void UUOUWaterContainerComponent::BroadcastAmountChanged()
 void UUOUWaterContainerComponent::BroadcastPourContentProfileChanged()
 {
 	OnPourContentProfileChanged.Broadcast(PourContentProfile.Get());
+}
+
+void UUOUWaterContainerComponent::ResolveMaterialVisualComponent()
+{
+	if (IsValid(MaterialVisualComponent))
+	{
+		bResolvedMaterialVisualComponent = true;
+		ResolvedMaterialVisualComponentName = MaterialVisualComponent->GetName();
+		CaptureOriginalMaterialVisualMaterialsIfNeeded();
+		return;
+	}
+
+	MaterialVisualComponent = nullptr;
+	bCapturedOriginalMaterialVisualMaterials = false;
+	OriginalMaterialVisualMaterials.Reset();
+	bResolvedMaterialVisualComponent = false;
+	ResolvedMaterialVisualComponentName = TEXT("None");
+
+	if (!bAutoFindMaterialVisualComponent)
+	{
+		return;
+	}
+
+	MaterialVisualComponent = FindMaterialVisualComponent();
+	bResolvedMaterialVisualComponent = MaterialVisualComponent != nullptr;
+	ResolvedMaterialVisualComponentName = MaterialVisualComponent != nullptr ? MaterialVisualComponent->GetName() : TEXT("None");
+	CaptureOriginalMaterialVisualMaterialsIfNeeded();
+}
+
+UMeshComponent* UUOUWaterContainerComponent::FindMaterialVisualComponent() const
+{
+	AActor* Owner = GetOwner();
+	if (Owner == nullptr)
+	{
+		return nullptr;
+	}
+
+	TInlineComponentArray<UMeshComponent*> MeshComponents(Owner);
+	if (MeshComponents.IsEmpty())
+	{
+		return nullptr;
+	}
+
+	if (MaterialVisualComponentName.IsNone())
+	{
+		if (UMeshComponent* RootMesh = Cast<UMeshComponent>(Owner->GetRootComponent()))
+		{
+			return RootMesh;
+		}
+
+		return MeshComponents[0];
+	}
+
+	const FString TargetName = MaterialVisualComponentName.ToString();
+	for (UMeshComponent* Candidate : MeshComponents)
+	{
+		if (Candidate == nullptr)
+		{
+			continue;
+		}
+
+		if (Candidate->GetFName() == MaterialVisualComponentName
+			|| Candidate->ComponentTags.Contains(MaterialVisualComponentName)
+			|| Candidate->GetName().Equals(TargetName, ESearchCase::IgnoreCase)
+			|| Candidate->GetName().Contains(TargetName, ESearchCase::IgnoreCase))
+		{
+			return Candidate;
+		}
+	}
+
+	return nullptr;
+}
+
+void UUOUWaterContainerComponent::CaptureOriginalMaterialVisualMaterialsIfNeeded()
+{
+	if (!MaterialVisualComponent || bCapturedOriginalMaterialVisualMaterials)
+	{
+		return;
+	}
+
+	OriginalMaterialVisualMaterials.Reset();
+	const int32 MaterialCount = MaterialVisualComponent->GetNumMaterials();
+	OriginalMaterialVisualMaterials.Reserve(MaterialCount);
+	for (int32 MaterialIndex = 0; MaterialIndex < MaterialCount; ++MaterialIndex)
+	{
+		OriginalMaterialVisualMaterials.Add(MaterialVisualComponent->GetMaterial(MaterialIndex));
+	}
+
+	bCapturedOriginalMaterialVisualMaterials = true;
+}
+
+void UUOUWaterContainerComponent::RefreshMaterialVisual()
+{
+	if (!bUpdateMaterialVisual)
+	{
+		return;
+	}
+
+	ResolveMaterialVisualComponent();
+	if (MaterialVisualComponent == nullptr)
+	{
+		return;
+	}
+
+	const bool bHasStoredWater = CurrentAmount > KINDA_SMALL_NUMBER;
+	const TArray<TObjectPtr<UMaterialInterface>>* MaterialsToApply = nullptr;
+	if (bHasStoredWater)
+	{
+		MaterialsToApply = &FilledMaterials;
+	}
+	else if (!EmptyMaterials.IsEmpty())
+	{
+		MaterialsToApply = &EmptyMaterials;
+	}
+	else if (bRestoreOriginalMaterialsWhenEmpty)
+	{
+		MaterialsToApply = &OriginalMaterialVisualMaterials;
+	}
+
+	if (MaterialsToApply == nullptr)
+	{
+		return;
+	}
+
+	for (int32 MaterialIndex = 0; MaterialIndex < MaterialsToApply->Num(); ++MaterialIndex)
+	{
+		if ((*MaterialsToApply)[MaterialIndex] != nullptr)
+		{
+			MaterialVisualComponent->SetMaterial(MaterialIndex, (*MaterialsToApply)[MaterialIndex]);
+		}
+	}
 }
 
 void UUOUWaterContainerComponent::ResolveFillVisualComponent()
