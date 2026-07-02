@@ -11,6 +11,7 @@ class UMaterialInterface;
 class UNiagaraComponent;
 class USceneComponent;
 class UStaticMeshComponent;
+class UUOUAudioSubsystem;
 class UUOUEnvironmentVisualComponent;
 struct FUOUWaterWheelRainCatchSample;
 
@@ -40,6 +41,7 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void OnConstruction(const FTransform& Transform) override;
 
@@ -167,6 +169,15 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Falling", meta = (DisplayName = "Rate Reference Area", ClampMin = "1.0", UIMin = "1.0", DisplayPriority = "12", EditCondition = "bEnableRainVisuals && bScaleRainSpawnRateByArea"))
 	float RainSpawnRateReferenceArea = 250000.0f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Audio", meta = (DisplayName = "Enable Rain Audio", ToolTip = "RainArea가 활성 비 상태일 때 주변 빗소리 이벤트를 관리형 인스턴스로 유지합니다."))
+	bool bEnableRainAudio = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Audio", meta = (DisplayName = "Rain Audio Event Id", EditCondition = "bEnableRainAudio", ToolTip = "RainArea 주변에서 들릴 빗소리 AudioData 이벤트 ID입니다. 별도 ambience 이벤트를 지정하는 것을 권장합니다."))
+	FName RainAudioEventId = TEXT("Rain.Ambience");
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Audio", meta = (DisplayName = "Rain Audio Refresh Interval", ClampMin = "0.02", EditCondition = "bEnableRainAudio", ToolTip = "관리형 오디오 인스턴스 위치와 재생 상태를 갱신하는 간격입니다."))
+	float RainAudioRefreshInterval = 0.1f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Falling", meta = (DisplayName = "Speed", ClampMin = "-3000.0", ClampMax = "3000.0", UIMin = "-3000.0", UIMax = "3000.0", EditCondition = "bEnableRainVisuals", DisplayPriority = "13", ToolTip = "Niagara에 전달할 수직 속도입니다. Downward는 음수로, Upward는 양수로 자동 보정됩니다."))
 	float RainFallSpeed = -900.0f;
 
@@ -215,4 +226,19 @@ protected:
 	// 비주얼 디버그 박스를 그려서 환경 연동 범위를 확인합니다.
 	void DrawRainVisualDebug() const;
 	float GetAreaScaledRainSpawnRate() const;
+	bool ShouldRainAudioBePlaying() const;
+	FVector GetRainAudioLocation() const;
+	FName BuildRainAudioInstanceId() const;
+	UUOUAudioSubsystem* GetAudioSubsystem() const;
+	void UpdateRainAudio();
+	void StopRainAudio(float OverrideFadeOutTime = -1.0f);
+
+	UPROPERTY(Transient)
+	bool bRainAudioPlaying = false;
+
+	UPROPERTY(Transient)
+	float LastRainAudioRefreshTime = -1000.0f;
+
+	UPROPERTY(Transient)
+	FName ActiveRainAudioEventId = NAME_None;
 };
