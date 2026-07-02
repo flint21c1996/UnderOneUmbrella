@@ -178,6 +178,72 @@ bool UUOUAudioSubsystem::PlayAudioEventInstance(FName EventId, FName InstanceId,
 	return PlayAudioEventDefinition(AudioEvent, Location, false, InstanceId);
 }
 
+bool UUOUAudioSubsystem::PlayManagedAudioEventInstance(FName EventId, FName InstanceId, FVector Location)
+{
+	FUOUAudioEventDefinition AudioEvent;
+	UUOUAudioDataAsset* AudioData = GetAudioData();
+	if (AudioData == nullptr)
+	{
+		UE_LOG(
+			LogUOUAudio,
+			Warning,
+			TEXT("[RainBlockedAudio][AudioSubsystem] PlayManaged failed: AudioData is null. Event=%s Instance=%s"),
+			*EventId.ToString(),
+			*InstanceId.ToString());
+		return false;
+	}
+
+	if (!AudioData->TryGetAudioEvent(EventId, AudioEvent))
+	{
+		UE_LOG(
+			LogUOUAudio,
+			Warning,
+			TEXT("[RainBlockedAudio][AudioSubsystem] PlayManaged failed: event was not found. Event=%s Instance=%s AudioData=%s"),
+			*EventId.ToString(),
+			*InstanceId.ToString(),
+			*GetNameSafe(AudioData));
+		return false;
+	}
+
+	if (AudioEvent.PlaybackMode == EUOUAudioPlaybackMode::BGM)
+	{
+		UE_LOG(
+			LogUOUAudio,
+			Warning,
+			TEXT("[RainBlockedAudio][AudioSubsystem] PlayManaged redirected to BGM playback. Event=%s Instance=%s"),
+			*EventId.ToString(),
+			*InstanceId.ToString());
+		return PlayAudioEventDefinition(AudioEvent, Location, false, InstanceId);
+	}
+
+	USoundBase* Sound = AudioEvent.Sound.IsNull() ? nullptr : AudioEvent.Sound.LoadSynchronous();
+	if (Sound == nullptr)
+	{
+		UE_LOG(
+			LogUOUAudio,
+			Warning,
+			TEXT("[RainBlockedAudio][AudioSubsystem] PlayManaged failed: sound is null. Event=%s Instance=%s SoundPath=%s"),
+			*AudioEvent.EventId.ToString(),
+			*InstanceId.ToString(),
+			*AudioEvent.Sound.ToSoftObjectPath().ToString());
+		return false;
+	}
+
+	const bool bPlayed = PlayManagedAudioEventDefinition(AudioEvent, Sound, Location, false, InstanceId);
+	UE_LOG(
+		LogUOUAudio,
+		Warning,
+		TEXT("[RainBlockedAudio][AudioSubsystem] PlayManaged result. Event=%s Instance=%s Sound=%s Played=%s Location=(%.1f %.1f %.1f)"),
+		*AudioEvent.EventId.ToString(),
+		*InstanceId.ToString(),
+		*GetNameSafe(Sound),
+		bPlayed ? TEXT("true") : TEXT("false"),
+		Location.X,
+		Location.Y,
+		Location.Z);
+	return bPlayed;
+}
+
 bool UUOUAudioSubsystem::PlayAudioEventAtLocation(FName EventId, FVector Location)
 {
 	return PlayAudioEvent(EventId, Location);
@@ -529,6 +595,12 @@ bool UUOUAudioSubsystem::PlayManagedAudioEventDefinition(const FUOUAudioEventDef
 	const FName ManagedAudioKey = BuildManagedAudioKey(AudioEvent.EventId, InstanceId);
 	if (ManagedAudioKey.IsNone())
 	{
+		UE_LOG(
+			LogUOUAudio,
+			Warning,
+			TEXT("[RainBlockedAudio][AudioSubsystem] Managed playback failed: managed key is none. Event=%s Instance=%s"),
+			*AudioEvent.EventId.ToString(),
+			*InstanceId.ToString());
 		return false;
 	}
 
@@ -536,6 +608,15 @@ bool UUOUAudioSubsystem::PlayManagedAudioEventDefinition(const FUOUAudioEventDef
 	UAudioComponent* ExistingAudioComponent = ManagedAudioComponents.FindRef(ManagedAudioKey);
 	if (IsValid(ExistingAudioComponent))
 	{
+		UE_LOG(
+			LogUOUAudio,
+			Warning,
+			TEXT("[RainBlockedAudio][AudioSubsystem] Reusing managed component. Key=%s Event=%s IsPlaying=%s TargetVolume=%.3f"),
+			*ManagedAudioKey.ToString(),
+			*AudioEvent.EventId.ToString(),
+			ExistingAudioComponent->IsPlaying() ? TEXT("true") : TEXT("false"),
+			TargetVolume);
+
 		if (AudioEvent.PlaybackMode == EUOUAudioPlaybackMode::AtLocation && !bForceTwoDimensional)
 		{
 			ExistingAudioComponent->SetWorldLocation(Location);
@@ -586,6 +667,15 @@ bool UUOUAudioSubsystem::PlayManagedAudioEventDefinition(const FUOUAudioEventDef
 
 	if (!IsValid(NewAudioComponent))
 	{
+		UE_LOG(
+			LogUOUAudio,
+			Warning,
+			TEXT("[RainBlockedAudio][AudioSubsystem] Managed playback failed: spawn returned null. Key=%s Event=%s Sound=%s Volume=%.3f PlaybackMode=%d"),
+			*ManagedAudioKey.ToString(),
+			*AudioEvent.EventId.ToString(),
+			*GetNameSafe(Sound),
+			InitialVolume,
+			static_cast<int32>(AudioEvent.PlaybackMode));
 		return false;
 	}
 
@@ -598,6 +688,18 @@ bool UUOUAudioSubsystem::PlayManagedAudioEventDefinition(const FUOUAudioEventDef
 	{
 		NewAudioComponent->FadeIn(AudioEvent.FadeTime, TargetVolume, AudioEvent.StartTime);
 	}
+
+	UE_LOG(
+		LogUOUAudio,
+		Warning,
+		TEXT("[RainBlockedAudio][AudioSubsystem] Created managed component. Key=%s Event=%s Sound=%s InitialVolume=%.3f TargetVolume=%.3f FadeTime=%.3f IsPlaying=%s"),
+		*ManagedAudioKey.ToString(),
+		*AudioEvent.EventId.ToString(),
+		*GetNameSafe(Sound),
+		InitialVolume,
+		TargetVolume,
+		AudioEvent.FadeTime,
+		NewAudioComponent->IsPlaying() ? TEXT("true") : TEXT("false"));
 
 	return true;
 }
