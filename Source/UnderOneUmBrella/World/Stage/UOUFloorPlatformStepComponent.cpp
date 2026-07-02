@@ -120,6 +120,8 @@ void UUOUFloorPlatformStepComponent::AdvanceTargetIndex(
 	const TArray<TObjectPtr<AUOUFloorPlatformTargetActor>>& TargetMarkers,
 	bool bLoopMoveSteps,
 	bool bLoopThroughStart,
+	bool bPingPongMoveSteps,
+	int32& InOutMoveDirection,
 	int32& InOutCurrentTargetIndex)
 {
 	if (!bUseMoveSteps || ActiveTargetIndex == INDEX_NONE || TargetMarkers.Num() == 0)
@@ -129,15 +131,42 @@ void UUOUFloorPlatformStepComponent::AdvanceTargetIndex(
 	}
 
 	const int32 TargetCount = TargetMarkers.Num();
+	const int32 MoveDirection = InOutMoveDirection >= 0 ? 1 : -1;
 
-	for (int32 CandidateIndex = ActiveTargetIndex + 1; CandidateIndex < TargetCount; ++CandidateIndex)
+	auto TryAdvanceInDirection = [this, &TargetMarkers, TargetCount, &InOutCurrentTargetIndex](int32 Direction) -> bool
 	{
-		if (GetTargetMarkerAt(TargetMarkers, CandidateIndex) != nullptr)
+		for (int32 CandidateIndex = ActiveTargetIndex + Direction;
+			CandidateIndex >= 0 && CandidateIndex < TargetCount;
+			CandidateIndex += Direction)
 		{
-			InOutCurrentTargetIndex = CandidateIndex;
+			if (GetTargetMarkerAt(TargetMarkers, CandidateIndex) != nullptr)
+			{
+				InOutCurrentTargetIndex = CandidateIndex;
+				return true;
+			}
+		}
+		return false;
+	};
+
+	if (TryAdvanceInDirection(MoveDirection))
+	{
+		ActiveTargetIndex = INDEX_NONE;
+		return;
+	}
+
+	if (bPingPongMoveSteps)
+	{
+		const int32 ReversedMoveDirection = -MoveDirection;
+		if (TryAdvanceInDirection(ReversedMoveDirection))
+		{
+			InOutMoveDirection = ReversedMoveDirection;
 			ActiveTargetIndex = INDEX_NONE;
 			return;
 		}
+
+		InOutCurrentTargetIndex = FMath::Clamp(ActiveTargetIndex, 0, TargetCount - 1);
+		ActiveTargetIndex = INDEX_NONE;
+		return;
 	}
 
 	if (bLoopMoveSteps)
