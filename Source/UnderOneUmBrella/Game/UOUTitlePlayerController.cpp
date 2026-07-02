@@ -6,6 +6,7 @@
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
+#include "Game/UOULevelTransitionSettingsActor.h"
 #include "Game/UOULevelTransitionSubsystem.h"
 #include "Game/UOUTitleLevelTransitionActor.h"
 #include "InputCoreTypes.h"
@@ -98,9 +99,19 @@ void AUOUTitlePlayerController::StartGame()
 	}
 
 	TSoftObjectPtr<UWorld> TargetLevel = nextLevel;
+	bool bFoundSettingsTargetLevel = false;
+	if (const AUOULevelTransitionSettingsActor* SettingsActor = FindLevelTransitionSettingsActor())
+	{
+		if (!SettingsActor->TargetLevel.IsNull())
+		{
+			TargetLevel = SettingsActor->TargetLevel;
+			bFoundSettingsTargetLevel = true;
+		}
+	}
+
 	if (const AUOUTitleLevelTransitionActor* TransitionActor = FindTitleLevelTransitionActor())
 	{
-		if (!TransitionActor->TargetLevel.IsNull())
+		if (!TransitionActor->TargetLevel.IsNull() && !bFoundSettingsTargetLevel)
 		{
 			TargetLevel = TransitionActor->TargetLevel;
 		}
@@ -146,6 +157,22 @@ void AUOUTitlePlayerController::ApplyTitleMenuInputMode()
 	ResetIgnoreLookInput();
 	SetIgnoreMoveInput(true);
 	SetIgnoreLookInput(true);
+}
+
+const AUOULevelTransitionSettingsActor* AUOUTitlePlayerController::FindLevelTransitionSettingsActor() const
+{
+	UWorld* World = GetWorld();
+	if (World == nullptr)
+	{
+		return nullptr;
+	}
+
+	for (TActorIterator<AUOULevelTransitionSettingsActor> It(World); It; ++It)
+	{
+		return *It;
+	}
+
+	return nullptr;
 }
 
 AUOUTitleLevelTransitionActor* AUOUTitlePlayerController::FindTitleLevelTransitionActor() const
