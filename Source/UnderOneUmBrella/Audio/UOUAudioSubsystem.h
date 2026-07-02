@@ -56,6 +56,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Audio|Events", meta = (DisplayName = "오디오 이벤트 인스턴스 재생"))
 	bool PlayAudioEventInstance(FName EventId, FName InstanceId, FVector Location = FVector::ZeroVector);
 
+	UFUNCTION(BlueprintCallable, Category = "Audio|Events", meta = (DisplayName = "관리형 오디오 이벤트 인스턴스 재생"))
+	bool PlayManagedAudioEventInstance(FName EventId, FName InstanceId, FVector Location = FVector::ZeroVector);
+
 	UFUNCTION(BlueprintCallable, Category = "Audio|Events", meta = (DisplayName = "위치 오디오 이벤트 재생"))
 	bool PlayAudioEventAtLocation(FName EventId, FVector Location);
 

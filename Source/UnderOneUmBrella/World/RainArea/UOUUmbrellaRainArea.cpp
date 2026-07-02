@@ -2,13 +2,17 @@
 
 #include "World/RainArea/UOUUmbrellaRainArea.h"
 
+#include "Audio/UOUAudioSubsystem.h"
 #include "Components/BoxComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Debug/UOUDebugSubsystem.h"
 #include "DrawDebugHelpers.h"
+#include "Engine/GameInstance.h"
 #include "EngineUtils.h"
 #include "GameFramework/Actor.h"
+#include "GameFramework/Pawn.h"
+#include "Kismet/GameplayStatics.h"
 #include "Materials/MaterialInterface.h"
 #include "NiagaraComponent.h"
 #include "Player/UOUUmbrellaComponent.h"
@@ -143,6 +147,12 @@ void AUOUUmbrellaRainArea::BeginPlay()
 	ApplyEnvironmentVisualSettings();
 }
 
+void AUOUUmbrellaRainArea::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	StopRainAudio(0.0f);
+	Super::EndPlay(EndPlayReason);
+}
+
 void AUOUUmbrellaRainArea::OnConstruction(const FTransform& Transform)
 {
 	Super::OnConstruction(Transform);
@@ -200,6 +210,7 @@ void AUOUUmbrellaRainArea::Tick(float DeltaSeconds)
 	// 비주얼 상태는 매 프레임 최신 에디터 세팅과 런타임 토글을 반영합니다.
 	ApplyEnvironmentVisualState();
 	DrawRainVisualDebug();
+	UpdateRainAudio();
 
 	TArray<AActor*> OverlappingActors;
 	RainVolume->GetOverlappingActors(OverlappingActors);
@@ -390,6 +401,110 @@ float AUOUUmbrellaRainArea::GetAreaScaledRainSpawnRate() const
 	const float SafeReferenceArea = FMath::Max(1.0f, RainSpawnRateReferenceArea);
 
 	return BaseSpawnRate * FMath::Max(0.0f, AreaSize / SafeReferenceArea);
+}
+
+bool AUOUUmbrellaRainArea::ShouldRainAudioBePlaying() const
+{
+	return bEnableRainAudio
+		&& !RainAudioEventId.IsNone()
+		&& RainVolume != nullptr
+		&& bEnableRainVisuals
+		&& RainVisualIntensity > KINDA_SMALL_NUMBER
+		&& GetAreaScaledRainSpawnRate() > KINDA_SMALL_NUMBER;
+}
+
+FVector AUOUUmbrellaRainArea::GetRainAudioLocation() const
+{
+	if (RainVolume == nullptr)
+	{
+		return GetActorLocation();
+	}
+
+	const APawn* PlayerPawn = UGameplayStatics::GetPlayerPawn(this, 0);
+	if (!IsValid(PlayerPawn))
+	{
+		return RainVolume->GetComponentLocation();
+	}
+
+	const FTransform RainVolumeTransform = RainVolume->GetComponentTransform();
+	const FVector LocalPlayerLocation = RainVolumeTransform.InverseTransformPosition(PlayerPawn->GetActorLocation());
+	const FVector BoxExtent = RainVolume->GetUnscaledBoxExtent();
+	const FVector ClampedLocalLocation(
+		FMath::Clamp(LocalPlayerLocation.X, -BoxExtent.X, BoxExtent.X),
+		FMath::Clamp(LocalPlayerLocation.Y, -BoxExtent.Y, BoxExtent.Y),
+		FMath::Clamp(LocalPlayerLocation.Z, -BoxExtent.Z, BoxExtent.Z));
+
+	return RainVolumeTransform.TransformPosition(ClampedLocalLocation);
+}
+
+FName AUOUUmbrellaRainArea::BuildRainAudioInstanceId() const
+{
+	return FName(*FString::Printf(TEXT("%s.RainAmbience"), *GetName()));
+}
+
+UUOUAudioSubsystem* AUOUUmbrellaRainArea::GetAudioSubsystem() const
+{
+	const UWorld* World = GetWorld();
+	if (World == nullptr)
+	{
+		return nullptr;
+	}
+
+	UGameInstance* GameInstance = World->GetGameInstance();
+	return GameInstance != nullptr ? GameInstance->GetSubsystem<UUOUAudioSubsystem>() : nullptr;
+}
+
+void AUOUUmbrellaRainArea::UpdateRainAudio()
+{
+	if (!ShouldRainAudioBePlaying())
+	{
+		StopRainAudio();
+		return;
+	}
+
+	const UWorld* World = GetWorld();
+	const float CurrentTime = World != nullptr ? World->GetTimeSeconds() : 0.0f;
+	const float SafeRefreshInterval = FMath::Max(0.02f, RainAudioRefreshInterval);
+	if (CurrentTime - LastRainAudioRefreshTime < SafeRefreshInterval)
+	{
+		return;
+	}
+	LastRainAudioRefreshTime = CurrentTime;
+
+	if (bRainAudioPlaying && ActiveRainAudioEventId != RainAudioEventId)
+	{
+		StopRainAudio(0.0f);
+	}
+
+	UUOUAudioSubsystem* AudioSubsystem = GetAudioSubsystem();
+	if (AudioSubsystem == nullptr)
+	{
+		return;
+	}
+
+	bRainAudioPlaying = AudioSubsystem->PlayManagedAudioEventInstance(
+		RainAudioEventId,
+		BuildRainAudioInstanceId(),
+		GetRainAudioLocation());
+	ActiveRainAudioEventId = bRainAudioPlaying ? RainAudioEventId : NAME_None;
+}
+
+void AUOUUmbrellaRainArea::StopRainAudio(float OverrideFadeOutTime)
+{
+	if (!bRainAudioPlaying)
+	{
+		return;
+	}
+
+	if (UUOUAudioSubsystem* AudioSubsystem = GetAudioSubsystem())
+	{
+		const FName StopEventId = ActiveRainAudioEventId.IsNone() ? RainAudioEventId : ActiveRainAudioEventId;
+		AudioSubsystem->StopAudioEvent(StopEventId, BuildRainAudioInstanceId(), OverrideFadeOutTime);
+	}
+
+	bRainAudioPlaying = false;
+	LastRainAudioRefreshTime = -1000.0f;
+	ActiveRainAudioEventId = NAME_None;
 }
 
 void AUOUUmbrellaRainArea::ApplyEnvironmentVisualRainBlocker(bool bIsBlocking, const FVector& BlockerWorldCenter, const FVector& BlockerHalfExtent, float BlockerIntensity)
