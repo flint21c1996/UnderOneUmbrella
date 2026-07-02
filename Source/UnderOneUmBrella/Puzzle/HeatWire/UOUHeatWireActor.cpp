@@ -4,6 +4,7 @@
 
 #include "Components/SceneComponent.h"
 #include "Components/SplineComponent.h"
+#include "Debug/UOUDebugControllerComponent.h"
 #include "Debug/UOUDebugSubsystem.h"
 #include "Debug/UOUPuzzleDebugInfoProvider.h"
 #include "DrawDebugHelpers.h"
@@ -379,6 +380,26 @@ void AUOUHeatWireActor::DrawPathPointDebug() const
 		return;
 	}
 
+	const UUOUDebugSubsystem* DebugSubsystem = World->GetSubsystem<UUOUDebugSubsystem>();
+	if (DebugSubsystem == nullptr || !DebugSubsystem->IsDebugEnabled(EUOUDebugCategory::Puzzle))
+	{
+		return;
+	}
+
+	const UUOUPuzzleDebugControllerComponent* PuzzleDebugController =
+		Cast<UUOUPuzzleDebugControllerComponent>(DebugSubsystem->FindDebugControllerComponent(EUOUDebugCategory::Puzzle));
+	if (PuzzleDebugController != nullptr && !PuzzleDebugController->bShowHeatWirePathDebug)
+	{
+		return;
+	}
+
+	const bool bDrawWorldShapes = DebugSubsystem->IsWorldDrawEnabled(EUOUDebugCategory::Puzzle);
+	const bool bDrawWorldLabels = DebugSubsystem->IsWorldLabelEnabled(EUOUDebugCategory::Puzzle);
+	if (!bDrawWorldShapes && !bDrawWorldLabels)
+	{
+		return;
+	}
+
 	const int32 SplinePointCount = HeatWirePath->GetNumberOfSplinePoints();
 	if (SplinePointCount <= 0)
 	{
@@ -409,32 +430,35 @@ void AUOUHeatWireActor::DrawPathPointDebug() const
 			? FColor::Blue
 			: (PointIndex == SplinePointCount - 1 ? FColor::Red : FColor::Green);
 
-		DrawDebugSphere(
-			World,
-			PointLocation,
-			SphereRadius,
-			SphereSegments,
-			PointColor,
-			false,
-			0.0f,
-			0,
-			Thickness);
-
-		if (bDrawPathPointHeatStateDebug)
+		if (bDrawWorldShapes)
 		{
 			DrawDebugSphere(
 				World,
 				PointLocation,
-				SphereRadius * 0.45f,
+				SphereRadius,
 				SphereSegments,
-				bReachedByHeat ? FColor::Orange : FColor::White,
+				PointColor,
 				false,
 				0.0f,
 				0,
-				Thickness + 1.0f);
+				Thickness);
+
+			if (bDrawPathPointHeatStateDebug)
+			{
+				DrawDebugSphere(
+					World,
+					PointLocation,
+					SphereRadius * 0.45f,
+					SphereSegments,
+					bReachedByHeat ? FColor::Orange : FColor::White,
+					false,
+					0.0f,
+					0,
+					Thickness + 1.0f);
+			}
 		}
 
-		if (bDrawPathPointDebugLabels)
+		if (bDrawWorldLabels && bDrawPathPointDebugLabels)
 		{
 			DrawDebugString(
 				World,
@@ -455,18 +479,21 @@ void AUOUHeatWireActor::DrawPathPointDebug() const
 	if (bDrawCurrentHeatFrontDebug && HeatWireComponent != nullptr)
 	{
 		const FVector HeatFrontLocation = HeatWireComponent->GetFireWorldLocation() + PathPointDebugOffset;
-		DrawDebugSphere(
-			World,
-			HeatFrontLocation,
-			FMath::Max(1.0f, CurrentHeatFrontDebugSphereRadius),
-			SphereSegments,
-			FColor::Yellow,
-			false,
-			0.0f,
-			0,
-			Thickness + 1.0f);
+		if (bDrawWorldShapes)
+		{
+			DrawDebugSphere(
+				World,
+				HeatFrontLocation,
+				FMath::Max(1.0f, CurrentHeatFrontDebugSphereRadius),
+				SphereSegments,
+				FColor::Yellow,
+				false,
+				0.0f,
+				0,
+				Thickness + 1.0f);
+		}
 
-		if (bDrawPathPointDebugLabels)
+		if (bDrawWorldLabels && bDrawPathPointDebugLabels)
 		{
 			DrawDebugString(
 				World,
