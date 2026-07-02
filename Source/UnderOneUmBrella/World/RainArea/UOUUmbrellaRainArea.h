@@ -11,6 +11,8 @@ class UMaterialInterface;
 class UNiagaraComponent;
 class USceneComponent;
 class UStaticMeshComponent;
+class UUOUHeatWireComponent;
+class UUOUAudioSubsystem;
 class UUOUEnvironmentVisualComponent;
 struct FUOUWaterWheelRainCatchSample;
 
@@ -40,6 +42,7 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void OnConstruction(const FTransform& Transform) override;
 
@@ -99,6 +102,36 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Water Wheel", meta = (ToolTip = "RainVolume 안의 WaterWheelRainConditionComponent에 위치 기반 비 입력을 전달할지 여부입니다."))
 	bool bEnableWaterWheelRainInput = true;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Heat Wire", meta = (ToolTip = "RainVolume 안의 UOU Heat Wire Wet Sections에 비 입력을 전달할지 여부입니다. 우산으로 막힌 구간은 젖지 않습니다."))
+	bool bEnableHeatWireRainInput = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Heat Wire", meta = (ClampMin = "1", ToolTip = "Heat Wire Wet Section 하나를 비 판정할 때 스플라인을 따라 샘플링할 위치 수입니다. 값이 높을수록 얇은 비 영역을 놓칠 가능성이 줄어듭니다."))
+	int32 HeatWireWetSectionPathSampleCount = 7;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Rain|Heat Wire|Runtime")
+	bool bLastHeatWireRainInputTickRan = false;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Rain|Heat Wire|Runtime")
+	int32 LastHeatWireActorScanCount = 0;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Rain|Heat Wire|Runtime")
+	int32 LastHeatWireComponentCount = 0;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Rain|Heat Wire|Runtime")
+	int32 LastHeatWireValidComponentCount = 0;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Rain|Heat Wire|Runtime")
+	int32 LastHeatWireWetSectionCount = 0;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Rain|Heat Wire|Runtime")
+	int32 LastHeatWireAcceptedSectionCount = 0;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Rain|Heat Wire|Runtime")
+	float LastHeatWireDeliveredWetness = 0.0f;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Rain|Heat Wire|Runtime")
+	FString LastHeatWireRainDebugReason = TEXT("Not Run");
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Water Wheel", meta = (ClampMin = "0.0", ClampMax = "1.0", ToolTip = "물레방아 입력 계산에서 RainVolume 가장자리 샘플이 가지는 최소 강도입니다."))
 	float WaterWheelRainEdgeStrength = 0.35f;
 
@@ -109,7 +142,7 @@ protected:
 	bool bRequireWaterWheelCatchPointCenterInsideRainVolume = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Water Wheel|Debug", meta = (ToolTip = "켜져 있으면 물레방아 비 입력 샘플 위치와 판정 결과를 월드에 표시합니다."))
-	bool bDrawWaterWheelRainInputDebug = true;
+	bool bDrawWaterWheelRainInputDebug = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Water Wheel|Debug", meta = (ClampMin = "0.0", ToolTip = "물레방아 비 입력 디버그 표시 유지 시간입니다. 0이면 매 프레임 갱신됩니다."))
 	float WaterWheelRainInputDebugLifeTime = 0.0f;
@@ -167,6 +200,15 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Falling", meta = (DisplayName = "Rate Reference Area", ClampMin = "1.0", UIMin = "1.0", DisplayPriority = "12", EditCondition = "bEnableRainVisuals && bScaleRainSpawnRateByArea"))
 	float RainSpawnRateReferenceArea = 250000.0f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Audio", meta = (DisplayName = "Enable Rain Audio", ToolTip = "RainArea가 활성 비 상태일 때 주변 빗소리 이벤트를 관리형 인스턴스로 유지합니다."))
+	bool bEnableRainAudio = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Audio", meta = (DisplayName = "Rain Audio Event Id", EditCondition = "bEnableRainAudio", ToolTip = "RainArea 주변에서 들릴 빗소리 AudioData 이벤트 ID입니다. 별도 ambience 이벤트를 지정하는 것을 권장합니다."))
+	FName RainAudioEventId = TEXT("Rain.Ambience");
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Audio", meta = (DisplayName = "Rain Audio Refresh Interval", ClampMin = "0.02", EditCondition = "bEnableRainAudio", ToolTip = "관리형 오디오 인스턴스 위치와 재생 상태를 갱신하는 간격입니다."))
+	float RainAudioRefreshInterval = 0.1f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rain|Falling", meta = (DisplayName = "Speed", ClampMin = "-3000.0", ClampMax = "3000.0", UIMin = "-3000.0", UIMax = "3000.0", EditCondition = "bEnableRainVisuals", DisplayPriority = "13", ToolTip = "Niagara에 전달할 수직 속도입니다. Downward는 음수로, Upward는 양수로 자동 보정됩니다."))
 	float RainFallSpeed = -900.0f;
 
@@ -202,6 +244,8 @@ protected:
 	void ApplyRainToWaterBasinTargets(float DeltaSeconds, bool bHasRainBlocker, const FVector& RainBlockerWorldCenter, const FRotator& RainBlockerWorldRotation, const FVector& RainBlockerHalfExtent) const;
 	// RainVolume 안의 물레방아 Catch Point에 위치 기반 비 입력을 전달합니다.
 	void ApplyRainToWaterWheelTargets(float DeltaSeconds, bool bHasRainBlocker, const FVector& RainBlockerWorldCenter, const FRotator& RainBlockerWorldRotation, const FVector& RainBlockerHalfExtent);
+	void ApplyRainToHeatWireTargets(float DeltaSeconds, bool bHasRainBlocker, const FVector& RainBlockerWorldCenter, const FRotator& RainBlockerWorldRotation, const FVector& RainBlockerHalfExtent);
+	float CalculateHeatWireWetSectionRainScale(const UUOUHeatWireComponent* HeatWire, int32 SectionIndex, bool bHasRainBlocker, const FVector& RainBlockerWorldCenter, const FRotator& RainBlockerWorldRotation, const FVector& RainBlockerHalfExtent) const;
 	float CalculateWaterWheelCatchRainScale(const FUOUWaterWheelRainCatchSample& CatchSample, bool bHasRainBlocker, const FVector& RainBlockerWorldCenter, const FRotator& RainBlockerWorldRotation, const FVector& RainBlockerHalfExtent) const;
 	float CalculateRainVolumeCenterStrength(const FVector& WorldLocation) const;
 	// 대상 Actor의 bounds가 RainVolume과 겹치는지 확인합니다.
@@ -215,4 +259,19 @@ protected:
 	// 비주얼 디버그 박스를 그려서 환경 연동 범위를 확인합니다.
 	void DrawRainVisualDebug() const;
 	float GetAreaScaledRainSpawnRate() const;
+	bool ShouldRainAudioBePlaying() const;
+	FVector GetRainAudioLocation() const;
+	FName BuildRainAudioInstanceId() const;
+	UUOUAudioSubsystem* GetAudioSubsystem() const;
+	void UpdateRainAudio();
+	void StopRainAudio(float OverrideFadeOutTime = -1.0f);
+
+	UPROPERTY(Transient)
+	bool bRainAudioPlaying = false;
+
+	UPROPERTY(Transient)
+	float LastRainAudioRefreshTime = -1000.0f;
+
+	UPROPERTY(Transient)
+	FName ActiveRainAudioEventId = NAME_None;
 };

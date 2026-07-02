@@ -41,6 +41,8 @@ float UUOUWeightSensorComponent::GetPuzzleWeight() const
 
 void UUOUWeightSensorComponent::RefreshCurrentWeight()
 {
+	SynchronizeOverlappingActors();
+
 	float TotalWeight = 0.0f;
 	TArray<TObjectPtr<AActor>> MissingActors;
 
@@ -165,6 +167,28 @@ void UUOUWeightSensorComponent::UnbindSensorVolume()
 
 	SensorVolume->OnComponentBeginOverlap.RemoveDynamic(this, &UUOUWeightSensorComponent::HandleSensorBeginOverlap);
 	SensorVolume->OnComponentEndOverlap.RemoveDynamic(this, &UUOUWeightSensorComponent::HandleSensorEndOverlap);
+}
+
+void UUOUWeightSensorComponent::SynchronizeOverlappingActors()
+{
+	OverlapActorCounts.Reset();
+
+	if (SensorVolume == nullptr)
+	{
+		return;
+	}
+
+	TArray<AActor*> OverlappingActors;
+	SensorVolume->GetOverlappingActors(OverlappingActors);
+
+	const AActor* Owner = GetOwner();
+	for (AActor* OverlappingActor : OverlappingActors)
+	{
+		if (OverlappingActor != nullptr && OverlappingActor != Owner)
+		{
+			OverlapActorCounts.Add(OverlappingActor, 1);
+		}
+	}
 }
 
 void UUOUWeightSensorComponent::RegisterOverlappingActor(AActor* OtherActor)

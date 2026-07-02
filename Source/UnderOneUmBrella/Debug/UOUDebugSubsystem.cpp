@@ -701,7 +701,7 @@ bool UUOUDebugSubsystem::IsWorldDrawEnabled(EUOUDebugCategory Category) const
 		if (const UUOUPuzzleDebugControllerComponent* PuzzleController =
 			Cast<UUOUPuzzleDebugControllerComponent>(FindDebugControllerComponent(Category)))
 		{
-			return PuzzleController->bShowConnections;
+			return PuzzleController->bShowConnections || PuzzleController->bShowHeatWirePathDebug;
 		}
 		return true;
 	case EUOUDebugCategory::Interaction:

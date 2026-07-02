@@ -148,9 +148,11 @@ protected:
 	bool bSurfaceFollowOffsetCaptured = false;
 
 private:
+	void ConfigureWeightedButtonMotionReferences() const;
 	void ConfigureButtonCollisionLayout() const;
 	void ConfigureButtonCollision() const;
 	void ConfigureBlockingCollision(UBoxComponent* CollisionComponent) const;
+	void SyncButtonCollisionToVisual() const;
 
 	// 침하 상태에 따라 ButtonVisual을 ResultSinkPoint 쪽으로 보간 이동합니다.
 	void MoveResultSinkVisual(float DeltaSeconds);
