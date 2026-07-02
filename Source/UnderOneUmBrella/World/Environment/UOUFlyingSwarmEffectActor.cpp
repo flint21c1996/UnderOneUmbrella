@@ -12,14 +12,14 @@
 #include "GameFramework/PlayerController.h"
 #include "NiagaraComponent.h"
 #include "NiagaraSystem.h"
-#include "UObject/ConstructorHelpers.h"
 
 namespace
 {
 constexpr int32 MaxPaperPlaneSwarmFlightPatternCount = 4;
 constexpr float OrbitBlendStartFlightT = 0.80f;
 constexpr float FlightHandoffBlendHalfWidth = 0.08f;
-constexpr TCHAR DefaultPaperPlaneMeshPath[] = TEXT("/Engine/BasicShapes/Cone.Cone");
+constexpr TCHAR DefaultPaperPlaneMeshPath[] = TEXT("/Game/UOU/Effects/PaperPlane/PaperPlane.PaperPlane");
+constexpr TCHAR FallbackPaperPlaneMeshPath[] = TEXT("/Engine/BasicShapes/Cone.Cone");
 
 FName NormalizeNiagaraUserParameterName(FName ParameterName)
 {
@@ -62,6 +62,13 @@ FVector SolveQuadraticBezier(const FVector& P0, const FVector& P1, const FVector
 	return P0 * OneMinusT * OneMinusT
 		+ P1 * 2.0f * OneMinusT * T
 		+ P2 * T * T;
+}
+
+FVector SolveQuadraticBezierTangent(const FVector& P0, const FVector& P1, const FVector& P2, float T)
+{
+	const float OneMinusT = 1.0f - T;
+	return (P1 - P0) * (2.0f * OneMinusT)
+		+ (P2 - P1) * (2.0f * T);
 }
 
 float RandomRangeFloat(FRandomStream& RandomStream, float MinValue, float MaxValue)
@@ -112,6 +119,49 @@ FVector BlendFlightHandoffPath(const FVector& OutPath, const FVector& BackPath, 
 
 	return FMath::Lerp(OutPath, BackPath, BlendT);
 }
+
+FVector BlendFlightHandoffTangent(const FVector& OutTangent, const FVector& BackTangent, float PatternT, float FarReachT, float BlendWidth, float BlendT)
+{
+	if (PatternT <= FarReachT - BlendWidth)
+	{
+		return OutTangent;
+	}
+
+	if (PatternT >= FarReachT + BlendWidth)
+	{
+		return BackTangent;
+	}
+
+	return FMath::Lerp(OutTangent, BackTangent, BlendT);
+}
+
+FVector GetStableFlightUp(const FVector& ForwardDirection, const FVector& DesiredUp, const FVector& FallbackRight)
+{
+	const FVector SafeForward = GetSafeDirection(ForwardDirection, FVector::ForwardVector);
+	const FVector ProjectedUp = DesiredUp - SafeForward * FVector::DotProduct(DesiredUp, SafeForward);
+	if (!ProjectedUp.IsNearlyZero())
+	{
+		return ProjectedUp.GetSafeNormal();
+	}
+
+	const FVector ProjectedRight = FallbackRight - SafeForward * FVector::DotProduct(FallbackRight, SafeForward);
+	if (!ProjectedRight.IsNearlyZero())
+	{
+		return FVector::CrossProduct(SafeForward, ProjectedRight.GetSafeNormal()).GetSafeNormal();
+	}
+
+	return FRotationMatrix::MakeFromX(SafeForward).GetUnitAxis(EAxis::Z);
+}
+
+UStaticMesh* LoadDefaultPaperPlaneMesh()
+{
+	if (UStaticMesh* DefaultMesh = LoadObject<UStaticMesh>(nullptr, DefaultPaperPlaneMeshPath))
+	{
+		return DefaultMesh;
+	}
+
+	return LoadObject<UStaticMesh>(nullptr, FallbackPaperPlaneMeshPath);
+}
 }
 
 AUOUFlyingSwarmEffectActor::AUOUFlyingSwarmEffectActor()
@@ -133,12 +183,6 @@ AUOUFlyingSwarmEffectActor::AUOUFlyingSwarmEffectActor()
 	PaperPlaneInstances->SetCanEverAffectNavigation(false);
 	PaperPlaneInstances->SetVisibility(false, true);
 	PaperPlaneInstances->SetHiddenInGame(true);
-
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> PaperPlaneMeshFinder(DefaultPaperPlaneMeshPath);
-	if (PaperPlaneMeshFinder.Succeeded())
-	{
-		PaperPlaneInstances->SetStaticMesh(PaperPlaneMeshFinder.Object);
-	}
 }
 
 void AUOUFlyingSwarmEffectActor::BeginPlay()
@@ -171,6 +215,9 @@ void AUOUFlyingSwarmEffectActor::OnConstruction(const FTransform& Transform)
 	WobbleUpAmount = FMath::Max(0.0f, WobbleUpAmount);
 	PlaneScaleRandomMin = FMath::Max(0.001f, PlaneScaleRandomMin);
 	PlaneScaleRandomMax = FMath::Max(0.001f, PlaneScaleRandomMax);
+	PaperPlaneMeshScale.X = FMath::Max(0.001f, PaperPlaneMeshScale.X);
+	PaperPlaneMeshScale.Y = FMath::Max(0.001f, PaperPlaneMeshScale.Y);
+	PaperPlaneMeshScale.Z = FMath::Max(0.001f, PaperPlaneMeshScale.Z);
 	FlightPatternCount = FMath::Clamp(FlightPatternCount, 1, MaxPaperPlaneSwarmFlightPatternCount);
 	GlideSwoopAmount = FMath::Max(0.0f, GlideSwoopAmount);
 	GlideSwoopHeight = FMath::Max(0.0f, GlideSwoopHeight);
@@ -222,7 +269,7 @@ void AUOUFlyingSwarmEffectActor::ActivateEffect()
 
 	if (RenderMode == EUOUPaperPlaneSwarmRenderMode::CodeDrivenMesh && (PaperPlaneInstances == nullptr || !EnsurePaperPlaneMesh()))
 	{
-		UE_LOG(LogTemp, Warning, TEXT("UOU Paper Plane Swarm Effect '%s' has no code-driven static mesh. Expected: %s"), *GetNameSafe(this), DefaultPaperPlaneMeshPath);
+		UE_LOG(LogTemp, Warning, TEXT("UOU Paper Plane Swarm Effect '%s' has no code-driven static mesh. Expected: %s or %s"), *GetNameSafe(this), DefaultPaperPlaneMeshPath, FallbackPaperPlaneMeshPath);
 		return;
 	}
 
@@ -527,18 +574,12 @@ void AUOUFlyingSwarmEffectActor::ApplyNiagaraParameters()
 void AUOUFlyingSwarmEffectActor::ApplyRenderMode()
 {
 	const bool bUseCodeDrivenMesh = RenderMode == EUOUPaperPlaneSwarmRenderMode::CodeDrivenMesh;
-	UStaticMesh* ResolvedPaperPlaneMesh = GetResolvedPaperPlaneMesh();
 
 	if (PaperPlaneInstances != nullptr)
 	{
 		if (bUseCodeDrivenMesh)
 		{
 			EnsurePaperPlaneMesh();
-		}
-
-		if (ResolvedPaperPlaneMesh != nullptr && PaperPlaneInstances->GetStaticMesh() != ResolvedPaperPlaneMesh)
-		{
-			PaperPlaneInstances->SetStaticMesh(ResolvedPaperPlaneMesh);
 		}
 
 		const bool bShowCodeInstances = false;
@@ -585,29 +626,36 @@ void AUOUFlyingSwarmEffectActor::ApplyRenderMode()
 
 UStaticMesh* AUOUFlyingSwarmEffectActor::GetResolvedPaperPlaneMesh() const
 {
-	if (PaperPlaneMesh != nullptr)
-	{
-		return PaperPlaneMesh.Get();
-	}
-
 	if (PaperPlaneInstances != nullptr && PaperPlaneInstances->GetStaticMesh() != nullptr)
 	{
 		return PaperPlaneInstances->GetStaticMesh();
 	}
 
-	return LoadObject<UStaticMesh>(nullptr, DefaultPaperPlaneMeshPath);
+	if (PaperPlaneMesh != nullptr)
+	{
+		return PaperPlaneMesh.Get();
+	}
+
+	return LoadDefaultPaperPlaneMesh();
 }
 
 bool AUOUFlyingSwarmEffectActor::EnsurePaperPlaneMesh()
 {
 	UStaticMesh* ResolvedPaperPlaneMesh = GetResolvedPaperPlaneMesh();
 
-	if (PaperPlaneInstances != nullptr && ResolvedPaperPlaneMesh != nullptr && PaperPlaneInstances->GetStaticMesh() != ResolvedPaperPlaneMesh)
-	{
-		PaperPlaneInstances->SetStaticMesh(ResolvedPaperPlaneMesh);
-	}
-
 	return ResolvedPaperPlaneMesh != nullptr;
+}
+
+FVector AUOUFlyingSwarmEffectActor::GetResolvedPaperPlaneBaseScale() const
+{
+	const FVector ComponentScale = PaperPlaneInstances != nullptr
+		? PaperPlaneInstances->GetRelativeScale3D()
+		: FVector::OneVector;
+	const FVector CombinedScale = PaperPlaneMeshScale * ComponentScale;
+	return FVector(
+		FMath::Max(0.001f, CombinedScale.X),
+		FMath::Max(0.001f, CombinedScale.Y),
+		FMath::Max(0.001f, CombinedScale.Z));
 }
 
 void AUOUFlyingSwarmEffectActor::ClearCodeDrivenPlaneComponents()
@@ -679,11 +727,6 @@ void AUOUFlyingSwarmEffectActor::RebuildCodeDrivenPlaneInstances()
 
 	UStaticMesh* ResolvedPaperPlaneMesh = GetResolvedPaperPlaneMesh();
 
-	if (ResolvedPaperPlaneMesh != nullptr && PaperPlaneInstances->GetStaticMesh() != ResolvedPaperPlaneMesh)
-	{
-		PaperPlaneInstances->SetStaticMesh(ResolvedPaperPlaneMesh);
-	}
-
 	ClearCodeDrivenPlaneComponents();
 	RuntimeParticles.Reset();
 	RuntimePreviousPositions.Reset();
@@ -700,10 +743,7 @@ void AUOUFlyingSwarmEffectActor::RebuildCodeDrivenPlaneInstances()
 
 	const FVector StartPosition = GetCurrentStartTransform().GetLocation();
 	const FUOUPaperPlaneSwarmRandomRanges RandomRanges = BuildRandomRanges();
-	const FVector SafeBaseScale(
-		FMath::Max(0.001f, PaperPlaneMeshScale.X),
-		FMath::Max(0.001f, PaperPlaneMeshScale.Y),
-		FMath::Max(0.001f, PaperPlaneMeshScale.Z));
+	const FVector SafeBaseScale = GetResolvedPaperPlaneBaseScale();
 
 	for (int32 PlaneIndex = 0; PlaneIndex < SafePlaneCount; ++PlaneIndex)
 	{
@@ -750,11 +790,6 @@ void AUOUFlyingSwarmEffectActor::UpdateCodeDrivenPlaneInstances(float DeltaSecon
 		return;
 	}
 
-	if (PaperPlaneInstances->GetStaticMesh() != ResolvedPaperPlaneMesh)
-	{
-		PaperPlaneInstances->SetStaticMesh(ResolvedPaperPlaneMesh);
-	}
-
 	const int32 SafePlaneCount = FMath::Max(0, PlaneCount);
 	if (RuntimeParticles.Num() != SafePlaneCount || RuntimePreviousPositions.Num() != SafePlaneCount || RuntimePlaneMeshComponents.Num() != SafePlaneCount)
 	{
@@ -766,10 +801,7 @@ void AUOUFlyingSwarmEffectActor::UpdateCodeDrivenPlaneInstances(float DeltaSecon
 		return;
 	}
 
-	const FVector SafeBaseScale(
-		FMath::Max(0.001f, PaperPlaneMeshScale.X),
-		FMath::Max(0.001f, PaperPlaneMeshScale.Y),
-		FMath::Max(0.001f, PaperPlaneMeshScale.Z));
+	const FVector SafeBaseScale = GetResolvedPaperPlaneBaseScale();
 	FUOUPaperPlaneSwarmMotionInput MotionInput = BuildMotionInput(DeltaSeconds);
 
 	for (int32 PlaneIndex = 0; PlaneIndex < SafePlaneCount; ++PlaneIndex)
@@ -1004,6 +1036,8 @@ FUOUPaperPlaneSwarmMotionResult AUOUFlyingSwarmEffectActor::SolvePaperPlaneSwarm
 	const float ToTargetT = FMath::Clamp((PatternT - FarReachT) / FMath::Max(1.0f - FarReachT, 0.001f), 0.0f, 1.0f);
 	const float HandoffBlendWidth = FMath::Min(FlightHandoffBlendHalfWidth, FMath::Min(FarReachT, 1.0f - FarReachT) * 0.5f);
 	const float HandoffBlendT = SmoothStep01((PatternT - (FarReachT - HandoffBlendWidth)) / FMath::Max(HandoffBlendWidth * 2.0f, 0.001f));
+	const float ToFarDerivativeScale = 1.0f / FMath::Max(FarReachT, 0.001f);
+	const float ToTargetDerivativeScale = 1.0f / FMath::Max(1.0f - FarReachT, 0.001f);
 
 	const FVector ToFarVector = Result.FarPoint - MotionInput.StartPosition;
 	const FVector FromFarVector = Result.PreWrapPosition - Result.FarPoint;
@@ -1021,6 +1055,7 @@ FUOUPaperPlaneSwarmMotionResult AUOUFlyingSwarmEffectActor::SolvePaperPlaneSwarm
 	const float BoomerangHeight = MotionInput.GlideSwoopHeight * ParticleRandom.SwoopHeight;
 	const float BoomerangSideAmount = MotionInput.GlideSideAmount * ParticleRandom.SwoopSideAmount;
 	const float OvershootDistance = FMath::Max(MotionInput.GlideOvershootAmount, MotionInput.GlideSwoopAmount * 0.35f) * ParticleRandom.SwoopAmount;
+	FVector PathTangent = TravelDirection;
 
 	switch (static_cast<EUOUPaperPlaneSwarmFlightPattern>(Result.PatternIndex))
 	{
@@ -1036,6 +1071,13 @@ FUOUPaperPlaneSwarmMotionResult AUOUFlyingSwarmEffectActor::SolvePaperPlaneSwarm
 		Result.BezierPosition = BlendFlightHandoffPath(
 			SolveQuadraticBezier(MotionInput.StartPosition, Result.ControlPointA, Result.FarPoint, ToFarT),
 			SolveQuadraticBezier(Result.FarPoint, Result.ControlPointB, Result.PreWrapPosition, ToTargetT),
+			PatternT,
+			FarReachT,
+			HandoffBlendWidth,
+			HandoffBlendT);
+		PathTangent = BlendFlightHandoffTangent(
+			SolveQuadraticBezierTangent(MotionInput.StartPosition, Result.ControlPointA, Result.FarPoint, ToFarT) * ToFarDerivativeScale,
+			SolveQuadraticBezierTangent(Result.FarPoint, Result.ControlPointB, Result.PreWrapPosition, ToTargetT) * ToTargetDerivativeScale,
 			PatternT,
 			FarReachT,
 			HandoffBlendWidth,
@@ -1058,11 +1100,24 @@ FUOUPaperPlaneSwarmMotionResult AUOUFlyingSwarmEffectActor::SolvePaperPlaneSwarm
 			FarReachT,
 			HandoffBlendWidth,
 			HandoffBlendT);
-		Result.BezierPosition += FarSideDirection
-			* FMath::Sin(PatternT * UE_TWO_PI + ParticleRandom.PatternPhase)
-			* FMath::Sin(PatternT * UE_PI)
-			* BoomerangSideAmount
-			* 0.30f;
+		PathTangent = BlendFlightHandoffTangent(
+			SolveQuadraticBezierTangent(MotionInput.StartPosition, Result.ControlPointA, Result.FarPoint, ToFarT) * ToFarDerivativeScale,
+			SolveQuadraticBezierTangent(Result.FarPoint, Result.ControlPointB, Result.PreWrapPosition, ToTargetT) * ToTargetDerivativeScale,
+			PatternT,
+			FarReachT,
+			HandoffBlendWidth,
+			HandoffBlendT);
+		{
+			const float SCurveWavePhase = PatternT * UE_TWO_PI + ParticleRandom.PatternPhase;
+			const float SCurveWave = FMath::Sin(SCurveWavePhase) * FMath::Sin(PatternT * UE_PI);
+			const float SCurveWaveDerivative =
+				(FMath::Cos(SCurveWavePhase) * UE_TWO_PI * FMath::Sin(PatternT * UE_PI)
+					+ FMath::Sin(SCurveWavePhase) * FMath::Cos(PatternT * UE_PI) * UE_PI)
+				* BoomerangSideAmount
+				* 0.30f;
+			Result.BezierPosition += FarSideDirection * SCurveWave * BoomerangSideAmount * 0.30f;
+			PathTangent += FarSideDirection * SCurveWaveDerivative;
+		}
 		break;
 
 	case EUOUPaperPlaneSwarmFlightPattern::OverpassTurnback:
@@ -1085,6 +1140,13 @@ FUOUPaperPlaneSwarmMotionResult AUOUFlyingSwarmEffectActor::SolvePaperPlaneSwarm
 			FarReachT,
 			HandoffBlendWidth,
 			HandoffBlendT);
+		PathTangent = BlendFlightHandoffTangent(
+			SolveQuadraticBezierTangent(MotionInput.StartPosition, Result.ControlPointA, Result.OvershootPosition, ToFarT) * ToFarDerivativeScale,
+			SolveQuadraticBezierTangent(Result.OvershootPosition, Result.ControlPointB, Result.PreWrapPosition, ToTargetT) * ToTargetDerivativeScale,
+			PatternT,
+			FarReachT,
+			HandoffBlendWidth,
+			HandoffBlendT);
 		break;
 
 	case EUOUPaperPlaneSwarmFlightPattern::WideGlide:
@@ -1100,6 +1162,13 @@ FUOUPaperPlaneSwarmMotionResult AUOUFlyingSwarmEffectActor::SolvePaperPlaneSwarm
 		Result.BezierPosition = BlendFlightHandoffPath(
 			SolveQuadraticBezier(MotionInput.StartPosition, Result.ControlPointA, Result.FarPoint, ToFarT),
 			SolveQuadraticBezier(Result.FarPoint, Result.ControlPointB, Result.PreWrapPosition, ToTargetT),
+			PatternT,
+			FarReachT,
+			HandoffBlendWidth,
+			HandoffBlendT);
+		PathTangent = BlendFlightHandoffTangent(
+			SolveQuadraticBezierTangent(MotionInput.StartPosition, Result.ControlPointA, Result.FarPoint, ToFarT) * ToFarDerivativeScale,
+			SolveQuadraticBezierTangent(Result.FarPoint, Result.ControlPointB, Result.PreWrapPosition, ToTargetT) * ToTargetDerivativeScale,
 			PatternT,
 			FarReachT,
 			HandoffBlendWidth,
@@ -1144,12 +1213,16 @@ FUOUPaperPlaneSwarmMotionResult AUOUFlyingSwarmEffectActor::SolvePaperPlaneSwarm
 
 	Result.Position = FMath::Lerp(Result.PathPosition, Result.WrapPosition, Result.WrapT);
 	Result.Velocity = (Result.Position - MotionInput.PreviousPosition) / FMath::Max(MotionInput.DeltaTime, 0.0001f);
-	Result.ForwardDirection = GetSafeDirection(Result.Velocity, OrbitForward);
+	const FVector OrbitTangent = GetSafeDirection(-OrbitForward * OrbitSin + OrbitRight * OrbitCos, OrbitRight);
+	Result.ForwardDirection = GetSafeDirection(
+		FMath::Lerp(GetSafeDirection(PathTangent, TravelDirection), OrbitTangent, Result.WrapT),
+		GetSafeDirection(Result.Velocity, OrbitForward));
 	Result.BankRadians = FMath::Sin(MotionInput.Time * 4.0f * ParticleRandom.RandomSpeed + ParticleRandom.RandomPhase)
 		* FMath::DegreesToRadians(ParticleRandom.BankAmount);
 	Result.Scale = ParticleRandom.ScaleRandom;
 
-	const FQuat BaseRotation = FRotationMatrix::MakeFromXZ(Result.ForwardDirection, OrbitUp).ToQuat();
+	const FVector StableUp = GetStableFlightUp(Result.ForwardDirection, OrbitUp, OrbitRight);
+	const FQuat BaseRotation = FRotationMatrix::MakeFromXZ(Result.ForwardDirection, StableUp).ToQuat();
 	const FQuat BankRotation(Result.ForwardDirection, Result.BankRadians);
 	const FQuat MeshRotation = BankRotation * BaseRotation;
 	Result.Rotation = MeshRotation.Rotator();
