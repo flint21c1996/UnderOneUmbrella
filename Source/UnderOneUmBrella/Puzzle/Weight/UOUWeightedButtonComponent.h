@@ -9,6 +9,7 @@
 #include "UOUWeightedButtonComponent.generated.h"
 
 class USceneComponent;
+class UUOUAudioCueComponent;
 class UUOUWeightSensorComponent;
 
 // 센서가 읽은 무게를 바탕으로 버튼 눌림 상태를 계산하는 버튼 핵심 컴포넌트입니다.
@@ -96,6 +97,22 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Puzzle|Motion", meta = (ClampMin = "0.0"))
 	float MoveSpeed = 120.0f;
 
+	// 버튼이 새로 눌렸을 때 한 번 재생할 Audio Cue ID입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Puzzle|Audio", meta = (ToolTip = "Owner에 AudioCueComponent가 있으면 이 Cue를 먼저 재생합니다. 실패하면 PressedAudioEventId를 fallback으로 사용합니다."))
+	FName PressedAudioCueId = TEXT("Press");
+
+	// 버튼이 다시 올라왔을 때 한 번 재생할 Audio Cue ID입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Puzzle|Audio", meta = (ToolTip = "Owner에 AudioCueComponent가 있으면 이 Cue를 먼저 재생합니다. 실패하면 ReleasedAudioEventId를 fallback으로 사용합니다."))
+	FName ReleasedAudioCueId = TEXT("Release");
+
+	// 눌림 Cue를 재생할 수 없을 때 사용할 fallback Audio Event ID입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Puzzle|Audio", meta = (ToolTip = "Audio DataAsset에 등록된 눌림 효과음 Event ID입니다."))
+	FName PressedAudioEventId = TEXT("WeightButton.Press");
+
+	// 올라옴 Cue를 재생할 수 없을 때 사용할 fallback Audio Event ID입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Puzzle|Audio", meta = (ToolTip = "Audio DataAsset에 등록된 올라옴 효과음 Event ID입니다."))
+	FName ReleasedAudioEventId = TEXT("WeightButton.Release");
+
 	// 화면 디버그를 켜서 현재 무게와 상태를 확인할지 결정합니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Puzzle|Debug")
 	bool bShowScreenDebug = false;
@@ -116,7 +133,12 @@ protected:
 	void ResolveReferences();
 
 	// 현재 무게를 기준으로 눌림 상태를 다시 계산합니다.
-	void RefreshPressedState();
+	void RefreshPressedState(bool bPlayFeedbackAudio = true);
+
+	void PlayButtonAudioCue(FName CueId, FName FallbackAudioEventId) const;
+	void PlayButtonAudioEvent(FName AudioEventId) const;
+	UUOUAudioCueComponent* GetAudioCueComponent() const;
+	FVector GetButtonAudioLocation() const;
 
 	// 버튼 비주얼을 현재 상태에 맞는 기준점 쪽으로 이동합니다.
 	void MoveButtonVisual(float DeltaTime);
