@@ -22,10 +22,10 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Level Transition")
 	TObjectPtr<USceneComponent> RootScene = nullptr;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Level Transition|Target", meta = (AllowedClasses = "/Script/Engine.World", DisplayName = "기본 대상 레벨", ToolTip = "타이틀 시작 버튼처럼 이 맵에서 기본으로 전환할 레벨입니다. 비워두면 호출자가 가진 대상 레벨을 사용합니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Level Transition|Level Links", meta = (AllowedClasses = "/Script/Engine.World", DisplayName = "다음 레벨", ToolTip = "다음 레벨 요청 또는 이 맵의 기본 대상 전환에 사용할 레벨입니다. 비워두면 타이틀 레벨로 돌아갑니다."))
 	TSoftObjectPtr<UWorld> TargetLevel;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Level Transition|Target", meta = (AllowedClasses = "/Script/Engine.World", DisplayName = "Previous Level", ToolTip = "Development travel UI or transition actors use this as the previous level. If empty, previous-level requests fall back to the title level."))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Level Transition|Level Links", meta = (AllowedClasses = "/Script/Engine.World", DisplayName = "이전 레벨", ToolTip = "이전 레벨 요청에 사용할 레벨입니다. 비워두면 타이틀 레벨로 돌아갑니다."))
 	TSoftObjectPtr<UWorld> PreviousLevel;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Level Transition|Enter", meta = (ClampMin = "0.0", DisplayName = "페이드 인 시간", ToolTip = "이 맵이 로드된 뒤 검은 화면에서 플레이 화면으로 밝아지는 시간입니다."))
