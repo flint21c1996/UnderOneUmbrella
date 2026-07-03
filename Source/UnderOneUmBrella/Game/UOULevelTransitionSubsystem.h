@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Engine/World.h"
 #include "Subsystems/GameInstanceSubsystem.h"
 #include "TimerManager.h"
 #include "UI/UOUTransitionMessageTypes.h"
@@ -61,11 +62,27 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Level Transition")
 	bool RequestLevelTransition(TSoftObjectPtr<UWorld> TargetLevel, FUOULevelTransitionSettings Settings);
 
+	bool RequestLevelTransitionFromWorld(UWorld* SourceWorld, TSoftObjectPtr<UWorld> TargetLevel, FUOULevelTransitionSettings Settings);
+
 	UFUNCTION(BlueprintCallable, Category = "Level Transition")
 	bool RequestLevelTransitionByName(FName LevelName, FUOULevelTransitionSettings Settings);
 
+	bool RequestLevelTransitionByNameFromWorld(UWorld* SourceWorld, FName LevelName, FUOULevelTransitionSettings Settings);
+
 	UFUNCTION(BlueprintCallable, Category = "Level Transition")
 	bool RestartCurrentLevel(FUOULevelTransitionSettings Settings);
+
+	bool RestartCurrentLevelFromWorld(UWorld* SourceWorld, FUOULevelTransitionSettings Settings);
+
+	UFUNCTION(BlueprintCallable, Category = "Level Transition")
+	bool RequestNextLevel(FUOULevelTransitionSettings Settings);
+
+	bool RequestNextLevelFromWorld(UWorld* SourceWorld, FUOULevelTransitionSettings Settings);
+
+	UFUNCTION(BlueprintCallable, Category = "Level Transition")
+	bool RequestPreviousLevel(FUOULevelTransitionSettings Settings);
+
+	bool RequestPreviousLevelFromWorld(UWorld* SourceWorld, FUOULevelTransitionSettings Settings);
 
 	UFUNCTION(BlueprintCallable, Category = "Level Transition")
 	void CancelTransition();
@@ -88,7 +105,7 @@ private:
 		FadeIn
 	};
 
-	bool BeginTransition(FUOULevelTransitionSettings Settings);
+	bool BeginTransition(UWorld* TransitionWorld, FUOULevelTransitionSettings Settings);
 	void UpdateFadeOutOverlay();
 	void UpdateFadeInOverlay();
 	void FinishFadeOut();
@@ -118,6 +135,7 @@ private:
 	void HideTransitionOverlay();
 	void SetPlayerInputLocked(UWorld* World, bool bLocked) const;
 	APlayerController* ResolvePlayerController(UWorld* World) const;
+	UWorld* GetActiveTransitionWorld() const;
 	UWorld* GetSubsystemWorld() const;
 
 	ETransitionTargetType PendingTargetType = ETransitionTargetType::None;
@@ -125,6 +143,7 @@ private:
 	FName PendingLevelName = NAME_None;
 	FUOULevelTransitionSettings ActiveSettings;
 	FUOUTransitionMessageSettings ActiveMessageSettings;
+	TWeakObjectPtr<UWorld> ActiveTransitionWorld;
 	TWeakObjectPtr<UWorld> FadeInWorld;
 
 	FTimerHandle FadeOutTimerHandle;
