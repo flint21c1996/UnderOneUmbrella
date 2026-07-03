@@ -7,6 +7,8 @@
 #include "UOUPlayerController.generated.h"
 
 class UUserWidget;
+class UWorld;
+class UUOUDevelopmentLevelTravelWidget;
 
 // 실제 플레이 맵에서 사용하는 PlayerController입니다.
 // 공통 설정 메뉴 기능을 상속받고, 인게임 HUD를 생성합니다.
@@ -25,10 +27,24 @@ protected:
 
 private:
 	void ApplyInGameInputMode();
+	void CreateDevelopmentLevelTravelWidget();
+	void ToggleDevelopmentLevelTravelWidget();
 
 	UPROPERTY(EditDefaultsOnly, Config, Category = "HUD")
 	TSoftClassPtr<UUserWidget> InGameHUDWidgetClass;
 
 	UPROPERTY()
 	TObjectPtr<UUserWidget> InGameHUDWidget;
+
+	UPROPERTY(EditDefaultsOnly, Config, Category = "Development|Level Travel")
+	bool bShowDevelopmentLevelTravelWidget = true;
+
+	UPROPERTY(EditDefaultsOnly, Config, Category = "Development|Level Travel")
+	TSoftObjectPtr<UWorld> DevelopmentTitleLevel;
+
+	UPROPERTY(EditDefaultsOnly, Config, Category = "Development|Level Travel")
+	TArray<TSoftObjectPtr<UWorld>> DevelopmentTravelLevels;
+
+	UPROPERTY()
+	TObjectPtr<UUOUDevelopmentLevelTravelWidget> DevelopmentLevelTravelWidget;
 };

@@ -61,8 +61,12 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Level Transition")
 	bool RequestLevelTransition(TSoftObjectPtr<UWorld> TargetLevel, FUOULevelTransitionSettings Settings);
 
+	bool RequestLevelTransitionFromWorld(UWorld* SourceWorld, TSoftObjectPtr<UWorld> TargetLevel, FUOULevelTransitionSettings Settings);
+
 	UFUNCTION(BlueprintCallable, Category = "Level Transition")
 	bool RequestLevelTransitionByName(FName LevelName, FUOULevelTransitionSettings Settings);
+
+	bool RequestLevelTransitionByNameFromWorld(UWorld* SourceWorld, FName LevelName, FUOULevelTransitionSettings Settings);
 
 	UFUNCTION(BlueprintCallable, Category = "Level Transition")
 	bool RestartCurrentLevel(FUOULevelTransitionSettings Settings);

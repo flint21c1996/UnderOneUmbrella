@@ -69,6 +69,14 @@ bool UUOULevelTransitionSubsystem::RequestLevelTransition(
 	TSoftObjectPtr<UWorld> TargetLevel,
 	FUOULevelTransitionSettings Settings)
 {
+	return RequestLevelTransitionFromWorld(GetSubsystemWorld(), TargetLevel, Settings);
+}
+
+bool UUOULevelTransitionSubsystem::RequestLevelTransitionFromWorld(
+	UWorld* SourceWorld,
+	TSoftObjectPtr<UWorld> TargetLevel,
+	FUOULevelTransitionSettings Settings)
+{
 	if (bIsTransitioning)
 	{
 		return false;
@@ -84,7 +92,7 @@ bool UUOULevelTransitionSubsystem::RequestLevelTransition(
 	PendingTargetLevel = TargetLevel;
 	PendingLevelName = NAME_None;
 
-	if (!BeginTransition(GetSubsystemWorld(), Settings))
+	if (!BeginTransition(SourceWorld, Settings))
 	{
 		ResetPendingTransition();
 		return false;
@@ -94,6 +102,14 @@ bool UUOULevelTransitionSubsystem::RequestLevelTransition(
 }
 
 bool UUOULevelTransitionSubsystem::RequestLevelTransitionByName(
+	FName LevelName,
+	FUOULevelTransitionSettings Settings)
+{
+	return RequestLevelTransitionByNameFromWorld(GetSubsystemWorld(), LevelName, Settings);
+}
+
+bool UUOULevelTransitionSubsystem::RequestLevelTransitionByNameFromWorld(
+	UWorld* SourceWorld,
 	FName LevelName,
 	FUOULevelTransitionSettings Settings)
 {
@@ -112,7 +128,7 @@ bool UUOULevelTransitionSubsystem::RequestLevelTransitionByName(
 	PendingTargetLevel.Reset();
 	PendingLevelName = LevelName;
 
-	if (!BeginTransition(GetSubsystemWorld(), Settings))
+	if (!BeginTransition(SourceWorld, Settings))
 	{
 		ResetPendingTransition();
 		return false;
