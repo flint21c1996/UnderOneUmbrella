@@ -256,6 +256,7 @@ bool UUOULevelTransitionSubsystem::RequestPreviousLevelFromWorld(
 	PendingTargetType = ETransitionTargetType::SoftLevel;
 	PendingTargetLevel = PreviousLevel;
 	PendingLevelName = NAME_None;
+	Settings.bSuppressFadeOutMessage = true;
 
 	if (!BeginTransition(SourceWorld, Settings))
 	{
@@ -305,6 +306,10 @@ bool UUOULevelTransitionSubsystem::BeginTransition(UWorld* TransitionWorld, FUOU
 		ApplyCurrentMapExitSettings(World, ActiveSettings);
 	}
 	ActiveSettings = SanitizeTransitionSettings(ActiveSettings);
+	if (ActiveSettings.bSuppressFadeOutMessage)
+	{
+		ActiveSettings.FadeOutMessageSettings = FUOUTransitionMessageSettings();
+	}
 	bIsTransitioning = true;
 	FadeOverlayElapsedTime = 0.0f;
 
