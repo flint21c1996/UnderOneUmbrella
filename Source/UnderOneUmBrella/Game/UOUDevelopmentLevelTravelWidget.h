@@ -64,6 +64,9 @@ private:
 	void HandleNextClicked();
 
 	UFUNCTION()
+	void HandlePreviousClicked();
+
+	UFUNCTION()
 	void HandleTitleClicked();
 
 	UFUNCTION()

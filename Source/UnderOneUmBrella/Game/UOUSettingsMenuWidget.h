@@ -32,6 +32,9 @@ public:
 	void GoToNextLevel();
 
 	UFUNCTION(BlueprintCallable, Category = "Settings")
+	void GoToPreviousLevel();
+
+	UFUNCTION(BlueprintCallable, Category = "Settings")
 	void ToggleTestSetting();
 
 	UFUNCTION(BlueprintPure, Category = "Settings", meta = (DisplayName = "현재 스테이지 재시작 가능"))

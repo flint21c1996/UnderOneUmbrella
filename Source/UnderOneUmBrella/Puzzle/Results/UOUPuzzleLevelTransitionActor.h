@@ -16,7 +16,8 @@ enum class EUOUPuzzleLevelTransitionMode : uint8
 {
 	OpenTargetLevel,
 	RestartCurrentLevel,
-	OpenNextLevel
+	OpenNextLevel,
+	OpenPreviousLevel
 };
 
 UCLASS(meta=(DisplayName="UOU Puzzle Level Transition Actor"))

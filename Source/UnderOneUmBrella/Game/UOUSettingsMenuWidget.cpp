@@ -58,6 +58,14 @@ void UUOUSettingsMenuWidget::GoToNextLevel()
 	}
 }
 
+void UUOUSettingsMenuWidget::GoToPreviousLevel()
+{
+	if (AUOUMenuPlayerController* MenuPlayerController = GetMenuPlayerController())
+	{
+		MenuPlayerController->GoToPreviousLevel();
+	}
+}
+
 void UUOUSettingsMenuWidget::ToggleTestSetting()
 {
 	RestartCurrentStage();

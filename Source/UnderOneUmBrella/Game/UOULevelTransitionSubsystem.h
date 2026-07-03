@@ -79,6 +79,11 @@ public:
 	bool RequestNextLevelFromWorld(UWorld* SourceWorld, FUOULevelTransitionSettings Settings);
 
 	UFUNCTION(BlueprintCallable, Category = "Level Transition")
+	bool RequestPreviousLevel(FUOULevelTransitionSettings Settings);
+
+	bool RequestPreviousLevelFromWorld(UWorld* SourceWorld, FUOULevelTransitionSettings Settings);
+
+	UFUNCTION(BlueprintCallable, Category = "Level Transition")
 	void CancelTransition();
 
 	UFUNCTION(BlueprintPure, Category = "Level Transition")

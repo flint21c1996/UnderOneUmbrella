@@ -130,6 +130,14 @@ void UUOUDevelopmentLevelTravelWidget::BuildWidgetTree()
 		RestartSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
 	}
 
+	UButton* PreviousButton = CreateButton(FText::FromString(TEXT("Prev")));
+	PreviousButton->OnClicked.AddDynamic(this, &UUOUDevelopmentLevelTravelWidget::HandlePreviousClicked);
+	if (UHorizontalBoxSlot* PreviousSlot = PrimaryRow->AddChildToHorizontalBox(PreviousButton))
+	{
+		PreviousSlot->SetPadding(FMargin(0.0f, 0.0f, 4.0f, 0.0f));
+		PreviousSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+	}
+
 	UButton* NextButton = CreateButton(FText::FromString(TEXT("Next")));
 	NextButton->OnClicked.AddDynamic(this, &UUOUDevelopmentLevelTravelWidget::HandleNextClicked);
 	if (UHorizontalBoxSlot* NextSlot = PrimaryRow->AddChildToHorizontalBox(NextButton))
@@ -273,6 +281,14 @@ void UUOUDevelopmentLevelTravelWidget::HandleNextClicked()
 	if (UUOULevelTransitionSubsystem* TransitionSubsystem = GetTransitionSubsystem())
 	{
 		TransitionSubsystem->RequestNextLevelFromWorld(GetWorld(), MakeDevelopmentTransitionSettings());
+	}
+}
+
+void UUOUDevelopmentLevelTravelWidget::HandlePreviousClicked()
+{
+	if (UUOULevelTransitionSubsystem* TransitionSubsystem = GetTransitionSubsystem())
+	{
+		TransitionSubsystem->RequestPreviousLevelFromWorld(GetWorld(), MakeDevelopmentTransitionSettings());
 	}
 }
 

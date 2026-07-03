@@ -221,6 +221,51 @@ bool UUOULevelTransitionSubsystem::RequestNextLevelFromWorld(
 	return true;
 }
 
+bool UUOULevelTransitionSubsystem::RequestPreviousLevel(FUOULevelTransitionSettings Settings)
+{
+	return RequestPreviousLevelFromWorld(GetSubsystemWorld(), Settings);
+}
+
+bool UUOULevelTransitionSubsystem::RequestPreviousLevelFromWorld(
+	UWorld* SourceWorld,
+	FUOULevelTransitionSettings Settings)
+{
+	if (bIsTransitioning)
+	{
+		return false;
+	}
+
+	if (SourceWorld == nullptr)
+	{
+		return false;
+	}
+
+	TSoftObjectPtr<UWorld> PreviousLevel;
+	const AUOULevelTransitionSettingsActor* SettingsActor = FindLevelTransitionSettingsActor(SourceWorld);
+	if (SettingsActor != nullptr)
+	{
+		PreviousLevel = SettingsActor->PreviousLevel;
+	}
+
+	if (PreviousLevel.IsNull())
+	{
+		PreviousLevel = TSoftObjectPtr<UWorld>(FSoftObjectPath(DefaultTitleLevelPath));
+		UE_LOG(LogTemp, Warning, TEXT("Previous level was not configured. Falling back to %s."), DefaultTitleLevelPath);
+	}
+
+	PendingTargetType = ETransitionTargetType::SoftLevel;
+	PendingTargetLevel = PreviousLevel;
+	PendingLevelName = NAME_None;
+
+	if (!BeginTransition(SourceWorld, Settings))
+	{
+		ResetPendingTransition();
+		return false;
+	}
+
+	return true;
+}
+
 void UUOULevelTransitionSubsystem::CancelTransition()
 {
 	UWorld* World = GetActiveTransitionWorld();

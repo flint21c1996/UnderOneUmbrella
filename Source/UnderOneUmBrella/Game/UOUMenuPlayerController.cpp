@@ -163,6 +163,25 @@ void AUOUMenuPlayerController::GoToNextLevel()
 	}
 }
 
+void AUOUMenuPlayerController::GoToPreviousLevel()
+{
+	UGameInstance* GameInstance = GetGameInstance();
+	UUOULevelTransitionSubsystem* TransitionSubsystem = GameInstance != nullptr
+		? GameInstance->GetSubsystem<UUOULevelTransitionSubsystem>()
+		: nullptr;
+	if (TransitionSubsystem == nullptr)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("GoToPreviousLevel failed because the level transition subsystem was not available."));
+		return;
+	}
+
+	FUOULevelTransitionSettings PreviousLevelSettings;
+	if (!TransitionSubsystem->RequestPreviousLevelFromWorld(GetWorld(), PreviousLevelSettings))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("GoToPreviousLevel failed to start a previous level transition."));
+	}
+}
+
 void AUOUMenuPlayerController::ToggleTestSetting()
 {
 	RestartCurrentStage();
