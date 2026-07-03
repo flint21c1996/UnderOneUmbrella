@@ -167,6 +167,50 @@ bool UUOUInGameHUDWidget::IsSettingsMenuOpen() const
 	return MenuPlayerController != nullptr && MenuPlayerController->IsSettingsMenuOpen();
 }
 
+void UUOUInGameHUDWidget::ReturnToTitle()
+{
+	if (AUOUMenuPlayerController* MenuPlayerController = GetMenuPlayerController())
+	{
+		MenuPlayerController->ReturnToTitle();
+	}
+}
+
+void UUOUInGameHUDWidget::RestartCurrentStage()
+{
+	if (AUOUMenuPlayerController* MenuPlayerController = GetMenuPlayerController())
+	{
+		MenuPlayerController->RestartCurrentStage();
+	}
+}
+
+void UUOUInGameHUDWidget::GoToNextLevel()
+{
+	if (AUOUMenuPlayerController* MenuPlayerController = GetMenuPlayerController())
+	{
+		MenuPlayerController->GoToNextLevel();
+	}
+}
+
+void UUOUInGameHUDWidget::GoToPreviousLevel()
+{
+	if (AUOUMenuPlayerController* MenuPlayerController = GetMenuPlayerController())
+	{
+		MenuPlayerController->GoToPreviousLevel();
+	}
+}
+
+bool UUOUInGameHUDWidget::CanRestartCurrentStage() const
+{
+	const AUOUMenuPlayerController* MenuPlayerController = GetMenuPlayerController();
+	return MenuPlayerController != nullptr && MenuPlayerController->CanRestartCurrentStage();
+}
+
+bool UUOUInGameHUDWidget::CanReturnToTitle() const
+{
+	const AUOUMenuPlayerController* MenuPlayerController = GetMenuPlayerController();
+	return MenuPlayerController != nullptr && MenuPlayerController->CanReturnToTitle();
+}
+
 void UUOUInGameHUDWidget::BindToPlayerUmbrella()
 {
 	APlayerController* OwningPlayerController = GetOwningPlayer();
