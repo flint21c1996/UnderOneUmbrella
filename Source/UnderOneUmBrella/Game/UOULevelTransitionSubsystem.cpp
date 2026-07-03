@@ -24,11 +24,78 @@ namespace
 	{
 		Settings.FontSize = FMath::Max(1, Settings.FontSize);
 		Settings.WrapTextAt = FMath::Max(100.0f, Settings.WrapTextAt);
+		Settings.ImageDesiredSize.X = FMath::Max(1.0f, Settings.ImageDesiredSize.X);
+		Settings.ImageDesiredSize.Y = FMath::Max(1.0f, Settings.ImageDesiredSize.Y);
 		Settings.ViewportZOrder = FMath::Max(0, Settings.ViewportZOrder);
 		Settings.MessageFadeInDuration = FMath::Max(0.0f, Settings.MessageFadeInDuration);
 		Settings.MessageHoldDuration = FMath::Max(0.0f, Settings.MessageHoldDuration);
 		Settings.MessageFadeOutDuration = FMath::Max(0.0f, Settings.MessageFadeOutDuration);
+		for (FUOUTransitionMessagePage& AdditionalMessagePage : Settings.AdditionalMessagePages)
+		{
+			AdditionalMessagePage.ImageDesiredSize.X = FMath::Max(1.0f, AdditionalMessagePage.ImageDesiredSize.X);
+			AdditionalMessagePage.ImageDesiredSize.Y = FMath::Max(1.0f, AdditionalMessagePage.ImageDesiredSize.Y);
+			AdditionalMessagePage.MessageHoldDuration = FMath::Max(0.0f, AdditionalMessagePage.MessageHoldDuration);
+		}
 		return Settings;
+	}
+
+	void AddMessagePage(
+		TArray<FUOUTransitionMessageSettings>& MessagePages,
+		const FUOUTransitionMessageSettings& BaseSettings,
+		const FText& MessageText,
+		UTexture2D* MessageImage,
+		FVector2D ImageDesiredSize,
+		float MessageHoldDuration)
+	{
+		if (MessageText.IsEmpty() && MessageImage == nullptr)
+		{
+			return;
+		}
+
+		FUOUTransitionMessageSettings PageSettings = BaseSettings;
+		PageSettings.MessageText = MessageText;
+		PageSettings.MessageImage = MessageImage;
+		PageSettings.ImageDesiredSize = ImageDesiredSize;
+		PageSettings.MessageHoldDuration = FMath::Max(0.0f, MessageHoldDuration);
+		PageSettings.AdditionalMessageTexts.Reset();
+		PageSettings.AdditionalMessagePages.Reset();
+		MessagePages.Add(PageSettings);
+	}
+
+	TArray<FUOUTransitionMessageSettings> BuildMessagePages(const FUOUTransitionMessageSettings& MessageSettings)
+	{
+		const FUOUTransitionMessageSettings SanitizedSettings = SanitizeMessageSettings(MessageSettings);
+		TArray<FUOUTransitionMessageSettings> MessagePages;
+
+		AddMessagePage(
+			MessagePages,
+			SanitizedSettings,
+			SanitizedSettings.MessageText,
+			SanitizedSettings.MessageImage,
+			SanitizedSettings.ImageDesiredSize,
+			SanitizedSettings.MessageHoldDuration);
+		for (const FText& AdditionalMessageText : SanitizedSettings.AdditionalMessageTexts)
+		{
+			AddMessagePage(
+				MessagePages,
+				SanitizedSettings,
+				AdditionalMessageText,
+				nullptr,
+				SanitizedSettings.ImageDesiredSize,
+				SanitizedSettings.MessageHoldDuration);
+		}
+		for (const FUOUTransitionMessagePage& AdditionalMessagePage : SanitizedSettings.AdditionalMessagePages)
+		{
+			AddMessagePage(
+				MessagePages,
+				SanitizedSettings,
+				AdditionalMessagePage.MessageText,
+				AdditionalMessagePage.MessageImage,
+				AdditionalMessagePage.ImageDesiredSize,
+				AdditionalMessagePage.MessageHoldDuration);
+		}
+
+		return MessagePages;
 	}
 
 	FUOULevelTransitionSettings SanitizeTransitionSettings(FUOULevelTransitionSettings Settings)
@@ -403,7 +470,20 @@ void UUOULevelTransitionSubsystem::StartMessageSequence(
 	ETransitionMessageStage MessageStage,
 	const FUOUTransitionMessageSettings& MessageSettings)
 {
-	UWorld* World = MessageStage == ETransitionMessageStage::FadeIn
+	ActiveMessageStage = MessageStage;
+	ActiveMessagePages = BuildMessagePages(MessageSettings);
+	ActiveMessagePageIndex = ActiveMessagePages.Num() > 0 ? 0 : INDEX_NONE;
+	ActiveMessageSettings = ActiveMessagePageIndex != INDEX_NONE
+		? ActiveMessagePages[ActiveMessagePageIndex]
+		: FUOUTransitionMessageSettings();
+	MessageElapsedTime = 0.0f;
+
+	StartActiveMessagePage();
+}
+
+void UUOULevelTransitionSubsystem::StartActiveMessagePage()
+{
+	UWorld* World = ActiveMessageStage == ETransitionMessageStage::FadeIn
 		? FadeInWorld.Get()
 		: GetActiveTransitionWorld();
 	if (World == nullptr)
@@ -411,8 +491,6 @@ void UUOULevelTransitionSubsystem::StartMessageSequence(
 		World = GetActiveTransitionWorld();
 	}
 
-	ActiveMessageStage = MessageStage;
-	ActiveMessageSettings = SanitizeMessageSettings(MessageSettings);
 	MessageElapsedTime = 0.0f;
 
 	if (World != nullptr)
@@ -424,7 +502,7 @@ void UUOULevelTransitionSubsystem::StartMessageSequence(
 	SetTransitionBackgroundOpacity(1.0f);
 	SetTransitionMessageOpacity(0.0f);
 
-	if (!ActiveMessageSettings.ShouldDisplay())
+	if (ActiveMessagePageIndex == INDEX_NONE || !ActiveMessageSettings.ShouldDisplay())
 	{
 		FinishMessageSequence();
 		return;
@@ -561,9 +639,20 @@ void UUOULevelTransitionSubsystem::FinishMessageSequence()
 		World->GetTimerManager().ClearTimer(MessageTimerHandle);
 	}
 
+	const int32 NextMessagePageIndex = ActiveMessagePageIndex + 1;
+	if (ActiveMessagePages.IsValidIndex(NextMessagePageIndex))
+	{
+		ActiveMessagePageIndex = NextMessagePageIndex;
+		ActiveMessageSettings = ActiveMessagePages[ActiveMessagePageIndex];
+		StartActiveMessagePage();
+		return;
+	}
+
 	const ETransitionMessageStage FinishedStage = ActiveMessageStage;
 	ActiveMessageStage = ETransitionMessageStage::None;
 	ActiveMessageSettings = FUOUTransitionMessageSettings();
+	ActiveMessagePages.Reset();
+	ActiveMessagePageIndex = INDEX_NONE;
 	MessageElapsedTime = 0.0f;
 
 	switch (FinishedStage)
@@ -788,10 +877,12 @@ void UUOULevelTransitionSubsystem::ResetPendingTransition()
 	PendingLevelName = NAME_None;
 	ActiveSettings = FUOULevelTransitionSettings();
 	ActiveMessageSettings = FUOUTransitionMessageSettings();
+	ActiveMessagePages.Reset();
 	ActiveTransitionWorld.Reset();
 	FadeInWorld.Reset();
 	FadeOverlayElapsedTime = 0.0f;
 	MessageElapsedTime = 0.0f;
+	ActiveMessagePageIndex = INDEX_NONE;
 	ActiveMessageStage = ETransitionMessageStage::None;
 	bIsTransitioning = false;
 	bWaitingForPostLoadFadeIn = false;

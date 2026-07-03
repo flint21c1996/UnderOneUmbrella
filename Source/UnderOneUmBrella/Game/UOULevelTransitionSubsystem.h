@@ -115,6 +115,7 @@ private:
 	void StartFadeOutMessageSequence();
 	void StartFadeInMessageSequence();
 	void StartMessageSequence(ETransitionMessageStage MessageStage, const FUOUTransitionMessageSettings& MessageSettings);
+	void StartActiveMessagePage();
 	void UpdateMessageFadeIn();
 	void FinishMessageFadeIn();
 	void FinishMessageHold();
@@ -146,6 +147,7 @@ private:
 	FName PendingLevelName = NAME_None;
 	FUOULevelTransitionSettings ActiveSettings;
 	FUOUTransitionMessageSettings ActiveMessageSettings;
+	TArray<FUOUTransitionMessageSettings> ActiveMessagePages;
 	TWeakObjectPtr<UWorld> ActiveTransitionWorld;
 	TWeakObjectPtr<UWorld> FadeInWorld;
 
@@ -159,6 +161,7 @@ private:
 
 	float FadeOverlayElapsedTime = 0.0f;
 	float MessageElapsedTime = 0.0f;
+	int32 ActiveMessagePageIndex = INDEX_NONE;
 	ETransitionMessageStage ActiveMessageStage = ETransitionMessageStage::None;
 	bool bIsTransitioning = false;
 	bool bWaitingForPostLoadFadeIn = false;
