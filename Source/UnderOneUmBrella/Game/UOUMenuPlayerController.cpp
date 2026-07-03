@@ -12,7 +12,7 @@ namespace
 {
 // config가 비어 있어도 프로토타입을 바로 실행할 수 있도록 기본 경로를 둡니다.
 constexpr TCHAR DefaultSettingsMenuWidgetClassPath[] = TEXT("/Game/UOU/UI/WBP_SettingsMenu.WBP_SettingsMenu_C");
-constexpr TCHAR DefaultTitleLevelPath[] = TEXT("/Game/UOU/Maps/TitleMap.TitleMap");
+constexpr TCHAR MenuControllerDefaultTitleLevelPath[] = TEXT("/Game/UOU/Maps/TitleMap.TitleMap");
 }
 
 AUOUMenuPlayerController::AUOUMenuPlayerController()
@@ -99,8 +99,8 @@ void AUOUMenuPlayerController::ReturnToTitle()
 
 	if (TitleLevel.IsNull())
 	{
-		TitleLevel = TSoftObjectPtr<UWorld>(FSoftObjectPath(DefaultTitleLevelPath));
-		UE_LOG(LogTemp, Warning, TEXT("Title level was not configured. Falling back to %s."), DefaultTitleLevelPath);
+		TitleLevel = TSoftObjectPtr<UWorld>(FSoftObjectPath(MenuControllerDefaultTitleLevelPath));
+		UE_LOG(LogTemp, Warning, TEXT("Title level was not configured. Falling back to %s."), MenuControllerDefaultTitleLevelPath);
 	}
 
 	UGameInstance* GameInstance = GetGameInstance();
@@ -138,9 +138,47 @@ void AUOUMenuPlayerController::RestartCurrentStage()
 	}
 
 	FUOULevelTransitionSettings RestartSettings;
-	if (!TransitionSubsystem->RestartCurrentLevel(RestartSettings))
+	if (!TransitionSubsystem->RestartCurrentLevelFromWorld(GetWorld(), RestartSettings))
 	{
 		UE_LOG(LogTemp, Warning, TEXT("RestartCurrentStage failed to start a current level restart transition."));
+	}
+}
+
+void AUOUMenuPlayerController::GoToNextLevel()
+{
+	UGameInstance* GameInstance = GetGameInstance();
+	UUOULevelTransitionSubsystem* TransitionSubsystem = GameInstance != nullptr
+		? GameInstance->GetSubsystem<UUOULevelTransitionSubsystem>()
+		: nullptr;
+	if (TransitionSubsystem == nullptr)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("GoToNextLevel failed because the level transition subsystem was not available."));
+		return;
+	}
+
+	FUOULevelTransitionSettings NextLevelSettings;
+	if (!TransitionSubsystem->RequestNextLevelFromWorld(GetWorld(), NextLevelSettings))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("GoToNextLevel failed to start a next level transition."));
+	}
+}
+
+void AUOUMenuPlayerController::GoToPreviousLevel()
+{
+	UGameInstance* GameInstance = GetGameInstance();
+	UUOULevelTransitionSubsystem* TransitionSubsystem = GameInstance != nullptr
+		? GameInstance->GetSubsystem<UUOULevelTransitionSubsystem>()
+		: nullptr;
+	if (TransitionSubsystem == nullptr)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("GoToPreviousLevel failed because the level transition subsystem was not available."));
+		return;
+	}
+
+	FUOULevelTransitionSettings PreviousLevelSettings;
+	if (!TransitionSubsystem->RequestPreviousLevelFromWorld(GetWorld(), PreviousLevelSettings))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("GoToPreviousLevel failed to start a previous level transition."));
 	}
 }
 

@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Engine/World.h"
 #include "UOUMenuPlayerController.h"
 #include "UOUTitlePlayerController.generated.h"
 

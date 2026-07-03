@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Engine/World.h"
 #include "Game/UOULevelTransitionSubsystem.h"
 #include "GameFramework/Actor.h"
 #include "Puzzle/Core/UOUPuzzleResultReceiver.h"
@@ -15,7 +16,9 @@ UENUM(BlueprintType)
 enum class EUOUPuzzleLevelTransitionMode : uint8
 {
 	OpenTargetLevel,
-	RestartCurrentLevel
+	RestartCurrentLevel,
+	OpenNextLevel,
+	OpenPreviousLevel
 };
 
 UCLASS(meta=(DisplayName="UOU Puzzle Level Transition Actor"))

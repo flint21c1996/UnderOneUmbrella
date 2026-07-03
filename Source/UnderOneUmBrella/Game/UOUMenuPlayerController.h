@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
 #include "UOUMenuPlayerController.generated.h"
 
@@ -33,6 +34,12 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Menu|Settings", meta = (DisplayName = "현재 스테이지 재시작", ToolTip = "현재 플레이 중인 스테이지를 다시 시작합니다."))
 	void RestartCurrentStage();
+
+	UFUNCTION(BlueprintCallable, Category = "Menu|Settings")
+	void GoToNextLevel();
+
+	UFUNCTION(BlueprintCallable, Category = "Menu|Settings")
+	void GoToPreviousLevel();
 
 	UFUNCTION(BlueprintCallable, Category = "Menu|Settings")
 	void ToggleTestSetting();
