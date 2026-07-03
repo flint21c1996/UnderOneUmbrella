@@ -59,6 +59,9 @@ bool AUOUPuzzleLevelTransitionActor::StartLevelTransition()
 	case EUOUPuzzleLevelTransitionMode::RestartCurrentLevel:
 		bStarted = TransitionSubsystem->RestartCurrentLevelFromWorld(GetWorld(), Settings);
 		break;
+	case EUOUPuzzleLevelTransitionMode::OpenNextLevel:
+		bStarted = TransitionSubsystem->RequestNextLevelFromWorld(GetWorld(), Settings);
+		break;
 	default:
 		break;
 	}

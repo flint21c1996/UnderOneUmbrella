@@ -144,6 +144,25 @@ void AUOUMenuPlayerController::RestartCurrentStage()
 	}
 }
 
+void AUOUMenuPlayerController::GoToNextLevel()
+{
+	UGameInstance* GameInstance = GetGameInstance();
+	UUOULevelTransitionSubsystem* TransitionSubsystem = GameInstance != nullptr
+		? GameInstance->GetSubsystem<UUOULevelTransitionSubsystem>()
+		: nullptr;
+	if (TransitionSubsystem == nullptr)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("GoToNextLevel failed because the level transition subsystem was not available."));
+		return;
+	}
+
+	FUOULevelTransitionSettings NextLevelSettings;
+	if (!TransitionSubsystem->RequestNextLevelFromWorld(GetWorld(), NextLevelSettings))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("GoToNextLevel failed to start a next level transition."));
+	}
+}
+
 void AUOUMenuPlayerController::ToggleTestSetting()
 {
 	RestartCurrentStage();

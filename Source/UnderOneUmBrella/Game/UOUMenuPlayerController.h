@@ -35,6 +35,9 @@ public:
 	void RestartCurrentStage();
 
 	UFUNCTION(BlueprintCallable, Category = "Menu|Settings")
+	void GoToNextLevel();
+
+	UFUNCTION(BlueprintCallable, Category = "Menu|Settings")
 	void ToggleTestSetting();
 
 	UFUNCTION(BlueprintPure, Category = "Menu|Settings")

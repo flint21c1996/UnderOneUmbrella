@@ -18,6 +18,7 @@ namespace
 {
 	constexpr float FadeOverlayTickInterval = 1.0f / 60.0f;
 	constexpr TCHAR DefaultTransitionOverlayWidgetClassPath[] = TEXT("/Game/UOU/UI/WBP_LevelTransitionOverlay.WBP_LevelTransitionOverlay_C");
+	constexpr TCHAR DefaultTitleLevelPath[] = TEXT("/Game/UOU/Maps/TitleMap.TitleMap");
 
 	FUOUTransitionMessageSettings SanitizeMessageSettings(FUOUTransitionMessageSettings Settings)
 	{
@@ -149,6 +150,51 @@ bool UUOULevelTransitionSubsystem::RestartCurrentLevelFromWorld(
 	PendingTargetType = ETransitionTargetType::LevelName;
 	PendingTargetLevel.Reset();
 	PendingLevelName = FName(*CurrentLevelName);
+
+	if (!BeginTransition(SourceWorld, Settings))
+	{
+		ResetPendingTransition();
+		return false;
+	}
+
+	return true;
+}
+
+bool UUOULevelTransitionSubsystem::RequestNextLevel(FUOULevelTransitionSettings Settings)
+{
+	return RequestNextLevelFromWorld(GetSubsystemWorld(), Settings);
+}
+
+bool UUOULevelTransitionSubsystem::RequestNextLevelFromWorld(
+	UWorld* SourceWorld,
+	FUOULevelTransitionSettings Settings)
+{
+	if (bIsTransitioning)
+	{
+		return false;
+	}
+
+	if (SourceWorld == nullptr)
+	{
+		return false;
+	}
+
+	TSoftObjectPtr<UWorld> NextLevel;
+	const AUOULevelTransitionSettingsActor* SettingsActor = FindLevelTransitionSettingsActor(SourceWorld);
+	if (SettingsActor != nullptr)
+	{
+		NextLevel = SettingsActor->TargetLevel;
+	}
+
+	if (NextLevel.IsNull())
+	{
+		NextLevel = TSoftObjectPtr<UWorld>(FSoftObjectPath(DefaultTitleLevelPath));
+		UE_LOG(LogTemp, Warning, TEXT("Next level was not configured. Falling back to %s."), DefaultTitleLevelPath);
+	}
+
+	PendingTargetType = ETransitionTargetType::SoftLevel;
+	PendingTargetLevel = NextLevel;
+	PendingLevelName = NAME_None;
 
 	if (!BeginTransition(SourceWorld, Settings))
 	{

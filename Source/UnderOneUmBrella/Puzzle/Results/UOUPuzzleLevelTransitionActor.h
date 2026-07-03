@@ -15,7 +15,8 @@ UENUM(BlueprintType)
 enum class EUOUPuzzleLevelTransitionMode : uint8
 {
 	OpenTargetLevel,
-	RestartCurrentLevel
+	RestartCurrentLevel,
+	OpenNextLevel
 };
 
 UCLASS(meta=(DisplayName="UOU Puzzle Level Transition Actor"))
