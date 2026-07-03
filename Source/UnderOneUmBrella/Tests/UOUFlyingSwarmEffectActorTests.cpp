@@ -102,7 +102,7 @@ bool FUOUPaperPlaneSwarmMotionTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("WrapT reaches 1"), Result.WrapT, 1.0f);
 	TestVectorNear(TEXT("After wrap, final position follows flat orbit position"), Result.Position, FVector(1350.0f, 0.0f, 100.0f));
 	TestVectorNear(TEXT("Velocity is derived from previous position and DeltaTime"), Result.Velocity, FVector(2700.0f, 0.0f, 200.0f));
-	TestVectorNear(TEXT("Forward direction follows velocity alignment"), Result.ForwardDirection, Result.Velocity.GetSafeNormal());
+	TestVectorNear(TEXT("Forward direction follows the orbit tangent"), Result.ForwardDirection, FVector::RightVector);
 	TestEqual(TEXT("Default scale comes from particle scale random"), Result.Scale, 1.0f);
 	TestEqual(TEXT("Bank is zero when bank sine is zero"), Result.BankRadians, 0.0f);
 

@@ -136,6 +136,7 @@ protected:
 	void UnbindUmbrellaEvents();
 
 	void CaptureStoredVisualTransformIfNeeded();
+	void ApplyStoredVisualCollisionSettings() const;
 	void ApplyStoredVisualContentProfile();
 	void UpdateStoredVisual(float DeltaTime, bool bSnapToTarget = false);
 	void ApplyStoredVisualTransform(float FillRatio);

@@ -189,6 +189,15 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Move Steps", meta = (DisplayName = "Loop Through Start"))
 	bool bLoopMoveStepsThroughStart = true;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Move Steps", meta = (DisplayName = "Ping Pong Move Steps"))
+	bool bPingPongSequentialTargetMarkers = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Move Steps", meta = (DisplayName = "Auto Start Move Steps"))
+	bool bAutoStartSequentialMove = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Move Steps", meta = (DisplayName = "Auto Continue Move Steps"))
+	bool bAutoContinueSequentialMove = false;
+
 	// Activate가 한 번 들어왔을 때 연속으로 소비할 이동 스텝 수입니다.
 	// 예를 들어 2로 두면 퍼즐 버튼 한 번으로 현재 위치에서 다음 마커, 그 다음 마커까지 이어서 이동합니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Floor Platform|Move Steps", meta = (ClampMin = "1", UIMin = "1", DisplayName = "Move Step Count Per Activate"))
@@ -525,6 +534,9 @@ private:
 	// 에디터 이동 테스트나 런타임 이동으로 바뀌지만 맵에는 저장되지 않습니다.
 	UPROPERTY(Transient)
 	int32 RuntimeSequentialTargetIndex = 0;
+
+	UPROPERTY(Transient)
+	int32 RuntimeSequentialMoveDirection = 1;
 
 	// 현재 이동이 끝난 뒤 이어서 실행해야 하는 남은 스텝 수입니다.
 	UPROPERTY(Transient)

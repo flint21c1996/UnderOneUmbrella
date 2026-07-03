@@ -99,6 +99,7 @@ protected:
 
 	// 센서 볼륨 이벤트 바인딩을 해제합니다.
 	void UnbindSensorVolume();
+	void SynchronizeOverlappingActors();
 
 	// 겹친 액터를 내부 카운트 맵에 등록합니다.
 	void RegisterOverlappingActor(AActor* OtherActor);

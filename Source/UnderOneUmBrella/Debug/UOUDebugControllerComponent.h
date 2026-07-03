@@ -117,6 +117,9 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Puzzle", meta = (ToolTip = "퍼즐 노드의 현재 활성 또는 비활성 상태를 표시합니다."))
 	bool bShowNodeState = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Puzzle", meta = (ToolTip = "Heat Wire 스플라인 포인트와 현재 열 진행 위치를 월드 디버그 구체로 표시합니다."))
+	bool bShowHeatWirePathDebug = true;
 };
 
 UCLASS(ClassGroup=(Debug), HideCategories=("Debug|Common", Common), meta=(BlueprintSpawnableComponent, DisplayName = "UOU Interaction Debug Controller"))

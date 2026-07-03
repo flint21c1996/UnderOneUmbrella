@@ -119,10 +119,34 @@ void AUOUMenuPlayerController::ReturnToTitle()
 	}
 }
 
+void AUOUMenuPlayerController::RestartCurrentStage()
+{
+	if (!bCanRestartCurrentStage)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("RestartCurrentStage was requested, but this controller does not allow it."));
+		return;
+	}
+
+	UGameInstance* GameInstance = GetGameInstance();
+	UUOULevelTransitionSubsystem* TransitionSubsystem = GameInstance != nullptr
+		? GameInstance->GetSubsystem<UUOULevelTransitionSubsystem>()
+		: nullptr;
+	if (TransitionSubsystem == nullptr)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("RestartCurrentStage failed because the level transition subsystem was not available."));
+		return;
+	}
+
+	FUOULevelTransitionSettings RestartSettings;
+	if (!TransitionSubsystem->RestartCurrentLevel(RestartSettings))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("RestartCurrentStage failed to start a current level restart transition."));
+	}
+}
+
 void AUOUMenuPlayerController::ToggleTestSetting()
 {
-	bTestSettingEnabled = !bTestSettingEnabled;
-	UE_LOG(LogTemp, Log, TEXT("Test setting is now %s."), bTestSettingEnabled ? TEXT("enabled") : TEXT("disabled"));
+	RestartCurrentStage();
 }
 
 void AUOUMenuPlayerController::ApplySettingsMenuInputMode(UUserWidget* InSettingsMenuWidget)

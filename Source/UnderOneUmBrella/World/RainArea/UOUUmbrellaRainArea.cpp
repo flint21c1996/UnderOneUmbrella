@@ -16,6 +16,7 @@
 #include "Materials/MaterialInterface.h"
 #include "NiagaraComponent.h"
 #include "Player/UOUUmbrellaComponent.h"
+#include "Puzzle/HeatWire/UOUHeatWireComponent.h"
 #include "Puzzle/Water/UOUWaterWheelRainConditionComponent.h"
 #include "UObject/ConstructorHelpers.h"
 #include "World/Environment/UOUEnvironmentVisualComponent.h"
@@ -133,6 +134,7 @@ void AUOUUmbrellaRainArea::BeginPlay()
 {
 	Super::BeginPlay();
 	RainFillRate = FMath::Max(0.0f, RainFillRate);
+	HeatWireWetSectionPathSampleCount = FMath::Max(1, HeatWireWetSectionPathSampleCount);
 	RainVisualIntensity = FMath::Clamp(RainVisualIntensity, 0.0f, 1.0f);
 	RainSpawnRate = FMath::Max(0.0f, RainSpawnRate);
 	GroundSplashIntensityMultiplier = FMath::Max(0.0f, GroundSplashIntensityMultiplier);
@@ -156,6 +158,7 @@ void AUOUUmbrellaRainArea::OnConstruction(const FTransform& Transform)
 	Super::OnConstruction(Transform);
 
 	RainFillRate = FMath::Max(0.0f, RainFillRate);
+	HeatWireWetSectionPathSampleCount = FMath::Max(1, HeatWireWetSectionPathSampleCount);
 	RainVisualIntensity = FMath::Clamp(RainVisualIntensity, 0.0f, 1.0f);
 	RainSpawnRate = FMath::Max(0.0f, RainSpawnRate);
 	GroundSplashIntensityMultiplier = FMath::Max(0.0f, GroundSplashIntensityMultiplier);
@@ -175,6 +178,7 @@ void AUOUUmbrellaRainArea::PostEditChangeProperty(FPropertyChangedEvent& Propert
 	Super::PostEditChangeProperty(PropertyChangedEvent);
 
 	RainFillRate = FMath::Max(0.0f, RainFillRate);
+	HeatWireWetSectionPathSampleCount = FMath::Max(1, HeatWireWetSectionPathSampleCount);
 	RainVisualIntensity = FMath::Clamp(RainVisualIntensity, 0.0f, 1.0f);
 	RainSpawnRate = FMath::Max(0.0f, RainSpawnRate);
 	GroundSplashIntensityMultiplier = FMath::Max(0.0f, GroundSplashIntensityMultiplier);
@@ -280,6 +284,13 @@ void AUOUUmbrellaRainArea::Tick(float DeltaSeconds)
 		RainBlockerHalfExtent);
 
 	// Niagara 비주얼은 가장 큰 우산 차단 영역 하나를 받아 파티클을 뚫고 지나가지 않게 표현합니다.
+	ApplyRainToHeatWireTargets(
+		DeltaSeconds,
+		bHasRainBlocker,
+		RainBlockerWorldCenter,
+		RainBlockerWorldRotation,
+		RainBlockerHalfExtent);
+
 	ApplyEnvironmentVisualRainBlocker(
 		bHasVisualRainBlocker,
 		VisualRainBlockerWorldCenter,
@@ -802,6 +813,266 @@ void AUOUUmbrellaRainArea::ApplyRainToWaterWheelTargets(float DeltaSeconds, bool
 			true,
 			0.9f);
 	}
+}
+
+void AUOUUmbrellaRainArea::ApplyRainToHeatWireTargets(
+	float DeltaSeconds,
+	bool bHasRainBlocker,
+	const FVector& RainBlockerWorldCenter,
+	const FRotator& RainBlockerWorldRotation,
+	const FVector& RainBlockerHalfExtent)
+{
+	bLastHeatWireRainInputTickRan = true;
+	LastHeatWireActorScanCount = 0;
+	LastHeatWireComponentCount = 0;
+	LastHeatWireValidComponentCount = 0;
+	LastHeatWireWetSectionCount = 0;
+	LastHeatWireAcceptedSectionCount = 0;
+	LastHeatWireDeliveredWetness = 0.0f;
+	LastHeatWireRainDebugReason = TEXT("Running");
+
+	if (!bEnableHeatWireRainInput)
+	{
+		LastHeatWireRainDebugReason = TEXT("Skipped: Heat Wire Rain Input Disabled");
+		return;
+	}
+
+	const float RainAmount = FMath::Max(0.0f, RainFillRate) * FMath::Max(0.0f, DeltaSeconds);
+	if (RainAmount <= 0.0f || RainVolume == nullptr)
+	{
+		LastHeatWireRainDebugReason = FString::Printf(
+			TEXT("Skipped: Delta %.3f Rain %.3f Volume %s"),
+			DeltaSeconds,
+			RainFillRate,
+			RainVolume != nullptr ? TEXT("Y") : TEXT("N"));
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	if (World == nullptr)
+	{
+		LastHeatWireRainDebugReason = TEXT("Skipped: No World");
+		return;
+	}
+
+	int32 InactiveComponentCount = 0;
+	int32 NoOwnerComponentCount = 0;
+	int32 NoWetSectionComponentCount = 0;
+	int32 OtherCannotReceiveComponentCount = 0;
+
+	for (TActorIterator<AActor> ActorIt(World); ActorIt; ++ActorIt)
+	{
+		AActor* Actor = *ActorIt;
+		++LastHeatWireActorScanCount;
+		if (!IsValid(Actor))
+		{
+			continue;
+		}
+
+		TInlineComponentArray<UUOUHeatWireComponent*> HeatWireComponents(Actor);
+		LastHeatWireComponentCount += HeatWireComponents.Num();
+		for (UUOUHeatWireComponent* HeatWire : HeatWireComponents)
+		{
+			if (!IsValid(HeatWire))
+			{
+				continue;
+			}
+
+			if (!HeatWire->IsActive())
+			{
+				++InactiveComponentCount;
+				continue;
+			}
+
+			if (HeatWire->GetOwner() == nullptr)
+			{
+				++NoOwnerComponentCount;
+				continue;
+			}
+
+			const int32 WetSectionCount = HeatWire->GetWetSectionCount();
+			if (WetSectionCount <= 0)
+			{
+				++NoWetSectionComponentCount;
+				continue;
+			}
+
+			if (!HeatWire->CanReceiveRainInput())
+			{
+				++OtherCannotReceiveComponentCount;
+				continue;
+			}
+
+			++LastHeatWireValidComponentCount;
+			LastHeatWireWetSectionCount += WetSectionCount;
+			for (int32 SectionIndex = 0; SectionIndex < WetSectionCount; ++SectionIndex)
+			{
+				if (!HeatWire->CanWetSectionReceiveRain(SectionIndex))
+				{
+					continue;
+				}
+
+				const float RainScale = CalculateHeatWireWetSectionRainScale(
+					HeatWire,
+					SectionIndex,
+					bHasRainBlocker,
+					RainBlockerWorldCenter,
+					RainBlockerWorldRotation,
+					RainBlockerHalfExtent);
+				if (RainScale <= 0.0f)
+				{
+					continue;
+				}
+
+				const float DeliveredWetness = RainAmount * RainScale;
+				HeatWire->ApplyRainToWetSection(SectionIndex, DeliveredWetness, this);
+				++LastHeatWireAcceptedSectionCount;
+				LastHeatWireDeliveredWetness += DeliveredWetness;
+			}
+		}
+	}
+
+	if (LastHeatWireComponentCount == 0)
+	{
+		LastHeatWireRainDebugReason = TEXT("No Heat Wire Components");
+	}
+	else if (LastHeatWireValidComponentCount == 0)
+	{
+		LastHeatWireRainDebugReason = FString::Printf(
+			TEXT("Cannot Receive: Inactive %d NoOwner %d NoWetSections %d Other %d"),
+			InactiveComponentCount,
+			NoOwnerComponentCount,
+			NoWetSectionComponentCount,
+			OtherCannotReceiveComponentCount);
+	}
+	else if (LastHeatWireWetSectionCount == 0)
+	{
+		LastHeatWireRainDebugReason = TEXT("No Wet Sections");
+	}
+	else if (LastHeatWireAcceptedSectionCount == 0)
+	{
+		LastHeatWireRainDebugReason = TEXT("All Wet Sections Outside Or Blocked");
+	}
+	else
+	{
+		LastHeatWireRainDebugReason = FString::Printf(
+			TEXT("Delivered %.2f wetness to %d sections"),
+			LastHeatWireDeliveredWetness,
+			LastHeatWireAcceptedSectionCount);
+	}
+}
+
+float AUOUUmbrellaRainArea::CalculateHeatWireWetSectionRainScale(
+	const UUOUHeatWireComponent* HeatWire,
+	int32 SectionIndex,
+	bool bHasRainBlocker,
+	const FVector& RainBlockerWorldCenter,
+	const FRotator& RainBlockerWorldRotation,
+	const FVector& RainBlockerHalfExtent) const
+{
+	if (RainVolume == nullptr || !IsValid(HeatWire))
+	{
+		return 0.0f;
+	}
+
+	if (!HeatWire->WetSections.IsValidIndex(SectionIndex))
+	{
+		return 0.0f;
+	}
+
+	const FUOUHeatWireWetSection& WetSection = HeatWire->WetSections[SectionIndex];
+	float MinProgress = FMath::Clamp(WetSection.StartProgress, 0.0f, 1.0f);
+	float MaxProgress = FMath::Clamp(WetSection.EndProgress, 0.0f, 1.0f);
+	if (MinProgress > MaxProgress)
+	{
+		Swap(MinProgress, MaxProgress);
+	}
+
+	const auto CanReceiveAtLocation = [this, bHasRainBlocker, &RainBlockerWorldCenter, &RainBlockerWorldRotation, &RainBlockerHalfExtent](const FVector& WorldLocation)
+	{
+		return IsWorldLocationInsideRainVolume(WorldLocation)
+			&& (!bHasRainBlocker
+				|| !IsWorldLocationBlockedByRainBlocker(
+					WorldLocation,
+					RainBlockerWorldCenter,
+					RainBlockerWorldRotation,
+					RainBlockerHalfExtent));
+	};
+
+	const float SafeCoverageRadius = HeatWire->GetWetSectionRainCoverageRadius(SectionIndex);
+	const FVector RainDirection = FlowDirection == EUOURainAreaFlowDirection::Upward
+		? RainVolume->GetUpVector()
+		: -RainVolume->GetUpVector();
+
+	FVector BasisX = FVector::RightVector;
+	FVector BasisY = FVector::ForwardVector;
+	BuildRainSampleBasis(RainDirection, BasisX, BasisY);
+
+	struct FRainCoverageSampleOffset
+	{
+		FVector2D Offset;
+		float Weight = 1.0f;
+	};
+
+	const FRainCoverageSampleOffset SampleOffsets[] = {
+		{ FVector2D(0.0f, 0.0f), 1.5f },
+		{ FVector2D(1.0f, 0.0f), 1.0f },
+		{ FVector2D(-1.0f, 0.0f), 1.0f },
+		{ FVector2D(0.0f, 1.0f), 1.0f },
+		{ FVector2D(0.0f, -1.0f), 1.0f },
+		{ FVector2D(0.7071f, 0.7071f), 0.75f },
+		{ FVector2D(0.7071f, -0.7071f), 0.75f },
+		{ FVector2D(-0.7071f, 0.7071f), 0.75f },
+		{ FVector2D(-0.7071f, -0.7071f), 0.75f }
+	};
+
+	const auto CalculateRainScaleAtLocation = [this, &CanReceiveAtLocation, SafeCoverageRadius, &BasisX, &BasisY, &SampleOffsets](const FVector& SectionWorldLocation)
+	{
+		if (SafeCoverageRadius <= KINDA_SMALL_NUMBER)
+		{
+			return CanReceiveAtLocation(SectionWorldLocation)
+				? CalculateRainVolumeCenterStrength(SectionWorldLocation)
+				: 0.0f;
+		}
+
+		float WeightedRainScale = 0.0f;
+		float TotalWeight = 0.0f;
+		for (const FRainCoverageSampleOffset& SampleOffset : SampleOffsets)
+		{
+			const FVector SampleLocation =
+				SectionWorldLocation
+				+ BasisX * (SampleOffset.Offset.X * SafeCoverageRadius)
+				+ BasisY * (SampleOffset.Offset.Y * SafeCoverageRadius);
+			TotalWeight += SampleOffset.Weight;
+
+			if (!CanReceiveAtLocation(SampleLocation))
+			{
+				continue;
+			}
+
+			WeightedRainScale += SampleOffset.Weight * CalculateRainVolumeCenterStrength(SampleLocation);
+		}
+
+		return TotalWeight > KINDA_SMALL_NUMBER ? WeightedRainScale / TotalWeight : 0.0f;
+	};
+
+	const int32 PathSampleCount = FMath::Max(1, HeatWireWetSectionPathSampleCount);
+	float BestRainScale = 0.0f;
+	for (int32 SampleIndex = 0; SampleIndex < PathSampleCount; ++SampleIndex)
+	{
+		const float PathAlpha = PathSampleCount > 1
+			? static_cast<float>(SampleIndex) / static_cast<float>(PathSampleCount - 1)
+			: 0.5f;
+		const float Progress = FMath::Lerp(MinProgress, MaxProgress, PathAlpha);
+		const FVector SampleWorldLocation = HeatWire->GetWorldLocationAtProgress(Progress);
+		BestRainScale = FMath::Max(BestRainScale, CalculateRainScaleAtLocation(SampleWorldLocation));
+		if (BestRainScale >= 1.0f - KINDA_SMALL_NUMBER)
+		{
+			break;
+		}
+	}
+
+	return BestRainScale;
 }
 
 float AUOUUmbrellaRainArea::CalculateWaterWheelCatchRainScale(

@@ -16,6 +16,7 @@ AUOUPushPullBlockActor::AUOUPushPullBlockActor()
 	BlockVisual->SetSimulatePhysics(true);
 	BlockVisual->SetEnableGravity(true);
 	BlockVisual->SetCollisionProfileName(TEXT("PhysicsActor"));
+	BlockVisual->SetGenerateOverlapEvents(true);
 	ApplyBlockRotationLocks(false);
 	BlockVisual->SetLinearDamping(6.0f);
 	BlockVisual->SetAngularDamping(12.0f);
@@ -30,6 +31,8 @@ AUOUPushPullBlockActor::AUOUPushPullBlockActor()
 	WaterContainerComponent->MaxAmount = 5.0f;
 	WaterContainerComponent->InitialAmount = 0.0f;
 	WaterContainerComponent->WeightMultiplier = 1.0f;
+	WaterContainerComponent->MaterialVisualComponent = BlockVisual;
+	WaterContainerComponent->bUpdateMaterialVisual = true;
 
 	PuzzleWeightComponent = CreateDefaultSubobject<UUOUPuzzleWeightComponent>(TEXT("PuzzleWeightComponent"));
 	PuzzleWeightComponent->BaseWeight = 10.0f;
@@ -41,6 +44,7 @@ void AUOUPushPullBlockActor::BeginPlay()
 	Super::BeginPlay();
 
 	ApplyBlockRotationLocks(true);
+	BlockVisual->SetGenerateOverlapEvents(true);
 }
 
 void AUOUPushPullBlockActor::ApplyBlockRotationLocks(bool bRecreatePhysicsState)
@@ -51,8 +55,8 @@ void AUOUPushPullBlockActor::ApplyBlockRotationLocks(bool bRecreatePhysicsState)
 	}
 
 	BlockVisual->SetConstraintMode(EDOFMode::SixDOF);
-	BlockVisual->BodyInstance.bLockXRotation = false;
-	BlockVisual->BodyInstance.bLockYRotation = false;
+	BlockVisual->BodyInstance.bLockXRotation = true;
+	BlockVisual->BodyInstance.bLockYRotation = true;
 	BlockVisual->BodyInstance.bLockZRotation = true;
 
 	if (bRecreatePhysicsState && BlockVisual->IsRegistered())
