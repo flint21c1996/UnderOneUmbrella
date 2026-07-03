@@ -113,6 +113,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Puzzle|Audio", meta = (ToolTip = "Audio DataAsset에 등록된 올라옴 효과음 Event ID입니다."))
 	FName ReleasedAudioEventId = TEXT("WeightButton.Release");
 
+	// 부족한 무게로 버튼을 건드렸을 때 한 번 재생할 Audio Cue ID입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Puzzle|Audio", meta = (ToolTip = "버튼 위에 무게가 올라왔지만 PressWeight에 부족할 때 한 번 재생합니다."))
+	FName InsufficientWeightAudioCueId = TEXT("Insufficient");
+
+	// 부족한 무게 Cue를 재생할 수 없을 때 사용할 fallback Audio Event ID입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Puzzle|Audio", meta = (ToolTip = "Audio DataAsset에 등록된 부족한 무게 덜컹 효과음 Event ID입니다."))
+	FName InsufficientWeightAudioEventId = TEXT("WeightButton.Insufficient");
+
 	// 화면 디버그를 켜서 현재 무게와 상태를 확인할지 결정합니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Puzzle|Debug")
 	bool bShowScreenDebug = false;
@@ -139,6 +147,8 @@ protected:
 	void PlayButtonAudioEvent(FName AudioEventId) const;
 	UUOUAudioCueComponent* GetAudioCueComponent() const;
 	FVector GetButtonAudioLocation() const;
+
+	bool bInsufficientWeightFeedbackActive = false;
 
 	// 버튼 비주얼을 현재 상태에 맞는 기준점 쪽으로 이동합니다.
 	void MoveButtonVisual(float DeltaTime);

@@ -235,6 +235,7 @@ void UUOUWeightedButtonComponent::RefreshPressedState(bool bPlayFeedbackAudio)
 
 	if (!bIsSatisfied && CurrentWeight >= PressWeight)
 	{
+		bInsufficientWeightFeedbackActive = false;
 		if (SetSatisfiedState(true, true) && bPlayFeedbackAudio)
 		{
 			PlayButtonAudioCue(PressedAudioCueId, PressedAudioEventId);
@@ -248,6 +249,26 @@ void UUOUWeightedButtonComponent::RefreshPressedState(bool bPlayFeedbackAudio)
 		{
 			PlayButtonAudioCue(ReleasedAudioCueId, ReleasedAudioEventId);
 		}
+
+		bInsufficientWeightFeedbackActive = CurrentWeight > 0.0f && CurrentWeight < PressWeight;
+		return;
+	}
+
+	const bool bHasInsufficientWeight = !bIsSatisfied && CurrentWeight > 0.0f && CurrentWeight < PressWeight;
+	if (bHasInsufficientWeight)
+	{
+		if (!bInsufficientWeightFeedbackActive && bPlayFeedbackAudio)
+		{
+			PlayButtonAudioCue(InsufficientWeightAudioCueId, InsufficientWeightAudioEventId);
+		}
+
+		bInsufficientWeightFeedbackActive = true;
+		return;
+	}
+
+	if (CurrentWeight <= 0.0f)
+	{
+		bInsufficientWeightFeedbackActive = false;
 	}
 }
 
