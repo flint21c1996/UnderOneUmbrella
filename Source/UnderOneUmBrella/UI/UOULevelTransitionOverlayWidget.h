@@ -8,6 +8,7 @@
 #include "UOULevelTransitionOverlayWidget.generated.h"
 
 class UBorder;
+class UImage;
 class UTextBlock;
 
 UCLASS(Blueprintable)
@@ -39,6 +40,9 @@ protected:
 
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional), Category = "Level Transition|Bind")
 	TObjectPtr<UTextBlock> MessageText = nullptr;
+
+	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional), Category = "Level Transition|Bind")
+	TObjectPtr<UImage> MessageImage = nullptr;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Level Transition|Display")
 	ESlateVisibility VisibleOverlayVisibility = ESlateVisibility::HitTestInvisible;
