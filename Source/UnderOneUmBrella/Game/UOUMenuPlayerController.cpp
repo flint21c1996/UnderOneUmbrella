@@ -138,7 +138,7 @@ void AUOUMenuPlayerController::RestartCurrentStage()
 	}
 
 	FUOULevelTransitionSettings RestartSettings;
-	if (!TransitionSubsystem->RestartCurrentLevel(RestartSettings))
+	if (!TransitionSubsystem->RestartCurrentLevelFromWorld(GetWorld(), RestartSettings))
 	{
 		UE_LOG(LogTemp, Warning, TEXT("RestartCurrentStage failed to start a current level restart transition."));
 	}

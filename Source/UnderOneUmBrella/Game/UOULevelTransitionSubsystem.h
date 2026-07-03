@@ -67,6 +67,8 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Level Transition")
 	bool RestartCurrentLevel(FUOULevelTransitionSettings Settings);
 
+	bool RestartCurrentLevelFromWorld(UWorld* SourceWorld, FUOULevelTransitionSettings Settings);
+
 	UFUNCTION(BlueprintCallable, Category = "Level Transition")
 	void CancelTransition();
 
@@ -88,7 +90,7 @@ private:
 		FadeIn
 	};
 
-	bool BeginTransition(FUOULevelTransitionSettings Settings);
+	bool BeginTransition(UWorld* TransitionWorld, FUOULevelTransitionSettings Settings);
 	void UpdateFadeOutOverlay();
 	void UpdateFadeInOverlay();
 	void FinishFadeOut();
@@ -118,6 +120,7 @@ private:
 	void HideTransitionOverlay();
 	void SetPlayerInputLocked(UWorld* World, bool bLocked) const;
 	APlayerController* ResolvePlayerController(UWorld* World) const;
+	UWorld* GetActiveTransitionWorld() const;
 	UWorld* GetSubsystemWorld() const;
 
 	ETransitionTargetType PendingTargetType = ETransitionTargetType::None;
@@ -125,6 +128,7 @@ private:
 	FName PendingLevelName = NAME_None;
 	FUOULevelTransitionSettings ActiveSettings;
 	FUOUTransitionMessageSettings ActiveMessageSettings;
+	TWeakObjectPtr<UWorld> ActiveTransitionWorld;
 	TWeakObjectPtr<UWorld> FadeInWorld;
 
 	FTimerHandle FadeOutTimerHandle;
