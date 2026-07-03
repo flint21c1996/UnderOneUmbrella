@@ -43,6 +43,9 @@ struct FUOULevelTransitionSettings
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Level Transition|Map Settings", meta = (DisplayName = "도착 맵 Enter 설정 사용", ToolTip = "켜져 있으면 도착 맵의 UOU Level Transition Settings Actor에 있는 Enter 설정으로 페이드 인을 덮어씁니다."))
 	bool bUseLoadedMapEnterSettings = true;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Level Transition|Message", meta = (DisplayName = "페이드 아웃 문구 숨김", ToolTip = "켜져 있으면 현재 맵의 Exit 설정을 사용하더라도 페이드 아웃 문구만 표시하지 않습니다. 이전 레벨 전환에서는 자동으로 켜집니다."))
+	bool bSuppressFadeOutMessage = false;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Level Transition|Message", meta = (DisplayName = "페이드 아웃 문구", ToolTip = "현재 레벨에서 화면이 검게 가려진 뒤 표시할 문구입니다. 비워두면 표시하지 않습니다."))
 	FUOUTransitionMessageSettings FadeOutMessageSettings;
 
