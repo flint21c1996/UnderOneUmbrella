@@ -32,6 +32,24 @@ public:
 	UFUNCTION(BlueprintPure, Category = "HUD")
 	bool IsSettingsMenuOpen() const;
 
+	UFUNCTION(BlueprintCallable, Category = "HUD|Level Travel")
+	void ReturnToTitle();
+
+	UFUNCTION(BlueprintCallable, Category = "HUD|Level Travel")
+	void RestartCurrentStage();
+
+	UFUNCTION(BlueprintCallable, Category = "HUD|Level Travel")
+	void GoToNextLevel();
+
+	UFUNCTION(BlueprintCallable, Category = "HUD|Level Travel")
+	void GoToPreviousLevel();
+
+	UFUNCTION(BlueprintPure, Category = "HUD|Level Travel")
+	bool CanRestartCurrentStage() const;
+
+	UFUNCTION(BlueprintPure, Category = "HUD|Level Travel")
+	bool CanReturnToTitle() const;
+
 	// Finds the player's umbrella component and connects it to the HUD state stream.
 	UFUNCTION(BlueprintCallable, Category = "HUD|Umbrella")
 	void BindToPlayerUmbrella();

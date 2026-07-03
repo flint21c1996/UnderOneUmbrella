@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Engine/World.h"
 #include "Game/UOULevelTransitionSubsystem.h"
 #include "GameFramework/Actor.h"
 #include "Puzzle/Core/UOUPuzzleResultReceiver.h"

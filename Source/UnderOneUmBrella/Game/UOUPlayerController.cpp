@@ -3,7 +3,6 @@
 #include "UOUPlayerController.h"
 
 #include "Blueprint/UserWidget.h"
-#include "Game/UOUDevelopmentLevelTravelWidget.h"
 #include "GameFramework/PlayerController.h"
 #include "InputCoreTypes.h"
 #include "UObject/SoftObjectPath.h"
@@ -12,10 +11,6 @@ namespace
 {
 // config가 비어 있어도 인게임 HUD를 바로 띄울 수 있도록 기본 경로를 둡니다.
 constexpr TCHAR DefaultInGameHUDWidgetClassPath[] = TEXT("/Game/UOU/UI/WBP_InGameHUD.WBP_InGameHUD_C");
-constexpr TCHAR DefaultTitleLevelPath[] = TEXT("/Game/UOU/Maps/TitleMap.TitleMap");
-constexpr TCHAR DefaultTutorialLevelPath[] = TEXT("/Game/UOU/Maps/TutorialMap_1.TutorialMap_1");
-constexpr TCHAR DefaultMouseStarLevelPath[] = TEXT("/Game/UOU/Maps/MouseStar.MouseStar");
-constexpr TCHAR DefaultTempLevelPath[] = TEXT("/Game/UOU/Maps/TempMap.TempMap");
 }
 
 AUOUPlayerController::AUOUPlayerController()
@@ -59,7 +54,6 @@ void AUOUPlayerController::BeginPlay()
 	}
 
 	InGameHUDWidget->AddToViewport();
-	CreateDevelopmentLevelTravelWidget();
 }
 
 void AUOUPlayerController::RestoreInputModeAfterSettingsMenu()
@@ -82,59 +76,6 @@ void AUOUPlayerController::ApplyInGameInputMode()
 	ResetIgnoreLookInput();
 }
 
-void AUOUPlayerController::CreateDevelopmentLevelTravelWidget()
-{
-#if !UE_BUILD_SHIPPING
-	if (!bShowDevelopmentLevelTravelWidget || DevelopmentLevelTravelWidget != nullptr)
-	{
-		return;
-	}
-
-	TArray<TSoftObjectPtr<UWorld>> QuickLevels = DevelopmentTravelLevels;
-	if (QuickLevels.IsEmpty())
-	{
-		QuickLevels.Add(TSoftObjectPtr<UWorld>(FSoftObjectPath(DefaultTitleLevelPath)));
-		QuickLevels.Add(TSoftObjectPtr<UWorld>(FSoftObjectPath(DefaultTutorialLevelPath)));
-		QuickLevels.Add(TSoftObjectPtr<UWorld>(FSoftObjectPath(DefaultMouseStarLevelPath)));
-		QuickLevels.Add(TSoftObjectPtr<UWorld>(FSoftObjectPath(DefaultTempLevelPath)));
-	}
-
-	TSoftObjectPtr<UWorld> TitleLevel = DevelopmentTitleLevel;
-	if (TitleLevel.IsNull())
-	{
-		TitleLevel = TSoftObjectPtr<UWorld>(FSoftObjectPath(DefaultTitleLevelPath));
-	}
-
-	DevelopmentLevelTravelWidget = CreateWidget<UUOUDevelopmentLevelTravelWidget>(
-		this,
-		UUOUDevelopmentLevelTravelWidget::StaticClass());
-	if (DevelopmentLevelTravelWidget == nullptr)
-	{
-		return;
-	}
-
-	DevelopmentLevelTravelWidget->SetQuickLevels(QuickLevels);
-	DevelopmentLevelTravelWidget->SetTitleLevel(TitleLevel);
-	DevelopmentLevelTravelWidget->AddToViewport(250);
-#endif
-}
-
-void AUOUPlayerController::ToggleDevelopmentLevelTravelWidget()
-{
-#if !UE_BUILD_SHIPPING
-	if (DevelopmentLevelTravelWidget == nullptr)
-	{
-		CreateDevelopmentLevelTravelWidget();
-		return;
-	}
-
-	const ESlateVisibility CurrentVisibility = DevelopmentLevelTravelWidget->GetVisibility();
-	const bool bShouldShow = CurrentVisibility == ESlateVisibility::Collapsed
-		|| CurrentVisibility == ESlateVisibility::Hidden;
-	DevelopmentLevelTravelWidget->SetVisibility(bShouldShow ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
-#endif
-}
-
 void AUOUPlayerController::SetupInputComponent()
 {
 	Super::SetupInputComponent();
@@ -146,8 +87,4 @@ void AUOUPlayerController::SetupInputComponent()
 
 	// ESC는 타이틀과 인게임 공통으로 설정창 토글에 사용합니다.
 	InputComponent->BindKey(EKeys::Escape, IE_Pressed, this, &AUOUPlayerController::ToggleSettingsMenu);
-
-#if !UE_BUILD_SHIPPING
-	InputComponent->BindKey(EKeys::F9, IE_Pressed, this, &AUOUPlayerController::ToggleDevelopmentLevelTravelWidget);
-#endif
 }

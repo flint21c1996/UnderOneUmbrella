@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Engine/World.h"
 #include "GameFramework/Actor.h"
 #include "UI/UOUTransitionMessageTypes.h"
 #include "UOULevelTransitionSettingsActor.generated.h"
