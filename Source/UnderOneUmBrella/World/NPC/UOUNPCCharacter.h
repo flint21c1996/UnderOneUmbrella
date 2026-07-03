@@ -61,6 +61,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "NPC|Movement", meta = (ClampMin = "0.1", ToolTip = "기존 직접 활성화 점프의 이동 시간입니다. 액션 요청에서 이 값을 덮어쓸 수 있습니다."))
 	float JumpTravelTime = 0.75f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "NPC|Movement", meta = (ToolTip = "Jump Move 중에도 목표 방향을 향해 회전합니다. LaunchCharacter 이동은 기본 이동 회전이 잘 적용되지 않아 별도로 보정합니다."))
+	bool bOrientRotationDuringJumpMove = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "NPC|Movement", meta = (ClampMin = "0.0", UIMin = "0.0", UIMax = "1440.0", EditCondition = "bOrientRotationDuringJumpMove", ToolTip = "Jump Move 중 목표 방향으로 회전하는 속도입니다. 0이면 즉시 회전합니다."))
+	float JumpMoveRotationRate = 720.0f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "NPC|Movement", meta = (ToolTip = "점프 착지 후 같은 타겟으로 이동해 착지 오차를 보정합니다."))
 	bool bMoveToTargetAfterJumpLanding = true;
 
@@ -168,10 +174,14 @@ protected:
 	bool GetTargetLocationFromActionRequest(const FUOUNPCActionRequest& ActionRequest, FVector& OutTargetLocation) const;
 	bool GetConfiguredTargetLocation(FVector& OutTargetLocation) const;
 	FVector CalculateJumpLaunchVelocity(const FVector& TargetLocation, float TravelTime) const;
+	void UpdateJumpMoveRotation(float DeltaSeconds);
 	void DrawNPCDebug();
 	FString BuildNPCDebugText(const class UUOUNPCDebugControllerComponent& DebugController) const;
 	void DrawNPCMoveTargetDebug(const class UUOUNPCDebugControllerComponent& DebugController, FColor DebugColor) const;
 	void DrawNPCPathDebug(const class UUOUNPCDebugControllerComponent& DebugController, FColor DebugColor) const;
 
 	FOnUOUPuzzleResultCompletionStateChangedNativeSignature OnPuzzleResultCompletionStateChanged;
+
+	bool bJumpMoveRotationActive = false;
+	FVector JumpMoveRotationTargetLocation = FVector::ZeroVector;
 };
