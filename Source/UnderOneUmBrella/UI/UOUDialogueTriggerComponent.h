@@ -133,6 +133,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue|Debug")
 	bool bShowUmbrellaCoverDebug = true;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue|Debug")
+	bool bShowTriggerShapeInGame = false;
+
 	// 켜져 있으면 대화 줌 카메라가 켜져 있는 동안 플레이어 이동 입력을 막습니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue|Control")
 	bool bLockMovementDuringDialogueFocus = true;
