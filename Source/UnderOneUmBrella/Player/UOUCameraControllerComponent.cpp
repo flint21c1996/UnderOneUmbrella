@@ -539,7 +539,7 @@ bool UUOUCameraControllerComponent::IsOwnerSupportMesh(const UMeshComponent* Mes
 
 void UUOUCameraControllerComponent::ApplyOcclusionToMesh(UMeshComponent* MeshComponent)
 {
-	if (MeshComponent == nullptr || OccludedMeshStates.Contains(MeshComponent))
+	if (!IsValid(MeshComponent) || OccludedMeshStates.Contains(MeshComponent))
 	{
 		return;
 	}
@@ -569,8 +569,9 @@ void UUOUCameraControllerComponent::ApplyOcclusionToMesh(UMeshComponent* MeshCom
 
 void UUOUCameraControllerComponent::RestoreOcclusionFromMesh(UMeshComponent* MeshComponent)
 {
-	if (MeshComponent == nullptr)
+	if (!IsValid(MeshComponent))
 	{
+		OccludedMeshStates.Remove(MeshComponent);
 		return;
 	}
 
@@ -580,9 +581,14 @@ void UUOUCameraControllerComponent::RestoreOcclusionFromMesh(UMeshComponent* Mes
 		return;
 	}
 
-	for (int32 MaterialIndex = 0; MaterialIndex < State->OriginalMaterials.Num(); ++MaterialIndex)
+	const int32 RestoreMaterialCount = FMath::Min(MeshComponent->GetNumMaterials(), State->OriginalMaterials.Num());
+	for (int32 MaterialIndex = 0; MaterialIndex < RestoreMaterialCount; ++MaterialIndex)
 	{
-		MeshComponent->SetMaterial(MaterialIndex, State->OriginalMaterials[MaterialIndex]);
+		UMaterialInterface* OriginalMaterial = State->OriginalMaterials[MaterialIndex].Get();
+		if (OriginalMaterial == nullptr || IsValid(OriginalMaterial))
+		{
+			MeshComponent->SetMaterial(MaterialIndex, OriginalMaterial);
+		}
 	}
 
 	MeshComponent->SetVisibility(State->bWasVisible, true);
