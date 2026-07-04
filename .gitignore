@@ -19,3 +19,6 @@ Saved/
 # OS files
 Thumbs.db
 Desktop.ini
+Build/
+Docs/
+AGENTS.md
