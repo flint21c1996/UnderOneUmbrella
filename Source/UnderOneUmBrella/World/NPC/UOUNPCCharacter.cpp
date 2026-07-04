@@ -122,12 +122,15 @@ void AUOUNPCCharacter::BeginPlay()
 void AUOUNPCCharacter::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+	UpdateJumpMoveRotation(DeltaSeconds);
 	DrawNPCDebug();
 }
 
 void AUOUNPCCharacter::Landed(const FHitResult& Hit)
 {
 	Super::Landed(Hit);
+
+	bJumpMoveRotationActive = false;
 
 	if (bPendingMoveAfterJumpLanding)
 	{
@@ -270,6 +273,8 @@ bool AUOUNPCCharacter::JumpMoveToTargetLocation(const FVector& TargetLocation)
 
 	StopNPCMovement();
 	bPendingMoveAfterJumpLanding = ActionRequest.bMoveToTargetAfterJumpLanding;
+	bJumpMoveRotationActive = bOrientRotationDuringJumpMove;
+	JumpMoveRotationTargetLocation = TargetLocation;
 	LaunchCharacter(CalculateJumpLaunchVelocity(TargetLocation, ActionRequest.JumpTravelTime), true, true);
 	if (UCharacterMovementComponent* MovementComponent = GetCharacterMovement())
 	{
@@ -299,6 +304,8 @@ float AUOUNPCCharacter::PlayActivationAnimation()
 
 void AUOUNPCCharacter::StopNPCMovement()
 {
+	bJumpMoveRotationActive = false;
+
 	if (AUOUNPCController* NPCController = GetNPCController())
 	{
 		NPCController->StopMovement();
@@ -693,4 +700,39 @@ FVector AUOUNPCCharacter::CalculateJumpLaunchVelocity(const FVector& TargetLocat
 	const float VerticalVelocity = (Delta.Z - 0.5f * GravityZ * SafeTravelTime * SafeTravelTime) / SafeTravelTime;
 
 	return HorizontalVelocity + FVector(0.0f, 0.0f, VerticalVelocity);
+}
+
+void AUOUNPCCharacter::UpdateJumpMoveRotation(float DeltaSeconds)
+{
+	if (!bJumpMoveRotationActive || !bOrientRotationDuringJumpMove)
+	{
+		return;
+	}
+
+	FVector DesiredDirection = JumpMoveRotationTargetLocation - GetActorLocation();
+	DesiredDirection.Z = 0.0f;
+
+	if (DesiredDirection.IsNearlyZero())
+	{
+		DesiredDirection = GetVelocity();
+		DesiredDirection.Z = 0.0f;
+	}
+
+	if (DesiredDirection.IsNearlyZero())
+	{
+		return;
+	}
+
+	const FRotator CurrentRotation = GetActorRotation();
+	const FRotator DesiredRotation(0.0f, DesiredDirection.Rotation().Yaw, 0.0f);
+	const float SafeRotationRate = FMath::Max(0.0f, JumpMoveRotationRate);
+	const FRotator NextRotation = SafeRotationRate <= KINDA_SMALL_NUMBER
+		? DesiredRotation
+		: FMath::RInterpConstantTo(
+			FRotator(0.0f, CurrentRotation.Yaw, 0.0f),
+			DesiredRotation,
+			DeltaSeconds,
+			SafeRotationRate);
+
+	SetActorRotation(NextRotation);
 }

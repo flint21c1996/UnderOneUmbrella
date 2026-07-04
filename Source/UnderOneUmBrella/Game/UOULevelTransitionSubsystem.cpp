@@ -18,16 +18,84 @@ namespace
 {
 	constexpr float FadeOverlayTickInterval = 1.0f / 60.0f;
 	constexpr TCHAR DefaultTransitionOverlayWidgetClassPath[] = TEXT("/Game/UOU/UI/WBP_LevelTransitionOverlay.WBP_LevelTransitionOverlay_C");
+	constexpr TCHAR LevelTransitionDefaultTitleLevelPath[] = TEXT("/Game/UOU/Maps/TitleMap.TitleMap");
 
 	FUOUTransitionMessageSettings SanitizeMessageSettings(FUOUTransitionMessageSettings Settings)
 	{
 		Settings.FontSize = FMath::Max(1, Settings.FontSize);
 		Settings.WrapTextAt = FMath::Max(100.0f, Settings.WrapTextAt);
+		Settings.ImageDesiredSize.X = FMath::Max(1.0f, Settings.ImageDesiredSize.X);
+		Settings.ImageDesiredSize.Y = FMath::Max(1.0f, Settings.ImageDesiredSize.Y);
 		Settings.ViewportZOrder = FMath::Max(0, Settings.ViewportZOrder);
 		Settings.MessageFadeInDuration = FMath::Max(0.0f, Settings.MessageFadeInDuration);
 		Settings.MessageHoldDuration = FMath::Max(0.0f, Settings.MessageHoldDuration);
 		Settings.MessageFadeOutDuration = FMath::Max(0.0f, Settings.MessageFadeOutDuration);
+		for (FUOUTransitionMessagePage& AdditionalMessagePage : Settings.AdditionalMessagePages)
+		{
+			AdditionalMessagePage.ImageDesiredSize.X = FMath::Max(1.0f, AdditionalMessagePage.ImageDesiredSize.X);
+			AdditionalMessagePage.ImageDesiredSize.Y = FMath::Max(1.0f, AdditionalMessagePage.ImageDesiredSize.Y);
+			AdditionalMessagePage.MessageHoldDuration = FMath::Max(0.0f, AdditionalMessagePage.MessageHoldDuration);
+		}
 		return Settings;
+	}
+
+	void AddMessagePage(
+		TArray<FUOUTransitionMessageSettings>& MessagePages,
+		const FUOUTransitionMessageSettings& BaseSettings,
+		const FText& MessageText,
+		UTexture2D* MessageImage,
+		FVector2D ImageDesiredSize,
+		float MessageHoldDuration)
+	{
+		if (MessageText.IsEmpty() && MessageImage == nullptr)
+		{
+			return;
+		}
+
+		FUOUTransitionMessageSettings PageSettings = BaseSettings;
+		PageSettings.MessageText = MessageText;
+		PageSettings.MessageImage = MessageImage;
+		PageSettings.ImageDesiredSize = ImageDesiredSize;
+		PageSettings.MessageHoldDuration = FMath::Max(0.0f, MessageHoldDuration);
+		PageSettings.AdditionalMessageTexts.Reset();
+		PageSettings.AdditionalMessagePages.Reset();
+		MessagePages.Add(PageSettings);
+	}
+
+	TArray<FUOUTransitionMessageSettings> BuildMessagePages(const FUOUTransitionMessageSettings& MessageSettings)
+	{
+		const FUOUTransitionMessageSettings SanitizedSettings = SanitizeMessageSettings(MessageSettings);
+		TArray<FUOUTransitionMessageSettings> MessagePages;
+
+		AddMessagePage(
+			MessagePages,
+			SanitizedSettings,
+			SanitizedSettings.MessageText,
+			SanitizedSettings.MessageImage,
+			SanitizedSettings.ImageDesiredSize,
+			SanitizedSettings.MessageHoldDuration);
+		for (const FText& AdditionalMessageText : SanitizedSettings.AdditionalMessageTexts)
+		{
+			AddMessagePage(
+				MessagePages,
+				SanitizedSettings,
+				AdditionalMessageText,
+				nullptr,
+				SanitizedSettings.ImageDesiredSize,
+				SanitizedSettings.MessageHoldDuration);
+		}
+		for (const FUOUTransitionMessagePage& AdditionalMessagePage : SanitizedSettings.AdditionalMessagePages)
+		{
+			AddMessagePage(
+				MessagePages,
+				SanitizedSettings,
+				AdditionalMessagePage.MessageText,
+				AdditionalMessagePage.MessageImage,
+				AdditionalMessagePage.ImageDesiredSize,
+				AdditionalMessagePage.MessageHoldDuration);
+		}
+
+		return MessagePages;
 	}
 
 	FUOULevelTransitionSettings SanitizeTransitionSettings(FUOULevelTransitionSettings Settings)
@@ -68,6 +136,14 @@ bool UUOULevelTransitionSubsystem::RequestLevelTransition(
 	TSoftObjectPtr<UWorld> TargetLevel,
 	FUOULevelTransitionSettings Settings)
 {
+	return RequestLevelTransitionFromWorld(GetSubsystemWorld(), TargetLevel, Settings);
+}
+
+bool UUOULevelTransitionSubsystem::RequestLevelTransitionFromWorld(
+	UWorld* SourceWorld,
+	TSoftObjectPtr<UWorld> TargetLevel,
+	FUOULevelTransitionSettings Settings)
+{
 	if (bIsTransitioning)
 	{
 		return false;
@@ -83,7 +159,7 @@ bool UUOULevelTransitionSubsystem::RequestLevelTransition(
 	PendingTargetLevel = TargetLevel;
 	PendingLevelName = NAME_None;
 
-	if (!BeginTransition(Settings))
+	if (!BeginTransition(SourceWorld, Settings))
 	{
 		ResetPendingTransition();
 		return false;
@@ -93,6 +169,14 @@ bool UUOULevelTransitionSubsystem::RequestLevelTransition(
 }
 
 bool UUOULevelTransitionSubsystem::RequestLevelTransitionByName(
+	FName LevelName,
+	FUOULevelTransitionSettings Settings)
+{
+	return RequestLevelTransitionByNameFromWorld(GetSubsystemWorld(), LevelName, Settings);
+}
+
+bool UUOULevelTransitionSubsystem::RequestLevelTransitionByNameFromWorld(
+	UWorld* SourceWorld,
 	FName LevelName,
 	FUOULevelTransitionSettings Settings)
 {
@@ -111,7 +195,7 @@ bool UUOULevelTransitionSubsystem::RequestLevelTransitionByName(
 	PendingTargetLevel.Reset();
 	PendingLevelName = LevelName;
 
-	if (!BeginTransition(Settings))
+	if (!BeginTransition(SourceWorld, Settings))
 	{
 		ResetPendingTransition();
 		return false;
@@ -122,25 +206,138 @@ bool UUOULevelTransitionSubsystem::RequestLevelTransitionByName(
 
 bool UUOULevelTransitionSubsystem::RestartCurrentLevel(FUOULevelTransitionSettings Settings)
 {
-	UWorld* World = GetSubsystemWorld();
-	if (World == nullptr)
+	return RestartCurrentLevelFromWorld(GetSubsystemWorld(), Settings);
+}
+
+bool UUOULevelTransitionSubsystem::RestartCurrentLevelFromWorld(
+	UWorld* SourceWorld,
+	FUOULevelTransitionSettings Settings)
+{
+	if (bIsTransitioning)
 	{
 		return false;
 	}
 
-	const FString CurrentLevelName = UGameplayStatics::GetCurrentLevelName(World, true);
+	if (SourceWorld == nullptr)
+	{
+		return false;
+	}
+
+	const FString CurrentLevelName = UGameplayStatics::GetCurrentLevelName(SourceWorld, true);
 	if (CurrentLevelName.IsEmpty())
 	{
 		UE_LOG(LogTemp, Warning, TEXT("Current level name could not be resolved for restart."));
 		return false;
 	}
 
-	return RequestLevelTransitionByName(FName(*CurrentLevelName), Settings);
+	PendingTargetType = ETransitionTargetType::LevelName;
+	PendingTargetLevel.Reset();
+	PendingLevelName = FName(*CurrentLevelName);
+	Settings.bSuppressFadeOutMessage = true;
+
+	if (!BeginTransition(SourceWorld, Settings))
+	{
+		ResetPendingTransition();
+		return false;
+	}
+
+	return true;
+}
+
+bool UUOULevelTransitionSubsystem::RequestNextLevel(FUOULevelTransitionSettings Settings)
+{
+	return RequestNextLevelFromWorld(GetSubsystemWorld(), Settings);
+}
+
+bool UUOULevelTransitionSubsystem::RequestNextLevelFromWorld(
+	UWorld* SourceWorld,
+	FUOULevelTransitionSettings Settings)
+{
+	if (bIsTransitioning)
+	{
+		return false;
+	}
+
+	if (SourceWorld == nullptr)
+	{
+		return false;
+	}
+
+	TSoftObjectPtr<UWorld> NextLevel;
+	const AUOULevelTransitionSettingsActor* SettingsActor = FindLevelTransitionSettingsActor(SourceWorld);
+	if (SettingsActor != nullptr)
+	{
+		NextLevel = SettingsActor->TargetLevel;
+	}
+
+	if (NextLevel.IsNull())
+	{
+		NextLevel = TSoftObjectPtr<UWorld>(FSoftObjectPath(LevelTransitionDefaultTitleLevelPath));
+		UE_LOG(LogTemp, Warning, TEXT("Next level was not configured. Falling back to %s."), LevelTransitionDefaultTitleLevelPath);
+	}
+
+	PendingTargetType = ETransitionTargetType::SoftLevel;
+	PendingTargetLevel = NextLevel;
+	PendingLevelName = NAME_None;
+
+	if (!BeginTransition(SourceWorld, Settings))
+	{
+		ResetPendingTransition();
+		return false;
+	}
+
+	return true;
+}
+
+bool UUOULevelTransitionSubsystem::RequestPreviousLevel(FUOULevelTransitionSettings Settings)
+{
+	return RequestPreviousLevelFromWorld(GetSubsystemWorld(), Settings);
+}
+
+bool UUOULevelTransitionSubsystem::RequestPreviousLevelFromWorld(
+	UWorld* SourceWorld,
+	FUOULevelTransitionSettings Settings)
+{
+	if (bIsTransitioning)
+	{
+		return false;
+	}
+
+	if (SourceWorld == nullptr)
+	{
+		return false;
+	}
+
+	TSoftObjectPtr<UWorld> PreviousLevel;
+	const AUOULevelTransitionSettingsActor* SettingsActor = FindLevelTransitionSettingsActor(SourceWorld);
+	if (SettingsActor != nullptr)
+	{
+		PreviousLevel = SettingsActor->PreviousLevel;
+	}
+
+	if (PreviousLevel.IsNull())
+	{
+		PreviousLevel = TSoftObjectPtr<UWorld>(FSoftObjectPath(LevelTransitionDefaultTitleLevelPath));
+		UE_LOG(LogTemp, Warning, TEXT("Previous level was not configured. Falling back to %s."), LevelTransitionDefaultTitleLevelPath);
+	}
+
+	PendingTargetType = ETransitionTargetType::SoftLevel;
+	PendingTargetLevel = PreviousLevel;
+	PendingLevelName = NAME_None;
+	Settings.bSuppressFadeOutMessage = true;
+
+	if (!BeginTransition(SourceWorld, Settings))
+	{
+		ResetPendingTransition();
+		return false;
+	}
+
+	return true;
 }
 
 void UUOULevelTransitionSubsystem::CancelTransition()
 {
-	UWorld* World = GetSubsystemWorld();
+	UWorld* World = GetActiveTransitionWorld();
 	if (World != nullptr)
 	{
 		ClearTransitionTimers(World);
@@ -162,20 +359,25 @@ void UUOULevelTransitionSubsystem::CancelTransition()
 	ResetPendingTransition();
 }
 
-bool UUOULevelTransitionSubsystem::BeginTransition(FUOULevelTransitionSettings Settings)
+bool UUOULevelTransitionSubsystem::BeginTransition(UWorld* TransitionWorld, FUOULevelTransitionSettings Settings)
 {
-	UWorld* World = GetSubsystemWorld();
+	UWorld* World = TransitionWorld;
 	if (World == nullptr)
 	{
 		return false;
 	}
 
+	ActiveTransitionWorld = World;
 	ActiveSettings = SanitizeTransitionSettings(Settings);
 	if (ActiveSettings.bUseCurrentMapExitSettings)
 	{
 		ApplyCurrentMapExitSettings(World, ActiveSettings);
 	}
 	ActiveSettings = SanitizeTransitionSettings(ActiveSettings);
+	if (ActiveSettings.bSuppressFadeOutMessage)
+	{
+		ActiveSettings.FadeOutMessageSettings = FUOUTransitionMessageSettings();
+	}
 	bIsTransitioning = true;
 	FadeOverlayElapsedTime = 0.0f;
 
@@ -221,7 +423,7 @@ bool UUOULevelTransitionSubsystem::BeginTransition(FUOULevelTransitionSettings S
 
 void UUOULevelTransitionSubsystem::UpdateFadeOutOverlay()
 {
-	UWorld* World = GetSubsystemWorld();
+	UWorld* World = GetActiveTransitionWorld();
 	if (World == nullptr)
 	{
 		FinishFadeOut();
@@ -246,7 +448,7 @@ void UUOULevelTransitionSubsystem::FinishFadeOut()
 	SetTransitionBackgroundOpacity(1.0f);
 	SetTransitionMessageOpacity(0.0f);
 
-	UWorld* World = GetSubsystemWorld();
+	UWorld* World = GetActiveTransitionWorld();
 	if (World != nullptr)
 	{
 		World->GetTimerManager().ClearTimer(FadeOutTimerHandle);
@@ -269,16 +471,27 @@ void UUOULevelTransitionSubsystem::StartMessageSequence(
 	ETransitionMessageStage MessageStage,
 	const FUOUTransitionMessageSettings& MessageSettings)
 {
-	UWorld* World = MessageStage == ETransitionMessageStage::FadeIn
+	ActiveMessageStage = MessageStage;
+	ActiveMessagePages = BuildMessagePages(MessageSettings);
+	ActiveMessagePageIndex = ActiveMessagePages.Num() > 0 ? 0 : INDEX_NONE;
+	ActiveMessageSettings = ActiveMessagePageIndex != INDEX_NONE
+		? ActiveMessagePages[ActiveMessagePageIndex]
+		: FUOUTransitionMessageSettings();
+	MessageElapsedTime = 0.0f;
+
+	StartActiveMessagePage();
+}
+
+void UUOULevelTransitionSubsystem::StartActiveMessagePage()
+{
+	UWorld* World = ActiveMessageStage == ETransitionMessageStage::FadeIn
 		? FadeInWorld.Get()
-		: GetSubsystemWorld();
+		: GetActiveTransitionWorld();
 	if (World == nullptr)
 	{
-		World = GetSubsystemWorld();
+		World = GetActiveTransitionWorld();
 	}
 
-	ActiveMessageStage = MessageStage;
-	ActiveMessageSettings = SanitizeMessageSettings(MessageSettings);
 	MessageElapsedTime = 0.0f;
 
 	if (World != nullptr)
@@ -290,7 +503,7 @@ void UUOULevelTransitionSubsystem::StartMessageSequence(
 	SetTransitionBackgroundOpacity(1.0f);
 	SetTransitionMessageOpacity(0.0f);
 
-	if (!ActiveMessageSettings.ShouldDisplay())
+	if (ActiveMessagePageIndex == INDEX_NONE || !ActiveMessageSettings.ShouldDisplay())
 	{
 		FinishMessageSequence();
 		return;
@@ -321,7 +534,7 @@ void UUOULevelTransitionSubsystem::UpdateMessageFadeIn()
 {
 	UWorld* World = ActiveMessageStage == ETransitionMessageStage::FadeIn
 		? FadeInWorld.Get()
-		: GetSubsystemWorld();
+		: GetActiveTransitionWorld();
 	if (World == nullptr)
 	{
 		FinishMessageSequence();
@@ -348,7 +561,7 @@ void UUOULevelTransitionSubsystem::FinishMessageFadeIn()
 
 	UWorld* World = ActiveMessageStage == ETransitionMessageStage::FadeIn
 		? FadeInWorld.Get()
-		: GetSubsystemWorld();
+		: GetActiveTransitionWorld();
 	if (World == nullptr || ActiveMessageSettings.MessageHoldDuration <= 0.0f)
 	{
 		FinishMessageHold();
@@ -376,7 +589,7 @@ void UUOULevelTransitionSubsystem::FinishMessageHold()
 
 	UWorld* World = ActiveMessageStage == ETransitionMessageStage::FadeIn
 		? FadeInWorld.Get()
-		: GetSubsystemWorld();
+		: GetActiveTransitionWorld();
 	if (World == nullptr)
 	{
 		FinishMessageSequence();
@@ -395,7 +608,7 @@ void UUOULevelTransitionSubsystem::UpdateMessageFadeOut()
 {
 	UWorld* World = ActiveMessageStage == ETransitionMessageStage::FadeIn
 		? FadeInWorld.Get()
-		: GetSubsystemWorld();
+		: GetActiveTransitionWorld();
 	if (World == nullptr)
 	{
 		FinishMessageSequence();
@@ -421,15 +634,26 @@ void UUOULevelTransitionSubsystem::FinishMessageSequence()
 
 	UWorld* World = ActiveMessageStage == ETransitionMessageStage::FadeIn
 		? FadeInWorld.Get()
-		: GetSubsystemWorld();
+		: GetActiveTransitionWorld();
 	if (World != nullptr)
 	{
 		World->GetTimerManager().ClearTimer(MessageTimerHandle);
 	}
 
+	const int32 NextMessagePageIndex = ActiveMessagePageIndex + 1;
+	if (ActiveMessagePages.IsValidIndex(NextMessagePageIndex))
+	{
+		ActiveMessagePageIndex = NextMessagePageIndex;
+		ActiveMessageSettings = ActiveMessagePages[ActiveMessagePageIndex];
+		StartActiveMessagePage();
+		return;
+	}
+
 	const ETransitionMessageStage FinishedStage = ActiveMessageStage;
 	ActiveMessageStage = ETransitionMessageStage::None;
 	ActiveMessageSettings = FUOUTransitionMessageSettings();
+	ActiveMessagePages.Reset();
+	ActiveMessagePageIndex = INDEX_NONE;
 	MessageElapsedTime = 0.0f;
 
 	switch (FinishedStage)
@@ -448,7 +672,7 @@ void UUOULevelTransitionSubsystem::FinishMessageSequence()
 
 void UUOULevelTransitionSubsystem::ContinueAfterFadeOutMessageSequence()
 {
-	UWorld* World = GetSubsystemWorld();
+	UWorld* World = GetActiveTransitionWorld();
 	if (World == nullptr || ActiveSettings.BlackHoldDuration <= 0.0f)
 	{
 		OpenPendingLevel();
@@ -468,7 +692,7 @@ void UUOULevelTransitionSubsystem::ContinueAfterFadeInMessageSequence()
 	UWorld* World = FadeInWorld.Get();
 	if (World == nullptr)
 	{
-		World = GetSubsystemWorld();
+		World = GetActiveTransitionWorld();
 	}
 
 	if (World == nullptr || ActiveSettings.FadeInDuration <= 0.0f)
@@ -489,7 +713,7 @@ void UUOULevelTransitionSubsystem::ContinueAfterFadeInMessageSequence()
 
 void UUOULevelTransitionSubsystem::OpenPendingLevel()
 {
-	UWorld* World = GetSubsystemWorld();
+	UWorld* World = GetActiveTransitionWorld();
 	if (World == nullptr)
 	{
 		ResetPendingTransition();
@@ -550,7 +774,7 @@ void UUOULevelTransitionSubsystem::StartPostLoadFadeIn()
 	UWorld* World = FadeInWorld.Get();
 	if (World == nullptr)
 	{
-		World = GetSubsystemWorld();
+		World = GetActiveTransitionWorld();
 	}
 
 	APlayerController* PlayerController = ResolvePlayerController(World);
@@ -588,7 +812,7 @@ void UUOULevelTransitionSubsystem::UpdateFadeInOverlay()
 	UWorld* World = FadeInWorld.Get();
 	if (World == nullptr)
 	{
-		World = GetSubsystemWorld();
+		World = GetActiveTransitionWorld();
 	}
 
 	if (World == nullptr)
@@ -616,7 +840,7 @@ void UUOULevelTransitionSubsystem::FinishTransition()
 	UWorld* World = FadeInWorld.Get();
 	if (World == nullptr)
 	{
-		World = GetSubsystemWorld();
+		World = GetActiveTransitionWorld();
 	}
 
 	if (World != nullptr)
@@ -654,9 +878,12 @@ void UUOULevelTransitionSubsystem::ResetPendingTransition()
 	PendingLevelName = NAME_None;
 	ActiveSettings = FUOULevelTransitionSettings();
 	ActiveMessageSettings = FUOUTransitionMessageSettings();
+	ActiveMessagePages.Reset();
+	ActiveTransitionWorld.Reset();
 	FadeInWorld.Reset();
 	FadeOverlayElapsedTime = 0.0f;
 	MessageElapsedTime = 0.0f;
+	ActiveMessagePageIndex = INDEX_NONE;
 	ActiveMessageStage = ETransitionMessageStage::None;
 	bIsTransitioning = false;
 	bWaitingForPostLoadFadeIn = false;
@@ -803,6 +1030,16 @@ void UUOULevelTransitionSubsystem::SetPlayerInputLocked(UWorld* World, bool bLoc
 APlayerController* UUOULevelTransitionSubsystem::ResolvePlayerController(UWorld* World) const
 {
 	return World != nullptr ? World->GetFirstPlayerController() : nullptr;
+}
+
+UWorld* UUOULevelTransitionSubsystem::GetActiveTransitionWorld() const
+{
+	if (UWorld* World = ActiveTransitionWorld.Get())
+	{
+		return World;
+	}
+
+	return GetSubsystemWorld();
 }
 
 UWorld* UUOULevelTransitionSubsystem::GetSubsystemWorld() const

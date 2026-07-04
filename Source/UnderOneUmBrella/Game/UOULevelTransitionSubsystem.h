@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Engine/World.h"
 #include "Subsystems/GameInstanceSubsystem.h"
 #include "TimerManager.h"
 #include "UI/UOUTransitionMessageTypes.h"
@@ -42,6 +43,9 @@ struct FUOULevelTransitionSettings
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Level Transition|Map Settings", meta = (DisplayName = "도착 맵 Enter 설정 사용", ToolTip = "켜져 있으면 도착 맵의 UOU Level Transition Settings Actor에 있는 Enter 설정으로 페이드 인을 덮어씁니다."))
 	bool bUseLoadedMapEnterSettings = true;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Level Transition|Message", meta = (DisplayName = "페이드 아웃 문구 숨김", ToolTip = "켜져 있으면 현재 맵의 Exit 설정을 사용하더라도 페이드 아웃 문구만 표시하지 않습니다. 이전 레벨 전환에서는 자동으로 켜집니다."))
+	bool bSuppressFadeOutMessage = false;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Level Transition|Message", meta = (DisplayName = "페이드 아웃 문구", ToolTip = "현재 레벨에서 화면이 검게 가려진 뒤 표시할 문구입니다. 비워두면 표시하지 않습니다."))
 	FUOUTransitionMessageSettings FadeOutMessageSettings;
 
@@ -61,11 +65,27 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Level Transition")
 	bool RequestLevelTransition(TSoftObjectPtr<UWorld> TargetLevel, FUOULevelTransitionSettings Settings);
 
+	bool RequestLevelTransitionFromWorld(UWorld* SourceWorld, TSoftObjectPtr<UWorld> TargetLevel, FUOULevelTransitionSettings Settings);
+
 	UFUNCTION(BlueprintCallable, Category = "Level Transition")
 	bool RequestLevelTransitionByName(FName LevelName, FUOULevelTransitionSettings Settings);
 
+	bool RequestLevelTransitionByNameFromWorld(UWorld* SourceWorld, FName LevelName, FUOULevelTransitionSettings Settings);
+
 	UFUNCTION(BlueprintCallable, Category = "Level Transition")
 	bool RestartCurrentLevel(FUOULevelTransitionSettings Settings);
+
+	bool RestartCurrentLevelFromWorld(UWorld* SourceWorld, FUOULevelTransitionSettings Settings);
+
+	UFUNCTION(BlueprintCallable, Category = "Level Transition")
+	bool RequestNextLevel(FUOULevelTransitionSettings Settings);
+
+	bool RequestNextLevelFromWorld(UWorld* SourceWorld, FUOULevelTransitionSettings Settings);
+
+	UFUNCTION(BlueprintCallable, Category = "Level Transition")
+	bool RequestPreviousLevel(FUOULevelTransitionSettings Settings);
+
+	bool RequestPreviousLevelFromWorld(UWorld* SourceWorld, FUOULevelTransitionSettings Settings);
 
 	UFUNCTION(BlueprintCallable, Category = "Level Transition")
 	void CancelTransition();
@@ -88,13 +108,14 @@ private:
 		FadeIn
 	};
 
-	bool BeginTransition(FUOULevelTransitionSettings Settings);
+	bool BeginTransition(UWorld* TransitionWorld, FUOULevelTransitionSettings Settings);
 	void UpdateFadeOutOverlay();
 	void UpdateFadeInOverlay();
 	void FinishFadeOut();
 	void StartFadeOutMessageSequence();
 	void StartFadeInMessageSequence();
 	void StartMessageSequence(ETransitionMessageStage MessageStage, const FUOUTransitionMessageSettings& MessageSettings);
+	void StartActiveMessagePage();
 	void UpdateMessageFadeIn();
 	void FinishMessageFadeIn();
 	void FinishMessageHold();
@@ -118,6 +139,7 @@ private:
 	void HideTransitionOverlay();
 	void SetPlayerInputLocked(UWorld* World, bool bLocked) const;
 	APlayerController* ResolvePlayerController(UWorld* World) const;
+	UWorld* GetActiveTransitionWorld() const;
 	UWorld* GetSubsystemWorld() const;
 
 	ETransitionTargetType PendingTargetType = ETransitionTargetType::None;
@@ -125,6 +147,8 @@ private:
 	FName PendingLevelName = NAME_None;
 	FUOULevelTransitionSettings ActiveSettings;
 	FUOUTransitionMessageSettings ActiveMessageSettings;
+	TArray<FUOUTransitionMessageSettings> ActiveMessagePages;
+	TWeakObjectPtr<UWorld> ActiveTransitionWorld;
 	TWeakObjectPtr<UWorld> FadeInWorld;
 
 	FTimerHandle FadeOutTimerHandle;
@@ -137,6 +161,7 @@ private:
 
 	float FadeOverlayElapsedTime = 0.0f;
 	float MessageElapsedTime = 0.0f;
+	int32 ActiveMessagePageIndex = INDEX_NONE;
 	ETransitionMessageStage ActiveMessageStage = ETransitionMessageStage::None;
 	bool bIsTransitioning = false;
 	bool bWaitingForPostLoadFadeIn = false;

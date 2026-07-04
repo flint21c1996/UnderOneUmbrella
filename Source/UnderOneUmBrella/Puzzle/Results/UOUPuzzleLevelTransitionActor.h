@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Engine/World.h"
 #include "Game/UOULevelTransitionSubsystem.h"
 #include "GameFramework/Actor.h"
 #include "Puzzle/Core/UOUPuzzleResultReceiver.h"
@@ -15,7 +16,9 @@ UENUM(BlueprintType)
 enum class EUOUPuzzleLevelTransitionMode : uint8
 {
 	OpenTargetLevel,
-	RestartCurrentLevel
+	RestartCurrentLevel,
+	OpenNextLevel,
+	OpenPreviousLevel
 };
 
 UCLASS(meta=(DisplayName="UOU Puzzle Level Transition Actor"))
@@ -37,7 +40,7 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Puzzle|Level Transition")
 	TObjectPtr<USceneComponent> RootScene = nullptr;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Puzzle|Level Transition", meta = (AllowedClasses = "/Script/Engine.World", ToolTip = "페이드 아웃 후 열 레벨입니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Puzzle|Level Transition", meta = (AllowedClasses = "/Script/Engine.World", ToolTip = "Transition Mode가 Open Target Level일 때 열 레벨입니다. Next/Previous 모드에서는 현재 맵의 UOU Level Transition Settings Actor를 사용합니다."))
 	TSoftObjectPtr<UWorld> TargetLevel;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Puzzle|Level Transition")
@@ -49,30 +52,6 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Puzzle|Level Transition", meta = (ToolTip = "켜져 있으면 한 번 전환을 시작한 뒤 같은 액터가 다시 전환을 시작하지 않습니다."))
 	bool bTriggerOnce = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Puzzle|Level Transition", meta = (ClampMin = "0.0", ToolTip = "화면이 검은색으로 사라지는 시간입니다."))
-	float FadeOutDuration = 0.75f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Puzzle|Level Transition", meta = (ClampMin = "0.0", ToolTip = "완전히 어두워진 뒤 레벨을 열기 전에 기다리는 시간입니다."))
-	float BlackHoldDuration = 0.1f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Puzzle|Level Transition", meta = (ClampMin = "0.0", ToolTip = "Time spent fading back in after the new level is loaded."))
-	float FadeInDuration = 0.35f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Puzzle|Level Transition", meta = (ToolTip = "페이드 색상입니다."))
-	FLinearColor FadeColor = FLinearColor::Black;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Puzzle|Level Transition", meta = (ToolTip = "켜져 있으면 카메라 페이드와 함께 오디오도 페이드 처리합니다."))
-	bool bFadeAudio = false;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Puzzle|Level Transition", meta = (ToolTip = "If enabled, player move and look input are blocked while the transition is running."))
-	bool bLockPlayerInputDuringTransition = true;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Puzzle|Level Transition|Message", meta = (DisplayName = "페이드 아웃 문구", ToolTip = "현재 레벨에서 화면이 검게 가려진 뒤 표시할 문구입니다. 비워두면 표시하지 않습니다."))
-	FUOUTransitionMessageSettings FadeOutMessageSettings;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Puzzle|Level Transition|Message", meta = (DisplayName = "페이드 인 문구", ToolTip = "새 레벨이 로드된 뒤 화면이 밝아지는 동안 표시할 문구입니다. 비워두면 표시하지 않습니다."))
-	FUOUTransitionMessageSettings FadeInMessageSettings;
-
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Puzzle|Runtime")
 	bool bHasTriggered = false;
 
@@ -80,5 +59,31 @@ public:
 	bool bIsTransitioning = false;
 
 private:
+	// 기존 맵에 저장된 전환 연출 값을 유지하기 위한 호환용 필드입니다.
+	// 실제 페이드 시간, 색상, 문구는 각 맵의 UOU Level Transition Settings Actor가 담당합니다.
+	UPROPERTY()
+	float FadeOutDuration = 0.75f;
+
+	UPROPERTY()
+	float BlackHoldDuration = 0.1f;
+
+	UPROPERTY()
+	float FadeInDuration = 0.35f;
+
+	UPROPERTY()
+	FLinearColor FadeColor = FLinearColor::Black;
+
+	UPROPERTY()
+	bool bFadeAudio = false;
+
+	UPROPERTY()
+	bool bLockPlayerInputDuringTransition = true;
+
+	UPROPERTY()
+	FUOUTransitionMessageSettings FadeOutMessageSettings;
+
+	UPROPERTY()
+	FUOUTransitionMessageSettings FadeInMessageSettings;
+
 	UUOULevelTransitionSubsystem* GetTransitionSubsystem() const;
 };

@@ -3,7 +3,31 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Engine/Texture2D.h"
 #include "UOUTransitionMessageTypes.generated.h"
+
+USTRUCT(BlueprintType)
+struct FUOUTransitionMessagePage
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Transition Message", meta = (DisplayName = "Message Text", MultiLine = "true"))
+	FText MessageText = FText::GetEmpty();
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Transition Message", meta = (DisplayName = "Message Image"))
+	TObjectPtr<UTexture2D> MessageImage = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Transition Message", meta = (ClampMin = "1.0", DisplayName = "Image Desired Size"))
+	FVector2D ImageDesiredSize = FVector2D(640.0f, 360.0f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Transition Message|Timing", meta = (ClampMin = "0.0", DisplayName = "Message Hold Duration"))
+	float MessageHoldDuration = 1.2f;
+
+	bool ShouldDisplay() const
+	{
+		return !MessageText.IsEmpty() || MessageImage != nullptr;
+	}
+};
 
 USTRUCT(BlueprintType)
 struct FUOUTransitionMessageSettings
@@ -12,6 +36,18 @@ struct FUOUTransitionMessageSettings
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Transition Message", meta = (DisplayName = "전환 문구", MultiLine = "true", ToolTip = "화면 전환 중 중앙에 표시할 문구입니다. 비워두면 표시하지 않습니다."))
 	FText MessageText = FText::GetEmpty();
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Transition Message", meta = (DisplayName = "Message Image"))
+	TObjectPtr<UTexture2D> MessageImage = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Transition Message", meta = (ClampMin = "1.0", DisplayName = "Image Desired Size"))
+	FVector2D ImageDesiredSize = FVector2D(640.0f, 360.0f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Transition Message", meta = (DisplayName = "Additional Message Pages", MultiLine = "true", ToolTip = "Additional text pages displayed after Message Text. Each page uses the same font, color, and timing settings."))
+	TArray<FText> AdditionalMessageTexts;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Transition Message", meta = (DisplayName = "Additional Message Pages With Images"))
+	TArray<FUOUTransitionMessagePage> AdditionalMessagePages;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Transition Message", meta = (ClampMin = "1", DisplayName = "글자 크기", ToolTip = "전환 문구의 글자 크기입니다."))
 	int32 FontSize = 30;
@@ -36,15 +72,52 @@ struct FUOUTransitionMessageSettings
 
 	bool ShouldDisplay() const
 	{
-		return !MessageText.IsEmpty();
+		if (!MessageText.IsEmpty() || MessageImage != nullptr)
+		{
+			return true;
+		}
+
+		for (const FText& AdditionalMessageText : AdditionalMessageTexts)
+		{
+			if (!AdditionalMessageText.IsEmpty())
+			{
+				return true;
+			}
+		}
+
+		for (const FUOUTransitionMessagePage& AdditionalMessagePage : AdditionalMessagePages)
+		{
+			if (AdditionalMessagePage.ShouldDisplay())
+			{
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	float GetTotalDisplayDuration() const
 	{
-		return ShouldDisplay()
-			? FMath::Max(0.0f, MessageFadeInDuration)
-				+ FMath::Max(0.0f, MessageHoldDuration)
-				+ FMath::Max(0.0f, MessageFadeOutDuration)
+		const float SharedFadeDuration = FMath::Max(0.0f, MessageFadeInDuration)
+			+ FMath::Max(0.0f, MessageFadeOutDuration);
+		float TotalDisplayDuration = (!MessageText.IsEmpty() || MessageImage != nullptr)
+			? SharedFadeDuration + FMath::Max(0.0f, MessageHoldDuration)
 			: 0.0f;
+		for (const FText& AdditionalMessageText : AdditionalMessageTexts)
+		{
+			if (!AdditionalMessageText.IsEmpty())
+			{
+				TotalDisplayDuration += SharedFadeDuration + FMath::Max(0.0f, MessageHoldDuration);
+			}
+		}
+		for (const FUOUTransitionMessagePage& AdditionalMessagePage : AdditionalMessagePages)
+		{
+			if (AdditionalMessagePage.ShouldDisplay())
+			{
+				TotalDisplayDuration += SharedFadeDuration + FMath::Max(0.0f, AdditionalMessagePage.MessageHoldDuration);
+			}
+		}
+
+		return TotalDisplayDuration;
 	}
 };

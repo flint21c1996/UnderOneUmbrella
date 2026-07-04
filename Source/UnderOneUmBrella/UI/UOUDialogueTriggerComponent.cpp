@@ -34,6 +34,9 @@ UUOUDialogueTriggerComponent::UUOUDialogueTriggerComponent()
 	InitSphereRadius(180.0f);
 	SetCollisionProfileName(TEXT("Trigger"));
 	SetGenerateOverlapEvents(true);
+	bDrawOnlyIfSelected = !bShowTriggerShapeInGame;
+	SetHiddenInGame(!bShowTriggerShapeInGame);
+	SetVisibility(bShowTriggerShapeInGame);
 	PrimaryComponentTick.bCanEverTick = true;
 	PrimaryComponentTick.bStartWithTickEnabled = false;
 
@@ -43,6 +46,11 @@ UUOUDialogueTriggerComponent::UUOUDialogueTriggerComponent()
 void UUOUDialogueTriggerComponent::BeginPlay()
 {
 	Super::BeginPlay();
+
+	bDrawOnlyIfSelected = !bShowTriggerShapeInGame;
+	SetHiddenInGame(!bShowTriggerShapeInGame);
+	SetVisibility(bShowTriggerShapeInGame);
+	MarkRenderStateDirty();
 
 	OnComponentBeginOverlap.AddDynamic(this, &UUOUDialogueTriggerComponent::HandleBeginOverlap);
 	OnComponentEndOverlap.AddDynamic(this, &UUOUDialogueTriggerComponent::HandleEndOverlap);
@@ -463,7 +471,7 @@ bool UUOUDialogueTriggerComponent::PassesInstigatorRules(AActor* InstigatorActor
 		return false;
 	}
 
-	if (bRequireOpenUmbrella && !UmbrellaComponent->IsOpen() && !UmbrellaComponent->IsUpsideDown())
+	if (bRequireOpenUmbrella && !UmbrellaComponent->IsOpen())
 	{
 		return false;
 	}
@@ -908,34 +916,14 @@ UUserWidget* UUOUDialogueTriggerComponent::GetHintUserWidget()
 	return WidgetComponent != nullptr ? WidgetComponent->GetUserWidgetObject() : nullptr;
 }
 
-void UUOUDialogueTriggerComponent::ShowCoverDebugMessage(const FString& Message, const FColor& Color, float Duration) const
+void UUOUDialogueTriggerComponent::ShowCoverDebugMessage(const FString&, const FColor&, float) const
 {
-	if (!bShowUmbrellaCoverDebug || GEngine == nullptr)
-	{
-		return;
-	}
-
-	GEngine->AddOnScreenDebugMessage(-1, Duration, Color, Message);
 }
 
-void UUOUDialogueTriggerComponent::ShowCoverDebugStatus(const FString& Message, const FColor& Color) const
+void UUOUDialogueTriggerComponent::ShowCoverDebugStatus(const FString&, const FColor&) const
 {
-	if (!bShowUmbrellaCoverDebug || GEngine == nullptr)
-	{
-		return;
-	}
-
-	const uint64 DebugKey = static_cast<uint64>(GetUniqueID());
-	GEngine->AddOnScreenDebugMessage(DebugKey, 0.0f, Color, Message);
 }
 
-void UUOUDialogueTriggerComponent::ShowProximityDebugStatus(const FString& Message, const FColor& Color) const
+void UUOUDialogueTriggerComponent::ShowProximityDebugStatus(const FString&, const FColor&) const
 {
-	if (!bShowUmbrellaCoverDebug || GEngine == nullptr)
-	{
-		return;
-	}
-
-	const uint64 DebugKey = static_cast<uint64>(GetUniqueID()) + 10000;
-	GEngine->AddOnScreenDebugMessage(DebugKey, 0.0f, Color, Message);
 }

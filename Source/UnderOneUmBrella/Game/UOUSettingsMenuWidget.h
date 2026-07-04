@@ -25,8 +25,20 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Settings")
 	void ReturnToTitle();
 
+	UFUNCTION(BlueprintCallable, Category = "Settings", meta = (DisplayName = "현재 스테이지 재시작", ToolTip = "설정창에서 현재 스테이지를 다시 시작합니다."))
+	void RestartCurrentStage();
+
+	UFUNCTION(BlueprintCallable, Category = "Settings")
+	void GoToNextLevel();
+
+	UFUNCTION(BlueprintCallable, Category = "Settings")
+	void GoToPreviousLevel();
+
 	UFUNCTION(BlueprintCallable, Category = "Settings")
 	void ToggleTestSetting();
+
+	UFUNCTION(BlueprintPure, Category = "Settings", meta = (DisplayName = "현재 스테이지 재시작 가능"))
+	bool CanRestartCurrentStage() const;
 
 	UFUNCTION(BlueprintPure, Category = "Settings")
 	bool IsTestSettingEnabled() const;

@@ -131,6 +131,11 @@ void AUOUFloorPlatformActor::BeginPlay()
 		bIsAtTarget = false;
 		ApplyTargetCollisionState();
 	}
+
+	if (bAutoStartSequentialMove && ShouldUseSequentialTargetMarkers())
+	{
+		RequestSequentialMoveSteps(1);
+	}
 }
 
 void AUOUFloorPlatformActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -599,6 +604,7 @@ void AUOUFloorPlatformActor::ResetRuntimeStepIndex()
 {
 	const int32 MaxTargetIndex = FMath::Max(0, SequentialTargetMarkers.Num() - 1);
 	RuntimeSequentialTargetIndex = FMath::Clamp(InitialSequentialTargetIndex, 0, MaxTargetIndex);
+	RuntimeSequentialMoveDirection = 1;
 }
 
 void AUOUFloorPlatformActor::FinishMoveToTarget()
@@ -632,7 +638,7 @@ void AUOUFloorPlatformActor::FinishMoveToTarget()
 	AdvanceSequentialTargetIndex();
 
 	OnMoveFinished.Broadcast(this);
-	if (bShouldContinueFromArrivedMarker)
+	if (bAutoContinueSequentialMove || bShouldContinueFromArrivedMarker)
 	{
 		PendingSequentialMoveCount = FMath::Max(PendingSequentialMoveCount, 1);
 	}
@@ -713,6 +719,8 @@ void AUOUFloorPlatformActor::AdvanceSequentialTargetIndex()
 		SequentialTargetMarkers,
 		bLoopSequentialTargetMarkers,
 		bLoopMoveStepsThroughStart,
+		bPingPongSequentialTargetMarkers,
+		RuntimeSequentialMoveDirection,
 		RuntimeSequentialTargetIndex);
 }
 
@@ -765,33 +773,44 @@ bool AUOUFloorPlatformActor::TryStartQueuedSequentialMove()
 		return false;
 	}
 
-	FTransform NextTargetTransform;
-	int32 NextTargetIndex = INDEX_NONE;
-	if (!ResolveNextSequentialTargetTransform(NextTargetTransform, NextTargetIndex))
+	const int32 MaxSkipCount = FMath::Max(SequentialTargetMarkers.Num() + 1, 1);
+	for (int32 SkipCount = 0; SkipCount < MaxSkipCount; ++SkipCount)
 	{
-		PendingSequentialMoveCount = 0;
-		return false;
+		FTransform NextTargetTransform;
+		int32 NextTargetIndex = INDEX_NONE;
+		if (!ResolveNextSequentialTargetTransform(NextTargetTransform, NextTargetIndex))
+		{
+			PendingSequentialMoveCount = 0;
+			return false;
+		}
+
+		AUOUFloorPlatformTargetActor* NextTargetMarker = GetSequentialTargetMarkerAt(NextTargetIndex);
+		RefreshCurrentMovementBaseRelativeTransform();
+		if (GetActorTransform().Equals(ResolveMoveTargetWorldTransform(NextTargetTransform, NextTargetMarker)))
+		{
+			LastArrivedMoveStepIndex = NextTargetIndex;
+			SetPuzzleResultCompletionState(EOUUPuzzleResultAction::Activate, true);
+			if (StepComponent != nullptr)
+			{
+				StepComponent->ClearReturnToStartRequest();
+				StepComponent->SetActiveTargetIndex(NextTargetIndex);
+			}
+			AdvanceSequentialTargetIndex();
+			continue;
+		}
+
+		if (StepComponent != nullptr)
+		{
+			StepComponent->ClearReturnToStartRequest();
+			StepComponent->SetActiveTargetIndex(NextTargetIndex);
+		}
+
+		--PendingSequentialMoveCount;
+		return BeginMoveToTransform(NextTargetTransform, NextTargetMarker, NextTargetIndex);
 	}
 
-	AUOUFloorPlatformTargetActor* NextTargetMarker = GetSequentialTargetMarkerAt(NextTargetIndex);
-	RefreshCurrentMovementBaseRelativeTransform();
-	if (GetActorTransform().Equals(ResolveMoveTargetWorldTransform(NextTargetTransform, NextTargetMarker)))
-	{
-		PendingSequentialMoveCount = 0;
-		LastArrivedMoveStepIndex = NextTargetIndex;
-		SetPuzzleResultCompletionState(EOUUPuzzleResultAction::Activate, true);
-		OnMoveFinished.Broadcast(this);
-		return false;
-	}
-
-	if (StepComponent != nullptr)
-	{
-		StepComponent->ClearReturnToStartRequest();
-		StepComponent->SetActiveTargetIndex(NextTargetIndex);
-	}
-
-	--PendingSequentialMoveCount;
-	return BeginMoveToTransform(NextTargetTransform, NextTargetMarker, NextTargetIndex);
+	PendingSequentialMoveCount = 0;
+	return false;
 }
 
 void AUOUFloorPlatformActor::RequestPlayerInputBlockForMove()

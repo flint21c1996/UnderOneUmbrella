@@ -2,9 +2,13 @@
 
 #include "UOUWeightedButtonComponent.h"
 
+#include "Audio/UOUAudioCueComponent.h"
+#include "Audio/UOUAudioSubsystem.h"
 #include "Components/SceneComponent.h"
 #include "Debug/UOUDebugSubsystem.h"
 #include "Engine/Engine.h"
+#include "Engine/GameInstance.h"
+#include "Engine/World.h"
 #include "GameFramework/Actor.h"
 #include "UOUWeightSensorComponent.h"
 
@@ -28,7 +32,7 @@ void UUOUWeightedButtonComponent::BeginPlay()
 	MoveSpeed = FMath::Max(0.0f, MoveSpeed);
 
 	ResolveReferences();
-	RefreshPressedState();
+	RefreshPressedState(false);
 	SnapVisualToCurrentState();
 }
 
@@ -225,20 +229,99 @@ void UUOUWeightedButtonComponent::ResolveReferences()
 	}
 }
 
-void UUOUWeightedButtonComponent::RefreshPressedState()
+void UUOUWeightedButtonComponent::RefreshPressedState(bool bPlayFeedbackAudio)
 {
 	CurrentWeight = Sensor != nullptr ? Sensor->CurrentWeight : 0.0f;
 
 	if (!bIsSatisfied && CurrentWeight >= PressWeight)
 	{
-		SetSatisfiedState(true, true);
+		bInsufficientWeightFeedbackActive = false;
+		if (SetSatisfiedState(true, true) && bPlayFeedbackAudio)
+		{
+			PlayButtonAudioCue(PressedAudioCueId, PressedAudioEventId);
+		}
 		return;
 	}
 
 	if (bIsSatisfied && CurrentWeight <= ReleaseWeight)
 	{
-		SetSatisfiedState(false, true);
+		if (SetSatisfiedState(false, true) && bPlayFeedbackAudio)
+		{
+			PlayButtonAudioCue(ReleasedAudioCueId, ReleasedAudioEventId);
+		}
+
+		bInsufficientWeightFeedbackActive = CurrentWeight > 0.0f && CurrentWeight < PressWeight;
+		return;
 	}
+
+	const bool bHasInsufficientWeight = !bIsSatisfied && CurrentWeight > 0.0f && CurrentWeight < PressWeight;
+	if (bHasInsufficientWeight)
+	{
+		if (!bInsufficientWeightFeedbackActive && bPlayFeedbackAudio)
+		{
+			PlayButtonAudioCue(InsufficientWeightAudioCueId, InsufficientWeightAudioEventId);
+		}
+
+		bInsufficientWeightFeedbackActive = true;
+		return;
+	}
+
+	if (CurrentWeight <= 0.0f)
+	{
+		bInsufficientWeightFeedbackActive = false;
+	}
+}
+
+void UUOUWeightedButtonComponent::PlayButtonAudioCue(FName CueId, FName FallbackAudioEventId) const
+{
+	if (!CueId.IsNone())
+	{
+		if (UUOUAudioCueComponent* AudioCueComponent = GetAudioCueComponent())
+		{
+			if (AudioCueComponent->HasCue(CueId)
+				&& AudioCueComponent->PlayCueAtLocation(CueId, GetButtonAudioLocation()))
+			{
+				return;
+			}
+		}
+	}
+
+	PlayButtonAudioEvent(FallbackAudioEventId);
+}
+
+void UUOUWeightedButtonComponent::PlayButtonAudioEvent(FName AudioEventId) const
+{
+	if (AudioEventId.IsNone())
+	{
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	UGameInstance* GameInstance = World != nullptr ? World->GetGameInstance() : nullptr;
+	UUOUAudioSubsystem* AudioSubsystem = GameInstance != nullptr ? GameInstance->GetSubsystem<UUOUAudioSubsystem>() : nullptr;
+	if (AudioSubsystem == nullptr)
+	{
+		return;
+	}
+
+	AudioSubsystem->PlayAudioEventAtLocation(AudioEventId, GetButtonAudioLocation());
+}
+
+UUOUAudioCueComponent* UUOUWeightedButtonComponent::GetAudioCueComponent() const
+{
+	const AActor* Owner = GetOwner();
+	return Owner != nullptr ? Owner->FindComponentByClass<UUOUAudioCueComponent>() : nullptr;
+}
+
+FVector UUOUWeightedButtonComponent::GetButtonAudioLocation() const
+{
+	if (ButtonVisual != nullptr)
+	{
+		return ButtonVisual->GetComponentLocation();
+	}
+
+	const AActor* Owner = GetOwner();
+	return Owner != nullptr ? Owner->GetActorLocation() : FVector::ZeroVector;
 }
 
 void UUOUWeightedButtonComponent::MoveButtonVisual(float DeltaTime)

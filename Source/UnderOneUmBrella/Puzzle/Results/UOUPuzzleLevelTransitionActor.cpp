@@ -35,15 +35,8 @@ bool AUOUPuzzleLevelTransitionActor::StartLevelTransition()
 		return false;
 	}
 
+	// 전환 연출은 현재 맵과 도착 맵의 UOU Level Transition Settings Actor를 기준으로 적용합니다.
 	FUOULevelTransitionSettings Settings;
-	Settings.FadeOutDuration = FadeOutDuration;
-	Settings.BlackHoldDuration = BlackHoldDuration;
-	Settings.FadeInDuration = FadeInDuration;
-	Settings.FadeColor = FadeColor;
-	Settings.bFadeAudio = bFadeAudio;
-	Settings.bLockPlayerInputDuringTransition = bLockPlayerInputDuringTransition;
-	Settings.FadeOutMessageSettings = FadeOutMessageSettings;
-	Settings.FadeInMessageSettings = FadeInMessageSettings;
 
 	bool bStarted = false;
 	switch (TransitionMode)
@@ -57,7 +50,13 @@ bool AUOUPuzzleLevelTransitionActor::StartLevelTransition()
 		bStarted = TransitionSubsystem->RequestLevelTransition(TargetLevel, Settings);
 		break;
 	case EUOUPuzzleLevelTransitionMode::RestartCurrentLevel:
-		bStarted = TransitionSubsystem->RestartCurrentLevel(Settings);
+		bStarted = TransitionSubsystem->RestartCurrentLevelFromWorld(GetWorld(), Settings);
+		break;
+	case EUOUPuzzleLevelTransitionMode::OpenNextLevel:
+		bStarted = TransitionSubsystem->RequestNextLevelFromWorld(GetWorld(), Settings);
+		break;
+	case EUOUPuzzleLevelTransitionMode::OpenPreviousLevel:
+		bStarted = TransitionSubsystem->RequestPreviousLevelFromWorld(GetWorld(), Settings);
 		break;
 	default:
 		break;

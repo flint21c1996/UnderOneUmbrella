@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
 #include "UOUMenuPlayerController.generated.h"
 
@@ -31,6 +32,15 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Menu|Settings")
 	void ReturnToTitle();
 
+	UFUNCTION(BlueprintCallable, Category = "Menu|Settings", meta = (DisplayName = "현재 스테이지 재시작", ToolTip = "현재 플레이 중인 스테이지를 다시 시작합니다."))
+	void RestartCurrentStage();
+
+	UFUNCTION(BlueprintCallable, Category = "Menu|Settings")
+	void GoToNextLevel();
+
+	UFUNCTION(BlueprintCallable, Category = "Menu|Settings")
+	void GoToPreviousLevel();
+
 	UFUNCTION(BlueprintCallable, Category = "Menu|Settings")
 	void ToggleTestSetting();
 
@@ -38,13 +48,17 @@ public:
 	bool IsSettingsMenuOpen() const { return bSettingsMenuOpen; }
 
 	UFUNCTION(BlueprintPure, Category = "Menu|Settings")
-	bool IsTestSettingEnabled() const { return bTestSettingEnabled; }
+	bool IsTestSettingEnabled() const { return CanRestartCurrentStage(); }
+
+	UFUNCTION(BlueprintPure, Category = "Menu|Settings", meta = (DisplayName = "현재 스테이지 재시작 가능"))
+	bool CanRestartCurrentStage() const { return bCanRestartCurrentStage; }
 
 	UFUNCTION(BlueprintPure, Category = "Menu|Settings")
 	bool CanReturnToTitle() const { return bCanReturnToTitle; }
 
 protected:
 	void SetCanReturnToTitle(bool bInCanReturnToTitle) { bCanReturnToTitle = bInCanReturnToTitle; }
+	void SetCanRestartCurrentStage(bool bInCanRestartCurrentStage) { bCanRestartCurrentStage = bInCanRestartCurrentStage; }
 
 	virtual void ApplySettingsMenuInputMode(UUserWidget* InSettingsMenuWidget);
 
@@ -63,6 +77,6 @@ private:
 	TObjectPtr<UUserWidget> SettingsMenuWidget;
 
 	bool bSettingsMenuOpen = false;
-	bool bTestSettingEnabled = false;
+	bool bCanRestartCurrentStage = false;
 	bool bCanReturnToTitle = false;
 };

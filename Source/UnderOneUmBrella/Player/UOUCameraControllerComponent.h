@@ -12,12 +12,17 @@ class UMeshComponent;
 class USpringArmComponent;
 
 // 가려진 메시가 원래 어떤 머티리얼을 쓰고 있었는지 복구하기 위한 저장 구조다.
+USTRUCT()
 struct FOccludedMeshState
 {
+	GENERATED_BODY()
+
 	// 투명 처리 전 원래 머티리얼 배열을 그대로 기억해둔다.
+	UPROPERTY(Transient)
 	TArray<TObjectPtr<UMaterialInterface>> OriginalMaterials;
 
 	// 투명 처리 전 표시 상태를 기억해둔다.
+	UPROPERTY(Transient)
 	bool bWasVisible = true;
 };
 
@@ -222,6 +227,7 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Camera|Runtime")
 	bool bDialogueFocusActive = false;
 
+	UPROPERTY(Transient)
 	TMap<TObjectPtr<UMeshComponent>, FOccludedMeshState> OccludedMeshStates;
 
 	// 소유 액터에서 카메라 관련 컴포넌트를 캐싱한다.
