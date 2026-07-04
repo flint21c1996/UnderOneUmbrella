@@ -233,6 +233,7 @@ bool UUOULevelTransitionSubsystem::RestartCurrentLevelFromWorld(
 	PendingTargetType = ETransitionTargetType::LevelName;
 	PendingTargetLevel.Reset();
 	PendingLevelName = FName(*CurrentLevelName);
+	Settings.bSuppressFadeOutMessage = true;
 
 	if (!BeginTransition(SourceWorld, Settings))
 	{
