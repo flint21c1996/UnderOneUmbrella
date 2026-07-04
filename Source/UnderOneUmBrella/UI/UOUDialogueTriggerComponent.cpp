@@ -468,7 +468,7 @@ bool UUOUDialogueTriggerComponent::PassesInstigatorRules(AActor* InstigatorActor
 		return false;
 	}
 
-	if (bRequireOpenUmbrella && !UmbrellaComponent->IsOpen() && !UmbrellaComponent->IsUpsideDown())
+	if (bRequireOpenUmbrella && !UmbrellaComponent->IsOpen())
 	{
 		return false;
 	}
