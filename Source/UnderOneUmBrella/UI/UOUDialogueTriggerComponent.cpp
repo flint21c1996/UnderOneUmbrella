@@ -34,8 +34,9 @@ UUOUDialogueTriggerComponent::UUOUDialogueTriggerComponent()
 	InitSphereRadius(180.0f);
 	SetCollisionProfileName(TEXT("Trigger"));
 	SetGenerateOverlapEvents(true);
-	SetHiddenInGame(true);
-	SetVisibility(false);
+	bDrawOnlyIfSelected = !bShowTriggerShapeInGame;
+	SetHiddenInGame(!bShowTriggerShapeInGame);
+	SetVisibility(bShowTriggerShapeInGame);
 	PrimaryComponentTick.bCanEverTick = true;
 	PrimaryComponentTick.bStartWithTickEnabled = false;
 
@@ -46,8 +47,10 @@ void UUOUDialogueTriggerComponent::BeginPlay()
 {
 	Super::BeginPlay();
 
-	SetHiddenInGame(true);
-	SetVisibility(false);
+	bDrawOnlyIfSelected = !bShowTriggerShapeInGame;
+	SetHiddenInGame(!bShowTriggerShapeInGame);
+	SetVisibility(bShowTriggerShapeInGame);
+	MarkRenderStateDirty();
 
 	OnComponentBeginOverlap.AddDynamic(this, &UUOUDialogueTriggerComponent::HandleBeginOverlap);
 	OnComponentEndOverlap.AddDynamic(this, &UUOUDialogueTriggerComponent::HandleEndOverlap);
