@@ -6,10 +6,7 @@
 #include "Components/ActorComponent.h"
 #include "UOUWaterBasinTargetComponent.generated.h"
 
-class USceneComponent;
 class AActor;
-class UNiagaraComponent;
-class UNiagaraSystem;
 class UUOUWaterBasinTargetComponent;
 
 // 물 바닥 높이(BottomWorldZ)를 어떤 기준으로 잡을지 정합니다.
@@ -96,8 +93,6 @@ struct FUOUWaterBasinInputContext
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Input")
 	bool bApplyToConnectedGroup = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin Input", meta = (ToolTip = "True when the pour source already spawned its own impact splash. WaterBasinTarget should still react with ripple, but skip its fallback splash."))
-	bool bImpactSplashHandledBySource = false;
 };
 
 // 런타임 디버그 표시 범위입니다.
@@ -228,52 +223,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin|Passive Drain", meta = (EditCondition = "bEnablePassiveDrain", EditConditionHides, ToolTip = "켜져 있으면 이 Target이 속한 연결 그룹 전체에서 물을 배출합니다. 꺼져 있으면 이 Target 하나에서만 배출합니다."))
 	bool bPassiveDrainApplyToConnectedGroup = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin|Visual", meta = (ToolTip = "지정한 Water Visual 컴포넌트를 현재 수위에 맞춰 자동 갱신합니다."))
-	bool bUpdateWaterVisual = true;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, AdvancedDisplay, Category = "Water Basin|Visual", meta = (EditCondition = "bUpdateWaterVisual", EditConditionHides, ToolTip = "Water Visual Component가 비어 있으면 소유 Actor 안에서 이름 또는 Component Tag로 자동 탐색합니다. 기본 구조에서는 켜둔 채 사용합니다."))
-	bool bAutoFindWaterVisualComponent = true;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, AdvancedDisplay, Category = "Water Basin|Visual", meta = (EditCondition = "bUpdateWaterVisual && bAutoFindWaterVisualComponent", EditConditionHides, ToolTip = "Water Visual을 자동 탐색할 때 사용할 Component 이름 또는 Component Tag입니다. 기본 프리팹 구조에서는 WaterVisual 이름을 사용합니다."))
-	FName WaterVisualComponentName = TEXT("WaterVisual");
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin|Visual", meta = (EditCondition = "bUpdateWaterVisual", EditConditionHides, ToolTip = "물 높이를 시각화할 SceneComponent입니다. 보통 반투명 물 머티리얼이 적용된 StaticMeshComponent를 지정합니다. 비워두면 자동 탐색을 사용할 수 있습니다."))
-	TObjectPtr<USceneComponent> WaterVisualComponent = nullptr;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, AdvancedDisplay, Category = "Water Basin|Visual", meta = (EditCondition = "bUpdateWaterVisual", EditConditionHides, ToolTip = "Water Visual의 X/Y를 Basin 영역에 맞추고, Z를 현재 물 깊이에 맞춰 변경합니다. 특수한 Visual Mesh를 직접 제어할 때만 끕니다."))
-	bool bFitWaterVisualToBasinBounds = true;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, AdvancedDisplay, Category = "Water Basin|Visual", meta = (EditCondition = "bUpdateWaterVisual", EditConditionHides, ToolTip = "켜져 있으면 Visual의 XY 위치는 Basin 영역 중심, Z 위치는 현재 물 깊이의 중심으로 맞춥니다. 기본 큐브 수면 표현에서는 켜둡니다."))
-	bool bAutoPlaceWaterVisual = true;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, AdvancedDisplay, Category = "Water Basin|Visual", meta = (EditCondition = "bUpdateWaterVisual", EditConditionHides, ToolTip = "물이 없을 때 Water Visual을 숨깁니다."))
-	bool bHideWaterVisualWhenEmpty = true;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin|Pour Impact", meta = (ToolTip = "PlayerPour 입력이 유효한 위치에 들어왔을 때 착수 Niagara를 재생합니다."))
-	bool bSpawnPlayerPourImpactSplash = true;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin|Pour Impact", meta = (EditCondition = "bSpawnPlayerPourImpactSplash", EditConditionHides, ToolTip = "우산 pour 물방울이 수면에 닿을 때 재생할 Niagara System입니다."))
-	TObjectPtr<UNiagaraSystem> PlayerPourImpactSplashEffect = nullptr;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin|Pour Impact", meta = (ClampMin = "0.0", EditCondition = "bSpawnPlayerPourImpactSplash", EditConditionHides, ToolTip = "착수 Niagara 크기 배율입니다."))
-	float PlayerPourImpactSplashScale = 1.0f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin|Pour Impact", meta = (ClampMin = "0.0", EditCondition = "bSpawnPlayerPourImpactSplash", EditConditionHides, ToolTip = "PlayerPour 착수 Niagara를 다시 재생하기 전까지 기다릴 시간입니다. 0이면 입력마다 재생합니다."))
-	float PlayerPourImpactSplashCooldown = 0.15f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin|Pour Impact", meta = (EditCondition = "bSpawnPlayerPourImpactSplash", EditConditionHides, ToolTip = "착수 Niagara가 수면 상승에 묻히지 않도록 수면보다 위로 올릴 월드 Z 오프셋입니다."))
-	float PlayerPourImpactSplashSurfaceOffset = 8.0f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin|Pour Impact", meta = (ToolTip = "PlayerPour 입력이 들어오면 Water Visual을 짧게 위아래로 흔들어 착수감을 줍니다."))
-	bool bAnimateWaterVisualOnPlayerPour = true;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin|Pour Impact", meta = (ClampMin = "0.0", EditCondition = "bAnimateWaterVisualOnPlayerPour", EditConditionHides, ToolTip = "착수 수면 흔들림 지속 시간입니다."))
-	float PlayerPourWaterVisualRippleDuration = 0.28f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin|Pour Impact", meta = (ClampMin = "0.0", EditCondition = "bAnimateWaterVisualOnPlayerPour", EditConditionHides, ToolTip = "착수 수면 흔들림의 최대 월드 Z 오프셋입니다."))
-	float PlayerPourWaterVisualRippleHeight = 3.0f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Transient, AdvancedDisplay, Category = "Water Basin|Runtime Test", meta = (ClampMin = "0.0", ToolTip = "테스트용 현재 물 부피입니다. 에디터에서 바꾸면 깊이, 비율, 수면 Z, Water Visual이 즉시 갱신됩니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Transient, AdvancedDisplay, Category = "Water Basin|Runtime Test", meta = (ClampMin = "0.0", ToolTip = "테스트용 현재 물 부피입니다. 에디터에서 바꾸면 깊이, 비율, 수면 Z가 즉시 갱신됩니다."))
 	float CurrentWaterVolume = 0.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Transient, AdvancedDisplay, Category = "Water Basin|Runtime Test", meta = (ClampMin = "0.0", ToolTip = "테스트용 현재 물 깊이입니다. 에디터에서 바꾸면 Current Water Volume으로 환산됩니다."))
@@ -352,7 +302,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Water Basin")
 	void GetConnectedGroup(TArray<UUOUWaterBasinTargetComponent*>& OutGroup) const;
 
-	// 물이 시작되는 월드 Z입니다. WaterVisual의 바닥과 수면 계산의 기준점입니다.
+	// 물이 시작되는 월드 Z이며 수면 높이 계산의 기준점입니다.
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Water Basin")
 	float GetBottomWorldZ() const;
 
@@ -405,11 +355,6 @@ private:
 	static TWeakObjectPtr<UUOUWaterBasinTargetComponent> RuntimeDebugTarget;
 
 	bool bPendingInitialRedistribution = false;
-	bool bCapturedWaterVisualTransform = false;
-	float ActivePlayerPourWaterVisualRippleTime = 0.0f;
-	float LastPlayerPourImpactSplashTime = -TNumericLimits<float>::Max();
-	FVector InitialWaterVisualScale = FVector::OneVector;
-	FVector InitialWaterVisualLocation = FVector::ZeroVector;
 
 	// 연결 리스트에서 null, 자기 자신, 중복, WaterBasinTargetComponent가 없는 Actor를 제거합니다.
 	void NormalizeConnections();
@@ -441,8 +386,8 @@ private:
 	// 공통 SurfaceWorldZ를 기준으로 각 Target의 CurrentWaterVolume을 다시 계산합니다.
 	void ApplyGroupSurfaceToTargets(const TArray<UUOUWaterBasinTargetComponent*>& Group, float SurfaceWorldZ);
 
-	// CurrentWaterVolume에서 Depth, FillRatio, SurfaceWorldZ를 다시 계산합니다. 필요할 때만 WaterVisual도 갱신합니다.
-	void UpdateCachedWaterState(bool bUpdateVisual = true);
+	// CurrentWaterVolume에서 Depth, FillRatio, SurfaceWorldZ를 다시 계산합니다.
+	void UpdateCachedWaterState();
 
 	// 그룹 합산 정보를 그룹에 속한 각 Target의 LastGroup... 런타임 값에 복사합니다.
 	void UpdateGroupRuntimeCache(const FUOUWaterBasinGroupDebugData& GroupData);
@@ -452,31 +397,6 @@ private:
 
 	// 실제 수위 변화 여부와 무관하게 물 입력이 들어왔음을 대상 범위에 알립니다.
 	void NotifyWaterInputReceived(const FUOUWaterBasinInputContext& InputContext);
-
-	// PlayerPour input uses the drop impact point to drive local splash/ripple feedback.
-	void HandlePlayerPourImpactVisuals(const FUOUWaterBasinInputContext& InputContext);
-
-	UFUNCTION()
-	void HandlePlayerPourImpactSplashFinished(UNiagaraComponent* FinishedComponent);
-
-	void UpdatePlayerPourWaterVisualRipple(float DeltaTime);
-	FVector ResolvePlayerPourImpactLocation(const FUOUWaterBasinInputContext& InputContext) const;
-	float EstimatePlayerPourSurfaceWorldZAfterInput(const FUOUWaterBasinInputContext& InputContext) const;
-
-	// CurrentWaterDepth를 기준으로 WaterVisual의 크기, 위치, 표시 상태를 갱신합니다.
-	void UpdateWaterVisual();
-
-	// WaterVisualComponent가 비어 있으면 이름/태그 기준으로 자동 탐색합니다.
-	void ResolveWaterVisualComponent();
-
-	// 소유 Actor의 SceneComponent 중 WaterVisualComponentName과 일치하는 컴포넌트를 찾습니다.
-	USceneComponent* FindWaterVisualComponent() const;
-
-	// WaterVisual StaticMesh를 Basin의 X/Y 크기와 현재 물 깊이 Z에 맞춥니다.
-	bool ApplyWaterVisualBounds(float VisibleDepthWorld);
-
-	// bFitWaterVisualToBasinBounds가 꺼진 경우 사용할 초기 Visual Transform을 한 번만 저장합니다.
-	void CaptureWaterVisualTransformIfNeeded();
 
 	// 현재 RuntimeDebugTarget에 해당하는 경우 디버그 문자열과 연결선을 그립니다.
 	void DrawRuntimeDebug();
@@ -508,7 +428,7 @@ private:
 	// ConnectedTargets 목록에 Other의 소유 Actor가 들어 있는지 확인합니다.
 	bool IsDirectlyConnectedTo(const UUOUWaterBasinTargetComponent* Other) const;
 
-	// 소유 Actor의 Primitive bounds를 합산하되 WaterVisual은 제외해 실제 Basin 영역만 구합니다.
+	// 소유 Actor의 유효한 Primitive bounds를 합산해 실제 Basin 영역을 구합니다.
 	bool TryGetBasinBounds(FBox& OutBounds) const;
 
 	// 특정 SurfaceWorldZ까지 물이 찼을 때 이 Target이 가져야 하는 부피를 계산합니다.

@@ -511,7 +511,6 @@ bool AUOUPourDropActor::TryDeliverWater(AActor* HitActor, const FVector& ImpactL
 			InputContext.bHasValidWorldLocation = WaterBasinTarget->IsWorldLocationInsideBasin(ImpactLocation);
 			InputContext.InstigatorActor = SourceInstigatorActor;
 			InputContext.bApplyToConnectedGroup = bCurrentApplyToConnectedWaterBasinGroup;
-			InputContext.bImpactSplashHandledBySource = ShouldHandleImpactSplashAtSource(true);
 			WaterBasinTarget->ReceiveWaterInput(InputContext);
 			OutReceiverType = EUOUPourDropReceiverType::WaterBasinTarget;
 			return true;
@@ -563,7 +562,6 @@ bool AUOUPourDropActor::TryDeliverWaterToBasinAtLocation(const FVector& ImpactLo
 		InputContext.bHasValidWorldLocation = true;
 		InputContext.InstigatorActor = SourceInstigatorActor;
 		InputContext.bApplyToConnectedGroup = bCurrentApplyToConnectedWaterBasinGroup;
-		InputContext.bImpactSplashHandledBySource = ShouldHandleImpactSplashAtSource(true);
 		WaterBasinTarget->ReceiveWaterInput(InputContext);
 
 		OutReceiverType = EUOUPourDropReceiverType::WaterBasinTarget;
