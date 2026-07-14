@@ -4,39 +4,15 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "World/Pour/UOUPourReceiverInterface.h"
 #include "UOUPourReceiverComponent.generated.h"
 
-class AActor;
 class UUOUPourReceiverComponent;
-
-USTRUCT(BlueprintType)
-struct UNDERONEUMBRELLA_API FUOUPourInputContext
-{
-	GENERATED_BODY()
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pour Input", meta = (ClampMin = "0.0", ToolTip = "이번 pour 입력으로 전달된 물의 양입니다. 0 이하이면 회전 반응 쪽에서 무시될 수 있습니다."))
-	float Volume = 0.0f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pour Input", meta = (ClampMin = "0.0", ToolTip = "이번 pour 입력이 지속된 시간입니다. Duration 방식 회전에서는 이 값에 비례해 회전량이 계산됩니다."))
-	float Duration = 0.0f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pour Input", meta = (ToolTip = "물이 떨어지는 월드 방향입니다. 수차처럼 붓는 방향에 따라 회전 방향을 정할 때 사용됩니다."))
-	FVector WorldDirection = FVector::ZeroVector;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pour Input", meta = (ToolTip = "물이 닿은 월드 위치입니다. 토크 기반 회전에서는 중심점과 이 위치의 차이로 힘이 걸린 방향을 계산합니다."))
-	FVector WorldLocation = FVector::ZeroVector;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pour Input", meta = (ToolTip = "WorldLocation이 실제 충돌 위치를 의미하는지 여부입니다. false이면 토크 기반 회전 방향 계산이 실패할 수 있습니다."))
-	bool bHasValidWorldLocation = false;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pour Input", meta = (ToolTip = "pour 입력을 발생시킨 액터입니다. 보통 우산을 소유한 플레이어 또는 우산 액터가 들어옵니다."))
-	TObjectPtr<AActor> InstigatorActor = nullptr;
-};
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FUOUPourReceivedSignature, UUOUPourReceiverComponent*, Receiver, const FUOUPourInputContext&, PourContext);
 
 UCLASS(ClassGroup=(Puzzle), meta=(BlueprintSpawnableComponent, DisplayName="UOU Pour Receiver"))
-class UNDERONEUMBRELLA_API UUOUPourReceiverComponent : public UActorComponent
+class UNDERONEUMBRELLA_API UUOUPourReceiverComponent : public UActorComponent, public IUOUPourReceiver
 {
 	GENERATED_BODY()
 
@@ -54,4 +30,9 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Pour")
 	bool CanReceivePour() const;
+
+	virtual bool CanAcceptPour_Implementation(const FUOUPourInputContext& Context) const override;
+	virtual FUOUPourReceiveResult TryReceivePour_Implementation(const FUOUPourInputContext& Context) override;
+	virtual int32 GetPourReceivePriority_Implementation() const override;
+	virtual bool CanAcceptPourAtLocation_Implementation(const FUOUPourInputContext& Context) const override;
 };

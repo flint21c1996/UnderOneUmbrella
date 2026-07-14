@@ -69,6 +69,42 @@ void AUOUUmbrellaWaterTarget::ReceiveWater(float WaterAmount)
 	BroadcastChanged();
 }
 
+bool AUOUUmbrellaWaterTarget::CanAcceptPour_Implementation(const FUOUPourInputContext& Context) const
+{
+	return Context.Volume > 0.0f;
+}
+
+FUOUPourReceiveResult AUOUUmbrellaWaterTarget::TryReceivePour_Implementation(const FUOUPourInputContext& Context)
+{
+	FUOUPourReceiveResult Result;
+	if (!CanAcceptPour_Implementation(Context))
+	{
+		return Result;
+	}
+
+	const float AmountBefore = GetReceivedWater();
+	ReceiveWater(Context.Volume);
+	Result.bAccepted = true;
+	Result.AcceptedVolume = FMath::Max(GetReceivedWater() - AmountBefore, 0.0f);
+	Result.ReceiverId = TEXT("UmbrellaWaterTarget");
+	Result.ReceiverType = EUOUPourDropReceiverType::UmbrellaWaterTarget;
+	Result.ReceiverObject = this;
+	Result.ReceiverActor = this;
+	return Result;
+}
+
+int32 AUOUUmbrellaWaterTarget::GetPourReceivePriority_Implementation() const
+{
+	// 기존 TryDeliverWater의 수신 타입 검사 순서를 유지합니다.
+	return 300;
+}
+
+bool AUOUUmbrellaWaterTarget::CanAcceptPourAtLocation_Implementation(const FUOUPourInputContext& Context) const
+{
+	(void)Context;
+	return false;
+}
+
 float AUOUUmbrellaWaterTarget::GetReceivedWater() const
 {
 	return TargetWaterContainer != nullptr ? TargetWaterContainer->CurrentAmount : 0.0f;

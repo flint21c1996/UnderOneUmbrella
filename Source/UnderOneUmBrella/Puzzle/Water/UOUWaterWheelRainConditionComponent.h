@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "Engine/EngineTypes.h"
 #include "Puzzle/Core/UOUPuzzleConditionSourceComponent.h"
+#include "World/Pour/UOUPourReceiverInterface.h"
 #include "UOUWaterWheelRainConditionComponent.generated.h"
 
 class USceneComponent;
@@ -75,7 +76,7 @@ struct FUOUWaterWheelRainInputContext
 };
 
 UCLASS(ClassGroup=(Puzzle), meta=(BlueprintSpawnableComponent, DisplayName="UOU Water Wheel Rain Condition"))
-class UNDERONEUMBRELLA_API UUOUWaterWheelRainConditionComponent : public UUOUPuzzleConditionSourceComponent
+class UNDERONEUMBRELLA_API UUOUWaterWheelRainConditionComponent : public UUOUPuzzleConditionSourceComponent, public IUOUPourReceiver
 {
 	GENERATED_BODY()
 
@@ -218,6 +219,11 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Water Wheel|Runtime")
 	void ResetWaterWheelState(bool bClearEverSpun = true, bool bApplyBaseRotation = true);
+
+	virtual bool CanAcceptPour_Implementation(const FUOUPourInputContext& Context) const override;
+	virtual FUOUPourReceiveResult TryReceivePour_Implementation(const FUOUPourInputContext& Context) override;
+	virtual int32 GetPourReceivePriority_Implementation() const override;
+	virtual bool CanAcceptPourAtLocation_Implementation(const FUOUPourInputContext& Context) const override;
 
 protected:
 	void SanitizeSettings();

@@ -3,13 +3,9 @@
 #include "World/WaterTarget/UOUWaterBasinTargetComponent.h"
 
 #include "Components/PrimitiveComponent.h"
-#include "Components/SceneComponent.h"
-#include "Components/StaticMeshComponent.h"
 #include "Debug/UOUDebugSubsystem.h"
 #include "DrawDebugHelpers.h"
 #include "GameFramework/Actor.h"
-#include "NiagaraComponent.h"
-#include "NiagaraFunctionLibrary.h"
 #include "UObject/UObjectIterator.h"
 
 bool UUOUWaterBasinTargetComponent::bRuntimeDebugOverlayEnabled = false;
@@ -29,7 +25,6 @@ namespace
 	constexpr float DebugTargetLabelOffsetZ = 80.0f;
 	constexpr float DebugMaxWaterBoxLifeTime = 0.0f;
 	constexpr float DebugMaxWaterBoxThickness = 3.0f;
-	constexpr float MinWaterVisualDepthWorld = 0.1f;
 	constexpr float InputLocationBoundsToleranceWorld = 1.0f;
 
 	// 연결 그룹의 공통 수면 높이는 이분 탐색으로 찾습니다.
@@ -84,7 +79,6 @@ void UUOUWaterBasinTargetComponent::TickComponent(float DeltaTime, ELevelTick Ti
 	}
 
 	ApplyPassiveDrain(DeltaTime);
-	UpdatePlayerPourWaterVisualRipple(DeltaTime);
 	DrawRuntimeDebug();
 }
 
@@ -107,14 +101,6 @@ void UUOUWaterBasinTargetComponent::PostEditChangeProperty(FPropertyChangedEvent
 	else
 	{
 		NormalizeConnections();
-	}
-
-
-	if (ChangedPropertyName == GET_MEMBER_NAME_CHECKED(UUOUWaterBasinTargetComponent, WaterVisualComponent)
-		|| ChangedPropertyName == GET_MEMBER_NAME_CHECKED(UUOUWaterBasinTargetComponent, WaterVisualComponentName)
-		|| ChangedPropertyName == GET_MEMBER_NAME_CHECKED(UUOUWaterBasinTargetComponent, bAutoFindWaterVisualComponent))
-	{
-		bCapturedWaterVisualTransform = false;
 	}
 
 	const bool bChangedInitialWaterSetting =
@@ -144,7 +130,7 @@ void UUOUWaterBasinTargetComponent::PostEditChangeProperty(FPropertyChangedEvent
 	if (bChangedInitialWaterSetting)
 	{
 		CurrentWaterVolume = ResolveInitialWaterVolume();
-		UpdateCachedWaterState(false);
+		UpdateCachedWaterState();
 	}
 	else if (bChangedRuntimeWaterPreview)
 	{
@@ -197,7 +183,6 @@ void UUOUWaterBasinTargetComponent::ReceiveWaterInput(const FUOUWaterBasinInputC
 	SanitizedInputContext.WorldDirection = SanitizedInputContext.WorldDirection.GetSafeNormal();
 
 	NotifyWaterInputReceived(SanitizedInputContext);
-	HandlePlayerPourImpactVisuals(SanitizedInputContext);
 
 	const float Volume = SanitizedInputContext.Volume;
 	const float Duration = SanitizedInputContext.Duration;
@@ -270,6 +255,62 @@ void UUOUWaterBasinTargetComponent::ReceiveWaterInput(const FUOUWaterBasinInputC
 		AddWater(Volume, bApplyToConnectedGroup);
 		break;
 	}
+}
+
+bool UUOUWaterBasinTargetComponent::CanAcceptPour_Implementation(const FUOUPourInputContext& Context) const
+{
+	return Context.Volume > 0.0f;
+}
+
+FUOUPourReceiveResult UUOUWaterBasinTargetComponent::TryReceivePour_Implementation(const FUOUPourInputContext& Context)
+{
+	FUOUPourReceiveResult Result;
+	if (!CanAcceptPour_Implementation(Context))
+	{
+		return Result;
+	}
+
+	FUOUWaterBasinInputContext BasinContext;
+	BasinContext.Volume = Context.Volume;
+	BasinContext.Duration = Context.Duration;
+	BasinContext.Source = EUOUWaterBasinInputSource::PlayerPour;
+	BasinContext.WorldDirection = Context.WorldDirection;
+	BasinContext.WorldLocation = Context.WorldLocation;
+	BasinContext.bHasValidWorldLocation = Context.bHasValidWorldLocation
+		&& IsWorldLocationInsideBasin(Context.WorldLocation);
+	BasinContext.InstigatorActor = Context.InstigatorActor;
+	BasinContext.bApplyToConnectedGroup = Context.bPropagateToConnectedTargets;
+	ReceiveWaterInput(BasinContext);
+
+	Result.bAccepted = true;
+	Result.AcceptedVolume = Context.Volume;
+	Result.ReceiverId = TEXT("WaterBasin");
+	Result.ReceiverType = EUOUPourDropReceiverType::WaterBasinTarget;
+	Result.ReceiverObject = this;
+	Result.ReceiverActor = GetOwner();
+	return Result;
+}
+
+int32 UUOUWaterBasinTargetComponent::GetPourReceivePriority_Implementation() const
+{
+	// 기존 TryDeliverWater의 수신 타입 검사 순서를 유지합니다.
+	return 200;
+}
+
+bool UUOUWaterBasinTargetComponent::CanAcceptPourAtLocation_Implementation(const FUOUPourInputContext& Context) const
+{
+	if (!CanAcceptPour_Implementation(Context)
+		|| !Context.bHasValidWorldLocation
+		|| !IsWorldLocationInsideBasin(Context.WorldLocation))
+	{
+		return false;
+	}
+
+	const float DeliveryTolerance = FMath::Max(Context.LocationAcceptanceTolerance, 1.0f);
+	const float BottomWorldZ = GetBottomWorldZ();
+	const float CurrentSurfaceWorldZ = FMath::Max(WaterSurfaceWorldZ, BottomWorldZ);
+	return Context.WorldLocation.Z >= BottomWorldZ - DeliveryTolerance
+		&& Context.WorldLocation.Z <= CurrentSurfaceWorldZ + DeliveryTolerance;
 }
 
 void UUOUWaterBasinTargetComponent::SetRainFillReceivingEnabled(bool bEnabled)
@@ -455,8 +496,7 @@ float UUOUWaterBasinTargetComponent::GetBottomWorldZ() const
 
 	if (BottomHeightMode == EUOUWaterBasinBottomHeightMode::ActorBoundsMinZ)
 	{
-		// WaterVisual이 유일한 Primitive인 Actor는 Basin bounds 계산에서 Visual이 제외되어 실패할 수 있습니다.
-		// 이때 실패한 Bounds.Min을 쓰거나 ActorLocation을 그대로 바닥으로 쓰면 중앙 피벗 기준으로 수면이 커집니다.
+		// 유효한 Primitive bounds가 없을 때 ActorLocation을 그대로 바닥으로 쓰면 중앙 피벗 기준으로 수면이 커집니다.
 		const float MaxDepthWorld = GetMaxWaterHeight() * FMath::Max(WorldUnitsPerTile, MinWorldUnitsPerTile);
 		return Owner->GetActorLocation().Z - (MaxDepthWorld * 0.5f);
 	}
@@ -822,7 +862,7 @@ void UUOUWaterBasinTargetComponent::ApplyGroupSurfaceToTargets(const TArray<UUOU
 	}
 }
 
-void UUOUWaterBasinTargetComponent::UpdateCachedWaterState(bool bUpdateVisual)
+void UUOUWaterBasinTargetComponent::UpdateCachedWaterState()
 {
 	const float Capacity = GetCapacity();
 	CurrentWaterVolume = FMath::Clamp(CurrentWaterVolume, 0.0f, Capacity);
@@ -838,11 +878,6 @@ void UUOUWaterBasinTargetComponent::UpdateCachedWaterState(bool bUpdateVisual)
 	const float MaxHeight = GetMaxWaterHeight();
 	CurrentFillRatio = MaxHeight > KINDA_SMALL_NUMBER ? CurrentWaterDepth / MaxHeight : 0.0f;
 	WaterSurfaceWorldZ = GetBottomWorldZ() + GetWaterDepthWorld();
-
-	if (bUpdateVisual)
-	{
-		UpdateWaterVisual();
-	}
 }
 
 void UUOUWaterBasinTargetComponent::UpdateGroupRuntimeCache(const FUOUWaterBasinGroupDebugData& GroupData)
@@ -911,382 +946,6 @@ void UUOUWaterBasinTargetComponent::NotifyWaterInputReceived(const FUOUWaterBasi
 			Target->OnWaterInputReceived.Broadcast(Target, TargetInputContext);
 		}
 	}
-}
-
-void UUOUWaterBasinTargetComponent::HandlePlayerPourImpactVisuals(const FUOUWaterBasinInputContext& InputContext)
-{
-	if (InputContext.Source != EUOUWaterBasinInputSource::PlayerPour)
-	{
-		return;
-	}
-
-	if (!InputContext.bImpactSplashHandledBySource && bSpawnPlayerPourImpactSplash && PlayerPourImpactSplashEffect)
-	{
-		UWorld* World = GetWorld();
-		const float CurrentTime = World != nullptr ? World->GetTimeSeconds() : 0.0f;
-		const float SplashCooldown = FMath::Max(PlayerPourImpactSplashCooldown, 0.0f);
-		const bool bCanSpawnSplash = World != nullptr
-			&& (SplashCooldown <= KINDA_SMALL_NUMBER || CurrentTime - LastPlayerPourImpactSplashTime >= SplashCooldown);
-		if (bCanSpawnSplash)
-		{
-			FVector ImpactLocation = ResolvePlayerPourImpactLocation(InputContext);
-			const float SurfaceZAfterInput = EstimatePlayerPourSurfaceWorldZAfterInput(InputContext);
-			const float SplashSurfaceZ = FMath::Max(WaterSurfaceWorldZ, SurfaceZAfterInput) + PlayerPourImpactSplashSurfaceOffset;
-			if (FMath::IsFinite(SplashSurfaceZ))
-			{
-				ImpactLocation.Z = FMath::Max(ImpactLocation.Z, SplashSurfaceZ);
-			}
-
-			const FVector RawImpactNormal = -InputContext.WorldDirection;
-			const FVector ImpactNormal = RawImpactNormal.IsNearlyZero()
-				? FVector::UpVector
-				: RawImpactNormal.GetSafeNormal();
-			UNiagaraComponent* SplashComponent = UNiagaraFunctionLibrary::SpawnSystemAtLocation(
-				World,
-				PlayerPourImpactSplashEffect,
-				ImpactLocation,
-				ImpactNormal.Rotation(),
-				FVector(FMath::Max(PlayerPourImpactSplashScale, 0.0f)));
-			if (SplashComponent)
-			{
-				SplashComponent->SetAutoDestroy(true);
-				SplashComponent->OnSystemFinished.AddDynamic(this, &UUOUWaterBasinTargetComponent::HandlePlayerPourImpactSplashFinished);
-			}
-			LastPlayerPourImpactSplashTime = CurrentTime;
-		}
-	}
-
-	if (bAnimateWaterVisualOnPlayerPour
-		&& PlayerPourWaterVisualRippleDuration > KINDA_SMALL_NUMBER
-		&& PlayerPourWaterVisualRippleHeight > 0.0f)
-	{
-		ActivePlayerPourWaterVisualRippleTime = ActivePlayerPourWaterVisualRippleTime <= 0.0f
-			? PlayerPourWaterVisualRippleDuration
-			: FMath::Max(ActivePlayerPourWaterVisualRippleTime, PlayerPourWaterVisualRippleDuration * 0.5f);
-	}
-}
-
-void UUOUWaterBasinTargetComponent::HandlePlayerPourImpactSplashFinished(UNiagaraComponent* FinishedComponent)
-{
-	if (!IsValid(FinishedComponent))
-	{
-		return;
-	}
-
-	FinishedComponent->OnSystemFinished.RemoveAll(this);
-	FinishedComponent->DestroyComponent();
-}
-
-void UUOUWaterBasinTargetComponent::UpdatePlayerPourWaterVisualRipple(float DeltaTime)
-{
-	if (ActivePlayerPourWaterVisualRippleTime <= 0.0f)
-	{
-		return;
-	}
-
-	const float RippleDuration = FMath::Max(PlayerPourWaterVisualRippleDuration, KINDA_SMALL_NUMBER);
-	ActivePlayerPourWaterVisualRippleTime = FMath::Max(ActivePlayerPourWaterVisualRippleTime - DeltaTime, 0.0f);
-
-	// Reset to the current water-state transform first so the ripple offset never accumulates.
-	UpdateWaterVisual();
-	if (ActivePlayerPourWaterVisualRippleTime <= 0.0f)
-	{
-		return;
-	}
-
-	ResolveWaterVisualComponent();
-	if (!WaterVisualComponent)
-	{
-		return;
-	}
-
-	const float RippleAlpha = 1.0f - (ActivePlayerPourWaterVisualRippleTime / RippleDuration);
-	const float RippleOffsetZ = FMath::Sin(RippleAlpha * PI) * PlayerPourWaterVisualRippleHeight;
-	WaterVisualComponent->AddWorldOffset(FVector(0.0f, 0.0f, RippleOffsetZ), false);
-}
-
-FVector UUOUWaterBasinTargetComponent::ResolvePlayerPourImpactLocation(const FUOUWaterBasinInputContext& InputContext) const
-{
-	if (InputContext.bHasValidWorldLocation && IsFiniteVector(InputContext.WorldLocation))
-	{
-		return InputContext.WorldLocation;
-	}
-
-	FVector ImpactLocation = GetDebugCenterWorld();
-	const float SurfaceZ = CurrentWaterDepth > KINDA_SMALL_NUMBER
-		? WaterSurfaceWorldZ
-		: GetBottomWorldZ();
-	if (FMath::IsFinite(SurfaceZ))
-	{
-		ImpactLocation.Z = SurfaceZ;
-	}
-	return ImpactLocation;
-}
-
-float UUOUWaterBasinTargetComponent::EstimatePlayerPourSurfaceWorldZAfterInput(const FUOUWaterBasinInputContext& InputContext) const
-{
-	const float Duration = FMath::Max(InputContext.Duration, 0.0f);
-	const bool bApplyToConnectedGroup = InputContext.bApplyToConnectedGroup;
-
-	if (bApplyToConnectedGroup)
-	{
-		TArray<UUOUWaterBasinTargetComponent*> Group;
-		GetConnectedGroup(Group);
-		const FUOUWaterBasinGroupDebugData GroupData = BuildGroupDebugData(Group);
-		if (GroupData.TotalCapacity <= KINDA_SMALL_NUMBER)
-		{
-			return GroupData.SurfaceWorldZ;
-		}
-
-		switch (PouredWaterFillMode)
-		{
-		case EUOUWaterBasinPouredWaterFillMode::Volume:
-			return SolveSurfaceWorldZForVolume(Group, GroupData.TotalVolume + FMath::Max(InputContext.Volume, 0.0f));
-
-		case EUOUWaterBasinPouredWaterFillMode::FillRatio:
-		{
-			const float RatioDelta = FMath::Max(PouredWaterFillRatioPerSecond, 0.0f) * Duration;
-			const float NewFillRatio = FMath::Clamp(GroupData.FillRatio + RatioDelta, 0.0f, 1.0f);
-			return SolveSurfaceWorldZForVolume(Group, GroupData.TotalCapacity * NewFillRatio);
-		}
-
-		case EUOUWaterBasinPouredWaterFillMode::WaterDepth:
-		{
-			const float SurfaceDeltaWorld = FMath::Max(PouredWaterDepthPerSecond, 0.0f) * Duration * FMath::Max(WorldUnitsPerTile, MinWorldUnitsPerTile);
-			return GroupData.SurfaceWorldZ + SurfaceDeltaWorld;
-		}
-
-		case EUOUWaterBasinPouredWaterFillMode::SurfaceWorldZ:
-			return GroupData.SurfaceWorldZ + FMath::Max(PouredWaterSurfaceWorldZPerSecond, 0.0f) * Duration;
-
-		default:
-			return GroupData.SurfaceWorldZ;
-		}
-	}
-
-	switch (PouredWaterFillMode)
-	{
-	case EUOUWaterBasinPouredWaterFillMode::Volume:
-		return GetBottomWorldZ()
-			+ (FMath::Clamp(CurrentWaterVolume + FMath::Max(InputContext.Volume, 0.0f), 0.0f, GetCapacity()) / GetSurfaceArea())
-			* FMath::Max(WorldUnitsPerTile, MinWorldUnitsPerTile);
-
-	case EUOUWaterBasinPouredWaterFillMode::FillRatio:
-	{
-		const float RatioDelta = FMath::Max(PouredWaterFillRatioPerSecond, 0.0f) * Duration;
-		const float NewFillRatio = FMath::Clamp(CurrentFillRatio + RatioDelta, 0.0f, 1.0f);
-		return GetBottomWorldZ() + (NewFillRatio * GetMaxWaterHeight() * FMath::Max(WorldUnitsPerTile, MinWorldUnitsPerTile));
-	}
-
-	case EUOUWaterBasinPouredWaterFillMode::WaterDepth:
-		return WaterSurfaceWorldZ + FMath::Max(PouredWaterDepthPerSecond, 0.0f) * Duration * FMath::Max(WorldUnitsPerTile, MinWorldUnitsPerTile);
-
-	case EUOUWaterBasinPouredWaterFillMode::SurfaceWorldZ:
-		return WaterSurfaceWorldZ + FMath::Max(PouredWaterSurfaceWorldZPerSecond, 0.0f) * Duration;
-
-	default:
-		return WaterSurfaceWorldZ;
-	}
-}
-
-void UUOUWaterBasinTargetComponent::UpdateWaterVisual()
-{
-	if (!bUpdateWaterVisual)
-	{
-		return;
-	}
-
-	ResolveWaterVisualComponent();
-	if (!WaterVisualComponent)
-	{
-		return;
-	}
-
-	const float MaxDepthWorld = GetMaxWaterHeight() * FMath::Max(WorldUnitsPerTile, MinWorldUnitsPerTile);
-	if (MaxDepthWorld <= KINDA_SMALL_NUMBER)
-	{
-		return;
-	}
-
-	const float DepthWorld = GetWaterDepthWorld();
-	const bool bShouldHide = bHideWaterVisualWhenEmpty && DepthWorld <= KINDA_SMALL_NUMBER;
-	WaterVisualComponent->SetHiddenInGame(bShouldHide, true);
-	WaterVisualComponent->SetVisibility(!bShouldHide, true);
-
-	// 수위 표현은 WaterVisual의 Z Scale을 계속 사용합니다.
-	// 다만 StaticMeshComponent의 Scale 한 축이 정확히 0이면 Physics/Query Body가 비정상 상태가 될 수 있으므로,
-	// 물이 비어 있을 때는 Hidden으로 숨기고 Mesh 자체는 아주 작은 최소 두께를 유지합니다.
-	const float SafeMinVisualDepthWorld = FMath::Min(MaxDepthWorld, MinWaterVisualDepthWorld);
-	const float VisibleDepthWorld = FMath::Clamp(DepthWorld, SafeMinVisualDepthWorld, MaxDepthWorld);
-	if (ApplyWaterVisualBounds(VisibleDepthWorld))
-	{
-		return;
-	}
-
-	CaptureWaterVisualTransformIfNeeded();
-
-	FVector NewScale = WaterVisualComponent->GetComponentScale();
-
-	FVector LocalMin = FVector::ZeroVector;
-	FVector LocalMax = FVector::ZeroVector;
-	FVector LocalCenter = FVector::ZeroVector;
-	if (UStaticMeshComponent* WaterVisualMeshComponent = Cast<UStaticMeshComponent>(WaterVisualComponent.Get()))
-	{
-		WaterVisualMeshComponent->GetLocalBounds(LocalMin, LocalMax);
-		LocalCenter = (LocalMin + LocalMax) * 0.5f;
-
-		const FVector LocalSize = LocalMax - LocalMin;
-		if (LocalSize.Z > KINDA_SMALL_NUMBER)
-		{
-			NewScale.Z = VisibleDepthWorld / LocalSize.Z;
-		}
-		else
-		{
-			const float HeightRatio = FMath::Clamp(VisibleDepthWorld / MaxDepthWorld, 0.0f, 1.0f);
-			NewScale.Z = InitialWaterVisualScale.Z * HeightRatio;
-		}
-	}
-	else
-	{
-		const float HeightRatio = FMath::Clamp(VisibleDepthWorld / MaxDepthWorld, 0.0f, 1.0f);
-		NewScale.Z = InitialWaterVisualScale.Z * HeightRatio;
-	}
-
-	const FTransform CurrentWaterVisualTransform = WaterVisualComponent->GetComponentTransform();
-	const FVector CurrentVisualCenter = CurrentWaterVisualTransform.TransformPosition(LocalCenter);
-
-	WaterVisualComponent->SetWorldScale3D(NewScale);
-
-	if (bAutoPlaceWaterVisual)
-	{
-		FVector DesiredCenter = CurrentVisualCenter;
-
-		FBox BasinBounds;
-		if (TryGetBasinBounds(BasinBounds))
-		{
-			const FVector BasinCenter = BasinBounds.GetCenter();
-			DesiredCenter.X = BasinCenter.X;
-			DesiredCenter.Y = BasinCenter.Y;
-		}
-
-		const FQuat WaterVisualRotation = WaterVisualComponent->GetComponentQuat();
-		const FVector PivotOffset = WaterVisualRotation.RotateVector(LocalCenter * NewScale);
-		DesiredCenter.Z = GetBottomWorldZ() + (VisibleDepthWorld * 0.5f);
-		WaterVisualComponent->SetWorldLocation(DesiredCenter - PivotOffset);
-	}
-}
-
-void UUOUWaterBasinTargetComponent::ResolveWaterVisualComponent()
-{
-	if (IsValid(WaterVisualComponent) || !bAutoFindWaterVisualComponent)
-	{
-		return;
-	}
-
-	WaterVisualComponent = FindWaterVisualComponent();
-	if (WaterVisualComponent)
-	{
-		bCapturedWaterVisualTransform = false;
-	}
-}
-
-USceneComponent* UUOUWaterBasinTargetComponent::FindWaterVisualComponent() const
-{
-	const AActor* Owner = GetOwner();
-	if (!Owner || WaterVisualComponentName.IsNone())
-	{
-		return nullptr;
-	}
-
-	const FString TargetName = WaterVisualComponentName.ToString();
-
-	TArray<USceneComponent*> SceneComponents;
-	Owner->GetComponents<USceneComponent>(SceneComponents);
-
-	for (USceneComponent* SceneComponent : SceneComponents)
-	{
-		if (!IsValid(SceneComponent))
-		{
-			continue;
-		}
-
-		if (SceneComponent->GetFName() == WaterVisualComponentName || SceneComponent->ComponentTags.Contains(WaterVisualComponentName))
-		{
-			return SceneComponent;
-		}
-
-		if (SceneComponent->GetName().Contains(TargetName, ESearchCase::IgnoreCase))
-		{
-			return SceneComponent;
-		}
-	}
-
-	return nullptr;
-}
-
-bool UUOUWaterBasinTargetComponent::ApplyWaterVisualBounds(float VisibleDepthWorld)
-{
-	if (!bFitWaterVisualToBasinBounds || !WaterVisualComponent)
-	{
-		return false;
-	}
-
-	FBox BasinBounds;
-	if (!TryGetBasinBounds(BasinBounds))
-	{
-		return false;
-	}
-
-	UStaticMeshComponent* WaterVisualMeshComponent = Cast<UStaticMeshComponent>(WaterVisualComponent.Get());
-	if (!WaterVisualMeshComponent)
-	{
-		return false;
-	}
-
-	FVector LocalMin = FVector::ZeroVector;
-	FVector LocalMax = FVector::ZeroVector;
-	WaterVisualMeshComponent->GetLocalBounds(LocalMin, LocalMax);
-
-	const FVector LocalSize = LocalMax - LocalMin;
-	if (LocalSize.X <= KINDA_SMALL_NUMBER || LocalSize.Y <= KINDA_SMALL_NUMBER || LocalSize.Z <= KINDA_SMALL_NUMBER)
-	{
-		return false;
-	}
-
-	const FVector BasinSize = BasinBounds.GetSize();
-	const FVector LocalCenter = (LocalMin + LocalMax) * 0.5f;
-
-	// X/Y는 Basin 영역 전체를 덮고, Z는 현재 물 깊이만큼만 차오르게 만듭니다.
-	// 따라서 WaterVisual의 최상단 월드 Z는 GetBottomWorldZ() + VisibleDepthWorld가 됩니다.
-	const FVector NewScale(
-		BasinSize.X / LocalSize.X,
-		BasinSize.Y / LocalSize.Y,
-		VisibleDepthWorld / LocalSize.Z);
-
-	WaterVisualMeshComponent->SetWorldScale3D(NewScale);
-
-	if (bAutoPlaceWaterVisual)
-	{
-		FVector DesiredCenter = BasinBounds.GetCenter();
-		DesiredCenter.Z = GetBottomWorldZ() + (VisibleDepthWorld * 0.5f);
-
-		const FVector PivotOffset = LocalCenter * NewScale;
-		WaterVisualMeshComponent->SetWorldLocation(DesiredCenter - PivotOffset);
-	}
-
-	return true;
-}
-
-void UUOUWaterBasinTargetComponent::CaptureWaterVisualTransformIfNeeded()
-{
-	if (!WaterVisualComponent || bCapturedWaterVisualTransform)
-	{
-		return;
-	}
-
-	InitialWaterVisualScale = WaterVisualComponent->GetComponentScale();
-	InitialWaterVisualLocation = WaterVisualComponent->GetComponentLocation();
-	bCapturedWaterVisualTransform = true;
 }
 
 void UUOUWaterBasinTargetComponent::DrawRuntimeDebug()
@@ -1371,46 +1030,23 @@ void UUOUWaterBasinTargetComponent::DrawMaxWaterCapacityDebugBox() const
 
 bool UUOUWaterBasinTargetComponent::BuildMaxWaterCapacityDebugBox(FVector& OutCenter, FVector& OutExtent, FQuat& OutRotation) const
 {
-	const USceneComponent* ResolvedWaterVisualComponent = WaterVisualComponent.Get();
-	if (!ResolvedWaterVisualComponent && bAutoFindWaterVisualComponent)
-	{
-		ResolvedWaterVisualComponent = FindWaterVisualComponent();
-	}
-
-	const UStaticMeshComponent* WaterVisualMeshComponent = Cast<UStaticMeshComponent>(ResolvedWaterVisualComponent);
-	if (!WaterVisualMeshComponent)
+	FBox BasinBounds;
+	if (!TryGetBasinBounds(BasinBounds))
 	{
 		return false;
 	}
 
-	FVector LocalMin = FVector::ZeroVector;
-	FVector LocalMax = FVector::ZeroVector;
-	WaterVisualMeshComponent->GetLocalBounds(LocalMin, LocalMax);
-
-	const FVector LocalSize = LocalMax - LocalMin;
-	if (LocalSize.X <= KINDA_SMALL_NUMBER || LocalSize.Y <= KINDA_SMALL_NUMBER || LocalSize.Z <= KINDA_SMALL_NUMBER)
-	{
-		return false;
-	}
-
-	const FTransform WaterVisualTransform = WaterVisualMeshComponent->GetComponentTransform();
 	const float MaxDepthWorld = GetMaxWaterHeight() * FMath::Max(WorldUnitsPerTile, MinWorldUnitsPerTile);
 	if (MaxDepthWorld <= KINDA_SMALL_NUMBER)
 	{
 		return false;
 	}
 
-	const FVector LocalCenter = (LocalMin + LocalMax) * 0.5f;
-	const FVector LocalExtent = LocalSize * 0.5f;
-	const FVector CurrentVisualCenter = WaterVisualTransform.TransformPosition(LocalCenter);
-	const FVector CurrentVisualExtent = LocalExtent * WaterVisualTransform.GetScale3D().GetAbs();
-
-	// X/Y는 현재 WaterVisual과 동일하게 두고, Z만 Fill 100%일 때의 높이로 표시합니다.
-	OutCenter = CurrentVisualCenter;
+	OutCenter = BasinBounds.GetCenter();
 	OutCenter.Z = GetBottomWorldZ() + (MaxDepthWorld * 0.5f);
-	OutExtent = CurrentVisualExtent;
+	OutExtent = BasinBounds.GetExtent();
 	OutExtent.Z = MaxDepthWorld * 0.5f;
-	OutRotation = WaterVisualTransform.GetRotation();
+	OutRotation = FQuat::Identity;
 	return true;
 }
 
@@ -1615,27 +1251,6 @@ bool UUOUWaterBasinTargetComponent::TryGetBasinBounds(FBox& OutBounds) const
 	for (UPrimitiveComponent* PrimitiveComponent : PrimitiveComponents)
 	{
 		if (!IsValid(PrimitiveComponent) || !PrimitiveComponent->IsRegistered())
-		{
-			continue;
-		}
-
-		if (PrimitiveComponent == WaterVisualComponent.Get())
-		{
-			continue;
-		}
-
-		if (!WaterVisualComponentName.IsNone())
-		{
-			const FString TargetName = WaterVisualComponentName.ToString();
-			if (PrimitiveComponent->GetFName() == WaterVisualComponentName
-				|| PrimitiveComponent->ComponentTags.Contains(WaterVisualComponentName)
-				|| PrimitiveComponent->GetName().Contains(TargetName, ESearchCase::IgnoreCase))
-			{
-				continue;
-			}
-		}
-
-		if (WaterVisualComponent && PrimitiveComponent->IsAttachedTo(WaterVisualComponent.Get()))
 		{
 			continue;
 		}

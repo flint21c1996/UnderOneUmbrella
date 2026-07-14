@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
 #include "World/Pour/UOUPourContentProfile.h"
+#include "World/Pour/UOUPourReceiverInterface.h"
 #include "UOUWaterContainerComponent.generated.h"
 
 class UMaterialInterface;
@@ -16,7 +17,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnPourContentProfileChangedSignatur
 
 // 물 양을 저장하고 퍼즐이나 무게 계산에 넘길 수 있게 관리하는 범용 물 컨테이너다.
 UCLASS(ClassGroup=(Gameplay), meta=(BlueprintSpawnableComponent))
-class UUOUWaterContainerComponent : public UActorComponent
+class UUOUWaterContainerComponent : public UActorComponent, public IUOUPourReceiver
 {
 	GENERATED_BODY()
 
@@ -126,6 +127,11 @@ public:
 	// 현재 물 양에 값을 더하고 실제 더해진 양을 돌려준다.
 	UFUNCTION(BlueprintCallable, Category = "Water")
 	float AddAmount(float AmountToAdd);
+
+	virtual bool CanAcceptPour_Implementation(const FUOUPourInputContext& Context) const override;
+	virtual FUOUPourReceiveResult TryReceivePour_Implementation(const FUOUPourInputContext& Context) override;
+	virtual int32 GetPourReceivePriority_Implementation() const override;
+	virtual bool CanAcceptPourAtLocation_Implementation(const FUOUPourInputContext& Context) const override;
 
 	UFUNCTION(BlueprintCallable, Category = "Water|Content")
 	float AddAmountWithContent(float AmountToAdd, UUOUPourContentProfile* NewContentProfile, bool bReplaceCurrentContent = true);
