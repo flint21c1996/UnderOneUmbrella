@@ -49,6 +49,42 @@ float UUOUWaterContainerComponent::AddAmount(float AmountToAdd)
 	return CurrentAmount;
 }
 
+bool UUOUWaterContainerComponent::CanAcceptPour_Implementation(const FUOUPourInputContext& Context) const
+{
+	return Context.Volume > 0.0f;
+}
+
+FUOUPourReceiveResult UUOUWaterContainerComponent::TryReceivePour_Implementation(const FUOUPourInputContext& Context)
+{
+	FUOUPourReceiveResult Result;
+	if (!CanAcceptPour_Implementation(Context))
+	{
+		return Result;
+	}
+
+	const float AmountBefore = CurrentAmount;
+	const float AmountAfter = AddAmount(Context.Volume);
+	Result.bAccepted = true;
+	Result.AcceptedVolume = FMath::Max(AmountAfter - AmountBefore, 0.0f);
+	Result.ReceiverId = TEXT("WaterContainer");
+	Result.ReceiverType = EUOUPourDropReceiverType::WaterContainer;
+	Result.ReceiverObject = this;
+	Result.ReceiverActor = GetOwner();
+	return Result;
+}
+
+int32 UUOUWaterContainerComponent::GetPourReceivePriority_Implementation() const
+{
+	// 기존 TryDeliverWater의 수신 타입 검사 순서를 유지합니다.
+	return 100;
+}
+
+bool UUOUWaterContainerComponent::CanAcceptPourAtLocation_Implementation(const FUOUPourInputContext& Context) const
+{
+	(void)Context;
+	return false;
+}
+
 float UUOUWaterContainerComponent::AddAmountWithContent(float AmountToAdd, UUOUPourContentProfile* NewContentProfile, bool bReplaceCurrentContent)
 {
 	if (AmountToAdd <= 0.0f)

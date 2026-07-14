@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "World/Pour/UOUPourReceiverInterface.h"
 #include "UOUUmbrellaWaterTarget.generated.h"
 
 class UMaterialInstanceDynamic;
@@ -17,7 +18,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FOnUOUUmbrellaWaterTargetChangedS
 // 우산에서 부은 물을 저장하고 목표 수치 도달 여부를 관리하는 물 타겟 액터입니다.
 // 물 저장 퍼즐이나 물을 담아 활성화하는 장치의 기본 베이스로 사용합니다.
 UCLASS(meta=(DisplayName="UOU Umbrella Water Target"))
-class AUOUUmbrellaWaterTarget : public AActor
+class AUOUUmbrellaWaterTarget : public AActor, public IUOUPourReceiver
 {
 	GENERATED_BODY()
 
@@ -78,6 +79,11 @@ public:
 	// 외부에서 물을 받을 때 호출하는 진입점입니다.
 	UFUNCTION(BlueprintCallable, Category = "Water Target")
 	void ReceiveWater(float WaterAmount);
+
+	virtual bool CanAcceptPour_Implementation(const FUOUPourInputContext& Context) const override;
+	virtual FUOUPourReceiveResult TryReceivePour_Implementation(const FUOUPourInputContext& Context) override;
+	virtual int32 GetPourReceivePriority_Implementation() const override;
+	virtual bool CanAcceptPourAtLocation_Implementation(const FUOUPourInputContext& Context) const override;
 
 	// 현재 저장된 물 양을 반환합니다.
 	UFUNCTION(BlueprintPure, Category = "Water Target")

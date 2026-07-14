@@ -257,6 +257,62 @@ void UUOUWaterBasinTargetComponent::ReceiveWaterInput(const FUOUWaterBasinInputC
 	}
 }
 
+bool UUOUWaterBasinTargetComponent::CanAcceptPour_Implementation(const FUOUPourInputContext& Context) const
+{
+	return Context.Volume > 0.0f;
+}
+
+FUOUPourReceiveResult UUOUWaterBasinTargetComponent::TryReceivePour_Implementation(const FUOUPourInputContext& Context)
+{
+	FUOUPourReceiveResult Result;
+	if (!CanAcceptPour_Implementation(Context))
+	{
+		return Result;
+	}
+
+	FUOUWaterBasinInputContext BasinContext;
+	BasinContext.Volume = Context.Volume;
+	BasinContext.Duration = Context.Duration;
+	BasinContext.Source = EUOUWaterBasinInputSource::PlayerPour;
+	BasinContext.WorldDirection = Context.WorldDirection;
+	BasinContext.WorldLocation = Context.WorldLocation;
+	BasinContext.bHasValidWorldLocation = Context.bHasValidWorldLocation
+		&& IsWorldLocationInsideBasin(Context.WorldLocation);
+	BasinContext.InstigatorActor = Context.InstigatorActor;
+	BasinContext.bApplyToConnectedGroup = Context.bPropagateToConnectedTargets;
+	ReceiveWaterInput(BasinContext);
+
+	Result.bAccepted = true;
+	Result.AcceptedVolume = Context.Volume;
+	Result.ReceiverId = TEXT("WaterBasin");
+	Result.ReceiverType = EUOUPourDropReceiverType::WaterBasinTarget;
+	Result.ReceiverObject = this;
+	Result.ReceiverActor = GetOwner();
+	return Result;
+}
+
+int32 UUOUWaterBasinTargetComponent::GetPourReceivePriority_Implementation() const
+{
+	// 기존 TryDeliverWater의 수신 타입 검사 순서를 유지합니다.
+	return 200;
+}
+
+bool UUOUWaterBasinTargetComponent::CanAcceptPourAtLocation_Implementation(const FUOUPourInputContext& Context) const
+{
+	if (!CanAcceptPour_Implementation(Context)
+		|| !Context.bHasValidWorldLocation
+		|| !IsWorldLocationInsideBasin(Context.WorldLocation))
+	{
+		return false;
+	}
+
+	const float DeliveryTolerance = FMath::Max(Context.LocationAcceptanceTolerance, 1.0f);
+	const float BottomWorldZ = GetBottomWorldZ();
+	const float CurrentSurfaceWorldZ = FMath::Max(WaterSurfaceWorldZ, BottomWorldZ);
+	return Context.WorldLocation.Z >= BottomWorldZ - DeliveryTolerance
+		&& Context.WorldLocation.Z <= CurrentSurfaceWorldZ + DeliveryTolerance;
+}
+
 void UUOUWaterBasinTargetComponent::SetRainFillReceivingEnabled(bool bEnabled)
 {
 	bReceiveRainFill = bEnabled;

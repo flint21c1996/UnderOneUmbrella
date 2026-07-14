@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "World/Pour/UOUPourDropTypes.h"
+#include "World/Pour/UOUPourReceiverInterface.h"
 #include "UOUPourDropActor.generated.h"
 
 class AActor;
@@ -17,7 +18,6 @@ class UStaticMesh;
 class UNiagaraComponent;
 class UNiagaraSystem;
 class AUOUPourDropActor;
-class UUOUWaterBasinTargetComponent;
 
 USTRUCT(BlueprintType)
 struct UNDERONEUMBRELLA_API FUOUPourDropContext
@@ -162,6 +162,9 @@ public:
 	EUOUPourDropReceiverType LastReceiverType = EUOUPourDropReceiverType::None;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Pour Drop|Runtime")
+	FName LastReceiverId = NAME_None;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Pour Drop|Runtime")
 	bool bHasDeliveredWater = false;
 
 	UFUNCTION(BlueprintCallable, Category = "Pour Drop")
@@ -195,9 +198,9 @@ private:
 	void IgnoreSourceActor();
 	void DrawDebugCollisionRadius() const;
 	void HandleImpact(const FHitResult& ImpactResult, AActor* OtherActor, bool bIsBlockingImpact);
-	bool TryDeliverWater(AActor* HitActor, const FVector& ImpactLocation, EUOUPourDropReceiverType& OutReceiverType);
-	bool TryDeliverWaterToBasinAtLocation(const FVector& ImpactLocation, EUOUPourDropReceiverType& OutReceiverType, AActor*& OutReceiverActor);
-	bool IsWaterBasinDeliveryLocation(const UUOUWaterBasinTargetComponent* WaterBasinTarget, const FVector& ImpactLocation) const;
+	FUOUPourInputContext BuildPourInputContext(const FVector& WorldLocation, const FVector& WorldDirection) const;
+	bool TryDeliverWater(AActor* HitActor, const FVector& ImpactLocation, FUOUPourReceiveResult& OutResult);
+	bool TryDeliverWaterAtLocation(const FUOUPourInputContext& Context, FUOUPourReceiveResult& OutResult);
 	bool ShouldHandleImpactSplashAtSource(bool bDeliveredWater) const;
 	void SpawnImpactSplash(const FVector& ImpactLocation, const FVector& ImpactNormal, bool bDeliveredWater) const;
 	bool ShouldIgnoreActor(const AActor* OtherActor) const;

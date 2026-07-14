@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "World/Pour/UOUPourReceiverInterface.h"
 #include "UOUWaterBasinTargetComponent.generated.h"
 
 class AActor;
@@ -139,7 +140,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FUOUWaterBasinTargetChangedSignature
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FUOUWaterBasinWaterInputSignature, UUOUWaterBasinTargetComponent*, Target, const FUOUWaterBasinInputContext&, InputContext);
 
 UCLASS(ClassGroup=(Puzzle), meta=(BlueprintSpawnableComponent))
-class UNDERONEUMBRELLA_API UUOUWaterBasinTargetComponent : public UActorComponent
+class UNDERONEUMBRELLA_API UUOUWaterBasinTargetComponent : public UActorComponent, public IUOUPourReceiver
 {
 	GENERATED_BODY()
 
@@ -261,6 +262,11 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Water Basin")
 	void ReceiveWaterInput(const FUOUWaterBasinInputContext& InputContext);
+
+	virtual bool CanAcceptPour_Implementation(const FUOUPourInputContext& Context) const override;
+	virtual FUOUPourReceiveResult TryReceivePour_Implementation(const FUOUPourInputContext& Context) override;
+	virtual int32 GetPourReceivePriority_Implementation() const override;
+	virtual bool CanAcceptPourAtLocation_Implementation(const FUOUPourInputContext& Context) const override;
 
 	UFUNCTION(BlueprintCallable, Category = "Water Basin|Rain")
 	void SetRainFillReceivingEnabled(bool bEnabled);

@@ -559,3 +559,48 @@ bool UUOUWaterWheelRainConditionComponent::HasRecentPouredWaterInput() const
 
 	return World->GetTimeSeconds() - LastPouredWaterInputTimestamp <= RainInputGraceTime;
 }
+
+bool UUOUWaterWheelRainConditionComponent::CanAcceptPour_Implementation(const FUOUPourInputContext& Context) const
+{
+	return Context.Volume > 0.0f && CanReceivePouredWaterInput();
+}
+
+FUOUPourReceiveResult UUOUWaterWheelRainConditionComponent::TryReceivePour_Implementation(const FUOUPourInputContext& Context)
+{
+	FUOUPourReceiveResult Result;
+	if (!CanAcceptPour_Implementation(Context))
+	{
+		return Result;
+	}
+
+	FUOUWaterWheelRainInputContext WaterWheelContext;
+	WaterWheelContext.Strength = Context.Duration > KINDA_SMALL_NUMBER
+		? Context.Volume / Context.Duration
+		: Context.Volume;
+	WaterWheelContext.Duration = Context.Duration;
+	WaterWheelContext.WorldDirection = Context.WorldDirection;
+	WaterWheelContext.WorldLocation = Context.WorldLocation;
+	WaterWheelContext.bHasValidWorldLocation = Context.bHasValidWorldLocation;
+	WaterWheelContext.InstigatorActor = Context.InstigatorActor;
+	ReceivePouredWaterInput(WaterWheelContext);
+
+	Result.bAccepted = true;
+	Result.AcceptedVolume = Context.Volume;
+	Result.ReceiverId = TEXT("WaterWheel");
+	Result.ReceiverType = EUOUPourDropReceiverType::WaterWheel;
+	Result.ReceiverObject = this;
+	Result.ReceiverActor = GetOwner();
+	return Result;
+}
+
+int32 UUOUWaterWheelRainConditionComponent::GetPourReceivePriority_Implementation() const
+{
+	// 기존 TryDeliverWater의 수신 타입 검사 순서를 유지합니다.
+	return 500;
+}
+
+bool UUOUWaterWheelRainConditionComponent::CanAcceptPourAtLocation_Implementation(const FUOUPourInputContext& Context) const
+{
+	(void)Context;
+	return false;
+}
