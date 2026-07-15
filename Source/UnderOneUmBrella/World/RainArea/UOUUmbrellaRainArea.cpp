@@ -402,29 +402,6 @@ void AUOUUmbrellaRainArea::ApplyEnvironmentVisualState()
 	// 게임플레이 비 노출량인 RainFillRate와 시각적 SpawnRate는 서로 별개 값입니다.
 	RainFallSpeed = NormalizeRainAreaFlowSpeed(RainFallSpeed, FlowDirection);
 	const float FinalRainSpawnRate = GetAreaScaledRainSpawnRate();
-	static double LastRainSpawnRateLogTime = -1000.0;
-	const UWorld* World = GetWorld();
-	const double CurrentTime = World != nullptr ? World->GetTimeSeconds() : FPlatformTime::Seconds();
-	if (CurrentTime - LastRainSpawnRateLogTime >= 0.5)
-	{
-		LastRainSpawnRateLogTime = CurrentTime;
-		const FVector BoxExtent = RainVolume != nullptr ? RainVolume->GetScaledBoxExtent() : FVector::ZeroVector;
-		const float AreaWidth = FMath::Max(0.0f, BoxExtent.X * 2.0f);
-		const float AreaDepth = FMath::Max(0.0f, BoxExtent.Y * 2.0f);
-		const float AreaSize = AreaWidth * AreaDepth;
-		UE_LOG(
-			LogTemp,
-			Warning,
-			TEXT("[RainSpawnRate][RainArea] Area=%s ScaleByArea=%s Base=%.1f Final=%.1f Size=(%.1f %.1f) Area=%.1f RefArea=%.1f"),
-			*GetName(),
-			bScaleRainSpawnRateByArea ? TEXT("true") : TEXT("false"),
-			RainSpawnRate,
-			FinalRainSpawnRate,
-			AreaWidth,
-			AreaDepth,
-			AreaSize,
-			RainSpawnRateReferenceArea);
-	}
 	RainVisual->SetRainSpawnRate(FinalRainSpawnRate);
 	RainVisual->SetRainFallSpeed(RainFallSpeed);
 	RainVisual->SetVisualIntensities(PrimaryIntensity, SecondaryIntensity);
@@ -565,30 +542,6 @@ void AUOUUmbrellaRainArea::ApplyEnvironmentVisualRainBlocker(bool bIsBlocking, c
 		: FVector::ZeroVector;
 
 	// 우산 차단 위치는 RainVisual 로컬 좌표로 넘겨야 Niagara 모듈의 Kill/Mask 계산과 좌표계가 맞습니다.
-	static double LastRainAreaBlockerLogTime = -1000.0;
-	const UWorld* World = GetWorld();
-	const double CurrentTime = World != nullptr ? World->GetTimeSeconds() : FPlatformTime::Seconds();
-	if (CurrentTime - LastRainAreaBlockerLogTime >= 0.5)
-	{
-		LastRainAreaBlockerLogTime = CurrentTime;
-		UE_LOG(
-			LogTemp,
-			Warning,
-			TEXT("[RainBlocker][RainArea->RainVisual] Area=%s Blocking=%s WorldCenter=(%.1f %.1f %.1f) VisualLocal=(%.1f %.1f %.1f) Half=(%.1f %.1f %.1f) Intensity=%.2f"),
-			*GetName(),
-			bIsBlocking ? TEXT("true") : TEXT("false"),
-			BlockerWorldCenter.X,
-			BlockerWorldCenter.Y,
-			BlockerWorldCenter.Z,
-			BlockerLocalCenter.X,
-			BlockerLocalCenter.Y,
-			BlockerLocalCenter.Z,
-			BlockerHalfExtent.X,
-			BlockerHalfExtent.Y,
-			BlockerHalfExtent.Z,
-			BlockerIntensity);
-	}
-
 	RainVisual->SetRainBlockerData(
 		bIsBlocking,
 		BlockerLocalCenter,
