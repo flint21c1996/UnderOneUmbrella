@@ -369,7 +369,7 @@ void AUOUUmbrellaRainArea::ApplyEnvironmentVisualState()
 		const float AreaSize = AreaWidth * AreaDepth;
 		UE_LOG(
 			LogTemp,
-			Warning,
+			Verbose,
 			TEXT("[RainSpawnRate][RainArea] Area=%s ScaleByArea=%s Base=%.1f Final=%.1f Size=(%.1f %.1f) Area=%.1f RefArea=%.1f"),
 			*GetName(),
 			bScaleRainSpawnRateByArea ? TEXT("true") : TEXT("false"),
@@ -528,7 +528,7 @@ void AUOUUmbrellaRainArea::ApplyEnvironmentVisualRainBlocker(bool bIsBlocking, c
 		LastRainAreaBlockerLogTime = CurrentTime;
 		UE_LOG(
 			LogTemp,
-			Warning,
+			Verbose,
 			TEXT("[RainBlocker][RainArea->RainVisual] Area=%s Blocking=%s WorldCenter=(%.1f %.1f %.1f) VisualLocal=(%.1f %.1f %.1f) Half=(%.1f %.1f %.1f) Intensity=%.2f"),
 			*GetName(),
 			bIsBlocking ? TEXT("true") : TEXT("false"),
