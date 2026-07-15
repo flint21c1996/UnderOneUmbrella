@@ -20,6 +20,5 @@ Saved/
 Thumbs.db
 Desktop.ini
 Build/
-Docs/*
-!Docs/UmbrellaComponent 리팩토링.md
+Docs/
 AGENTS.md
