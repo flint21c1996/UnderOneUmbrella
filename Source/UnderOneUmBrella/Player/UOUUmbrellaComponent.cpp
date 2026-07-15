@@ -2,6 +2,9 @@
 
 #include "Player/UOUUmbrellaComponent.h"
 
+#include "Player/UOUUmbrellaSkeletalVisualPresenter.h"
+#include "Player/UOUUmbrellaVisualPolicy.h"
+
 #include "Audio/UOUAudioCueComponent.h"
 #include "Audio/UOUAudioSubsystem.h"
 #include "Components/ArrowComponent.h"
@@ -16,14 +19,12 @@
 #include "Engine/Engine.h"
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
-#include "GameFramework/Character.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
 #include "Camera/PlayerCameraManager.h"
 #include "Materials/MaterialInterface.h"
 #include "NiagaraComponent.h"
 #include "Player/UOURainReceiverComponent.h"
-#include "Player/UOUUmbrellaAnimInstance.h"
 #include "Player/UOUWaterContainerComponent.h"
 #include "World/Pour/UOUPourContentProfile.h"
 #include "World/Pour/UOUPourDropActor.h"
@@ -168,7 +169,6 @@ void UUOUUmbrellaComponent::AcquireUmbrella()
 
 	bHasUmbrella = true;
 	CurrentDirectionState = EUOUUmbrellaDirectionState::Normal;
-	SetState(EUOUUmbrellaState::Closed);
 
 	if (StoredWaterContainer != nullptr)
 	{
@@ -176,7 +176,7 @@ void UUOUUmbrellaComponent::AcquireUmbrella()
 	}
 
 	PlayUmbrellaAudioCue(AcquireAudioCueId, AcquireAudioEventId);
-	OnUmbrellaStateChanged.Broadcast(CurrentState, bHasUmbrella);
+	SetState(EUOUUmbrellaState::Closed, true);
 }
 
 // 월드에 놓인 픽업 우산의 메쉬와 머티리얼을 복사한 뒤 플레이어가 들고 있는 우산으로 바꿉니다.
@@ -197,7 +197,7 @@ void UUOUUmbrellaComponent::RemoveUmbrella()
 	StopRainBlockedAudio();
 	bHasUmbrella = false;
 	CurrentDirectionState = EUOUUmbrellaDirectionState::Normal;
-	SetState(EUOUUmbrellaState::Closed);
+	ResetPendingPourDrop();
 
 	if (StoredWaterContainer != nullptr)
 	{
@@ -210,7 +210,7 @@ void UUOUUmbrellaComponent::RemoveUmbrella()
 	}
 
 	ClearPourAimFacing();
-	OnUmbrellaStateChanged.Broadcast(CurrentState, bHasUmbrella);
+	SetState(EUOUUmbrellaState::Closed, true);
 }
 
 // 우산을 펼쳐서 비를 막는 상태로 전환합니다.
@@ -598,7 +598,7 @@ EUOUUmbrellaState UUOUUmbrellaComponent::GetOpenStateForCurrentDirection() const
 }
 
 // 우산 상태 변경을 한 곳으로 모아 물 버림, 비주얼 갱신, 이벤트 호출 순서를 고정합니다.
-void UUOUUmbrellaComponent::SetState(EUOUUmbrellaState NewState)
+void UUOUUmbrellaComponent::SetState(EUOUUmbrellaState NewState, bool bBroadcastIfUnchanged)
 {
 	const EUOUUmbrellaState PreviousState = CurrentState;
 	const EUOUUmbrellaState ResolvedState = bHasUmbrella ? NewState : EUOUUmbrellaState::Closed;
@@ -641,6 +641,10 @@ void UUOUUmbrellaComponent::SetState(EUOUUmbrellaState NewState)
 		// 같은 상태여도 에디터 세팅 변경 뒤 비주얼을 다시 맞출 수 있게 갱신은 수행합니다.
 		RefreshVisuals();
 		UpdatePouringEffectState();
+		if (bBroadcastIfUnchanged)
+		{
+			OnUmbrellaStateChanged.Broadcast(CurrentState, bHasUmbrella);
+		}
 		return;
 	}
 
@@ -685,7 +689,9 @@ void UUOUUmbrellaComponent::SetState(EUOUUmbrellaState NewState)
 // 전용 상태 비주얼이 있으면 그 비주얼을 쓰고, 없으면 런타임 복사 메쉬 하나로 표시합니다.
 void UUOUUmbrellaComponent::RefreshVisuals()
 {
-	CurrentVisualState = ResolveVisualState();
+	CurrentVisualState = FUOUUmbrellaVisualPolicy::ResolveVisualState(
+		CurrentState,
+		bUseClosedReversedVisualOverride);
 	if (IsSkeletalHeldVisualAvailable())
 	{
 		RefreshSkeletalVisual();
@@ -694,6 +700,13 @@ void UUOUUmbrellaComponent::RefreshVisuals()
 	}
 
 	const bool bHasDedicatedVisuals = ClosedVisual != nullptr || OpenVisual != nullptr || UpsideDownVisual != nullptr;
+	const FUOUUmbrellaVisualVisibility Visibility = FUOUUmbrellaVisualPolicy::ResolveVisibility(
+		bHasUmbrella,
+		CurrentVisualState,
+		bHasDedicatedVisuals,
+		UpsideDownVisual != nullptr,
+		RuntimeHeldVisual != nullptr,
+		bFlipRuntimeHeldVisualWhenUpsideDown);
 
 	if (!bHasUmbrella)
 	{
@@ -724,36 +737,29 @@ void UUOUUmbrellaComponent::RefreshVisuals()
 	if (bHasDedicatedVisuals)
 	{
 		// 상태별 전용 비주얼이 하나라도 있으면 그 방식이 우선입니다.
-		const bool bUseRuntimeUpsideDownFallback = RuntimeHeldVisual != nullptr
-			&& UpsideDownVisual == nullptr
-			&& ShouldFlipRuntimeHeldVisual();
-
 		if (ClosedVisual != nullptr)
 		{
-			ClosedVisual->SetVisibility(CurrentState == EUOUUmbrellaState::Closed, true);
+			ClosedVisual->SetVisibility(Visibility.bShowClosed, true);
 		}
 
 		if (OpenVisual != nullptr)
 		{
-			OpenVisual->SetVisibility(
-				CurrentState == EUOUUmbrellaState::Open
-				|| (CurrentState == EUOUUmbrellaState::Pouring && !bUseRuntimeUpsideDownFallback),
-				true);
+			OpenVisual->SetVisibility(Visibility.bShowOpen, true);
 		}
 
 		if (UpsideDownVisual != nullptr)
 		{
-			UpsideDownVisual->SetVisibility(CurrentState == EUOUUmbrellaState::UpsideDown, true);
+			UpsideDownVisual->SetVisibility(Visibility.bShowUpsideDown, true);
 		}
 
 		if (RuntimeHeldVisual != nullptr)
 		{
-			if (bUseRuntimeUpsideDownFallback)
+			if (Visibility.bFlipRuntime)
 			{
 				ApplyRuntimeHeldVisualStateTransform();
 			}
 
-			RuntimeHeldVisual->SetVisibility(bUseRuntimeUpsideDownFallback, true);
+			RuntimeHeldVisual->SetVisibility(Visibility.bShowRuntime, true);
 		}
 
 		return;
@@ -763,25 +769,8 @@ void UUOUUmbrellaComponent::RefreshVisuals()
 	{
 		// 상태별 비주얼이 없다면 픽업에서 복사한 런타임 메쉬 하나를 계속 보여줍니다.
 		ApplyRuntimeHeldVisualStateTransform();
-		RuntimeHeldVisual->SetVisibility(true, true);
+		RuntimeHeldVisual->SetVisibility(Visibility.bShowRuntime, true);
 	}
-}
-
-EUOUUmbrellaVisualState UUOUUmbrellaComponent::ResolveVisualState() const
-{
-	if (CurrentState == EUOUUmbrellaState::Closed)
-	{
-		return bUseClosedReversedVisualOverride
-			? EUOUUmbrellaVisualState::ClosedReversed
-			: EUOUUmbrellaVisualState::Closed;
-	}
-
-	if (CurrentState == EUOUUmbrellaState::Open)
-	{
-		return EUOUUmbrellaVisualState::Open;
-	}
-
-	return EUOUUmbrellaVisualState::OpenReversed;
 }
 
 bool UUOUUmbrellaComponent::IsSkeletalHeldVisualAvailable() const
@@ -812,54 +801,6 @@ void UUOUUmbrellaComponent::HideStaticHeldVisuals()
 	}
 }
 
-FName UUOUUmbrellaComponent::GetSkeletalVisualSocketName(EUOUUmbrellaVisualState VisualState) const
-{
-	switch (VisualState)
-	{
-	case EUOUUmbrellaVisualState::Open:
-		return OpenSkeletalVisualSocketName;
-	case EUOUUmbrellaVisualState::ClosedReversed:
-		return ClosedReversedSkeletalVisualSocketName;
-	case EUOUUmbrellaVisualState::OpenReversed:
-		return OpenReversedSkeletalVisualSocketName;
-	case EUOUUmbrellaVisualState::Closed:
-	default:
-		return ClosedSkeletalVisualSocketName;
-	}
-}
-
-FTransform UUOUUmbrellaComponent::GetSkeletalVisualOffset(EUOUUmbrellaVisualState VisualState) const
-{
-	switch (VisualState)
-	{
-	case EUOUUmbrellaVisualState::Open:
-		return OpenSkeletalVisualOffset;
-	case EUOUUmbrellaVisualState::ClosedReversed:
-		return ClosedReversedSkeletalVisualOffset;
-	case EUOUUmbrellaVisualState::OpenReversed:
-		return OpenReversedSkeletalVisualOffset;
-	case EUOUUmbrellaVisualState::Closed:
-	default:
-		return ClosedSkeletalVisualOffset;
-	}
-}
-
-UAnimationAsset* UUOUUmbrellaComponent::GetSkeletalVisualAnimation(EUOUUmbrellaVisualState VisualState) const
-{
-	switch (VisualState)
-	{
-	case EUOUUmbrellaVisualState::Open:
-		return OpenSkeletalVisualAnimation.Get();
-	case EUOUUmbrellaVisualState::ClosedReversed:
-		return ClosedReversedSkeletalVisualAnimation.Get();
-	case EUOUUmbrellaVisualState::OpenReversed:
-		return OpenReversedSkeletalVisualAnimation.Get();
-	case EUOUUmbrellaVisualState::Closed:
-	default:
-		return ClosedSkeletalVisualAnimation.Get();
-	}
-}
-
 void UUOUUmbrellaComponent::RefreshSkeletalVisual()
 {
 	if (SkeletalHeldVisual == nullptr)
@@ -867,74 +808,32 @@ void UUOUUmbrellaComponent::RefreshSkeletalVisual()
 		return;
 	}
 
-	SkeletalHeldVisual->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	SkeletalHeldVisual->SetGenerateOverlapEvents(false);
-	SkeletalHeldVisual->SetCastShadow(true);
+	const FUOUUmbrellaSkeletalVisualVariants Variants = {
+		{ ClosedSkeletalVisualSocketName, ClosedSkeletalVisualOffset, ClosedSkeletalVisualAnimation.Get() },
+		{ OpenSkeletalVisualSocketName, OpenSkeletalVisualOffset, OpenSkeletalVisualAnimation.Get() },
+		{ ClosedReversedSkeletalVisualSocketName, ClosedReversedSkeletalVisualOffset, ClosedReversedSkeletalVisualAnimation.Get() },
+		{ OpenReversedSkeletalVisualSocketName, OpenReversedSkeletalVisualOffset, OpenReversedSkeletalVisualAnimation.Get() }
+	};
 
-	if (!bHasUmbrella)
-	{
-		SkeletalHeldVisual->SetVisibility(false, true);
-		bHasAppliedSkeletalVisualAnimation = false;
-		LastAppliedSkeletalVisualAnimation = nullptr;
+	FUOUUmbrellaSkeletalVisualRequest Request;
+	Request.Visual = SkeletalHeldVisual;
+	Request.HeldVisualAnchor = HeldVisualAnchor;
+	Request.PickupAttachPoint = PickupAttachPoint;
+	Request.Owner = GetOwner();
+	Request.bHasUmbrella = bHasUmbrella;
+	Request.bAttachToOwnerMeshSocket = bAttachSkeletalVisualToOwnerMeshSocket;
+	Request.bPlayAnimationDirectly = bPlaySkeletalVisualAnimationsDirectly;
+	Request.State = CurrentState;
+	Request.DirectionState = CurrentDirectionState;
+	Request.VisualState = CurrentVisualState;
+	Request.Variant = Variants.Resolve(CurrentVisualState);
 
-		if (UUOUUmbrellaAnimInstance* UmbrellaAnimInstance = Cast<UUOUUmbrellaAnimInstance>(SkeletalHeldVisual->GetAnimInstance()))
-		{
-			UmbrellaAnimInstance->SetUmbrellaState(false, CurrentState, CurrentDirectionState, CurrentVisualState);
-		}
-		return;
-	}
-
-	USceneComponent* AttachParent = nullptr;
-	FName AttachSocketName = NAME_None;
-	AActor* Owner = GetOwner();
-
-	if (bAttachSkeletalVisualToOwnerMeshSocket)
-	{
-		if (ACharacter* OwnerCharacter = Cast<ACharacter>(Owner))
-		{
-			AttachParent = OwnerCharacter->GetMesh();
-			AttachSocketName = GetSkeletalVisualSocketName(CurrentVisualState);
-		}
-	}
-
-	if (AttachParent == nullptr)
-	{
-		AttachParent = HeldVisualAnchor != nullptr
-			? HeldVisualAnchor.Get()
-			: (PickupAttachPoint != nullptr ? PickupAttachPoint.Get() : (Owner != nullptr ? Owner->GetRootComponent() : nullptr));
-	}
-
-	if (AttachParent != nullptr)
-	{
-		SkeletalHeldVisual->AttachToComponent(
-			AttachParent,
-			FAttachmentTransformRules::SnapToTargetNotIncludingScale,
-			AttachSocketName);
-	}
-
-	SkeletalHeldVisual->SetRelativeTransform(GetSkeletalVisualOffset(CurrentVisualState));
-	SkeletalHeldVisual->SetVisibility(true, true);
-
-	if (UUOUUmbrellaAnimInstance* UmbrellaAnimInstance = Cast<UUOUUmbrellaAnimInstance>(SkeletalHeldVisual->GetAnimInstance()))
-	{
-		UmbrellaAnimInstance->SetUmbrellaState(true, CurrentState, CurrentDirectionState, CurrentVisualState);
-	}
-
-	if (!bPlaySkeletalVisualAnimationsDirectly)
-	{
-		bHasAppliedSkeletalVisualAnimation = false;
-		LastAppliedSkeletalVisualAnimation = nullptr;
-		return;
-	}
-
-	UAnimationAsset* AnimationToPlay = GetSkeletalVisualAnimation(CurrentVisualState);
-	if (AnimationToPlay != nullptr
-		&& (!bHasAppliedSkeletalVisualAnimation || LastAppliedSkeletalVisualAnimation != AnimationToPlay))
-	{
-		SkeletalHeldVisual->PlayAnimation(AnimationToPlay, true);
-		LastAppliedSkeletalVisualAnimation = AnimationToPlay;
-		bHasAppliedSkeletalVisualAnimation = true;
-	}
+	FUOUUmbrellaSkeletalVisualPlaybackState PlaybackState;
+	PlaybackState.bHasAppliedAnimation = bHasAppliedSkeletalVisualAnimation;
+	PlaybackState.LastAppliedAnimation = LastAppliedSkeletalVisualAnimation;
+	FUOUUmbrellaSkeletalVisualPresenter::Apply(Request, PlaybackState);
+	bHasAppliedSkeletalVisualAnimation = PlaybackState.bHasAppliedAnimation;
+	LastAppliedSkeletalVisualAnimation = PlaybackState.LastAppliedAnimation;
 }
 
 void UUOUUmbrellaComponent::PlayUmbrellaAudioEvent(FName AudioEventId) const
@@ -1606,7 +1505,9 @@ void UUOUUmbrellaComponent::ApplyRuntimeHeldVisualStateTransform()
 	}
 
 	FTransform VisualTransform = RuntimeHeldVisualBaseRelativeTransform;
-	if (ShouldFlipRuntimeHeldVisual())
+	if (FUOUUmbrellaVisualPolicy::ShouldFlipRuntimeVisual(
+		bFlipRuntimeHeldVisualWhenUpsideDown,
+		CurrentVisualState))
 	{
 		const FQuat FlippedRotation = VisualTransform.GetRotation() * UpsideDownHeldVisualRotationOffset.Quaternion();
 		VisualTransform.SetRotation(FlippedRotation.GetNormalized());
@@ -1614,12 +1515,6 @@ void UUOUUmbrellaComponent::ApplyRuntimeHeldVisualStateTransform()
 	}
 
 	RuntimeHeldVisual->SetRelativeTransform(VisualTransform);
-}
-
-bool UUOUUmbrellaComponent::ShouldFlipRuntimeHeldVisual() const
-{
-	return bFlipRuntimeHeldVisualWhenUpsideDown
-		&& (CurrentState == EUOUUmbrellaState::UpsideDown || CurrentState == EUOUUmbrellaState::Pouring);
 }
 
 // 플레이 중 우산 보유 상태, 저장된 물, 마지막 붓기 대상을 화면에 표시합니다.
@@ -1858,6 +1753,11 @@ void UUOUUmbrellaComponent::ClearPourTraceDebug()
 void UUOUUmbrellaComponent::DrawPourSocketAndDropSpawnDebug() const
 {
 	if (!bHasUmbrella || (!bDrawPourSocketDebug && !bDrawPourDropSpawnDebug))
+	{
+		return;
+	}
+
+	if (!UUOUDebugSubsystem::IsDebugWorldDrawEnabled(this, EUOUDebugCategory::Player))
 	{
 		return;
 	}
