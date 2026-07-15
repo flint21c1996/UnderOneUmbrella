@@ -243,31 +243,33 @@ void AUOUUmbrellaRainArea::Tick(float DeltaSeconds)
 				UmbrellaComponent->ApplyRainExposure(RainFillRate * DeltaSeconds);
 			}
 
-			FVector CandidateVisualBlockerWorldCenter = FVector::ZeroVector;
-			FRotator CandidateVisualBlockerWorldRotation = FRotator::ZeroRotator;
-			FVector CandidateVisualBlockerHalfExtent = FVector::ZeroVector;
 			const bool bBlocksGameplayRain = UmbrellaComponent->IsBlockingRain();
 			const bool bBlocksRainVisual = bBlocksGameplayRain || UmbrellaComponent->IsUpsideDown();
-			if (bBlocksRainVisual
-				&& UmbrellaComponent->TryGetGameplayRainBlockerVolumeData(CandidateVisualBlockerWorldCenter, CandidateVisualBlockerWorldRotation, CandidateVisualBlockerHalfExtent)
-				&& CandidateVisualBlockerHalfExtent.SizeSquared() > VisualRainBlockerHalfExtent.SizeSquared())
+			FVector CandidateBlockerWorldCenter = FVector::ZeroVector;
+			FRotator CandidateBlockerWorldRotation = FRotator::ZeroRotator;
+			FVector CandidateBlockerHalfExtent = FVector::ZeroVector;
+			const bool bHasBlockerVolume = bBlocksRainVisual
+				&& UmbrellaComponent->TryGetGameplayRainBlockerVolumeData(
+					CandidateBlockerWorldCenter,
+					CandidateBlockerWorldRotation,
+					CandidateBlockerHalfExtent);
+
+			if (bHasBlockerVolume
+				&& CandidateBlockerHalfExtent.SizeSquared() > VisualRainBlockerHalfExtent.SizeSquared())
 			{
 				bHasVisualRainBlocker = true;
-				VisualRainBlockerWorldCenter = CandidateVisualBlockerWorldCenter;
-				VisualRainBlockerHalfExtent = CandidateVisualBlockerHalfExtent;
+				VisualRainBlockerWorldCenter = CandidateBlockerWorldCenter;
+				VisualRainBlockerHalfExtent = CandidateBlockerHalfExtent;
 			}
 
-			FVector CandidateGameplayBlockerWorldCenter = FVector::ZeroVector;
-			FRotator CandidateGameplayBlockerWorldRotation = FRotator::ZeroRotator;
-			FVector CandidateGameplayBlockerHalfExtent = FVector::ZeroVector;
 			if (bBlocksGameplayRain
-				&& UmbrellaComponent->TryGetGameplayRainBlockerVolumeData(CandidateGameplayBlockerWorldCenter, CandidateGameplayBlockerWorldRotation, CandidateGameplayBlockerHalfExtent)
-				&& CandidateGameplayBlockerHalfExtent.SizeSquared() > RainBlockerHalfExtent.SizeSquared())
+				&& bHasBlockerVolume
+				&& CandidateBlockerHalfExtent.SizeSquared() > RainBlockerHalfExtent.SizeSquared())
 			{
 				bHasRainBlocker = true;
-				RainBlockerWorldCenter = CandidateGameplayBlockerWorldCenter;
-				RainBlockerWorldRotation = CandidateGameplayBlockerWorldRotation;
-				RainBlockerHalfExtent = CandidateGameplayBlockerHalfExtent;
+				RainBlockerWorldCenter = CandidateBlockerWorldCenter;
+				RainBlockerWorldRotation = CandidateBlockerWorldRotation;
+				RainBlockerHalfExtent = CandidateBlockerHalfExtent;
 			}
 		}
 	}
