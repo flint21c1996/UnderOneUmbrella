@@ -662,13 +662,7 @@ protected:
 	void ApplyHeldVisualFromMeshComponent(UStaticMeshComponent* SourceMeshComponent);
 
 	// 직접 전달받은 메쉬와 머티리얼을 런타임 우산 비주얼에 적용합니다.
-	void ApplyHeldVisualFromAssets(UStaticMesh* Mesh, const TArray<TObjectPtr<UMaterialInterface>>& Materials, const FVector& SourceRelativeScale);
-
-	// 손에 든 우산 비주얼의 로컬 위치, 회전, 스케일을 계산합니다.
-	FTransform GetHeldVisualRelativeTransform(const FVector& SourceRelativeScale) const;
-
-	// 현재 우산 상태에 맞게 런타임 우산 메쉬의 임시 회전 보정을 적용합니다.
-	void ApplyRuntimeHeldVisualStateTransform();
+	void ApplyHeldVisualFromAssets(UStaticMesh* Mesh, const TArray<UMaterialInterface*>& Materials, const FVector& SourceRelativeScale);
 
 	// 우산 상태와 물 정보를 화면 디버그 텍스트로 표시합니다.
 	void DrawScreenDebug() const;

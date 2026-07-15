@@ -915,3 +915,236 @@ Presenter는 거대한 `UUOUUmbrellaComponent` 전체가 아니라 작업에 필
 6. 최종적으로 우산 상태 전이 자체를 명시적인 상태 머신으로 분리
 
 다음 작업은 런타임 픽업 메시 책임을 같은 비주얼 계층으로 옮기는 것이 가장 자연스럽습니다. 이 작업까지 끝내면 `UmbrellaComponent`에서 비주얼 관련 구현 대부분이 빠지고, 이후 게임플레이 기능 분리를 시작할 수 있습니다.
+
+---
+
+## 4차 리팩토링: 런타임 픽업 비주얼 Presenter 분리
+
+### 작업 목적
+
+월드에 놓인 우산을 획득하면 픽업 액터의 `UStaticMeshComponent`에서 메시, 머티리얼, 상대 스케일을 읽어 플레이어 손의 런타임 메시로 복사합니다. 기존에는 이 전체 과정이 `UUOUUmbrellaComponent` 안에 들어 있었습니다.
+
+기존 컴포넌트가 담당하던 작업은 다음과 같습니다.
+
+- `RuntimeHeldVisual` 동적 생성과 등록
+- 충돌, 오버랩, 그림자, 초기 가시성 설정
+- `PickupAttachPoint` 또는 루트 컴포넌트에 부착
+- 픽업 메시와 모든 머티리얼 수집
+- 기본 메시 fallback 적용
+- 앵커 위치·회전과 픽업 스케일을 조합한 기본 Transform 계산
+- 뒤집힘/붓기 상태에서 회전과 위치 오프셋 적용
+- 최종 메시와 머티리얼을 런타임 컴포넌트에 적용
+
+이 책임을 `FUOUUmbrellaRuntimeVisualPresenter`로 분리했습니다.
+
+### 추가된 파일
+
+- `Source/UnderOneUmBrella/Player/UOUUmbrellaRuntimeVisualPresenter.h`
+- `Source/UnderOneUmBrella/Player/UOUUmbrellaRuntimeVisualPresenter.cpp`
+
+### 픽업 비주얼 에셋 묶음
+
+픽업에서 읽어야 하는 데이터를 하나의 구조체로 묶었습니다.
+
+```cpp
+struct FUOUUmbrellaRuntimeVisualAssets
+{
+    UStaticMesh* Mesh;
+    TArray<UMaterialInterface*> Materials;
+    FVector SourceRelativeScale;
+};
+```
+
+이전에는 `UmbrellaComponent`가 직접 머티리얼 슬롯을 순회했습니다.
+
+```cpp
+for (int32 MaterialIndex = 0; MaterialIndex < MaterialCount; ++MaterialIndex)
+{
+    Materials.Add(SourceMeshComponent->GetMaterial(MaterialIndex));
+}
+```
+
+이제 Presenter의 `CaptureAssets()`가 이 작업을 담당합니다.
+
+```cpp
+const FUOUUmbrellaRuntimeVisualAssets Assets =
+    FUOUUmbrellaRuntimeVisualPresenter::CaptureAssets(SourceMeshComponent);
+```
+
+`UmbrellaComponent`는 픽업 메시 내부의 머티리얼 슬롯 구조를 알 필요 없이 캡처된 데이터만 전달합니다.
+
+### 런타임 메시 컴포넌트 생성 분리
+
+`EnsureVisual()`은 다음 생명주기 작업을 담당합니다.
+
+```text
+기존 RuntimeHeldVisual이 있으면 그대로 반환
+ → Owner가 없으면 생성하지 않음
+ → UStaticMeshComponent 생성
+ → Owner의 InstanceComponent로 등록
+ → 충돌과 오버랩 비활성화
+ → 초기 가시성 숨김
+ → PickupAttachPoint 또는 RootComponent에 부착
+ → 컴포넌트 등록
+ → 초기 상대 Transform 적용
+```
+
+호출부는 다음처럼 단순해졌습니다.
+
+```cpp
+RuntimeHeldVisual = FUOUUmbrellaRuntimeVisualPresenter::EnsureVisual(
+    GetOwner(),
+    PickupAttachPoint,
+    RuntimeHeldVisual,
+    RuntimeHeldVisualBaseRelativeTransform);
+```
+
+컴포넌트의 존재 여부를 관리하는 진입점 `EnsureRuntimeHeldVisual()`은 유지했습니다. 하지만 실제 생성 방법과 표시 전용 설정은 Presenter가 담당합니다.
+
+### 기본 Transform 계산 분리
+
+기본 Transform은 다음 입력을 조합합니다.
+
+- `HeldVisualAnchor`의 상대 위치
+- `HeldVisualAnchor`의 상대 회전
+- `HeldVisualRelativeScale`
+- 픽업 메시의 상대 스케일
+- `bUsePickupMeshRelativeScale` 옵션
+
+계산은 `CalculateBaseRelativeTransform()`으로 이동했습니다.
+
+```cpp
+FTransform CalculateBaseRelativeTransform(
+    const FTransform& AnchorRelativeTransform,
+    const FVector& HeldVisualRelativeScale,
+    const FVector& SourceRelativeScale,
+    bool bUseSourceRelativeScale);
+```
+
+픽업 스케일을 사용하면 축별로 다음 계산을 수행합니다.
+
+```text
+최종 Scale.X = HeldScale.X × PickupScale.X
+최종 Scale.Y = HeldScale.Y × PickupScale.Y
+최종 Scale.Z = HeldScale.Z × PickupScale.Z
+```
+
+옵션이 꺼져 있으면 픽업 스케일을 무시하고 `HeldVisualRelativeScale`만 사용합니다.
+
+이 함수는 메시 컴포넌트를 변경하지 않는 순수 계산 함수라 월드 없이 테스트할 수 있습니다.
+
+### 상태별 뒤집힘 Transform 분리
+
+기존 `ApplyRuntimeHeldVisualStateTransform()`은 `UmbrellaComponent` 내부에서 회전과 위치 오프셋을 직접 계산했습니다.
+
+이 함수는 제거하고 다음 두 함수로 역할을 나눴습니다.
+
+```cpp
+CalculateStateRelativeTransform(...);
+ApplyStateTransform(...);
+```
+
+`CalculateStateRelativeTransform()`은 기본 Transform에서 최종 Transform을 계산합니다. `OpenReversed` 상태이고 뒤집기 옵션이 켜져 있을 때만 다음 보정을 적용합니다.
+
+```text
+최종 회전 = 기본 회전 × UpsideDown 회전 오프셋
+최종 위치 = 기본 위치 + UpsideDown 위치 오프셋
+```
+
+`ApplyStateTransform()`은 계산된 결과를 실제 `UStaticMeshComponent`에 적용합니다.
+
+비주얼 상태 판정은 앞에서 분리한 `FUOUUmbrellaVisualPolicy::ShouldFlipRuntimeVisual()`을 재사용합니다. 따라서 런타임 Presenter가 `UpsideDown`과 `Pouring`이라는 게임플레이 상태를 직접 알 필요가 없습니다.
+
+### 메시와 머티리얼 적용 분리
+
+`ApplyAssets()`는 캡처한 데이터를 런타임 비주얼에 적용합니다.
+
+```cpp
+Visual->SetStaticMesh(
+    Assets.Mesh != nullptr ? Assets.Mesh : DefaultMesh);
+```
+
+픽업 메시가 없으면 기존 `DefaultHeldMesh`를 사용합니다. 픽업에서 읽은 머티리얼은 동일한 슬롯 인덱스에 적용합니다.
+
+```cpp
+for (int32 MaterialIndex = 0;
+     MaterialIndex < Assets.Materials.Num();
+     ++MaterialIndex)
+{
+    Visual->SetMaterial(MaterialIndex, Assets.Materials[MaterialIndex]);
+}
+```
+
+### 변경 후 획득 흐름
+
+```text
+AcquireUmbrellaFromMeshComponent
+ → 우산 소유 상태 변경
+ → RuntimeVisualPresenter.CaptureAssets
+ → EnsureRuntimeHeldVisual
+   → RuntimeVisualPresenter.EnsureVisual
+ → RuntimeVisualPresenter.ApplyAssets
+ → RuntimeVisualPresenter.CalculateBaseRelativeTransform
+ → RuntimeVisualPresenter.ApplyStateTransform
+ → RefreshVisuals
+```
+
+`UmbrellaComponent`는 이제 획득 흐름을 조율하지만 픽업 메시의 복사 방법과 Transform 계산 공식은 직접 구현하지 않습니다.
+
+### 자동화 테스트 추가
+
+다음 테스트를 추가했습니다.
+
+```text
+UnderOneUmBrella.Player.Umbrella.RuntimeVisualPresenter
+```
+
+검증 항목은 다음과 같습니다.
+
+- 앵커 위치가 기본 Transform에 유지되는지
+- 앵커 회전이 기본 Transform에 유지되는지
+- 손 비주얼 스케일과 픽업 스케일이 축별로 곱해지는지
+- 픽업 스케일 사용 옵션을 끄면 픽업 스케일이 무시되는지
+- `OpenReversed`에서 위치 오프셋과 추가 회전이 적용되는지
+- 일반 `Open` 상태에서는 기본 Transform이 유지되는지
+- 픽업의 `UStaticMesh`와 상대 스케일이 캡처되는지
+- 캡처한 메시가 대상 런타임 비주얼에 적용되는지
+- 기존 런타임 비주얼이 있으면 Owner 없이도 그대로 재사용되는지
+
+### SOLID 관점
+
+#### SRP
+
+런타임 픽업 비주얼의 생성, 에셋 복사, Transform 계산이 우산 게임플레이 컴포넌트에서 분리됐습니다.
+
+#### OCP
+
+앞으로 픽업 외형 복사 규칙이나 뒤집힘 보정을 변경해도 물 붓기, 빗물 차단, 오디오 상태 코드를 수정할 필요가 줄었습니다.
+
+#### ISP
+
+Presenter의 각 함수는 필요한 입력만 받습니다. 전체 `UUOUUmbrellaComponent`를 전달하지 않으므로 거대한 인터페이스에 의존하지 않습니다.
+
+### 검증 결과
+
+- UE 5.7 `UnderOneUmBrellaEditor` 빌드 성공
+- `StateTransitions` 성공
+- `PourVisualState` 성공
+- `VisualPolicy` 성공
+- `SkeletalVisualPresenter` 성공
+- `RuntimeVisualPresenter` 성공
+- `git diff --check` 통과
+
+### 비주얼 분리 이후 남은 주요 책임
+
+비주얼 선택 정책, 스켈레탈 표시, 런타임 픽업 표시가 분리됐습니다. 이제 `UmbrellaComponent`에서 가장 큰 책임은 게임플레이 영역입니다.
+
+다음 권장 순서는 다음과 같습니다.
+
+1. 물 붓기 세션과 물방울 누적·생성·충돌 전달
+2. 빗물 차단 판정과 `RainReceiver` 연동
+3. 오디오 큐와 비 차단 루프 상태
+4. 디버그 상태 기록과 월드 드로잉
+5. 최종 상태 머신 분리
+
+다음 단계에서는 물 붓기 로직을 한 번에 모두 옮기기 전에, 먼저 물방울 누적량과 생성 주기를 관리하는 작은 세션 객체를 분리하는 것이 안전합니다.

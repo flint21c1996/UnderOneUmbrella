@@ -1,11 +1,14 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "Player/UOUUmbrellaComponent.h"
+#include "Player/UOUUmbrellaRuntimeVisualPresenter.h"
 #include "Player/UOUUmbrellaSkeletalVisualPresenter.h"
 #include "Player/UOUUmbrellaVisualPolicy.h"
 #include "Player/UOUWaterContainerComponent.h"
 
 #include "Components/SkeletalMeshComponent.h"
+#include "Components/StaticMeshComponent.h"
+#include "Engine/StaticMesh.h"
 #include "Misc/AutomationTest.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
@@ -195,6 +198,78 @@ bool FUOUUmbrellaSkeletalVisualPresenterTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("Presenter disables skeletal visual collision"), Visual->GetCollisionEnabled(), ECollisionEnabled::NoCollision);
 	TestFalse(TEXT("Presenter disables skeletal visual overlap events"), Visual->GetGenerateOverlapEvents());
 	TestFalse(TEXT("Hiding the umbrella resets direct animation playback state"), PlaybackState.bHasAppliedAnimation);
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FUOUUmbrellaRuntimeVisualPresenterTest,
+	"UnderOneUmBrella.Player.Umbrella.RuntimeVisualPresenter",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUOUUmbrellaRuntimeVisualPresenterTest::RunTest(const FString& Parameters)
+{
+	const FTransform AnchorTransform(
+		FRotator(0.0f, 30.0f, 0.0f),
+		FVector(10.0f, 20.0f, 30.0f),
+		FVector(9.0f));
+	const FTransform BaseTransform = FUOUUmbrellaRuntimeVisualPresenter::CalculateBaseRelativeTransform(
+		AnchorTransform,
+		FVector(2.0f, 3.0f, 4.0f),
+		FVector(0.5f, 2.0f, 1.5f),
+		true);
+
+	TestEqual(TEXT("Runtime visual base keeps the anchor location"), BaseTransform.GetLocation(), AnchorTransform.GetLocation());
+	TestTrue(TEXT("Runtime visual base keeps the anchor rotation"), BaseTransform.GetRotation().Equals(AnchorTransform.GetRotation()));
+	TestEqual(TEXT("Runtime visual base combines held and pickup scale"), BaseTransform.GetScale3D(), FVector(1.0f, 6.0f, 6.0f));
+
+	const FTransform ScaleIgnored = FUOUUmbrellaRuntimeVisualPresenter::CalculateBaseRelativeTransform(
+		AnchorTransform,
+		FVector(2.0f, 3.0f, 4.0f),
+		FVector(0.5f, 2.0f, 1.5f),
+		false);
+	TestEqual(TEXT("Pickup scale can be ignored"), ScaleIgnored.GetScale3D(), FVector(2.0f, 3.0f, 4.0f));
+
+	const FTransform ReversedTransform = FUOUUmbrellaRuntimeVisualPresenter::CalculateStateRelativeTransform(
+		BaseTransform,
+		true,
+		EUOUUmbrellaVisualState::OpenReversed,
+		FRotator(180.0f, 0.0f, 0.0f),
+		FVector(0.0f, 0.0f, 150.0f));
+	TestEqual(TEXT("Reversed visual adds its location offset"), ReversedTransform.GetLocation(), FVector(10.0f, 20.0f, 180.0f));
+	TestFalse(TEXT("Reversed visual applies an additional rotation"), ReversedTransform.GetRotation().Equals(BaseTransform.GetRotation()));
+
+	const FTransform OpenTransform = FUOUUmbrellaRuntimeVisualPresenter::CalculateStateRelativeTransform(
+		BaseTransform,
+		true,
+		EUOUUmbrellaVisualState::Open,
+		FRotator(180.0f, 0.0f, 0.0f),
+		FVector(0.0f, 0.0f, 150.0f));
+	TestTrue(TEXT("Normal open visual keeps the base transform"), OpenTransform.Equals(BaseTransform));
+
+	UStaticMeshComponent* SourceVisual = NewObject<UStaticMeshComponent>();
+	UStaticMeshComponent* TargetVisual = NewObject<UStaticMeshComponent>();
+	UStaticMesh* Mesh = NewObject<UStaticMesh>();
+	TestNotNull(TEXT("Source runtime visual can be created"), SourceVisual);
+	TestNotNull(TEXT("Target runtime visual can be created"), TargetVisual);
+	TestNotNull(TEXT("Runtime visual mesh can be created"), Mesh);
+	if (SourceVisual == nullptr || TargetVisual == nullptr || Mesh == nullptr)
+	{
+		return false;
+	}
+
+	SourceVisual->SetStaticMesh(Mesh);
+	SourceVisual->SetRelativeScale3D(FVector(1.5f, 2.0f, 2.5f));
+	const FUOUUmbrellaRuntimeVisualAssets CapturedAssets = FUOUUmbrellaRuntimeVisualPresenter::CaptureAssets(SourceVisual);
+	TestEqual(TEXT("Presenter captures the pickup static mesh"), CapturedAssets.Mesh, Mesh);
+	TestEqual(TEXT("Presenter captures the pickup relative scale"), CapturedAssets.SourceRelativeScale, FVector(1.5f, 2.0f, 2.5f));
+
+	FUOUUmbrellaRuntimeVisualPresenter::ApplyAssets(TargetVisual, CapturedAssets, nullptr);
+	TestTrue(TEXT("Presenter applies the captured static mesh"), TargetVisual->GetStaticMesh() == Mesh);
+	TestEqual(
+		TEXT("Ensure returns an existing runtime visual without requiring an owner"),
+		FUOUUmbrellaRuntimeVisualPresenter::EnsureVisual(nullptr, nullptr, TargetVisual, FTransform::Identity),
+		TargetVisual);
 
 	return true;
 }
