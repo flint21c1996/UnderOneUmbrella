@@ -598,7 +598,7 @@ public:
 
 protected:
 	// 우산 상태를 안전하게 바꾸고 비주얼과 이벤트를 함께 갱신합니다.
-	void SetState(EUOUUmbrellaState NewState);
+	void SetState(EUOUUmbrellaState NewState, bool bBroadcastIfUnchanged = false);
 
 	// 현재 방향으로 우산을 펼쳤을 때 외부에 노출할 기존 상태를 계산합니다.
 	EUOUUmbrellaState GetOpenStateForCurrentDirection() const;
@@ -606,19 +606,11 @@ protected:
 	// 현재 상태와 보유 여부에 맞게 우산 비주얼 표시를 맞춥니다.
 	void RefreshVisuals();
 
-	EUOUUmbrellaVisualState ResolveVisualState() const;
-
 	void RefreshSkeletalVisual();
 
 	bool IsSkeletalHeldVisualAvailable() const;
 
 	void HideStaticHeldVisuals();
-
-	FName GetSkeletalVisualSocketName(EUOUUmbrellaVisualState VisualState) const;
-
-	FTransform GetSkeletalVisualOffset(EUOUUmbrellaVisualState VisualState) const;
-
-	UAnimationAsset* GetSkeletalVisualAnimation(EUOUUmbrellaVisualState VisualState) const;
 
 	// 우산 관련 오디오 이벤트를 플레이어 위치에서 재생합니다.
 	void PlayUmbrellaAudioEvent(FName AudioEventId) const;
@@ -670,16 +662,7 @@ protected:
 	void ApplyHeldVisualFromMeshComponent(UStaticMeshComponent* SourceMeshComponent);
 
 	// 직접 전달받은 메쉬와 머티리얼을 런타임 우산 비주얼에 적용합니다.
-	void ApplyHeldVisualFromAssets(UStaticMesh* Mesh, const TArray<TObjectPtr<UMaterialInterface>>& Materials, const FVector& SourceRelativeScale);
-
-	// 손에 든 우산 비주얼의 로컬 위치, 회전, 스케일을 계산합니다.
-	FTransform GetHeldVisualRelativeTransform(const FVector& SourceRelativeScale) const;
-
-	// 현재 우산 상태에 맞게 런타임 우산 메쉬의 임시 회전 보정을 적용합니다.
-	void ApplyRuntimeHeldVisualStateTransform();
-
-	// 런타임 우산 메쉬를 뒤집힌 상태로 보여줘야 하는지 확인합니다.
-	bool ShouldFlipRuntimeHeldVisual() const;
+	void ApplyHeldVisualFromAssets(UStaticMesh* Mesh, const TArray<UMaterialInterface*>& Materials, const FVector& SourceRelativeScale);
 
 	// 우산 상태와 물 정보를 화면 디버그 텍스트로 표시합니다.
 	void DrawScreenDebug() const;
