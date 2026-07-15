@@ -143,6 +143,7 @@ void AUOUUmbrellaRainArea::BeginPlay()
 	// BeginPlay 시점에 Construction에서 정리된 값이 있어도 한 번 더 내부 컴포넌트와 동기화합니다.
 	// 블루프린트 인스턴스에서 바뀐 Niagara 참조나 프리뷰 설정을 런타임 상태에 맞추기 위한 단계입니다.
 	RefreshRainVisualEffectComponents();
+	RefreshRainTargetCache();
 	ApplyPreviewSettings();
 	ApplyEnvironmentVisualSettings();
 }
@@ -150,6 +151,9 @@ void AUOUUmbrellaRainArea::BeginPlay()
 void AUOUUmbrellaRainArea::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	StopRainAudio(0.0f);
+	CachedWaterWheelTargets.Reset();
+	CachedHeatWireTargets.Reset();
+	CachedRainTargetActorScanCount = 0;
 	Super::EndPlay(EndPlayReason);
 }
 
@@ -302,6 +306,47 @@ void AUOUUmbrellaRainArea::ApplyEnvironmentVisualSettings()
 {
 	ApplyEnvironmentVisualGeometry();
 	ApplyEnvironmentVisualState();
+}
+
+void AUOUUmbrellaRainArea::RefreshRainTargetCache()
+{
+	CachedWaterWheelTargets.Reset();
+	CachedHeatWireTargets.Reset();
+	CachedRainTargetActorScanCount = 0;
+
+	UWorld* World = GetWorld();
+	if (World == nullptr)
+	{
+		return;
+	}
+
+	for (TActorIterator<AActor> ActorIt(World); ActorIt; ++ActorIt)
+	{
+		AActor* Actor = *ActorIt;
+		++CachedRainTargetActorScanCount;
+		if (!IsValid(Actor))
+		{
+			continue;
+		}
+
+		TInlineComponentArray<UUOUWaterWheelRainConditionComponent*> WaterWheelComponents(Actor);
+		for (UUOUWaterWheelRainConditionComponent* WaterWheel : WaterWheelComponents)
+		{
+			if (IsValid(WaterWheel))
+			{
+				CachedWaterWheelTargets.AddUnique(WaterWheel);
+			}
+		}
+
+		TInlineComponentArray<UUOUHeatWireComponent*> HeatWireComponents(Actor);
+		for (UUOUHeatWireComponent* HeatWire : HeatWireComponents)
+		{
+			if (IsValid(HeatWire))
+			{
+				CachedHeatWireTargets.AddUnique(HeatWire);
+			}
+		}
+	}
 }
 
 void AUOUUmbrellaRainArea::ApplyEnvironmentVisualGeometry()
@@ -650,6 +695,8 @@ void AUOUUmbrellaRainArea::ApplyRainToWaterWheelTargets(float DeltaSeconds, bool
 		LastWaterWheelRainDebugReason = TEXT("Skipped: No World");
 		return;
 	}
+	LastWaterWheelActorScanCount = CachedRainTargetActorScanCount;
+	LastWaterWheelComponentCount = CachedWaterWheelTargets.Num();
 
 	const FVector RainDirection = FlowDirection == EUOURainAreaFlowDirection::Upward
 		? RainVolume->GetUpVector()
@@ -659,105 +706,94 @@ void AUOUUmbrellaRainArea::ApplyRainToWaterWheelTargets(float DeltaSeconds, bool
 	int32 NoOwnerComponentCount = 0;
 	int32 OtherCannotReceiveComponentCount = 0;
 
-	for (TActorIterator<AActor> ActorIt(World); ActorIt; ++ActorIt)
+	for (const TWeakObjectPtr<UUOUWaterWheelRainConditionComponent>& WeakWaterWheel : CachedWaterWheelTargets)
 	{
-		AActor* Actor = *ActorIt;
-		++LastWaterWheelActorScanCount;
-		if (!IsValid(Actor))
+		UUOUWaterWheelRainConditionComponent* WaterWheel = WeakWaterWheel.Get();
+		if (!IsValid(WaterWheel))
 		{
 			continue;
 		}
 
-		TInlineComponentArray<UUOUWaterWheelRainConditionComponent*> WaterWheelComponents(Actor);
-		LastWaterWheelComponentCount += WaterWheelComponents.Num();
-		for (UUOUWaterWheelRainConditionComponent* WaterWheel : WaterWheelComponents)
+		if (!WaterWheel->bRainInputEnabled)
 		{
-			if (!IsValid(WaterWheel))
+			++RainInputDisabledComponentCount;
+			continue;
+		}
+
+		if (!WaterWheel->IsActive())
+		{
+			++InactiveComponentCount;
+			continue;
+		}
+
+		if (WaterWheel->GetOwner() == nullptr)
+		{
+			++NoOwnerComponentCount;
+			continue;
+		}
+
+		if (!WaterWheel->CanReceiveRainInput())
+		{
+			++OtherCannotReceiveComponentCount;
+			continue;
+		}
+		++LastWaterWheelValidComponentCount;
+
+		TArray<FUOUWaterWheelRainCatchSample> CatchSamples;
+		WaterWheel->GetRainCatchSamples(CatchSamples);
+		LastWaterWheelCatchSampleCount += CatchSamples.Num();
+		for (const FUOUWaterWheelRainCatchSample& CatchSample : CatchSamples)
+		{
+			LastWaterWheelSampleLocation = CatchSample.WorldLocation;
+			const float RainScale = CalculateWaterWheelCatchRainScale(
+				CatchSample,
+				bHasRainBlocker,
+				RainBlockerWorldCenter,
+				RainBlockerWorldRotation,
+				RainBlockerHalfExtent);
+
+			if (bDrawWaterWheelRainInputDebug)
+			{
+				const FColor DebugColor =
+					CatchSample.Weight <= KINDA_SMALL_NUMBER
+						? FColor::Yellow
+						: (RainScale > KINDA_SMALL_NUMBER ? FColor::Green : FColor::Red);
+				DrawDebugSphere(
+					World,
+					CatchSample.WorldLocation,
+					FMath::Max(8.0f, CatchSample.CoverageRadius * 0.15f),
+					12,
+					DebugColor,
+					false,
+					WaterWheelRainInputDebugLifeTime,
+					0,
+					2.0f);
+				DrawDebugString(
+					World,
+					CatchSample.WorldLocation + FVector(0.0f, 0.0f, 22.0f),
+					FString::Printf(TEXT("WheelRain %.2f W %.2f"), RainScale, CatchSample.Weight),
+					nullptr,
+					DebugColor,
+					WaterWheelRainInputDebugLifeTime,
+					true,
+					0.85f);
+			}
+
+			if (CatchSample.Weight <= KINDA_SMALL_NUMBER || RainScale <= KINDA_SMALL_NUMBER)
 			{
 				continue;
 			}
 
-			if (!WaterWheel->bRainInputEnabled)
-			{
-				++RainInputDisabledComponentCount;
-				continue;
-			}
-
-			if (!WaterWheel->IsActive())
-			{
-				++InactiveComponentCount;
-				continue;
-			}
-
-			if (WaterWheel->GetOwner() == nullptr)
-			{
-				++NoOwnerComponentCount;
-				continue;
-			}
-
-			if (!WaterWheel->CanReceiveRainInput())
-			{
-				++OtherCannotReceiveComponentCount;
-				continue;
-			}
-			++LastWaterWheelValidComponentCount;
-
-			TArray<FUOUWaterWheelRainCatchSample> CatchSamples;
-			WaterWheel->GetRainCatchSamples(CatchSamples);
-			LastWaterWheelCatchSampleCount += CatchSamples.Num();
-			for (const FUOUWaterWheelRainCatchSample& CatchSample : CatchSamples)
-			{
-				LastWaterWheelSampleLocation = CatchSample.WorldLocation;
-				const float RainScale = CalculateWaterWheelCatchRainScale(
-					CatchSample,
-					bHasRainBlocker,
-					RainBlockerWorldCenter,
-					RainBlockerWorldRotation,
-					RainBlockerHalfExtent);
-
-				if (bDrawWaterWheelRainInputDebug)
-				{
-					const FColor DebugColor =
-						CatchSample.Weight <= KINDA_SMALL_NUMBER
-							? FColor::Yellow
-							: (RainScale > KINDA_SMALL_NUMBER ? FColor::Green : FColor::Red);
-					DrawDebugSphere(
-						World,
-						CatchSample.WorldLocation,
-						FMath::Max(8.0f, CatchSample.CoverageRadius * 0.15f),
-						12,
-						DebugColor,
-						false,
-						WaterWheelRainInputDebugLifeTime,
-						0,
-						2.0f);
-					DrawDebugString(
-						World,
-						CatchSample.WorldLocation + FVector(0.0f, 0.0f, 22.0f),
-						FString::Printf(TEXT("WheelRain %.2f W %.2f"), RainScale, CatchSample.Weight),
-						nullptr,
-						DebugColor,
-						WaterWheelRainInputDebugLifeTime,
-						true,
-						0.85f);
-				}
-
-				if (CatchSample.Weight <= KINDA_SMALL_NUMBER || RainScale <= KINDA_SMALL_NUMBER)
-				{
-					continue;
-				}
-
-				FUOUWaterWheelRainInputContext InputContext;
-				InputContext.Strength = RainStrength * CatchSample.Weight * RainScale;
-				InputContext.Duration = SafeDeltaSeconds;
-				InputContext.WorldLocation = CatchSample.WorldLocation;
-				InputContext.WorldDirection = RainDirection;
-				InputContext.bHasValidWorldLocation = true;
-				InputContext.InstigatorActor = const_cast<AUOUUmbrellaRainArea*>(this);
-				WaterWheel->ReceiveRainInput(InputContext);
-				++LastWaterWheelAcceptedSampleCount;
-				LastWaterWheelDeliveredStrength += InputContext.Strength;
-			}
+			FUOUWaterWheelRainInputContext InputContext;
+			InputContext.Strength = RainStrength * CatchSample.Weight * RainScale;
+			InputContext.Duration = SafeDeltaSeconds;
+			InputContext.WorldLocation = CatchSample.WorldLocation;
+			InputContext.WorldDirection = RainDirection;
+			InputContext.bHasValidWorldLocation = true;
+			InputContext.InstigatorActor = const_cast<AUOUUmbrellaRainArea*>(this);
+			WaterWheel->ReceiveRainInput(InputContext);
+			++LastWaterWheelAcceptedSampleCount;
+			LastWaterWheelDeliveredStrength += InputContext.Strength;
 		}
 	}
 
@@ -854,81 +890,72 @@ void AUOUUmbrellaRainArea::ApplyRainToHeatWireTargets(
 		LastHeatWireRainDebugReason = TEXT("Skipped: No World");
 		return;
 	}
+	LastHeatWireActorScanCount = CachedRainTargetActorScanCount;
+	LastHeatWireComponentCount = CachedHeatWireTargets.Num();
 
 	int32 InactiveComponentCount = 0;
 	int32 NoOwnerComponentCount = 0;
 	int32 NoWetSectionComponentCount = 0;
 	int32 OtherCannotReceiveComponentCount = 0;
 
-	for (TActorIterator<AActor> ActorIt(World); ActorIt; ++ActorIt)
+	for (const TWeakObjectPtr<UUOUHeatWireComponent>& WeakHeatWire : CachedHeatWireTargets)
 	{
-		AActor* Actor = *ActorIt;
-		++LastHeatWireActorScanCount;
-		if (!IsValid(Actor))
+		UUOUHeatWireComponent* HeatWire = WeakHeatWire.Get();
+		if (!IsValid(HeatWire))
 		{
 			continue;
 		}
 
-		TInlineComponentArray<UUOUHeatWireComponent*> HeatWireComponents(Actor);
-		LastHeatWireComponentCount += HeatWireComponents.Num();
-		for (UUOUHeatWireComponent* HeatWire : HeatWireComponents)
+		if (!HeatWire->IsActive())
 		{
-			if (!IsValid(HeatWire))
+			++InactiveComponentCount;
+			continue;
+		}
+
+		if (HeatWire->GetOwner() == nullptr)
+		{
+			++NoOwnerComponentCount;
+			continue;
+		}
+
+		const int32 WetSectionCount = HeatWire->GetWetSectionCount();
+		if (WetSectionCount <= 0)
+		{
+			++NoWetSectionComponentCount;
+			continue;
+		}
+
+		if (!HeatWire->CanReceiveRainInput())
+		{
+			++OtherCannotReceiveComponentCount;
+			continue;
+		}
+
+		++LastHeatWireValidComponentCount;
+		LastHeatWireWetSectionCount += WetSectionCount;
+		for (int32 SectionIndex = 0; SectionIndex < WetSectionCount; ++SectionIndex)
+		{
+			if (!HeatWire->CanWetSectionReceiveRain(SectionIndex))
 			{
 				continue;
 			}
 
-			if (!HeatWire->IsActive())
+			const float RainScale = CalculateHeatWireWetSectionRainScale(
+				HeatWire,
+				SectionIndex,
+				bHasRainBlocker,
+				RainBlockerWorldCenter,
+				RainBlockerWorldRotation,
+				RainBlockerHalfExtent);
+			if (RainScale <= 0.0f)
 			{
-				++InactiveComponentCount;
 				continue;
 			}
 
-			if (HeatWire->GetOwner() == nullptr)
-			{
-				++NoOwnerComponentCount;
-				continue;
-			}
-
-			const int32 WetSectionCount = HeatWire->GetWetSectionCount();
-			if (WetSectionCount <= 0)
-			{
-				++NoWetSectionComponentCount;
-				continue;
-			}
-
-			if (!HeatWire->CanReceiveRainInput())
-			{
-				++OtherCannotReceiveComponentCount;
-				continue;
-			}
-
-			++LastHeatWireValidComponentCount;
-			LastHeatWireWetSectionCount += WetSectionCount;
-			for (int32 SectionIndex = 0; SectionIndex < WetSectionCount; ++SectionIndex)
-			{
-				if (!HeatWire->CanWetSectionReceiveRain(SectionIndex))
-				{
-					continue;
-				}
-
-				const float RainScale = CalculateHeatWireWetSectionRainScale(
-					HeatWire,
-					SectionIndex,
-					bHasRainBlocker,
-					RainBlockerWorldCenter,
-					RainBlockerWorldRotation,
-					RainBlockerHalfExtent);
-				if (RainScale <= 0.0f)
-				{
-					continue;
-				}
-
-				const float DeliveredWetness = RainAmount * RainScale;
-				HeatWire->ApplyRainToWetSection(SectionIndex, DeliveredWetness, this);
-				++LastHeatWireAcceptedSectionCount;
-				LastHeatWireDeliveredWetness += DeliveredWetness;
-			}
+			const float DeliveredWetness = RainAmount * RainScale;
+			HeatWire->ApplyRainToWetSection(SectionIndex, DeliveredWetness, this);
+			++LastHeatWireAcceptedSectionCount;
+			LastHeatWireDeliveredWetness += DeliveredWetness;
 		}
 	}
 
