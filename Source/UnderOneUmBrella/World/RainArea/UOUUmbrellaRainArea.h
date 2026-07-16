@@ -14,6 +14,7 @@ class UStaticMeshComponent;
 class UUOUHeatWireComponent;
 class UUOUAudioSubsystem;
 class UUOUEnvironmentVisualComponent;
+class UUOUWaterWheelRainConditionComponent;
 struct FUOUWaterWheelRainCatchSample;
 
 UENUM(BlueprintType)
@@ -230,6 +231,8 @@ protected:
 
 	// 현재 프리뷰 메쉬의 표시 상태와 스케일을 설정값에 맞게 다시 맞춥니다.
 	void ApplyPreviewSettings();
+	// 매 프레임 월드 전체를 탐색하지 않도록 고정 배치된 비 반응 대상을 미리 수집합니다.
+	void RefreshRainTargetCache();
 	// RainVisual 아래에 배치한 Niagara 컴포넌트들을 수집해 n개짜리 비 효과로 등록합니다.
 	void RefreshRainVisualEffectComponents();
 	// RainVisual 컴포넌트에 강도와 표시 옵션 같은 공통 설정을 넘깁니다.
@@ -274,4 +277,9 @@ protected:
 
 	UPROPERTY(Transient)
 	FName ActiveRainAudioEventId = NAME_None;
+
+	// 대상은 다른 액터가 소유하므로 수명에 영향을 주지 않는 약한 참조로 보관합니다.
+	TArray<TWeakObjectPtr<UUOUWaterWheelRainConditionComponent>> CachedWaterWheelTargets;
+	TArray<TWeakObjectPtr<UUOUHeatWireComponent>> CachedHeatWireTargets;
+	int32 CachedRainTargetActorScanCount = 0;
 };
