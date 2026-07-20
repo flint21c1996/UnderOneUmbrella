@@ -20,6 +20,7 @@ void UUOUPlayerAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 	CacheOwnerIfNeeded();
 	UpdateMovementVariables();
 	UpdateUmbrellaVariables();
+	UpdateLadderVariables();
 	UpdateDerivedAnimationVariables();
 }
 
@@ -31,11 +32,17 @@ void UUOUPlayerAnimInstance::CacheOwnerIfNeeded()
 	{
 		OwnerCharacter = CurrentOwner;
 		UmbrellaComponent = nullptr;
+		LadderClimbComponent = nullptr;
 	}
 
 	if (OwnerCharacter != nullptr && UmbrellaComponent == nullptr)
 	{
 		UmbrellaComponent = OwnerCharacter->FindComponentByClass<UUOUUmbrellaComponent>();
+	}
+
+	if (OwnerCharacter != nullptr && LadderClimbComponent == nullptr)
+	{
+		LadderClimbComponent = OwnerCharacter->FindComponentByClass<UUOULadderClimbComponent>();
 	}
 }
 
@@ -76,8 +83,27 @@ void UUOUPlayerAnimInstance::UpdateUmbrellaVariables()
 
 void UUOUPlayerAnimInstance::UpdateDerivedAnimationVariables()
 {
-	UseUmbrellaAnim = HasUmbrella && IsUmbrellaOpen && !IsUmbrellaUpsideDown && !IsPouring;
-	UseFlippedUmbrellaAnim = HasUmbrella && IsUmbrellaUpsideDown && !IsPouring;
+	UseUmbrellaAnim = HasUmbrella && IsUmbrellaOpen && !IsUmbrellaUpsideDown && !IsPouring && !IsClimbingLadder;
+	UseFlippedUmbrellaAnim = HasUmbrella && IsUmbrellaUpsideDown && !IsPouring && !IsClimbingLadder;
+}
+
+void UUOUPlayerAnimInstance::UpdateLadderVariables()
+{
+	if (LadderClimbComponent == nullptr && OwnerCharacter != nullptr)
+	{
+		LadderClimbComponent = OwnerCharacter->FindComponentByClass<UUOULadderClimbComponent>();
+	}
+
+	if (LadderClimbComponent == nullptr)
+	{
+		ResetLadderVariables();
+		return;
+	}
+
+	IsClimbingLadder = LadderClimbComponent->IsClimbing();
+	LadderClimbState = LadderClimbComponent->GetClimbState();
+	LadderClimbInput = LadderClimbComponent->GetClimbInput();
+	LadderNormalizedHeight = LadderClimbComponent->GetNormalizedHeight();
 }
 
 void UUOUPlayerAnimInstance::ResetMovementVariables()
@@ -93,4 +119,12 @@ void UUOUPlayerAnimInstance::ResetUmbrellaVariables()
 	IsUmbrellaOpen = false;
 	IsUmbrellaUpsideDown = false;
 	IsPouring = false;
+}
+
+void UUOUPlayerAnimInstance::ResetLadderVariables()
+{
+	IsClimbingLadder = false;
+	LadderClimbState = EUOULadderClimbState::None;
+	LadderClimbInput = 0.0f;
+	LadderNormalizedHeight = 0.0f;
 }
