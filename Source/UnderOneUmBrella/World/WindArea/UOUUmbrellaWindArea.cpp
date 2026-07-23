@@ -17,6 +17,7 @@
 AUOUUmbrellaWindArea::AUOUUmbrellaWindArea()
 {
 	PrimaryActorTick.bCanEverTick = true;
+	PrimaryActorTick.bStartWithTickEnabled = false;
 	PrimaryActorTick.TickGroup = TG_PostPhysics;
 
 	RootScene = CreateDefaultSubobject<USceneComponent>(TEXT("RootScene"));
@@ -29,6 +30,12 @@ AUOUUmbrellaWindArea::AUOUUmbrellaWindArea()
 	WindVolume->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
 	WindVolume->SetGenerateOverlapEvents(true);
 	WindVolume->SetBoxExtent(FVector(250.0f, 250.0f, 200.0f));
+	WindVolume->OnComponentBeginOverlap.AddUniqueDynamic(
+		this,
+		&AUOUUmbrellaWindArea::HandleWindVolumeBeginOverlap);
+	WindVolume->OnComponentEndOverlap.AddUniqueDynamic(
+		this,
+		&AUOUUmbrellaWindArea::HandleWindVolumeEndOverlap);
 
 	WindPath = CreateDefaultSubobject<USplineComponent>(TEXT("WindPath"));
 	WindPath->SetupAttachment(RootScene);
@@ -54,11 +61,29 @@ AUOUUmbrellaWindArea::AUOUUmbrellaWindArea()
 	}
 }
 
+void AUOUUmbrellaWindArea::BeginPlay()
+{
+	Super::BeginPlay();
+	RefreshPreview();
+
+	if (WindVolume != nullptr)
+	{
+		TArray<AActor*> InitiallyOverlappingPlayers;
+		WindVolume->GetOverlappingActors(
+			InitiallyOverlappingPlayers,
+			AUOUCharacter::StaticClass());
+		if (!InitiallyOverlappingPlayers.IsEmpty())
+		{
+			SetOverlappingPlayer(Cast<AUOUCharacter>(InitiallyOverlappingPlayers[0]));
+		}
+	}
+
+	RefreshTickEnabled();
+}
+
 void AUOUUmbrellaWindArea::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
-
-	RefreshPreview();
 
 	if (!bWindEnabled
 		|| MoveSpeed <= 0.0f
@@ -70,7 +95,7 @@ void AUOUUmbrellaWindArea::Tick(float DeltaSeconds)
 		return;
 	}
 
-	TryCapturePlayer();
+	StartPendingPlayerTravel();
 	UpdateActivePlayerTravel(DeltaSeconds);
 
 	if (bDrawWindDebug && GetWorld() != nullptr && WindPath->GetNumberOfSplinePoints() >= 2)
@@ -99,6 +124,7 @@ void AUOUUmbrellaWindArea::OnConstruction(const FTransform& Transform)
 
 void AUOUUmbrellaWindArea::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	SetOverlappingPlayer(nullptr);
 	FinishActivePlayerTravel();
 	Super::EndPlay(EndPlayReason);
 }
@@ -142,56 +168,47 @@ void AUOUUmbrellaWindArea::RefreshPreview()
 	}
 }
 
-void AUOUUmbrellaWindArea::TryCapturePlayer()
+void AUOUUmbrellaWindArea::StartPendingPlayerTravel()
 {
-	if (ActivePlayer.IsValid())
+	if (!bTravelStartPending || ActivePlayer.IsValid())
 	{
 		return;
 	}
 
-	TArray<AActor*> OverlappingActors;
-	WindVolume->GetOverlappingActors(OverlappingActors, AUOUCharacter::StaticClass());
+	bTravelStartPending = false;
 
-	for (AActor* OverlappingActor : OverlappingActors)
+	AUOUCharacter* Character = OverlappingPlayer.Get();
+	if (Character == nullptr)
 	{
-		AUOUCharacter* Character = Cast<AUOUCharacter>(OverlappingActor);
-		if (Character == nullptr)
+		SetOverlappingPlayer(nullptr);
+		RefreshTickEnabled();
+		return;
+	}
+
+	const UUOUUmbrellaComponent* UmbrellaComponent =
+		Character->FindComponentByClass<UUOUUmbrellaComponent>();
+	if (UmbrellaComponent != nullptr && UmbrellaComponent->IsOpen())
+	{
+		ActivePlayer = Character;
+		bMovingToPathStart = true;
+		CurrentDistanceAlongPath = 0.0f;
+
+		if (UCharacterMovementComponent* MutableMovementComponent =
+			Character->GetCharacterMovement())
 		{
-			continue;
+			MutableMovementComponent->StopMovementImmediately();
+			MutableMovementComponent->DisableMovement();
 		}
 
-		const UUOUUmbrellaComponent* UmbrellaComponent =
-			Character->FindComponentByClass<UUOUUmbrellaComponent>();
-		const UCharacterMovementComponent* MovementComponent =
-			Character->GetCharacterMovement();
-		const bool bIsRisingFromJump = MovementComponent != nullptr
-			&& MovementComponent->IsFalling()
-			&& MovementComponent->Velocity.Z > KINDA_SMALL_NUMBER;
-
-		if (UmbrellaComponent != nullptr
-			&& UmbrellaComponent->IsOpen()
-			&& bIsRisingFromJump)
+		if (UUOUPlayerInteractionExecutorComponent* InputExecutor =
+			Character->FindComponentByClass<UUOUPlayerInteractionExecutorComponent>())
 		{
-			ActivePlayer = Character;
-			bMovingToPathStart = true;
-			CurrentDistanceAlongPath = 0.0f;
-
-			if (UCharacterMovementComponent* MutableMovementComponent =
-				Character->GetCharacterMovement())
-			{
-				MutableMovementComponent->StopMovementImmediately();
-				MutableMovementComponent->DisableMovement();
-			}
-
-			if (UUOUPlayerInteractionExecutorComponent* InputExecutor =
-				Character->FindComponentByClass<UUOUPlayerInteractionExecutorComponent>())
-			{
-				InputExecutor->RequestPlayerInputBlockAllowingCameraRotation(this, true);
-				LockedInputExecutorComponent = InputExecutor;
-			}
-			return;
+			InputExecutor->RequestPlayerInputBlockAllowingCameraRotation(this, true);
+			LockedInputExecutorComponent = InputExecutor;
 		}
 	}
+
+	RefreshTickEnabled();
 }
 
 void AUOUUmbrellaWindArea::UpdateActivePlayerTravel(float DeltaSeconds)
@@ -277,6 +294,90 @@ void AUOUUmbrellaWindArea::FinishActivePlayerTravel()
 	}
 
 	ActivePlayer.Reset();
+	bTravelStartPending = false;
 	bMovingToPathStart = false;
 	CurrentDistanceAlongPath = 0.0f;
+	RefreshTickEnabled();
+}
+
+void AUOUUmbrellaWindArea::RefreshTickEnabled()
+{
+	const bool bShouldTick = bDrawWindDebug
+		|| ActivePlayer.IsValid()
+		|| bTravelStartPending;
+	SetActorTickEnabled(bShouldTick);
+}
+
+void AUOUUmbrellaWindArea::SetOverlappingPlayer(AUOUCharacter* Character)
+{
+	AUOUCharacter* PreviousCharacter = OverlappingPlayer.Get();
+	if (PreviousCharacter == Character)
+	{
+		return;
+	}
+
+	if (PreviousCharacter != nullptr)
+	{
+		PreviousCharacter->OnCharacterJumped.RemoveDynamic(
+			this,
+			&AUOUUmbrellaWindArea::HandleOverlappingPlayerJumped);
+	}
+
+	OverlappingPlayer = Character;
+	bTravelStartPending = false;
+
+	if (Character != nullptr)
+	{
+		Character->OnCharacterJumped.AddUniqueDynamic(
+			this,
+			&AUOUUmbrellaWindArea::HandleOverlappingPlayerJumped);
+	}
+
+	RefreshTickEnabled();
+}
+
+void AUOUUmbrellaWindArea::HandleOverlappingPlayerJumped()
+{
+	if (ActivePlayer.IsValid() || bTravelStartPending)
+	{
+		return;
+	}
+
+	AUOUCharacter* Character = OverlappingPlayer.Get();
+	const UUOUUmbrellaComponent* UmbrellaComponent = Character != nullptr
+		? Character->FindComponentByClass<UUOUUmbrellaComponent>()
+		: nullptr;
+	if (UmbrellaComponent == nullptr || !UmbrellaComponent->IsOpen())
+	{
+		return;
+	}
+
+	bTravelStartPending = true;
+	RefreshTickEnabled();
+}
+
+void AUOUUmbrellaWindArea::HandleWindVolumeBeginOverlap(
+	UPrimitiveComponent* OverlappedComponent,
+	AActor* OtherActor,
+	UPrimitiveComponent* OtherComponent,
+	int32 OtherBodyIndex,
+	bool bFromSweep,
+	const FHitResult& SweepResult)
+{
+	if (AUOUCharacter* Character = Cast<AUOUCharacter>(OtherActor))
+	{
+		SetOverlappingPlayer(Character);
+	}
+}
+
+void AUOUUmbrellaWindArea::HandleWindVolumeEndOverlap(
+	UPrimitiveComponent* OverlappedComponent,
+	AActor* OtherActor,
+	UPrimitiveComponent* OtherComponent,
+	int32 OtherBodyIndex)
+{
+	if (OtherActor == OverlappingPlayer.Get())
+	{
+		SetOverlappingPlayer(nullptr);
+	}
 }

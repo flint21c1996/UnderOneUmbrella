@@ -8,6 +8,7 @@
 
 class UArrowComponent;
 class UBoxComponent;
+class UPrimitiveComponent;
 class USceneComponent;
 class USplineComponent;
 class UStaticMeshComponent;
@@ -24,6 +25,7 @@ public:
 	AUOUUmbrellaWindArea();
 
 protected:
+	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void OnConstruction(const FTransform& Transform) override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
@@ -72,14 +74,45 @@ private:
 	// WindVolume과 WindPath의 현재 배치를 프리뷰 컴포넌트에 반영합니다.
 	void RefreshPreview();
 
-	// 이동 중인 플레이어가 없으면 영역 안에서 우산을 펼치고 점프한 플레이어를 등록합니다.
-	void TryCapturePlayer();
+	// 점프 이벤트로 예약된 플레이어의 경로 이동을 PostPhysics 시점에 시작합니다.
+	void StartPendingPlayerTravel();
 
 	// 현재 플레이어를 시작점까지 이동시키거나 스플라인 위로 이동시킵니다.
 	void UpdateActivePlayerTravel(float DeltaSeconds);
 
 	// 이동을 끝내고 캐릭터의 기본 낙하 이동을 복구합니다.
 	void FinishActivePlayerTravel();
+
+	// 영역 내 플레이어 감시, 경로 이동, 디버그 표시 중 하나라도 필요할 때만 Tick을 켭니다.
+	void RefreshTickEnabled();
+
+	// 영역 내 플레이어를 교체하며 점프 이벤트 구독 수명도 함께 관리합니다.
+	void SetOverlappingPlayer(AUOUCharacter* Character);
+
+	UFUNCTION()
+	void HandleOverlappingPlayerJumped();
+
+	UFUNCTION()
+	void HandleWindVolumeBeginOverlap(
+		UPrimitiveComponent* OverlappedComponent,
+		AActor* OtherActor,
+		UPrimitiveComponent* OtherComponent,
+		int32 OtherBodyIndex,
+		bool bFromSweep,
+		const FHitResult& SweepResult);
+
+	UFUNCTION()
+	void HandleWindVolumeEndOverlap(
+		UPrimitiveComponent* OverlappedComponent,
+		AActor* OtherActor,
+		UPrimitiveComponent* OtherComponent,
+		int32 OtherBodyIndex);
+
+	// WindVolume 안에서 발동 조건을 기다리는 싱글플레이 캐릭터입니다.
+	TWeakObjectPtr<AUOUCharacter> OverlappingPlayer;
+
+	// 점프 이벤트를 받은 뒤 PostPhysics Tick에서 이동을 시작하기 위한 예약 상태입니다.
+	bool bTravelStartPending = false;
 
 	// 싱글플레이에서 현재 WindPath를 따라가는 플레이어입니다.
 	TWeakObjectPtr<AUOUCharacter> ActivePlayer;
