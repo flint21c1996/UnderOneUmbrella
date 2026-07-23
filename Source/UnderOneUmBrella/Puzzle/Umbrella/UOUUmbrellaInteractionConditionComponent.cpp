@@ -76,6 +76,9 @@ bool UUOUUmbrellaInteractionConditionComponent::DoesInteractorUmbrellaStateMatch
 	case EUOUUmbrellaState::Pouring:
 		return UmbrellaComponent->IsPouring();
 
+	case EUOUUmbrellaState::LightReflecting:
+		return UmbrellaComponent->IsLightReflecting();
+
 	default:
 		return false;
 	}

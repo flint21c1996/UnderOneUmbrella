@@ -15,7 +15,7 @@ EUOUUmbrellaVisualState FUOUUmbrellaVisualPolicy::ResolveVisualState(
 			: EUOUUmbrellaVisualState::Closed;
 	}
 
-	if (State == EUOUUmbrellaState::Open)
+	if (State == EUOUUmbrellaState::Open || State == EUOUUmbrellaState::LightReflecting)
 	{
 		return EUOUUmbrellaVisualState::Open;
 	}

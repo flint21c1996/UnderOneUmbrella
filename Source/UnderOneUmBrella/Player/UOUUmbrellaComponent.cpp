@@ -20,6 +20,8 @@
 #include "Engine/Engine.h"
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
+#include "GameFramework/Character.h"
+#include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
 #include "Camera/PlayerCameraManager.h"
@@ -130,6 +132,7 @@ void UUOUUmbrellaComponent::BeginPlay()
 void UUOUUmbrellaComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	StopRainBlockedAudio();
+	ClearPourAimFacing();
 
 	Super::EndPlay(EndPlayReason);
 }
@@ -150,7 +153,7 @@ void UUOUUmbrellaComponent::TickComponent(float DeltaTime, ELevelTick TickType, 
 		return;
 	}
 
-	UpdatePourAimFacing();
+	UpdateUmbrellaAimFacing();
 	UpdatePouring(DeltaTime);
 	UpdatePouringEffectState();
 	DrawScreenDebug();
@@ -275,6 +278,37 @@ void UUOUUmbrellaComponent::EndPour()
 	SetState(GetOpenStateForCurrentDirection());
 }
 
+void UUOUUmbrellaComponent::BeginLightReflecting()
+{
+	if (!bHasUmbrella || CurrentState != EUOUUmbrellaState::Open)
+	{
+		return;
+	}
+
+	SetState(EUOUUmbrellaState::LightReflecting);
+}
+
+void UUOUUmbrellaComponent::EndLightReflecting()
+{
+	if (CurrentState != EUOUUmbrellaState::LightReflecting)
+	{
+		return;
+	}
+
+	SetState(EUOUUmbrellaState::Open);
+}
+
+void UUOUUmbrellaComponent::ToggleLightReflectingState()
+{
+	if (CurrentState == EUOUUmbrellaState::LightReflecting)
+	{
+		EndLightReflecting();
+		return;
+	}
+
+	BeginLightReflecting();
+}
+
 // 비나 다른 시스템에서 전달받은 물 양을 우산 저장 컨테이너에 더합니다.
 void UUOUUmbrellaComponent::AddCollectedWater(float WaterAmount)
 {
@@ -342,6 +376,7 @@ void UUOUUmbrellaComponent::ToggleOpenState()
 	case EUOUUmbrellaState::Open:
 	case EUOUUmbrellaState::UpsideDown:
 	case EUOUUmbrellaState::Pouring:
+	case EUOUUmbrellaState::LightReflecting:
 		CloseUmbrella();
 		break;
 	}
@@ -366,6 +401,7 @@ void UUOUUmbrellaComponent::ToggleInvertState()
 	case EUOUUmbrellaState::Open:
 	case EUOUUmbrellaState::UpsideDown:
 	case EUOUUmbrellaState::Pouring:
+	case EUOUUmbrellaState::LightReflecting:
 		SetState(GetOpenStateForCurrentDirection());
 		break;
 	}
@@ -407,6 +443,12 @@ void UUOUUmbrellaComponent::HandleInputPressed(FKey InputKey)
 		return;
 	}
 
+	if (InputKey == LightReflectingKey)
+	{
+		ToggleLightReflectingState();
+		return;
+	}
+
 }
 
 // 유지형 입력인 물 붓기는 키를 놓았을 때 종료합니다.
@@ -416,6 +458,7 @@ void UUOUUmbrellaComponent::HandleInputReleased(FKey InputKey)
 	{
 		EndPour();
 	}
+
 }
 
 // 우산을 가지고 있고 뒤집힌 상태일 때만 비를 받아 물로 저장할 수 있습니다.
@@ -454,6 +497,11 @@ bool UUOUUmbrellaComponent::IsPouring() const
 	return bHasUmbrella && CurrentState == EUOUUmbrellaState::Pouring;
 }
 
+bool UUOUUmbrellaComponent::IsLightReflecting() const
+{
+	return bHasUmbrella && CurrentState == EUOUUmbrellaState::LightReflecting;
+}
+
 bool UUOUUmbrellaComponent::IsNormalDirection() const
 {
 	return bHasUmbrella && CurrentDirectionState == EUOUUmbrellaDirectionState::Normal;
@@ -483,10 +531,12 @@ void UUOUUmbrellaComponent::SetClosedReversedVisualOverride(bool bEnable)
 }
 
 // ?곗궛???ㅼ쭛?붽굅??臾쇱쓣 遺볥뒗 以묒씠硫??먰봽瑜?留됱븘 ?뚮젅??媛먭컖???덉젙?쒗궢?덈떎.
-// 우산이 뒤집혔거나 물을 붓는 중이면 점프를 막아 플레이 감각을 안정시킵니다.
+// 우산이 뒤집힌 계열의 동작 중이면 점프를 막아 플레이 감각을 안정시킵니다.
 bool UUOUUmbrellaComponent::BlocksJumping() const
 {
-	return bHasUmbrella && (CurrentState == EUOUUmbrellaState::UpsideDown || CurrentState == EUOUUmbrellaState::Pouring);
+	return bHasUmbrella && (CurrentState == EUOUUmbrellaState::UpsideDown ||
+		CurrentState == EUOUUmbrellaState::Pouring ||
+		CurrentState == EUOUUmbrellaState::LightReflecting);
 }
 
 // 현재 구현에서는 펼친 우산만 비를 막는 상태로 봅니다.
@@ -610,11 +660,12 @@ void UUOUUmbrellaComponent::SetState(EUOUUmbrellaState NewState, bool bBroadcast
 	{
 		CurrentDirectionState = EUOUUmbrellaDirectionState::Normal;
 	}
-	else if (ResolvedState == EUOUUmbrellaState::Open)
+	else if (ResolvedState == EUOUUmbrellaState::Open || ResolvedState == EUOUUmbrellaState::LightReflecting)
 	{
 		CurrentDirectionState = EUOUUmbrellaDirectionState::Normal;
 	}
-	else if (ResolvedState == EUOUUmbrellaState::UpsideDown || ResolvedState == EUOUUmbrellaState::Pouring)
+	else if (ResolvedState == EUOUUmbrellaState::UpsideDown ||
+		ResolvedState == EUOUUmbrellaState::Pouring)
 	{
 		CurrentDirectionState = EUOUUmbrellaDirectionState::Reversed;
 	}
@@ -656,6 +707,10 @@ void UUOUUmbrellaComponent::SetState(EUOUUmbrellaState NewState, bool bBroadcast
 	}
 
 	CurrentState = ResolvedState;
+	if (CurrentState != EUOUUmbrellaState::Pouring && CurrentState != EUOUUmbrellaState::LightReflecting)
+	{
+		ClearPourAimFacing();
+	}
 	if (CurrentState != EUOUUmbrellaState::Open)
 	{
 		StopRainBlockedAudio();
@@ -1769,19 +1824,23 @@ void UUOUUmbrellaComponent::DrawPourSocketAndDropSpawnDebug() const
 	}
 }
 
-void UUOUUmbrellaComponent::UpdatePourAimFacing()
+void UUOUUmbrellaComponent::UpdateUmbrellaAimFacing()
 {
-	if (!bRotateOwnerTowardsPourDirection || CurrentState != EUOUUmbrellaState::Pouring)
+	const bool bIsPourAimActive = CurrentState == EUOUUmbrellaState::Pouring && bRotateOwnerTowardsPourDirection;
+	const bool bIsLightReflectingAimActive = CurrentState == EUOUUmbrellaState::LightReflecting &&
+		bRotateOwnerTowardsLightReflectingDirection;
+	if (!bIsPourAimActive && !bIsLightReflectingAimActive)
 	{
 		ClearPourAimFacing();
 		return;
 	}
 
+	ApplyAimFacingMovementOverride();
+
 	FVector AimDirection = FVector::ZeroVector;
 	FVector AimPoint = FVector::ZeroVector;
 	if (!TryGetMouseAimDirection(AimDirection, AimPoint))
 	{
-		ClearPourAimFacing();
 		return;
 	}
 
@@ -1791,7 +1850,9 @@ void UUOUUmbrellaComponent::UpdatePourAimFacing()
 		return;
 	}
 
-	AimDirection = SnapPourDirectionToAngleStep(AimDirection);
+	AimDirection = bIsLightReflectingAimActive
+		? SnapLightReflectingDirectionToAngleStep(AimDirection)
+		: SnapPourDirectionToAngleStep(AimDirection);
 	if (AimDirection.IsNearlyZero())
 	{
 		return;
@@ -1807,6 +1868,41 @@ void UUOUUmbrellaComponent::UpdatePourAimFacing()
 // 현재는 별도 보관 상태가 없지만, 조준 보정 정리 지점을 명확히 남겨둡니다.
 void UUOUUmbrellaComponent::ClearPourAimFacing()
 {
+	if (!bHasAimFacingMovementOverride)
+	{
+		return;
+	}
+
+	if (ACharacter* OwnerCharacter = Cast<ACharacter>(GetOwner()))
+	{
+		if (UCharacterMovementComponent* CharacterMovement = OwnerCharacter->GetCharacterMovement())
+		{
+			CharacterMovement->bOrientRotationToMovement = bSavedOrientRotationToMovement;
+		}
+	}
+
+	bHasAimFacingMovementOverride = false;
+}
+
+void UUOUUmbrellaComponent::ApplyAimFacingMovementOverride()
+{
+	if (bHasAimFacingMovementOverride)
+	{
+		return;
+	}
+
+	ACharacter* OwnerCharacter = Cast<ACharacter>(GetOwner());
+	UCharacterMovementComponent* CharacterMovement = OwnerCharacter != nullptr
+		? OwnerCharacter->GetCharacterMovement()
+		: nullptr;
+	if (CharacterMovement == nullptr)
+	{
+		return;
+	}
+
+	bSavedOrientRotationToMovement = CharacterMovement->bOrientRotationToMovement;
+	CharacterMovement->bOrientRotationToMovement = false;
+	bHasAimFacingMovementOverride = true;
 }
 
 bool UUOUUmbrellaComponent::SpawnPendingPourDrop()
@@ -2130,9 +2226,16 @@ bool UUOUUmbrellaComponent::TryGetScreenSpaceMouseAimDirection(APlayerController
 	}
 
 	ScreenDirection.Normalize();
-	if (bSnapPourAimDirection)
+	const bool bUseLightReflectingSnap = CurrentState == EUOUUmbrellaState::LightReflecting;
+	const bool bShouldSnapAim = bUseLightReflectingSnap
+		? bSnapLightReflectingAimDirection
+		: bSnapPourAimDirection;
+	if (bShouldSnapAim)
 	{
-		const float SafeStep = FMath::Clamp(PourAimSnapAngleDegrees, 1.0f, 180.0f);
+		const float SnapAngleDegrees = bUseLightReflectingSnap
+			? LightReflectingAimSnapAngleDegrees
+			: PourAimSnapAngleDegrees;
+		const float SafeStep = FMath::Clamp(SnapAngleDegrees, 1.0f, 180.0f);
 		const float ScreenAngleDegrees = FMath::RadiansToDegrees(FMath::Atan2(ScreenDirection.Y, ScreenDirection.X));
 		const float SnappedScreenAngleDegrees = FMath::GridSnap(ScreenAngleDegrees, SafeStep);
 		const float SnappedScreenAngleRadians = FMath::DegreesToRadians(SnappedScreenAngleDegrees);
@@ -2186,6 +2289,21 @@ FVector UUOUUmbrellaComponent::SnapPourDirectionToAngleStep(const FVector& Direc
 	}
 
 	const float SafeStep = FMath::Clamp(PourAimSnapAngleDegrees, 1.0f, 180.0f);
+	const float AngleDegrees = FMath::RadiansToDegrees(FMath::Atan2(FlatDirection.Y, FlatDirection.X));
+	const float SnappedAngleDegrees = FMath::GridSnap(AngleDegrees, SafeStep);
+	const float SnappedAngleRadians = FMath::DegreesToRadians(SnappedAngleDegrees);
+	return FVector(FMath::Cos(SnappedAngleRadians), FMath::Sin(SnappedAngleRadians), 0.0f).GetSafeNormal();
+}
+
+FVector UUOUUmbrellaComponent::SnapLightReflectingDirectionToAngleStep(const FVector& Direction) const
+{
+	FVector FlatDirection(Direction.X, Direction.Y, 0.0f);
+	if (!bSnapLightReflectingAimDirection || FlatDirection.IsNearlyZero())
+	{
+		return FlatDirection.GetSafeNormal();
+	}
+
+	const float SafeStep = FMath::Clamp(LightReflectingAimSnapAngleDegrees, 1.0f, 180.0f);
 	const float AngleDegrees = FMath::RadiansToDegrees(FMath::Atan2(FlatDirection.Y, FlatDirection.X));
 	const float SnappedAngleDegrees = FMath::GridSnap(AngleDegrees, SafeStep);
 	const float SnappedAngleRadians = FMath::DegreesToRadians(SnappedAngleDegrees);
@@ -2253,7 +2371,8 @@ bool UUOUUmbrellaComponent::TryGetPourDirection(FVector& PourOriginLocation, FVe
 // 물을 담고 있던 상태에서 닫힘이나 펼침으로 바뀌면 더 이상 담을 수 없으므로 버려야 합니다.
 bool UUOUUmbrellaComponent::ShouldSpillStoredWater(EUOUUmbrellaState PreviousState, EUOUUmbrellaState NextState) const
 {
-	const bool bWasHoldingWater = PreviousState == EUOUUmbrellaState::UpsideDown || PreviousState == EUOUUmbrellaState::Pouring;
+	const bool bWasHoldingWater = PreviousState == EUOUUmbrellaState::UpsideDown ||
+		PreviousState == EUOUUmbrellaState::Pouring;
 	const bool bWillNotHoldWater = NextState == EUOUUmbrellaState::Open || NextState == EUOUUmbrellaState::Closed;
 	return bWasHoldingWater && bWillNotHoldWater && GetCurrentStoredWater() > 0.0f;
 }

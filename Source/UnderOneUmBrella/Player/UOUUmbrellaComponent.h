@@ -31,7 +31,8 @@ enum class EUOUUmbrellaState : uint8
 	Closed,
 	Open,
 	UpsideDown,
-	Pouring
+	Pouring,
+	LightReflecting UMETA(DisplayName = "Light Reflecting")
 };
 
 // 우산 손잡이 방향을 나타내는 독립 상태입니다.
@@ -114,6 +115,10 @@ public:
 	// 뒤집힌 우산에 담긴 물을 붓기 시작하고 멈추는 기본 키입니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Input")
 	FKey PourKey = EKeys::RightMouseButton;
+
+	// 펼친 우산과 빛 반사 상태를 전환하는 키입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Input")
+	FKey LightReflectingKey = EKeys::LeftShift;
 
 	// 테스트 중 우산 물 저장량을 빠르게 채우는 디버그 키입니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Input")
@@ -361,6 +366,18 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Umbrella|Aim", meta = (ClampMin = "1.0", ClampMax = "180.0", EditCondition = "bSnapPourAimDirection", EditConditionHides))
 	float PourAimSnapAngleDegrees = 45.0f;
 
+	// 빛 반사 중 플레이어가 마우스 방향을 바라보게 할지 정합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Aim")
+	bool bRotateOwnerTowardsLightReflectingDirection = true;
+
+	// 빛 반사 조준을 고정 각도 단위로 보정할지 정합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Umbrella|Aim")
+	bool bSnapLightReflectingAimDirection = true;
+
+	// 빛 반사 조준의 각도 보정 단위입니다. 22.5도는 16방향입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Umbrella|Aim", meta = (ClampMin = "1.0", ClampMax = "180.0", EditCondition = "bSnapLightReflectingAimDirection", EditConditionHides))
+	float LightReflectingAimSnapAngleDegrees = 22.5f;
+
 	// 우산에 저장된 물이 무게 계산에 얼마나 영향을 줄지 정합니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Rain", meta = (ClampMin = "0.0"))
 	float StoredWaterWeightMultiplier = 1.0f;
@@ -488,6 +505,18 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Umbrella")
 	void EndPour();
 
+	// 펼친 우산을 앞으로 내미는 조준 가능한 빛 반사 상태로 전환합니다.
+	UFUNCTION(BlueprintCallable, Category = "Umbrella")
+	void BeginLightReflecting();
+
+	// 빛 반사를 끝내고 다시 펼친 상태로 돌아갑니다.
+	UFUNCTION(BlueprintCallable, Category = "Umbrella")
+	void EndLightReflecting();
+
+	// 펼친 우산과 빛 반사 상태를 토글합니다.
+	UFUNCTION(BlueprintCallable, Category = "Umbrella")
+	void ToggleLightReflectingState();
+
 	// 비나 외부 시스템에서 전달한 물 양을 우산 저장소에 더합니다.
 	UFUNCTION(BlueprintCallable, Category = "Umbrella")
 	void AddCollectedWater(float WaterAmount);
@@ -535,6 +564,10 @@ public:
 	// 우산을 들고 있고 물을 붓는 중인지 확인합니다.
 	UFUNCTION(BlueprintPure, Category = "Umbrella")
 	bool IsPouring() const;
+
+	// 우산으로 빛을 반사하는 중인지 확인합니다.
+	UFUNCTION(BlueprintPure, Category = "Umbrella")
+	bool IsLightReflecting() const;
 
 	// 우산 손잡이가 정방향인지 확인합니다.
 	UFUNCTION(BlueprintPure, Category = "Umbrella")
@@ -587,6 +620,10 @@ public:
 	// 물 붓기에 쓰는 키를 반환합니다.
 	UFUNCTION(BlueprintPure, Category = "Umbrella")
 	FKey GetPourKey() const { return PourKey; }
+
+	// 빛 반사에 쓰는 키를 반환합니다.
+	UFUNCTION(BlueprintPure, Category = "Umbrella")
+	FKey GetLightReflectingKey() const { return LightReflectingKey; }
 
 	// 디버그 물 채우기에 쓰는 키를 반환합니다.
 	UFUNCTION(BlueprintPure, Category = "Umbrella")
@@ -678,11 +715,12 @@ protected:
 
 	void DrawPourSocketAndDropSpawnDebug() const;
 
-	// 물을 붓는 동안 플레이어가 마우스 방향을 바라보도록 회전을 보정합니다.
-	void UpdatePourAimFacing();
+	// 물 붓기와 빛 반사 중 플레이어가 마우스 방향을 바라보도록 회전을 보정합니다.
+	void UpdateUmbrellaAimFacing();
 
 	// 붓기 조준 회전에서 남겨둔 상태를 정리하기 위한 자리입니다.
 	void ClearPourAimFacing();
+	void ApplyAimFacingMovementOverride();
 
 	// 저장된 물을 시간에 따라 줄이고 일정 간격으로 낙하 물 액터를 생성합니다.
 	void UpdatePouring(float DeltaTime);
@@ -705,6 +743,7 @@ protected:
 	bool TryGetScreenSpaceMouseAimDirection(APlayerController* PlayerController, FVector& AimDirection, FVector& AimPoint) const;
 
 	FVector SnapPourDirectionToAngleStep(const FVector& Direction) const;
+	FVector SnapLightReflectingDirectionToAngleStep(const FVector& Direction) const;
 
 	// 물 붓기 시작 위치와 최종 방향을 계산합니다.
 	bool TryGetPourDirection(FVector& PourOriginLocation, FVector& PourDirection) const;
@@ -722,6 +761,9 @@ protected:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UAnimationAsset> LastAppliedSkeletalVisualAnimation = nullptr;
+
+	bool bHasAimFacingMovementOverride = false;
+	bool bSavedOrientRotationToMovement = false;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UNiagaraComponent> PouringEffectComponent = nullptr;
