@@ -162,16 +162,25 @@ void AUOUUmbrellaWindArea::TryCapturePlayer()
 
 		const UUOUUmbrellaComponent* UmbrellaComponent =
 			Character->FindComponentByClass<UUOUUmbrellaComponent>();
-		if (UmbrellaComponent != nullptr && UmbrellaComponent->IsOpen())
+		const UCharacterMovementComponent* MovementComponent =
+			Character->GetCharacterMovement();
+		const bool bIsRisingFromJump = MovementComponent != nullptr
+			&& MovementComponent->IsFalling()
+			&& MovementComponent->Velocity.Z > KINDA_SMALL_NUMBER;
+
+		if (UmbrellaComponent != nullptr
+			&& UmbrellaComponent->IsOpen()
+			&& bIsRisingFromJump)
 		{
 			ActivePlayer = Character;
 			bMovingToPathStart = true;
 			CurrentDistanceAlongPath = 0.0f;
 
-			if (UCharacterMovementComponent* MovementComponent = Character->GetCharacterMovement())
+			if (UCharacterMovementComponent* MutableMovementComponent =
+				Character->GetCharacterMovement())
 			{
-				MovementComponent->StopMovementImmediately();
-				MovementComponent->DisableMovement();
+				MutableMovementComponent->StopMovementImmediately();
+				MutableMovementComponent->DisableMovement();
 			}
 
 			if (UUOUPlayerInteractionExecutorComponent* InputExecutor =

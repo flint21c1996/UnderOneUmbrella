@@ -14,7 +14,7 @@ class UStaticMeshComponent;
 class AUOUCharacter;
 class UUOUPlayerInteractionExecutorComponent;
 
-// 영역 안에서 우산을 펼친 플레이어를 지정된 목표 위치로 이동시키는 배치용 액터입니다.
+// 영역 안에서 우산을 펼치고 점프한 플레이어를 WindPath를 따라 이동시키는 배치용 액터입니다.
 UCLASS(meta = (DisplayName = "UOU Umbrella Wind Area"))
 class UNDERONEUMBRELLA_API AUOUUmbrellaWindArea : public AActor
 {
@@ -32,7 +32,7 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Wind")
 	TObjectPtr<USceneComponent> RootScene = nullptr;
 
-	// 우산을 펼친 플레이어를 탐색하는 영역입니다.
+	// 우산을 펼친 상태로 점프한 플레이어를 탐색하는 영역입니다.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Wind")
 	TObjectPtr<UBoxComponent> WindVolume = nullptr;
 
@@ -72,7 +72,7 @@ private:
 	// WindVolume과 WindPath의 현재 배치를 프리뷰 컴포넌트에 반영합니다.
 	void RefreshPreview();
 
-	// 이동 중인 플레이어가 없으면 영역 안에서 우산을 펼친 플레이어를 등록합니다.
+	// 이동 중인 플레이어가 없으면 영역 안에서 우산을 펼치고 점프한 플레이어를 등록합니다.
 	void TryCapturePlayer();
 
 	// 현재 플레이어를 시작점까지 이동시키거나 스플라인 위로 이동시킵니다.
