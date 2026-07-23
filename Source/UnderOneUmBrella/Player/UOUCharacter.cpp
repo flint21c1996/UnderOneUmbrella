@@ -186,6 +186,17 @@ void AUOUCharacter::Tick(float DeltaSeconds)
 	}
 }
 
+void AUOUCharacter::CheckJumpInput(float DeltaTime)
+{
+	const int32 PreviousJumpCount = JumpCurrentCount;
+	Super::CheckJumpInput(DeltaTime);
+
+	if (JumpCurrentCount > PreviousJumpCount)
+	{
+		OnCharacterJumped.Broadcast();
+	}
+}
+
 void AUOUCharacter::NotifyControllerChanged()
 {
 	Super::NotifyControllerChanged();

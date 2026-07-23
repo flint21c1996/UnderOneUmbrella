@@ -22,6 +22,7 @@ class UUOUUmbrellaComponent;
 struct FInputActionValue;
 
 DECLARE_LOG_CATEGORY_EXTERN(LogTemplateCharacter, Log, All);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnUOUCharacterJumpedSignature);
 
 // 플레이어 이동, 카메라, 우산, 퍼즐 상호작용을 한데 묶는 기본 캐릭터다.
 // 게임 중에 자주 오가는 입력 분기와 공용 진입점이 이 클래스에 모여 있다.
@@ -114,6 +115,10 @@ public:
 	// 기본 이동 세팅과 공용 컴포넌트 구성을 초기화한다.
 	AUOUCharacter();
 
+	// 캐릭터의 실제 점프가 성립했을 때 점프 기반 월드 기능에 알립니다.
+	UPROPERTY(BlueprintAssignable, Category = "Movement|Jump")
+	FOnUOUCharacterJumpedSignature OnCharacterJumped;
+
 protected:
 	// 시작 시점에 입력과 필수 참조가 제대로 연결됐는지 확인한다.
 	virtual void BeginPlay() override;
@@ -121,6 +126,7 @@ protected:
 
 	// 런타임 참조 복구와 디버그 보조 갱신을 처리한다.
 	virtual void Tick(float DeltaSeconds) override;
+	virtual void CheckJumpInput(float DeltaTime) override;
 
 	// 이동 입력을 카메라 기준 방향으로 바꿔 실제 이동에 반영한다.
 	void Move(const FInputActionValue& Value);
