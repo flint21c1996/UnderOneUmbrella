@@ -191,6 +191,7 @@ protected:
 	void ApplyPlayerAudioListenerOverride();
 	void ClearPlayerAudioListenerOverride();
 	bool IsPlayerInteractionInputBlocked() const;
+	bool IsPlayerCameraRotationInputBlocked() const;
 
 public:
 	FORCEINLINE class USpringArmComponent* GetCameraBoom() const { return CameraBoom; }

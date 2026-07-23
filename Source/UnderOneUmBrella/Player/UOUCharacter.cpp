@@ -335,7 +335,7 @@ void AUOUCharacter::Look(const FInputActionValue& Value)
 
 void AUOUCharacter::RotateCameraLeft()
 {
-	if (IsPlayerInteractionInputBlocked())
+	if (IsPlayerCameraRotationInputBlocked())
 	{
 		return;
 	}
@@ -348,7 +348,7 @@ void AUOUCharacter::RotateCameraLeft()
 
 void AUOUCharacter::RotateCameraRight()
 {
-	if (IsPlayerInteractionInputBlocked())
+	if (IsPlayerCameraRotationInputBlocked())
 	{
 		return;
 	}
@@ -715,4 +715,10 @@ void AUOUCharacter::ClearPlayerAudioListenerOverride()
 bool AUOUCharacter::IsPlayerInteractionInputBlocked() const
 {
 	return InteractionExecutorComponent != nullptr && InteractionExecutorComponent->ShouldBlockPlayerInput();
+}
+
+bool AUOUCharacter::IsPlayerCameraRotationInputBlocked() const
+{
+	return InteractionExecutorComponent != nullptr
+		&& InteractionExecutorComponent->ShouldBlockPlayerCameraRotationInput();
 }
