@@ -25,6 +25,7 @@
 #include "Player/UOUInteractionComponent.h"
 #include "Player/UOULadderClimbComponent.h"
 #include "Player/UOUPlayerInteractionExecutorComponent.h"
+#include "Player/UOUPlayerSplineTravelComponent.h"
 #include "Player/UOUPushPullInteractorComponent.h"
 #include "Player/UOUUmbrellaComponent.h"
 #include "UI/UOUUISubsystem.h"
@@ -112,6 +113,7 @@ AUOUCharacter::AUOUCharacter()
 	InteractionExecutorComponent = CreateDefaultSubobject<UUOUPlayerInteractionExecutorComponent>(
 		TEXT("InteractionExecutorComponent"));
 	LadderClimbComponent = CreateDefaultSubobject<UUOULadderClimbComponent>(TEXT("LadderClimbComponent"));
+	SplineTravelComponent = CreateDefaultSubobject<UUOUPlayerSplineTravelComponent>(TEXT("SplineTravelComponent"));
 
 	UmbrellaAttachPoint = CreateDefaultSubobject<UArrowComponent>(TEXT("UmbrellaAttachPoint"));
 	UmbrellaAttachPoint->SetupAttachment(GetMesh());

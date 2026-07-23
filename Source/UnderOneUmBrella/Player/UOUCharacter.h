@@ -14,6 +14,7 @@ class UInputMappingContext;
 class UUOULadderClimbComponent;
 class UUOUPushPullInteractorComponent;
 class UUOUPlayerInteractionExecutorComponent;
+class UUOUPlayerSplineTravelComponent;
 class USceneComponent;
 class USkeletalMeshComponent;
 class USpringArmComponent;
@@ -111,6 +112,10 @@ class AUOUCharacter : public ACharacter
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Gameplay, meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UUOULadderClimbComponent> LadderClimbComponent = nullptr;
 
+	// Executes world-authored spline travel while keeping player movement state on the character.
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Gameplay, meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UUOUPlayerSplineTravelComponent> SplineTravelComponent = nullptr;
+
 public:
 	// 기본 이동 세팅과 공용 컴포넌트 구성을 초기화한다.
 	AUOUCharacter();
@@ -207,6 +212,7 @@ public:
 	FORCEINLINE class UUOUPushPullInteractorComponent* GetPushPullInteractorComponent() const { return PushPullInteractorComponent; }
 	FORCEINLINE class UUOUPlayerInteractionExecutorComponent* GetInteractionExecutorComponent() const { return InteractionExecutorComponent; }
 	FORCEINLINE class UUOULadderClimbComponent* GetLadderClimbComponent() const { return LadderClimbComponent; }
+	FORCEINLINE class UUOUPlayerSplineTravelComponent* GetSplineTravelComponent() const { return SplineTravelComponent; }
 	FORCEINLINE int32 GetContextInteractPressedCount() const { return ContextInteractPressedCount; }
 	FORCEINLINE int32 GetContextInteractReleasedCount() const { return ContextInteractReleasedCount; }
 	FORCEINLINE int32 GetPushPullPressedCount() const { return PushPullPressedCount; }
