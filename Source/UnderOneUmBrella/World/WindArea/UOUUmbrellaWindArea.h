@@ -9,6 +9,7 @@
 class UArrowComponent;
 class UBoxComponent;
 class USceneComponent;
+class USplineComponent;
 class UStaticMeshComponent;
 class AUOUCharacter;
 
@@ -24,6 +25,7 @@ public:
 protected:
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void OnConstruction(const FTransform& Transform) override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 	// WindArea 전체 배치의 기준이 되는 루트입니다.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Wind")
@@ -33,9 +35,9 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Wind")
 	TObjectPtr<UBoxComponent> WindVolume = nullptr;
 
-	// 플레이어가 이동할 최종 위치입니다. 레벨에서 이 컴포넌트를 옮겨 목적지를 지정합니다.
+	// 플레이어가 따라갈 경로입니다. 스플라인 포인트 타입으로 직선과 곡선 구간을 구성합니다.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Wind")
-	TObjectPtr<UArrowComponent> WindTarget = nullptr;
+	TObjectPtr<USplineComponent> WindPath = nullptr;
 
 	// 에디터에서 바람의 진행 방향을 확인하기 위한 화살표입니다.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Wind|Preview")
@@ -53,7 +55,7 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|Gameplay", meta = (ClampMin = "0.0", UIMin = "0.0", UIMax = "3000.0", Units = "cm/s"))
 	float MoveSpeed = 1000.0f;
 
-	// 이 거리 안에 들어오면 목표에 도착한 것으로 판단하고 추가 이동을 적용하지 않습니다.
+	// 이 거리 안에 들어오면 스플라인 시작점에 도착한 것으로 판단하고 경로 이동을 시작합니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|Gameplay", meta = (ClampMin = "0.0", UIMin = "0.0", UIMax = "500.0", Units = "cm"))
 	float AcceptanceRadius = 30.0f;
 
@@ -66,15 +68,24 @@ protected:
 	bool bDrawWindDebug = false;
 
 private:
-	// WindVolume과 WindTarget의 현재 배치를 프리뷰 컴포넌트에 반영합니다.
+	// WindVolume과 WindPath의 현재 배치를 프리뷰 컴포넌트에 반영합니다.
 	void RefreshPreview();
 
-	// 영역 안에서 우산을 펼친 플레이어를 목표 이동 대상으로 등록합니다.
-	void RefreshTrackedPlayers();
+	// 이동 중인 플레이어가 없으면 영역 안에서 우산을 펼친 플레이어를 등록합니다.
+	void TryCapturePlayer();
 
-	// 등록된 플레이어가 영역을 벗어나도 목표에 도착할 때까지 이동을 이어갑니다.
-	void ApplyWindToTrackedPlayers(float DeltaSeconds);
+	// 현재 플레이어를 시작점까지 이동시키거나 스플라인 위로 이동시킵니다.
+	void UpdateActivePlayerTravel(float DeltaSeconds);
 
-	// 목표 이동 중인 플레이어를 약한 참조로 보관해 파괴된 플레이어를 붙잡지 않습니다.
-	TSet<TWeakObjectPtr<AUOUCharacter>> TrackedPlayers;
+	// 이동을 끝내고 캐릭터의 기본 낙하 이동을 복구합니다.
+	void FinishActivePlayerTravel();
+
+	// 싱글플레이에서 현재 WindPath를 따라가는 플레이어입니다.
+	TWeakObjectPtr<AUOUCharacter> ActivePlayer;
+
+	// 플레이어가 스플라인 시작점으로 진입하는 단계인지 나타냅니다.
+	bool bMovingToPathStart = false;
+
+	// 현재 스플라인 시작점에서부터 이동한 거리입니다.
+	float CurrentDistanceAlongPath = 0.0f;
 };

@@ -10,11 +10,13 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Player/UOUCharacter.h"
 #include "Player/UOUUmbrellaComponent.h"
+#include "Components/SplineComponent.h"
 #include "UObject/ConstructorHelpers.h"
 
 AUOUUmbrellaWindArea::AUOUUmbrellaWindArea()
 {
 	PrimaryActorTick.bCanEverTick = true;
+	PrimaryActorTick.TickGroup = TG_PostPhysics;
 
 	RootScene = CreateDefaultSubobject<USceneComponent>(TEXT("RootScene"));
 	SetRootComponent(RootScene);
@@ -27,11 +29,11 @@ AUOUUmbrellaWindArea::AUOUUmbrellaWindArea()
 	WindVolume->SetGenerateOverlapEvents(true);
 	WindVolume->SetBoxExtent(FVector(250.0f, 250.0f, 200.0f));
 
-	WindTarget = CreateDefaultSubobject<UArrowComponent>(TEXT("WindTarget"));
-	WindTarget->SetupAttachment(RootScene);
-	WindTarget->SetRelativeLocation(FVector(1000.0f, 0.0f, 300.0f));
-	WindTarget->ArrowColor = FColor::Green;
-	WindTarget->ArrowSize = 1.5f;
+	WindPath = CreateDefaultSubobject<USplineComponent>(TEXT("WindPath"));
+	WindPath->SetupAttachment(RootScene);
+	WindPath->ClearSplinePoints(false);
+	WindPath->AddSplinePoint(FVector::ZeroVector, ESplineCoordinateSpace::Local, false);
+	WindPath->AddSplinePoint(FVector(1000.0f, 0.0f, 300.0f), ESplineCoordinateSpace::Local, true);
 
 	WindDirectionArrow = CreateDefaultSubobject<UArrowComponent>(TEXT("WindDirectionArrow"));
 	WindDirectionArrow->SetupAttachment(RootScene);
@@ -57,27 +59,34 @@ void AUOUUmbrellaWindArea::Tick(float DeltaSeconds)
 
 	RefreshPreview();
 
-	if (!bWindEnabled || WindVolume == nullptr || WindTarget == nullptr)
+	if (!bWindEnabled
+		|| MoveSpeed <= 0.0f
+		|| WindVolume == nullptr
+		|| WindPath == nullptr
+		|| WindPath->GetNumberOfSplinePoints() < 2)
 	{
-		TrackedPlayers.Reset();
+		FinishActivePlayerTravel();
 		return;
 	}
 
-	RefreshTrackedPlayers();
-	ApplyWindToTrackedPlayers(DeltaSeconds);
+	TryCapturePlayer();
+	UpdateActivePlayerTravel(DeltaSeconds);
 
-	if (bDrawWindDebug && GetWorld() != nullptr)
+	if (bDrawWindDebug && GetWorld() != nullptr && WindPath->GetNumberOfSplinePoints() >= 2)
 	{
-		DrawDebugDirectionalArrow(
-			GetWorld(),
-			WindVolume->GetComponentLocation(),
-			WindTarget->GetComponentLocation(),
-			80.0f,
-			FColor::Cyan,
-			false,
-			0.0f,
-			0,
-			4.0f);
+		constexpr int32 DebugSegmentCount = 32;
+		const float SplineLength = WindPath->GetSplineLength();
+		FVector PreviousLocation =
+			WindPath->GetLocationAtDistanceAlongSpline(0.0f, ESplineCoordinateSpace::World);
+
+		for (int32 SegmentIndex = 1; SegmentIndex <= DebugSegmentCount; ++SegmentIndex)
+		{
+			const float Distance = SplineLength * SegmentIndex / DebugSegmentCount;
+			const FVector SegmentLocation =
+				WindPath->GetLocationAtDistanceAlongSpline(Distance, ESplineCoordinateSpace::World);
+			DrawDebugLine(GetWorld(), PreviousLocation, SegmentLocation, FColor::Cyan, false, 0.0f, 0, 4.0f);
+			PreviousLocation = SegmentLocation;
+		}
 	}
 }
 
@@ -87,20 +96,38 @@ void AUOUUmbrellaWindArea::OnConstruction(const FTransform& Transform)
 	RefreshPreview();
 }
 
+void AUOUUmbrellaWindArea::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	FinishActivePlayerTravel();
+	Super::EndPlay(EndPlayReason);
+}
+
 void AUOUUmbrellaWindArea::RefreshPreview()
 {
-	if (WindVolume == nullptr || WindTarget == nullptr)
+	if (WindVolume == nullptr
+		|| WindPath == nullptr
+		|| WindPath->GetNumberOfSplinePoints() <= 0)
 	{
 		return;
 	}
 
-	const FVector DirectionToTarget =
-		WindTarget->GetComponentLocation() - WindVolume->GetComponentLocation();
+	const FVector PathStart =
+		WindPath->GetLocationAtSplinePoint(0, ESplineCoordinateSpace::World);
+	const FVector InitialPathDirection =
+		WindPath->GetDirectionAtSplinePoint(0, ESplineCoordinateSpace::World);
+	const FVector DirectionToPathStart = PathStart - WindVolume->GetComponentLocation();
 
-	if (WindDirectionArrow != nullptr && !DirectionToTarget.IsNearlyZero())
+	if (WindDirectionArrow != nullptr)
 	{
 		WindDirectionArrow->SetWorldLocation(WindVolume->GetComponentLocation());
-		WindDirectionArrow->SetWorldRotation(DirectionToTarget.Rotation());
+
+		const FVector PreviewDirection = !DirectionToPathStart.IsNearlyZero()
+			? DirectionToPathStart
+			: InitialPathDirection;
+		if (!PreviewDirection.IsNearlyZero())
+		{
+			WindDirectionArrow->SetWorldRotation(PreviewDirection.Rotation());
+		}
 	}
 
 	if (PreviewVolumeMesh != nullptr)
@@ -114,8 +141,13 @@ void AUOUUmbrellaWindArea::RefreshPreview()
 	}
 }
 
-void AUOUUmbrellaWindArea::RefreshTrackedPlayers()
+void AUOUUmbrellaWindArea::TryCapturePlayer()
 {
+	if (ActivePlayer.IsValid())
+	{
+		return;
+	}
+
 	TArray<AActor*> OverlappingActors;
 	WindVolume->GetOverlappingActors(OverlappingActors, AUOUCharacter::StaticClass());
 
@@ -131,51 +163,96 @@ void AUOUUmbrellaWindArea::RefreshTrackedPlayers()
 			Character->FindComponentByClass<UUOUUmbrellaComponent>();
 		if (UmbrellaComponent != nullptr && UmbrellaComponent->IsOpen())
 		{
-			TrackedPlayers.Add(TWeakObjectPtr<AUOUCharacter>(Character));
+			ActivePlayer = Character;
+			bMovingToPathStart = true;
+			CurrentDistanceAlongPath = 0.0f;
+
+			if (UCharacterMovementComponent* MovementComponent = Character->GetCharacterMovement())
+			{
+				MovementComponent->StopMovementImmediately();
+				MovementComponent->DisableMovement();
+			}
+			return;
 		}
 	}
 }
 
-void AUOUUmbrellaWindArea::ApplyWindToTrackedPlayers(float DeltaSeconds)
+void AUOUUmbrellaWindArea::UpdateActivePlayerTravel(float DeltaSeconds)
 {
-	if (DeltaSeconds <= 0.0f || MoveSpeed <= 0.0f)
+	AUOUCharacter* Character = ActivePlayer.Get();
+	if (Character == nullptr)
+	{
+		FinishActivePlayerTravel();
+		return;
+	}
+
+	const UUOUUmbrellaComponent* UmbrellaComponent =
+		Character->FindComponentByClass<UUOUUmbrellaComponent>();
+	if (UmbrellaComponent == nullptr || !UmbrellaComponent->IsOpen())
+	{
+		FinishActivePlayerTravel();
+		return;
+	}
+
+	if (DeltaSeconds <= 0.0f || MoveSpeed <= 0.0f || WindPath->GetNumberOfSplinePoints() < 2)
 	{
 		return;
 	}
 
-	for (auto PlayerIterator = TrackedPlayers.CreateIterator(); PlayerIterator; ++PlayerIterator)
+	if (bMovingToPathStart)
 	{
-		AUOUCharacter* Character = PlayerIterator->Get();
-		if (Character == nullptr)
+		const FVector PathStart =
+			WindPath->GetLocationAtSplinePoint(0, ESplineCoordinateSpace::World);
+		const FVector ToPathStart = PathStart - Character->GetActorLocation();
+		const float DistanceToPathStart = ToPathStart.Size();
+
+		if (DistanceToPathStart <= AcceptanceRadius || ToPathStart.IsNearlyZero())
 		{
-			PlayerIterator.RemoveCurrent();
-			continue;
+			Character->SetActorLocation(PathStart, true);
+			bMovingToPathStart = false;
+			CurrentDistanceAlongPath = 0.0f;
+			return;
 		}
 
-		const UUOUUmbrellaComponent* UmbrellaComponent =
-			Character->FindComponentByClass<UUOUUmbrellaComponent>();
-		if (UmbrellaComponent == nullptr || !UmbrellaComponent->IsOpen())
-		{
-			PlayerIterator.RemoveCurrent();
-			continue;
-		}
-
-		const FVector ToTarget = WindTarget->GetComponentLocation() - Character->GetActorLocation();
-		const float DistanceToTarget = ToTarget.Size();
-		if (DistanceToTarget <= AcceptanceRadius || ToTarget.IsNearlyZero())
-		{
-			if (UCharacterMovementComponent* MovementComponent = Character->GetCharacterMovement())
-			{
-				MovementComponent->StopMovementImmediately();
-			}
-
-			PlayerIterator.RemoveCurrent();
-			continue;
-		}
-
-		// 남은 거리가 짧으면 한 프레임에 목표를 지나치지 않도록 마지막 이동 속도만 줄입니다.
-		const float DesiredSpeed = FMath::Min(MoveSpeed, DistanceToTarget / DeltaSeconds);
-		const FVector DesiredVelocity = ToTarget.GetSafeNormal() * DesiredSpeed;
-		Character->LaunchCharacter(DesiredVelocity, true, true);
+		const float EntryMoveDistance = FMath::Min(MoveSpeed * DeltaSeconds, DistanceToPathStart);
+		Character->SetActorLocation(
+			Character->GetActorLocation() + ToPathStart.GetSafeNormal() * EntryMoveDistance,
+			true);
+		return;
 	}
+
+	const float SplineLength = WindPath->GetSplineLength();
+	const float NextDistance = FMath::Min(
+		CurrentDistanceAlongPath + MoveSpeed * DeltaSeconds,
+		SplineLength);
+	const FVector NextLocation =
+		WindPath->GetLocationAtDistanceAlongSpline(NextDistance, ESplineCoordinateSpace::World);
+
+	FHitResult MoveHit;
+	Character->SetActorLocation(NextLocation, true, &MoveHit);
+	CurrentDistanceAlongPath = FMath::Lerp(
+		CurrentDistanceAlongPath,
+		NextDistance,
+		MoveHit.bBlockingHit ? MoveHit.Time : 1.0f);
+
+	if (CurrentDistanceAlongPath >= SplineLength - KINDA_SMALL_NUMBER)
+	{
+		FinishActivePlayerTravel();
+	}
+}
+
+void AUOUUmbrellaWindArea::FinishActivePlayerTravel()
+{
+	if (AUOUCharacter* Character = ActivePlayer.Get())
+	{
+		if (UCharacterMovementComponent* MovementComponent = Character->GetCharacterMovement())
+		{
+			MovementComponent->StopMovementImmediately();
+			MovementComponent->SetMovementMode(MOVE_Falling);
+		}
+	}
+
+	ActivePlayer.Reset();
+	bMovingToPathStart = false;
+	CurrentDistanceAlongPath = 0.0f;
 }
