@@ -11,6 +11,7 @@ class UArrowComponent;
 class UCameraComponent;
 class UInputAction;
 class UInputMappingContext;
+class UUOULadderClimbComponent;
 class UUOUPushPullInteractorComponent;
 class UUOUPlayerInteractionExecutorComponent;
 class USceneComponent;
@@ -105,6 +106,10 @@ class AUOUCharacter : public ACharacter
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Gameplay, meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UUOUPlayerInteractionExecutorComponent> InteractionExecutorComponent = nullptr;
 
+	// Owns automatic ladder detection, alignment, climbing, and exit movement.
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Gameplay, meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UUOULadderClimbComponent> LadderClimbComponent = nullptr;
+
 public:
 	// 기본 이동 세팅과 공용 컴포넌트 구성을 초기화한다.
 	AUOUCharacter();
@@ -194,6 +199,7 @@ public:
 	FORCEINLINE class UUOUCameraControllerComponent* GetCameraControllerComponent() const { return CameraControllerComponent; }
 	FORCEINLINE class UUOUPushPullInteractorComponent* GetPushPullInteractorComponent() const { return PushPullInteractorComponent; }
 	FORCEINLINE class UUOUPlayerInteractionExecutorComponent* GetInteractionExecutorComponent() const { return InteractionExecutorComponent; }
+	FORCEINLINE class UUOULadderClimbComponent* GetLadderClimbComponent() const { return LadderClimbComponent; }
 	FORCEINLINE int32 GetContextInteractPressedCount() const { return ContextInteractPressedCount; }
 	FORCEINLINE int32 GetContextInteractReleasedCount() const { return ContextInteractReleasedCount; }
 	FORCEINLINE int32 GetPushPullPressedCount() const { return PushPullPressedCount; }
