@@ -9,6 +9,7 @@
 #include "DrawDebugHelpers.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Player/UOUCharacter.h"
+#include "Player/UOUPlayerInteractionExecutorComponent.h"
 #include "Player/UOUUmbrellaComponent.h"
 #include "Components/SplineComponent.h"
 #include "UObject/ConstructorHelpers.h"
@@ -172,6 +173,13 @@ void AUOUUmbrellaWindArea::TryCapturePlayer()
 				MovementComponent->StopMovementImmediately();
 				MovementComponent->DisableMovement();
 			}
+
+			if (UUOUPlayerInteractionExecutorComponent* InputExecutor =
+				Character->FindComponentByClass<UUOUPlayerInteractionExecutorComponent>())
+			{
+				InputExecutor->RequestPlayerInputBlockAllowingCameraRotation(this, true);
+				LockedInputExecutorComponent = InputExecutor;
+			}
 			return;
 		}
 	}
@@ -243,6 +251,13 @@ void AUOUUmbrellaWindArea::UpdateActivePlayerTravel(float DeltaSeconds)
 
 void AUOUUmbrellaWindArea::FinishActivePlayerTravel()
 {
+	if (UUOUPlayerInteractionExecutorComponent* InputExecutor =
+		LockedInputExecutorComponent.Get())
+	{
+		InputExecutor->ReleasePlayerInputBlockAllowingCameraRotation(this);
+	}
+	LockedInputExecutorComponent.Reset();
+
 	if (AUOUCharacter* Character = ActivePlayer.Get())
 	{
 		if (UCharacterMovementComponent* MovementComponent = Character->GetCharacterMovement())

@@ -12,6 +12,7 @@ class USceneComponent;
 class USplineComponent;
 class UStaticMeshComponent;
 class AUOUCharacter;
+class UUOUPlayerInteractionExecutorComponent;
 
 // 영역 안에서 우산을 펼친 플레이어를 지정된 목표 위치로 이동시키는 배치용 액터입니다.
 UCLASS(meta = (DisplayName = "UOU Umbrella Wind Area"))
@@ -88,4 +89,7 @@ private:
 
 	// 현재 스플라인 시작점에서부터 이동한 거리입니다.
 	float CurrentDistanceAlongPath = 0.0f;
+
+	// WindPath 이동 중 게임플레이 입력만 차단하도록 요청한 플레이어 입력 컴포넌트입니다.
+	TWeakObjectPtr<UUOUPlayerInteractionExecutorComponent> LockedInputExecutorComponent;
 };
