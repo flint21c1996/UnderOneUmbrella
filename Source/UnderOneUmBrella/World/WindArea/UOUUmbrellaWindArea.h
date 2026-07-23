@@ -54,7 +54,7 @@ protected:
 
 	// 목표 위치를 향해 이동할 속도입니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|Gameplay", meta = (ClampMin = "0.0", UIMin = "0.0", UIMax = "3000.0", Units = "cm/s"))
-	float MoveSpeed = 1000.0f;
+	float MoveSpeed = 500.0f;
 
 	// 이 거리 안에 들어오면 스플라인 시작점에 도착한 것으로 판단하고 경로 이동을 시작합니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|Gameplay", meta = (ClampMin = "0.0", UIMin = "0.0", UIMax = "500.0", Units = "cm"))
