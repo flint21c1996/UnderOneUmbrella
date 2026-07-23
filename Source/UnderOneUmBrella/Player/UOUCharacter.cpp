@@ -428,8 +428,6 @@ void AUOUCharacter::HandleJumpStarted()
 		{
 			return;
 		}
-
-		UmbrellaComponent->CloseUmbrella();
 	}
 
 	Jump();
