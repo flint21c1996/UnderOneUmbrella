@@ -5,13 +5,12 @@
 #include "Components/ArrowComponent.h"
 #include "Components/BoxComponent.h"
 #include "Components/SceneComponent.h"
+#include "Components/SplineComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "DrawDebugHelpers.h"
-#include "GameFramework/CharacterMovementComponent.h"
 #include "Player/UOUCharacter.h"
-#include "Player/UOUPlayerInteractionExecutorComponent.h"
+#include "Player/UOUPlayerSplineTravelComponent.h"
 #include "Player/UOUUmbrellaComponent.h"
-#include "Components/SplineComponent.h"
 #include "UObject/ConstructorHelpers.h"
 
 AUOUUmbrellaWindArea::AUOUUmbrellaWindArea()
@@ -85,20 +84,10 @@ void AUOUUmbrellaWindArea::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 
-	if (!bWindEnabled
-		|| MoveSpeed <= 0.0f
-		|| WindVolume == nullptr
-		|| WindPath == nullptr
-		|| WindPath->GetNumberOfSplinePoints() < 2)
-	{
-		FinishActivePlayerTravel();
-		return;
-	}
-
-	StartPendingPlayerTravel();
-	UpdateActivePlayerTravel(DeltaSeconds);
-
-	if (bDrawWindDebug && GetWorld() != nullptr && WindPath->GetNumberOfSplinePoints() >= 2)
+	if (bDrawWindDebug
+		&& GetWorld() != nullptr
+		&& WindPath != nullptr
+		&& WindPath->GetNumberOfSplinePoints() >= 2)
 	{
 		constexpr int32 DebugSegmentCount = 32;
 		const float SplineLength = WindPath->GetSplineLength();
@@ -125,7 +114,6 @@ void AUOUUmbrellaWindArea::OnConstruction(const FTransform& Transform)
 void AUOUUmbrellaWindArea::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	SetOverlappingPlayer(nullptr);
-	FinishActivePlayerTravel();
 	Super::EndPlay(EndPlayReason);
 }
 
@@ -168,144 +156,9 @@ void AUOUUmbrellaWindArea::RefreshPreview()
 	}
 }
 
-void AUOUUmbrellaWindArea::StartPendingPlayerTravel()
-{
-	if (!bTravelStartPending || ActivePlayer.IsValid())
-	{
-		return;
-	}
-
-	bTravelStartPending = false;
-
-	AUOUCharacter* Character = OverlappingPlayer.Get();
-	if (Character == nullptr)
-	{
-		SetOverlappingPlayer(nullptr);
-		RefreshTickEnabled();
-		return;
-	}
-
-	const UUOUUmbrellaComponent* UmbrellaComponent =
-		Character->FindComponentByClass<UUOUUmbrellaComponent>();
-	if (UmbrellaComponent != nullptr && UmbrellaComponent->IsOpen())
-	{
-		ActivePlayer = Character;
-		bMovingToPathStart = true;
-		CurrentDistanceAlongPath = 0.0f;
-
-		if (UCharacterMovementComponent* MutableMovementComponent =
-			Character->GetCharacterMovement())
-		{
-			MutableMovementComponent->StopMovementImmediately();
-			MutableMovementComponent->DisableMovement();
-		}
-
-		if (UUOUPlayerInteractionExecutorComponent* InputExecutor =
-			Character->FindComponentByClass<UUOUPlayerInteractionExecutorComponent>())
-		{
-			InputExecutor->RequestPlayerInputBlockAllowingCameraRotation(this, true);
-			LockedInputExecutorComponent = InputExecutor;
-		}
-	}
-
-	RefreshTickEnabled();
-}
-
-void AUOUUmbrellaWindArea::UpdateActivePlayerTravel(float DeltaSeconds)
-{
-	AUOUCharacter* Character = ActivePlayer.Get();
-	if (Character == nullptr)
-	{
-		FinishActivePlayerTravel();
-		return;
-	}
-
-	const UUOUUmbrellaComponent* UmbrellaComponent =
-		Character->FindComponentByClass<UUOUUmbrellaComponent>();
-	if (UmbrellaComponent == nullptr || !UmbrellaComponent->IsOpen())
-	{
-		FinishActivePlayerTravel();
-		return;
-	}
-
-	if (DeltaSeconds <= 0.0f || MoveSpeed <= 0.0f || WindPath->GetNumberOfSplinePoints() < 2)
-	{
-		return;
-	}
-
-	if (bMovingToPathStart)
-	{
-		const FVector PathStart =
-			WindPath->GetLocationAtSplinePoint(0, ESplineCoordinateSpace::World);
-		const FVector ToPathStart = PathStart - Character->GetActorLocation();
-		const float DistanceToPathStart = ToPathStart.Size();
-
-		if (DistanceToPathStart <= AcceptanceRadius || ToPathStart.IsNearlyZero())
-		{
-			Character->SetActorLocation(PathStart, true);
-			bMovingToPathStart = false;
-			CurrentDistanceAlongPath = 0.0f;
-			return;
-		}
-
-		const float EntryMoveDistance = FMath::Min(MoveSpeed * DeltaSeconds, DistanceToPathStart);
-		Character->SetActorLocation(
-			Character->GetActorLocation() + ToPathStart.GetSafeNormal() * EntryMoveDistance,
-			true);
-		return;
-	}
-
-	const float SplineLength = WindPath->GetSplineLength();
-	const float NextDistance = FMath::Min(
-		CurrentDistanceAlongPath + MoveSpeed * DeltaSeconds,
-		SplineLength);
-	const FVector NextLocation =
-		WindPath->GetLocationAtDistanceAlongSpline(NextDistance, ESplineCoordinateSpace::World);
-
-	FHitResult MoveHit;
-	Character->SetActorLocation(NextLocation, true, &MoveHit);
-	CurrentDistanceAlongPath = FMath::Lerp(
-		CurrentDistanceAlongPath,
-		NextDistance,
-		MoveHit.bBlockingHit ? MoveHit.Time : 1.0f);
-
-	if (CurrentDistanceAlongPath >= SplineLength - KINDA_SMALL_NUMBER)
-	{
-		FinishActivePlayerTravel();
-	}
-}
-
-void AUOUUmbrellaWindArea::FinishActivePlayerTravel()
-{
-	if (UUOUPlayerInteractionExecutorComponent* InputExecutor =
-		LockedInputExecutorComponent.Get())
-	{
-		InputExecutor->ReleasePlayerInputBlockAllowingCameraRotation(this);
-	}
-	LockedInputExecutorComponent.Reset();
-
-	if (AUOUCharacter* Character = ActivePlayer.Get())
-	{
-		if (UCharacterMovementComponent* MovementComponent = Character->GetCharacterMovement())
-		{
-			MovementComponent->StopMovementImmediately();
-			MovementComponent->SetMovementMode(MOVE_Falling);
-		}
-	}
-
-	ActivePlayer.Reset();
-	bTravelStartPending = false;
-	bMovingToPathStart = false;
-	CurrentDistanceAlongPath = 0.0f;
-	RefreshTickEnabled();
-}
-
 void AUOUUmbrellaWindArea::RefreshTickEnabled()
 {
-	const bool bShouldTick = bDrawWindDebug
-		|| ActivePlayer.IsValid()
-		|| bTravelStartPending;
-	SetActorTickEnabled(bShouldTick);
+	SetActorTickEnabled(bDrawWindDebug);
 }
 
 void AUOUUmbrellaWindArea::SetOverlappingPlayer(AUOUCharacter* Character)
@@ -324,7 +177,6 @@ void AUOUUmbrellaWindArea::SetOverlappingPlayer(AUOUCharacter* Character)
 	}
 
 	OverlappingPlayer = Character;
-	bTravelStartPending = false;
 
 	if (Character != nullptr)
 	{
@@ -338,22 +190,30 @@ void AUOUUmbrellaWindArea::SetOverlappingPlayer(AUOUCharacter* Character)
 
 void AUOUUmbrellaWindArea::HandleOverlappingPlayerJumped()
 {
-	if (ActivePlayer.IsValid() || bTravelStartPending)
-	{
-		return;
-	}
-
 	AUOUCharacter* Character = OverlappingPlayer.Get();
 	const UUOUUmbrellaComponent* UmbrellaComponent = Character != nullptr
 		? Character->FindComponentByClass<UUOUUmbrellaComponent>()
 		: nullptr;
-	if (UmbrellaComponent == nullptr || !UmbrellaComponent->IsOpen())
+	if (!bWindEnabled
+		|| MoveSpeed <= 0.0f
+		|| WindPath == nullptr
+		|| WindPath->GetNumberOfSplinePoints() < 2
+		|| UmbrellaComponent == nullptr
+		|| !UmbrellaComponent->IsOpen())
 	{
 		return;
 	}
 
-	bTravelStartPending = true;
-	RefreshTickEnabled();
+	if (UUOUPlayerSplineTravelComponent* TravelComponent =
+		Character->GetSplineTravelComponent())
+	{
+		TravelComponent->StartTravel(
+			WindPath,
+			MoveSpeed,
+			AcceptanceRadius,
+			this,
+			true);
+	}
 }
 
 void AUOUUmbrellaWindArea::HandleWindVolumeBeginOverlap(

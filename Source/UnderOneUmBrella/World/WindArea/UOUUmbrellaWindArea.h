@@ -13,7 +13,6 @@ class USceneComponent;
 class USplineComponent;
 class UStaticMeshComponent;
 class AUOUCharacter;
-class UUOUPlayerInteractionExecutorComponent;
 
 // 영역 안에서 우산을 펼치고 점프한 플레이어를 WindPath를 따라 이동시키는 배치용 액터입니다.
 UCLASS(meta = (DisplayName = "UOU Umbrella Wind Area"))
@@ -74,16 +73,7 @@ private:
 	// WindVolume과 WindPath의 현재 배치를 프리뷰 컴포넌트에 반영합니다.
 	void RefreshPreview();
 
-	// 점프 이벤트로 예약된 플레이어의 경로 이동을 PostPhysics 시점에 시작합니다.
-	void StartPendingPlayerTravel();
-
-	// 현재 플레이어를 시작점까지 이동시키거나 스플라인 위로 이동시킵니다.
-	void UpdateActivePlayerTravel(float DeltaSeconds);
-
-	// 이동을 끝내고 캐릭터의 기본 낙하 이동을 복구합니다.
-	void FinishActivePlayerTravel();
-
-	// 영역 내 플레이어 감시, 경로 이동, 디버그 표시 중 하나라도 필요할 때만 Tick을 켭니다.
+	// 런타임 스플라인 디버그 표시가 필요할 때만 WindArea Tick을 켭니다.
 	void RefreshTickEnabled();
 
 	// 영역 내 플레이어를 교체하며 점프 이벤트 구독 수명도 함께 관리합니다.
@@ -110,19 +100,4 @@ private:
 
 	// WindVolume 안에서 발동 조건을 기다리는 싱글플레이 캐릭터입니다.
 	TWeakObjectPtr<AUOUCharacter> OverlappingPlayer;
-
-	// 점프 이벤트를 받은 뒤 PostPhysics Tick에서 이동을 시작하기 위한 예약 상태입니다.
-	bool bTravelStartPending = false;
-
-	// 싱글플레이에서 현재 WindPath를 따라가는 플레이어입니다.
-	TWeakObjectPtr<AUOUCharacter> ActivePlayer;
-
-	// 플레이어가 스플라인 시작점으로 진입하는 단계인지 나타냅니다.
-	bool bMovingToPathStart = false;
-
-	// 현재 스플라인 시작점에서부터 이동한 거리입니다.
-	float CurrentDistanceAlongPath = 0.0f;
-
-	// WindPath 이동 중 게임플레이 입력만 차단하도록 요청한 플레이어 입력 컴포넌트입니다.
-	TWeakObjectPtr<UUOUPlayerInteractionExecutorComponent> LockedInputExecutorComponent;
 };
