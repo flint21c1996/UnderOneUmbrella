@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Animation/AnimInstance.h"
+#include "Player/UOULadderClimbComponent.h"
 #include "UOUPlayerAnimInstance.generated.h"
 
 class AUOUCharacter;
@@ -27,6 +28,22 @@ public:
 
 	UPROPERTY(BlueprintReadOnly, Category = "Animation|Movement", meta = (ToolTip = "캐릭터가 공중에 있는지 여부입니다."))
 	bool IsInAir = false;
+
+	// True during entry, climbing, and exit so the graph can leave normal locomotion.
+	UPROPERTY(BlueprintReadOnly, Category = "Animation|Ladder")
+	bool IsClimbingLadder = false;
+
+	// Selects bottom/top entry, climb loop, and bottom/top exit animation states.
+	UPROPERTY(BlueprintReadOnly, Category = "Animation|Ladder")
+	EUOULadderClimbState LadderClimbState = EUOULadderClimbState::None;
+
+	// Positive climbs up, negative climbs down, and zero holds the ladder pose.
+	UPROPERTY(BlueprintReadOnly, Category = "Animation|Ladder")
+	float LadderClimbInput = 0.0f;
+
+	// Normalized 0-1 ladder position for rung-aware animation and later IK tuning.
+	UPROPERTY(BlueprintReadOnly, Category = "Animation|Ladder")
+	float LadderNormalizedHeight = 0.0f;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Animation|Umbrella", meta = (ToolTip = "우산을 보유하고 있는지 여부입니다."))
 	bool HasUmbrella = false;
@@ -52,11 +69,16 @@ public:
 	UPROPERTY(BlueprintReadOnly, Transient, Category = "Animation|References", meta = (ToolTip = "소유 캐릭터에 붙어 있는 우산 컴포넌트입니다."))
 	TObjectPtr<UUOUUmbrellaComponent> UmbrellaComponent = nullptr;
 
+	UPROPERTY(BlueprintReadOnly, Transient, Category = "Animation|References")
+	TObjectPtr<UUOULadderClimbComponent> LadderClimbComponent = nullptr;
+
 private:
 	void CacheOwnerIfNeeded();
 	void UpdateMovementVariables();
 	void UpdateUmbrellaVariables();
+	void UpdateLadderVariables();
 	void UpdateDerivedAnimationVariables();
 	void ResetMovementVariables();
 	void ResetUmbrellaVariables();
+	void ResetLadderVariables();
 };

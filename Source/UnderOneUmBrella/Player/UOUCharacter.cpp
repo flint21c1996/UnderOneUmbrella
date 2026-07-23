@@ -23,6 +23,7 @@
 #include "Interaction/UOUInteractable.h"
 #include "Player/UOUCameraControllerComponent.h"
 #include "Player/UOUInteractionComponent.h"
+#include "Player/UOULadderClimbComponent.h"
 #include "Player/UOUPlayerInteractionExecutorComponent.h"
 #include "Player/UOUPushPullInteractorComponent.h"
 #include "Player/UOUUmbrellaComponent.h"
@@ -110,6 +111,7 @@ AUOUCharacter::AUOUCharacter()
 	CameraControllerComponent = CreateDefaultSubobject<UUOUCameraControllerComponent>(TEXT("CameraControllerComponent"));
 	InteractionExecutorComponent = CreateDefaultSubobject<UUOUPlayerInteractionExecutorComponent>(
 		TEXT("InteractionExecutorComponent"));
+	LadderClimbComponent = CreateDefaultSubobject<UUOULadderClimbComponent>(TEXT("LadderClimbComponent"));
 
 	UmbrellaAttachPoint = CreateDefaultSubobject<UArrowComponent>(TEXT("UmbrellaAttachPoint"));
 	UmbrellaAttachPoint->SetupAttachment(GetMesh());
@@ -268,10 +270,22 @@ void AUOUCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompon
 void AUOUCharacter::Move(const FInputActionValue& Value)
 {
 	const FVector2D MovementVector = Value.Get<FVector2D>();
+	const float MovementYaw = CameraControllerComponent != nullptr ? CameraControllerComponent->GetMovementYaw() : 0.0f;
 
 	if (IsPlayerInteractionInputBlocked())
 	{
+		if (LadderClimbComponent != nullptr && LadderClimbComponent->IsClimbing())
+		{
+			LadderClimbComponent->HandleMoveInput(FVector2D::ZeroVector, MovementYaw);
+		}
 		GetCharacterMovement()->StopMovementImmediately();
+		return;
+	}
+
+	// An active ladder traversal owns movement before other gameplay interactions.
+	if (LadderClimbComponent != nullptr && LadderClimbComponent->IsClimbing())
+	{
+		LadderClimbComponent->HandleMoveInput(MovementVector, MovementYaw);
 		return;
 	}
 
@@ -279,7 +293,6 @@ void AUOUCharacter::Move(const FInputActionValue& Value)
 	{
 		if (UmbrellaComponent->IsPouring())
 		{
-			const float MovementYaw = CameraControllerComponent != nullptr ? CameraControllerComponent->GetMovementYaw() : 0.0f;
 			UmbrellaComponent->SetPourAimMovementInput(MovementVector, MovementYaw);
 			GetCharacterMovement()->StopMovementImmediately();
 			return;
@@ -288,16 +301,26 @@ void AUOUCharacter::Move(const FInputActionValue& Value)
 
 	if (PushPullInteractorComponent != nullptr)
 	{
-		const float MovementYaw = CameraControllerComponent != nullptr ? CameraControllerComponent->GetMovementYaw() : 0.0f;
 		if (PushPullInteractorComponent->HandleMoveInput(MovementVector, MovementYaw))
 		{
 			return;
 		}
 	}
 
+	if (LadderClimbComponent != nullptr && LadderClimbComponent->HandleMoveInput(MovementVector, MovementYaw))
+	{
+		if (LadderClimbComponent->IsClimbing())
+		{
+			if (UUOUUmbrellaComponent* UmbrellaComponent = FindUmbrellaComponent())
+			{
+				UmbrellaComponent->CloseUmbrella();
+			}
+		}
+		return;
+	}
+
 	if (Controller != nullptr)
 	{
-		const float MovementYaw = CameraControllerComponent != nullptr ? CameraControllerComponent->GetMovementYaw() : 0.0f;
 		const FRotator YawRotation(0.0f, MovementYaw, 0.0f);
 		const FVector ForwardDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
 		const FVector RightDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y);
@@ -390,6 +413,11 @@ void AUOUCharacter::HandleJumpStarted()
 		return;
 	}
 
+	if (LadderClimbComponent != nullptr && LadderClimbComponent->HandleJumpInput())
+	{
+		return;
+	}
+
 	if (PushPullInteractorComponent != nullptr && PushPullInteractorComponent->BlocksJumping())
 	{
 		return;
@@ -415,6 +443,11 @@ void AUOUCharacter::HandleUmbrellaTogglePressed()
 		return;
 	}
 
+	if (LadderClimbComponent != nullptr && LadderClimbComponent->IsClimbing())
+	{
+		return;
+	}
+
 	if (UUOUUmbrellaComponent* UmbrellaComponent = FindUmbrellaComponent())
 	{
 		UmbrellaComponent->HandleInputPressed(UmbrellaComponent->GetToggleUmbrellaKey());
@@ -428,6 +461,11 @@ void AUOUCharacter::HandleUmbrellaInvertPressed()
 		return;
 	}
 
+	if (LadderClimbComponent != nullptr && LadderClimbComponent->IsClimbing())
+	{
+		return;
+	}
+
 	if (UUOUUmbrellaComponent* UmbrellaComponent = FindUmbrellaComponent())
 	{
 		UmbrellaComponent->HandleInputPressed(UmbrellaComponent->GetInvertUmbrellaKey());
@@ -437,6 +475,11 @@ void AUOUCharacter::HandleUmbrellaInvertPressed()
 void AUOUCharacter::HandleUmbrellaPourPressed()
 {
 	if (IsPlayerInteractionInputBlocked())
+	{
+		return;
+	}
+
+	if (LadderClimbComponent != nullptr && LadderClimbComponent->IsClimbing())
 	{
 		return;
 	}
@@ -472,6 +515,11 @@ void AUOUCharacter::HandleUmbrellaDebugFillPressed()
 		return;
 	}
 
+	if (LadderClimbComponent != nullptr && LadderClimbComponent->IsClimbing())
+	{
+		return;
+	}
+
 	if (UUOUUmbrellaComponent* UmbrellaComponent = FindUmbrellaComponent())
 	{
 		UmbrellaComponent->HandleInputPressed(UmbrellaComponent->GetDebugFillKey());
@@ -483,6 +531,11 @@ void AUOUCharacter::HandleContextInteractPressed()
 	++ContextInteractPressedCount;
 
 	if (IsPlayerInteractionInputBlocked())
+	{
+		return;
+	}
+
+	if (LadderClimbComponent != nullptr && LadderClimbComponent->IsClimbing())
 	{
 		return;
 	}
