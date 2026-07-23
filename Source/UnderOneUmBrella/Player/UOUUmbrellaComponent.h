@@ -341,6 +341,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Aim")
 	bool bRotateOwnerTowardsPourDirection = true;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Umbrella|Aim", meta = (ToolTip = "While pouring, uses camera-relative movement input (WASD) to choose the pour direction and keeps the character in place."))
+	bool bUseMovementInputPourAim = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Umbrella|Aim", meta = (ClampMin = "0.0", ClampMax = "1.0", EditCondition = "bUseMovementInputPourAim", EditConditionHides, ToolTip = "Movement input smaller than this value does not change the current pour direction."))
+	float MovementInputPourAimDeadZone = 0.1f;
+
 	// 마우스 위치를 월드 방향으로 환산할 때 사용하는 보조 레이 거리입니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Aim", meta = (ClampMin = "0.0"))
 	float MouseAimRayDistance = 10000.0f;
@@ -487,6 +493,9 @@ public:
 	// 붓기 상태를 끝내고 다시 뒤집힌 상태로 돌아갑니다.
 	UFUNCTION(BlueprintCallable, Category = "Umbrella")
 	void EndPour();
+
+	UFUNCTION(BlueprintCallable, Category = "Umbrella|Aim")
+	void SetPourAimMovementInput(FVector2D MovementInput, float MovementYaw);
 
 	// 비나 외부 시스템에서 전달한 물 양을 우산 저장소에 더합니다.
 	UFUNCTION(BlueprintCallable, Category = "Umbrella")
@@ -704,6 +713,8 @@ protected:
 
 	bool TryGetScreenSpaceMouseAimDirection(APlayerController* PlayerController, FVector& AimDirection, FVector& AimPoint) const;
 
+	bool TryGetActivePourAimDirection(FVector& AimDirection) const;
+
 	FVector SnapPourDirectionToAngleStep(const FVector& Direction) const;
 
 	// 물 붓기 시작 위치와 최종 방향을 계산합니다.
@@ -731,6 +742,8 @@ protected:
 	float PendingPourDropDuration = 0.0f;
 
 	float TimeSinceLastPourDropSpawn = 0.0f;
+
+	FVector PourAimWorldDirection = FVector::ZeroVector;
 
 	bool bRainBlockedAudioPlaying = false;
 

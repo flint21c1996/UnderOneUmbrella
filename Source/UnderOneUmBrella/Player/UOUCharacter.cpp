@@ -275,20 +275,22 @@ void AUOUCharacter::Move(const FInputActionValue& Value)
 		return;
 	}
 
+	if (UUOUUmbrellaComponent* UmbrellaComponent = FindUmbrellaComponent())
+	{
+		if (UmbrellaComponent->IsPouring())
+		{
+			const float MovementYaw = CameraControllerComponent != nullptr ? CameraControllerComponent->GetMovementYaw() : 0.0f;
+			UmbrellaComponent->SetPourAimMovementInput(MovementVector, MovementYaw);
+			GetCharacterMovement()->StopMovementImmediately();
+			return;
+		}
+	}
+
 	if (PushPullInteractorComponent != nullptr)
 	{
 		const float MovementYaw = CameraControllerComponent != nullptr ? CameraControllerComponent->GetMovementYaw() : 0.0f;
 		if (PushPullInteractorComponent->HandleMoveInput(MovementVector, MovementYaw))
 		{
-			return;
-		}
-	}
-
-	if (UUOUUmbrellaComponent* UmbrellaComponent = FindUmbrellaComponent())
-	{
-		if (UmbrellaComponent->IsPouring())
-		{
-			GetCharacterMovement()->StopMovementImmediately();
 			return;
 		}
 	}
