@@ -74,15 +74,6 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Collection", meta = (ClampMin = "0.0"))
 	float TriggerRadius = 75.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Visual")
-	FVector MeshRelativeOffset = FVector::ZeroVector;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Visual")
-	FRotator MeshRelativeRotation = FRotator::ZeroRotator;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Visual")
-	FVector MeshRelativeScale = FVector::OneVector;
-
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Visual|Idle")
 	bool bUseHoverMotion = true;
 
@@ -124,4 +115,8 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<AActor> PendingCollector = nullptr;
+
+	// 에디터에서 VisualMesh에 설정한 Transform을 idle 움직임의 기준으로 보존합니다.
+	FVector BaseVisualRelativeLocation = FVector::ZeroVector;
+	FRotator BaseVisualRelativeRotation = FRotator::ZeroRotator;
 };

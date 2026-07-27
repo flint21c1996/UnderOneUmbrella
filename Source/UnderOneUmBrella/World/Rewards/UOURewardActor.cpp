@@ -48,6 +48,12 @@ void AUOURewardActor::BeginPlay()
 	Super::BeginPlay();
 
 	ApplyComponentSettings();
+	if (VisualMesh != nullptr)
+	{
+		BaseVisualRelativeLocation = VisualMesh->GetRelativeLocation();
+		BaseVisualRelativeRotation = VisualMesh->GetRelativeRotation();
+	}
+
 	CollectionTrigger->OnComponentBeginOverlap.AddUniqueDynamic(
 		this,
 		&AUOURewardActor::HandleCollectionTriggerBeginOverlap);
@@ -89,14 +95,14 @@ void AUOURewardActor::Tick(float DeltaSeconds)
 
 	const float ElapsedTime = GetGameTimeSinceCreation();
 
-	FVector RelativeLocation = MeshRelativeOffset;
+	FVector RelativeLocation = BaseVisualRelativeLocation;
 	if (bUseHoverMotion)
 	{
 		RelativeLocation.Z += FMath::Sin(ElapsedTime * HoverSpeed) * HoverAmplitude;
 	}
 	VisualMesh->SetRelativeLocation(RelativeLocation);
 
-	FRotator RelativeRotation = MeshRelativeRotation;
+	FRotator RelativeRotation = BaseVisualRelativeRotation;
 	if (bUseRotationMotion)
 	{
 		RelativeRotation += RotationSpeed * ElapsedTime;
@@ -153,13 +159,6 @@ void AUOURewardActor::ApplyComponentSettings()
 	if (CollectionTrigger != nullptr)
 	{
 		CollectionTrigger->SetSphereRadius(TriggerRadius);
-	}
-
-	if (VisualMesh != nullptr)
-	{
-		VisualMesh->SetRelativeLocation(MeshRelativeOffset);
-		VisualMesh->SetRelativeRotation(MeshRelativeRotation);
-		VisualMesh->SetRelativeScale3D(MeshRelativeScale);
 	}
 }
 
