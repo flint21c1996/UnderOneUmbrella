@@ -14,6 +14,7 @@
 #include "GameFramework/Actor.h"
 #include "World/Light/UOULightExposureReceiverComponent.h"
 #include "World/Light/UOULightInteractionSurfaceComponent.h"
+#include "Player/UOUUmbrellaLightShadeVolumeComponent.h"
 #include "World/Light/UOULightReceivableInterface.h"
 
 UUOULightExposureSourceComponent::UUOULightExposureSourceComponent()
@@ -63,6 +64,8 @@ TArray<FString> UUOULightExposureSourceComponent::GetPuzzleDebugInfo_Implementat
 			LastReceiverCount,
 			LastLitCount,
 			LastBlockedCount),
+		FString::Printf(TEXT("Reflection Bounces: %d"), LastReflectionBounceCount),
+		FString::Printf(TEXT("Reflection Path: %s"), *LastReflectionPath),
 		FString::Printf(TEXT("Last Lit: %s"), *LastLitTargetName)
 	};
 }
@@ -78,6 +81,8 @@ void UUOULightExposureSourceComponent::EmitLight(float DeltaTime)
 	LastLitTargetName = TEXT("None");
 	LastBlockedName = TEXT("None");
 	LastReflectorName = TEXT("None");
+	LastReflectionBounceCount = 0;
+	LastReflectionPath = TEXT("None");
 
 	UWorld* World = GetWorld();
 	const float ExposureRange = GetExposureRange();
@@ -206,6 +211,8 @@ void UUOULightExposureSourceComponent::ValidateSettings()
 	Intensity = FMath::Max(0.0f, Intensity);
 	SampleInterval = FMath::Max(0.0f, SampleInterval);
 	MaxReflectionSurfacesPerTick = FMath::Max(0, MaxReflectionSurfacesPerTick);
+	MaxReflectionBouncesPerPath = FMath::Clamp(MaxReflectionBouncesPerPath, 1, 16);
+	MinimumReflectedIntensity = FMath::Max(0.0f, MinimumReflectedIntensity);
 	DebugDrawTime = FMath::Max(0.0f, DebugDrawTime);
 }
 
@@ -449,6 +456,11 @@ bool UUOULightExposureSourceComponent::TryBuildExposureData(
 		return false;
 	}
 
+	if (IsWorldPositionInsideUmbrellaLightShade(ReceiverPosition))
+	{
+		return false;
+	}
+
 	if (bRequireLineOfSight && !HasLineOfSight(ReceiverObject, SourcePosition, ReceiverPosition, OutBlockingHit))
 	{
 		return false;
@@ -528,6 +540,44 @@ bool UUOULightExposureSourceComponent::HasLineOfSightFrom(
 	return !World->LineTraceSingleByChannel(OutBlockingHit, TraceStart, TraceEnd, OcclusionTraceChannel, QueryParams);
 }
 
+bool UUOULightExposureSourceComponent::IsWorldPositionInsideUmbrellaLightShade(const FVector& WorldPosition) const
+{
+	UWorld* World = GetWorld();
+	if (World == nullptr)
+	{
+		return false;
+	}
+
+	FCollisionObjectQueryParams ObjectQueryParams;
+	ObjectQueryParams.AddObjectTypesToQuery(ECC_WorldDynamic);
+
+	TArray<FOverlapResult> OverlapResults;
+	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(UOUUmbrellaLightShadeOverlap), false, GetOwner());
+	const bool bHasOverlaps = World->OverlapMultiByObjectType(
+		OverlapResults,
+		WorldPosition,
+		FQuat::Identity,
+		ObjectQueryParams,
+		FCollisionShape::MakeSphere(1.0f),
+		QueryParams);
+	if (!bHasOverlaps)
+	{
+		return false;
+	}
+
+	for (const FOverlapResult& OverlapResult : OverlapResults)
+	{
+		const UUOUUmbrellaLightShadeVolumeComponent* ShadeVolume =
+			Cast<UUOUUmbrellaLightShadeVolumeComponent>(OverlapResult.GetComponent());
+		if (ShadeVolume != nullptr && ShadeVolume->ContainsWorldPosition(WorldPosition))
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
 bool UUOULightExposureSourceComponent::TryBuildLightInteractionSurfaceHit(
 	UUOULightInteractionSurfaceComponent* SurfaceComponent,
 	FHitResult& OutSurfaceHit) const
@@ -587,29 +637,138 @@ void UUOULightExposureSourceComponent::EmitReflectedLightFromSurface(
 	}
 
 	const FVector SourcePosition = GetSourceLocation();
-	const FVector IncomingDirection = (SurfaceHit.ImpactPoint - SourcePosition).GetSafeNormal();
-	const FVector ReflectedDirection = SurfaceComponent->GetReflectionDirection(IncomingDirection, SurfaceHit.ImpactNormal);
-	if (IncomingDirection.IsNearlyZero() || ReflectedDirection.IsNearlyZero())
+	const FVector InitialIncomingDirection = (SurfaceHit.ImpactPoint - SourcePosition).GetSafeNormal();
+	if (InitialIncomingDirection.IsNearlyZero())
 	{
 		return;
 	}
 
 	const FVector SourceForward = GetSourceForwardVector().GetSafeNormal();
 	const float SurfaceDistance = FVector::Dist(SourcePosition, SurfaceHit.ImpactPoint);
-	const float Dot = FMath::Clamp(FVector::DotProduct(SourceForward, IncomingDirection), -1.0f, 1.0f);
+	const float Dot = FMath::Clamp(FVector::DotProduct(SourceForward, InitialIncomingDirection), -1.0f, 1.0f);
 	const float SurfaceAngle = FMath::RadiansToDegrees(FMath::Acos(Dot));
 
 	float SourceDistanceFactor = 0.0f;
 	float SourceAngleFactor = 0.0f;
-	const float SurfaceIntensity = CalculateIntensity(SurfaceDistance, SurfaceAngle, SourceDistanceFactor, SourceAngleFactor);
-	if (SurfaceIntensity <= 0.0f)
+	float IncomingSurfaceIntensity = CalculateIntensity(
+		SurfaceDistance,
+		SurfaceAngle,
+		SourceDistanceFactor,
+		SourceAngleFactor);
+	if (IncomingSurfaceIntensity <= 0.0f)
 	{
 		return;
 	}
 
-	const FVector ReflectionOrigin = SurfaceHit.ImpactPoint + ReflectedDirection * SurfaceComponent->ReflectionStartPadding;
-	const FVector DebugReflectionEnd = ReflectionOrigin + ReflectedDirection * SurfaceComponent->ReflectionRange;
-	DrawDebugReflectionRay(ReflectionOrigin, DebugReflectionEnd);
+	UUOULightInteractionSurfaceComponent* CurrentSurface = SurfaceComponent;
+	FHitResult CurrentSurfaceHit = SurfaceHit;
+	FVector CurrentRayOrigin = SourcePosition;
+	TSet<const UUOULightInteractionSurfaceComponent*> VisitedSurfaces;
+	TArray<FString> ReflectionPath;
+	int32 ReflectionDepth = 0;
+
+	while (CurrentSurface != nullptr && ReflectionDepth < MaxReflectionBouncesPerPath)
+	{
+		if (VisitedSurfaces.Contains(CurrentSurface))
+		{
+			break;
+		}
+
+		const FVector IncomingDirection = (CurrentSurfaceHit.ImpactPoint - CurrentRayOrigin).GetSafeNormal();
+		const FVector ReflectedDirection = CurrentSurface->GetReflectionDirection(
+			IncomingDirection,
+			CurrentSurfaceHit.ImpactNormal);
+		if (IncomingDirection.IsNearlyZero() || ReflectedDirection.IsNearlyZero())
+		{
+			break;
+		}
+
+		VisitedSurfaces.Add(CurrentSurface);
+		ReflectionPath.Add(FString::Printf(
+			TEXT("%s.%s"),
+			*GetNameSafe(CurrentSurface->GetOwner()),
+			*GetNameSafe(CurrentSurface)));
+		++ReflectionDepth;
+		LastReflectorName = GetNameSafe(CurrentSurface);
+
+		const FVector ReflectionOrigin =
+			CurrentSurfaceHit.ImpactPoint + ReflectedDirection * CurrentSurface->ReflectionStartPadding;
+
+		UUOULightInteractionSurfaceComponent* NextSurface = nullptr;
+		FHitResult NextSurfaceHit;
+		float NextSurfaceDistance = 0.0f;
+		float NextSurfaceAngle = 0.0f;
+		const bool bHasNextSurface = ReflectionDepth < MaxReflectionBouncesPerPath &&
+			TryFindNextReflectionSurface(
+				CurrentSurface,
+				ReflectionOrigin,
+				ReflectedDirection,
+				VisitedSurfaces,
+				NextSurface,
+				NextSurfaceHit,
+				NextSurfaceDistance,
+				NextSurfaceAngle);
+
+		const FVector DebugReflectionEnd = bHasNextSurface
+			? NextSurfaceHit.ImpactPoint
+			: ReflectionOrigin + ReflectedDirection * CurrentSurface->ReflectionRange;
+		DrawDebugReflectionRay(ReflectionOrigin, DebugReflectionEnd);
+
+		EmitReflectedLightToReceivers(
+			CurrentSurface,
+			ReflectionOrigin,
+			ReflectedDirection,
+			IncomingSurfaceIntensity,
+			DeltaTime,
+			LitReceivers);
+
+		if (!bHasNextSurface || NextSurface == nullptr)
+		{
+			break;
+		}
+
+		const float NextSurfaceIntensity = CalculateReflectedSegmentIntensity(
+			CurrentSurface,
+			IncomingSurfaceIntensity,
+			NextSurfaceDistance,
+			NextSurfaceAngle);
+		if (NextSurfaceIntensity <= MinimumReflectedIntensity)
+		{
+			break;
+		}
+
+		CurrentRayOrigin = ReflectionOrigin;
+		CurrentSurface = NextSurface;
+		CurrentSurfaceHit = NextSurfaceHit;
+		IncomingSurfaceIntensity = NextSurfaceIntensity;
+	}
+
+	if (ReflectionDepth >= LastReflectionBounceCount)
+	{
+		LastReflectionBounceCount = ReflectionDepth;
+		LastReflectionPath = ReflectionPath.IsEmpty()
+			? TEXT("None")
+			: FString::Join(ReflectionPath, TEXT(" -> "));
+	}
+}
+
+void UUOULightExposureSourceComponent::EmitReflectedLightToReceivers(
+	UUOULightInteractionSurfaceComponent* SurfaceComponent,
+	const FVector& ReflectionOrigin,
+	const FVector& ReflectedDirection,
+	float SurfaceIntensity,
+	float DeltaTime,
+	TSet<UObject*>& LitReceivers)
+{
+	UWorld* World = GetWorld();
+	if (World == nullptr ||
+		SurfaceComponent == nullptr ||
+		ReflectedDirection.IsNearlyZero() ||
+		SurfaceIntensity <= 0.0f ||
+		DeltaTime <= 0.0f)
+	{
+		return;
+	}
 
 	TArray<FOverlapResult> OverlapResults;
 	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(UOULightReflectionReceiverOverlap), false, GetOwner());
@@ -684,6 +843,168 @@ void UUOULightExposureSourceComponent::EmitReflectedLightFromSurface(
 	}
 }
 
+bool UUOULightExposureSourceComponent::TryFindNextReflectionSurface(
+	const UUOULightInteractionSurfaceComponent* CurrentSurface,
+	const FVector& ReflectionOrigin,
+	const FVector& ReflectedDirection,
+	const TSet<const UUOULightInteractionSurfaceComponent*>& VisitedSurfaces,
+	UUOULightInteractionSurfaceComponent*& OutSurface,
+	FHitResult& OutSurfaceHit,
+	float& OutDistance,
+	float& OutAngle) const
+{
+	OutSurface = nullptr;
+	OutSurfaceHit = FHitResult();
+	OutDistance = 0.0f;
+	OutAngle = 0.0f;
+
+	UWorld* World = GetWorld();
+	if (World == nullptr ||
+		CurrentSurface == nullptr ||
+		ReflectedDirection.IsNearlyZero() ||
+		CurrentSurface->ReflectionRange <= 0.0f)
+	{
+		return false;
+	}
+
+	FCollisionObjectQueryParams ObjectQueryParams;
+	ObjectQueryParams.AddObjectTypesToQuery(ECC_WorldDynamic);
+
+	FCollisionQueryParams OverlapQueryParams(SCENE_QUERY_STAT(UOULightReflectionSurfaceOverlap), false, GetOwner());
+	if (bIgnoreOwner && GetOwner() != nullptr)
+	{
+		OverlapQueryParams.AddIgnoredActor(GetOwner());
+	}
+	if (CurrentSurface->GetOwner() != nullptr)
+	{
+		OverlapQueryParams.AddIgnoredActor(CurrentSurface->GetOwner());
+	}
+
+	TArray<FOverlapResult> OverlapResults;
+	if (!World->OverlapMultiByObjectType(
+		OverlapResults,
+		ReflectionOrigin,
+		FQuat::Identity,
+		ObjectQueryParams,
+		FCollisionShape::MakeSphere(CurrentSurface->ReflectionRange),
+		OverlapQueryParams))
+	{
+		return false;
+	}
+
+	const FVector SafeReflectedDirection = ReflectedDirection.GetSafeNormal();
+	float ClosestHitDistance = TNumericLimits<float>::Max();
+	TSet<UUOULightInteractionSurfaceComponent*> ProcessedSurfaces;
+
+	for (const FOverlapResult& OverlapResult : OverlapResults)
+	{
+		TArray<UUOULightInteractionSurfaceComponent*> CandidateSurfaces;
+		AppendLightInteractionSurfaces(
+			OverlapResult.GetActor(),
+			OverlapResult.GetComponent(),
+			CandidateSurfaces);
+
+		for (UUOULightInteractionSurfaceComponent* CandidateSurface : CandidateSurfaces)
+		{
+			if (CandidateSurface == nullptr ||
+				CandidateSurface == CurrentSurface ||
+				VisitedSurfaces.Contains(CandidateSurface) ||
+				ProcessedSurfaces.Contains(CandidateSurface) ||
+				!CandidateSurface->CanReflectLight())
+			{
+				continue;
+			}
+
+			ProcessedSurfaces.Add(CandidateSurface);
+
+			const FVector ToCandidate = CandidateSurface->GetComponentLocation() - ReflectionOrigin;
+			const float CandidateDistance = ToCandidate.Size();
+			if (CandidateDistance <= KINDA_SMALL_NUMBER ||
+				CandidateDistance > CurrentSurface->ReflectionRange ||
+				CandidateDistance >= ClosestHitDistance)
+			{
+				continue;
+			}
+
+			const FVector DirectionToCandidate = ToCandidate / CandidateDistance;
+			const float DirectionDot = FMath::Clamp(
+				FVector::DotProduct(SafeReflectedDirection, DirectionToCandidate),
+				-1.0f,
+				1.0f);
+			const float CandidateAngle = FMath::RadiansToDegrees(FMath::Acos(DirectionDot));
+			if (CandidateAngle > CurrentSurface->ReflectionConeAngle)
+			{
+				continue;
+			}
+
+			FCollisionQueryParams TraceQueryParams(
+				SCENE_QUERY_STAT(UOULightChainedReflectionSurfaceTrace),
+				false,
+				GetOwner());
+			if (bIgnoreOwner && GetOwner() != nullptr)
+			{
+				TraceQueryParams.AddIgnoredActor(GetOwner());
+			}
+			if (CurrentSurface->GetOwner() != nullptr)
+			{
+				AddActorPrimitiveComponentsToIgnore(CurrentSurface->GetOwner(), TraceQueryParams);
+			}
+
+			FHitResult CandidateHit;
+			const FVector TraceEnd = CandidateSurface->GetComponentLocation() +
+				DirectionToCandidate * CandidateSurface->ReflectionStartPadding;
+			if (!World->LineTraceSingleByChannel(
+				CandidateHit,
+				ReflectionOrigin,
+				TraceEnd,
+				OcclusionTraceChannel,
+				TraceQueryParams) ||
+				CandidateHit.GetComponent() != CandidateSurface)
+			{
+				continue;
+			}
+
+			const float HitDistance = FVector::Dist(ReflectionOrigin, CandidateHit.ImpactPoint);
+			if (HitDistance >= ClosestHitDistance)
+			{
+				continue;
+			}
+
+			ClosestHitDistance = HitDistance;
+			OutSurface = CandidateSurface;
+			OutSurfaceHit = CandidateHit;
+			OutDistance = HitDistance;
+			OutAngle = CandidateAngle;
+		}
+	}
+
+	return OutSurface != nullptr;
+}
+
+float UUOULightExposureSourceComponent::CalculateReflectedSegmentIntensity(
+	const UUOULightInteractionSurfaceComponent* SurfaceComponent,
+	float IncomingIntensity,
+	float Distance,
+	float Angle) const
+{
+	if (SurfaceComponent == nullptr || IncomingIntensity <= 0.0f)
+	{
+		return 0.0f;
+	}
+
+	const float DistanceFactor = bUseDistanceFalloff && SurfaceComponent->ReflectionRange > 0.0f
+		? 1.0f - FMath::Clamp(Distance / SurfaceComponent->ReflectionRange, 0.0f, 1.0f)
+		: 1.0f;
+	const float AngleFactor = bUseAngleFalloff
+		? CalculateConeFactor(Angle, SurfaceComponent->ReflectionConeAngle)
+		: 1.0f;
+
+	return IncomingIntensity *
+		SurfaceComponent->ReflectionIntensityMultiplier *
+		FMath::Clamp(DistanceFactor, 0.0f, 1.0f) *
+		FMath::Clamp(AngleFactor, 0.0f, 1.0f);
+}
+
 bool UUOULightExposureSourceComponent::TryBuildReflectedExposureData(
 	UObject* ReceiverObject,
 	const UUOULightInteractionSurfaceComponent* SurfaceComponent,
@@ -716,6 +1037,11 @@ bool UUOULightExposureSourceComponent::TryBuildReflectedExposureData(
 	const float Dot = FMath::Clamp(FVector::DotProduct(ReflectedDirection.GetSafeNormal(), DirectionToReceiver), -1.0f, 1.0f);
 	const float Angle = FMath::RadiansToDegrees(FMath::Acos(Dot));
 	if (Angle > SurfaceComponent->ReflectionConeAngle)
+	{
+		return false;
+	}
+
+	if (IsWorldPositionInsideUmbrellaLightShade(ReceiverPosition))
 	{
 		return false;
 	}

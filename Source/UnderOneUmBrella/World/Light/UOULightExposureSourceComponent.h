@@ -14,6 +14,7 @@ class ULocalLightComponent;
 class USceneComponent;
 class USpotLightComponent;
 class UUOULightInteractionSurfaceComponent;
+class UUOUUmbrellaLightShadeVolumeComponent;
 
 // 스포트라이트 형태의 광원에서 주변 수신체로 게임플레이용 빛 노출을 전달합니다.
 UCLASS(ClassGroup=(Light), meta=(BlueprintSpawnableComponent, DisplayName="UOU Light Exposure Source", ToolTip = "광원 원뿔 범위 안의 수신체에 게임플레이용 빛 노출을 전달합니다."))
@@ -73,6 +74,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection", meta = (ClampMin = "0", ToolTip = "한 틱에 처리할 최대 반사 표면 수입니다."))
 	int32 MaxReflectionSurfacesPerTick = 4;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection", meta = (ClampMin = "1", ClampMax = "16", ToolTip = "하나의 반사 경로에서 허용할 최대 반사 횟수입니다. 우산과 거울을 모두 포함합니다."))
+	int32 MaxReflectionBouncesPerPath = 4;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection", meta = (ClampMin = "0.0", ToolTip = "누적 감쇠된 빛 세기가 이 값 이하가 되면 이후 반사 탐색을 중단합니다."))
+	float MinimumReflectedIntensity = 0.01f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Debug", meta = (ToolTip = "광원 원뿔, 히트 라인, 반사 디버그 도형을 그립니다."))
 	bool bDrawDebug = false;
 
@@ -99,6 +106,12 @@ public:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Runtime", meta = (ToolTip = "마지막으로 이 광원을 반사한 표면의 디버그 이름입니다."))
 	FString LastReflectorName = TEXT("None");
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Runtime", meta = (ToolTip = "마지막 샘플링에서 확인된 가장 긴 연속 반사 횟수입니다."))
+	int32 LastReflectionBounceCount = 0;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Runtime", meta = (ToolTip = "마지막 샘플링에서 확인된 가장 긴 반사 경로입니다."))
+	FString LastReflectionPath = TEXT("None");
 
 	UFUNCTION(BlueprintCallable, Category = "Light", meta = (ToolTip = "입력된 DeltaTime으로 게임플레이 빛 샘플링을 한 번 실행합니다."))
 	void EmitLight(float DeltaTime);
@@ -130,12 +143,34 @@ protected:
 		FHitResult& OutBlockingHit,
 		const AActor* IgnoredActor,
 		const UPrimitiveComponent* IgnoredComponent) const;
+	bool IsWorldPositionInsideUmbrellaLightShade(const FVector& WorldPosition) const;
 	bool TryBuildLightInteractionSurfaceHit(UUOULightInteractionSurfaceComponent* SurfaceComponent, FHitResult& OutSurfaceHit) const;
 	void EmitReflectedLightFromSurface(
 		UUOULightInteractionSurfaceComponent* SurfaceComponent,
 		const FHitResult& SurfaceHit,
 		float DeltaTime,
 		TSet<UObject*>& LitReceivers);
+	void EmitReflectedLightToReceivers(
+		UUOULightInteractionSurfaceComponent* SurfaceComponent,
+		const FVector& ReflectionOrigin,
+		const FVector& ReflectedDirection,
+		float SurfaceIntensity,
+		float DeltaTime,
+		TSet<UObject*>& LitReceivers);
+	bool TryFindNextReflectionSurface(
+		const UUOULightInteractionSurfaceComponent* CurrentSurface,
+		const FVector& ReflectionOrigin,
+		const FVector& ReflectedDirection,
+		const TSet<const UUOULightInteractionSurfaceComponent*>& VisitedSurfaces,
+		UUOULightInteractionSurfaceComponent*& OutSurface,
+		FHitResult& OutSurfaceHit,
+		float& OutDistance,
+		float& OutAngle) const;
+	float CalculateReflectedSegmentIntensity(
+		const UUOULightInteractionSurfaceComponent* SurfaceComponent,
+		float IncomingIntensity,
+		float Distance,
+		float Angle) const;
 	bool TryBuildReflectedExposureData(
 		UObject* ReceiverObject,
 		const UUOULightInteractionSurfaceComponent* SurfaceComponent,

@@ -4,6 +4,9 @@
 
 #include "Components/SceneComponent.h"
 #include "GameFramework/Actor.h"
+#include "Engine/World.h"
+#include "TimerManager.h"
+#include "Player/UOUUmbrellaLightShadeVolumeComponent.h"
 #include "World/Light/UOULightInteractionSurfaceComponent.h"
 
 UUOUUmbrellaLightInteractionComponent::UUOUUmbrellaLightInteractionComponent()
@@ -17,6 +20,7 @@ void UUOUUmbrellaLightInteractionComponent::BeginPlay()
 
 	ResolveReferences();
 	EnsureRuntimeLightSurface();
+	EnsureRuntimeLightShadeVolume();
 
 	if (UmbrellaComponent != nullptr)
 	{
@@ -26,6 +30,13 @@ void UUOUUmbrellaLightInteractionComponent::BeginPlay()
 	}
 
 	RefreshLightInteractionMode();
+
+	// 액터 컴포넌트 BeginPlay 순서와 무관하게 UmbrellaComponent의 초기 상태를 한 번 더 반영합니다.
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().SetTimerForNextTick(
+			FTimerDelegate::CreateUObject(this, &UUOUUmbrellaLightInteractionComponent::RefreshLightInteractionMode));
+	}
 }
 
 void UUOUUmbrellaLightInteractionComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -42,36 +53,43 @@ void UUOUUmbrellaLightInteractionComponent::EndPlay(const EEndPlayReason::Type E
 
 void UUOUUmbrellaLightInteractionComponent::RefreshLightInteractionMode()
 {
+	ResolveReferences();
+
 	if (LightSurfaceComponent == nullptr)
 	{
 		EnsureRuntimeLightSurface();
-		if (LightSurfaceComponent == nullptr)
-		{
-			return;
-		}
+	}
+	if (LightShadeVolumeComponent == nullptr)
+	{
+		EnsureRuntimeLightShadeVolume();
 	}
 
 	ApplyRuntimeLightSurfacePlacement();
+	ApplyRuntimeLightShadeVolumePlacement();
 
-	EUOULightInteractionMode NextMode = EUOULightInteractionMode::Disabled;
-	if (UmbrellaComponent != nullptr && UmbrellaComponent->bHasUmbrella)
+	const bool bHasUmbrella = UmbrellaComponent != nullptr && UmbrellaComponent->bHasUmbrella;
+	const EUOUUmbrellaState UmbrellaState = bHasUmbrella
+		? UmbrellaComponent->CurrentState
+		: EUOUUmbrellaState::Closed;
+	const bool bIsLightReflecting = UmbrellaState == EUOUUmbrellaState::LightReflecting;
+	const bool bIsNormallySpread = UmbrellaState == EUOUUmbrellaState::Open;
+
+	if (LightShadeVolumeComponent != nullptr)
 	{
-		const EUOUUmbrellaState UmbrellaState = UmbrellaComponent->CurrentState;
-		const bool bIsUpsideDown = UmbrellaState == EUOUUmbrellaState::UpsideDown ||
-			UmbrellaState == EUOUUmbrellaState::Pouring;
-		const bool bIsSpread = UmbrellaState == EUOUUmbrellaState::Open || bIsUpsideDown;
-
-		if (bIsUpsideDown && bUpsideDownUmbrellaReflectsLight)
-		{
-			NextMode = EUOULightInteractionMode::Reflecting;
-		}
-		else if (bIsSpread && bSpreadUmbrellaBlocksLight)
-		{
-			NextMode = EUOULightInteractionMode::Blocking;
-		}
+		LightShadeVolumeComponent->SetShadeEnabled(
+			bHasUmbrella && bIsNormallySpread && bSpreadUmbrellaBlocksLight);
 	}
 
-	LightSurfaceComponent->SetLightInteractionMode(NextMode);
+	EUOULightInteractionMode NextMode = EUOULightInteractionMode::Disabled;
+	if (bHasUmbrella && bIsLightReflecting && bLightReflectingStateReflectsLight)
+	{
+		NextMode = EUOULightInteractionMode::Reflecting;
+	}
+
+	if (LightSurfaceComponent != nullptr)
+	{
+		LightSurfaceComponent->SetLightInteractionMode(NextMode);
+	}
 }
 
 void UUOUUmbrellaLightInteractionComponent::ResolveReferences()
@@ -91,6 +109,11 @@ void UUOUUmbrellaLightInteractionComponent::ResolveReferences()
 	{
 		LightSurfaceComponent = Owner->FindComponentByClass<UUOULightInteractionSurfaceComponent>();
 	}
+
+	if (bAutoFindLightShadeVolumeComponent && LightShadeVolumeComponent == nullptr)
+	{
+		LightShadeVolumeComponent = Owner->FindComponentByClass<UUOUUmbrellaLightShadeVolumeComponent>();
+	}
 }
 
 void UUOUUmbrellaLightInteractionComponent::EnsureRuntimeLightSurface()
@@ -106,7 +129,7 @@ void UUOUUmbrellaLightInteractionComponent::EnsureRuntimeLightSurface()
 		return;
 	}
 
-	USceneComponent* AttachParent = GetLightSurfaceAttachParent();
+	USceneComponent* AttachParent = GetLightInteractionAttachParent();
 	if (AttachParent == nullptr)
 	{
 		AttachParent = Owner->GetRootComponent();
@@ -131,7 +154,44 @@ void UUOUUmbrellaLightInteractionComponent::EnsureRuntimeLightSurface()
 	ApplyRuntimeLightSurfacePlacement();
 }
 
-USceneComponent* UUOUUmbrellaLightInteractionComponent::GetLightSurfaceAttachParent() const
+void UUOUUmbrellaLightInteractionComponent::EnsureRuntimeLightShadeVolume()
+{
+	if (LightShadeVolumeComponent != nullptr || !bCreateRuntimeLightShadeVolumeWhenMissing)
+	{
+		return;
+	}
+
+	AActor* Owner = GetOwner();
+	if (Owner == nullptr)
+	{
+		return;
+	}
+
+	USceneComponent* AttachParent = GetLightInteractionAttachParent();
+	if (AttachParent == nullptr)
+	{
+		AttachParent = Owner->GetRootComponent();
+	}
+	if (AttachParent == nullptr)
+	{
+		return;
+	}
+
+	LightShadeVolumeComponent = NewObject<UUOUUmbrellaLightShadeVolumeComponent>(Owner, TEXT("RuntimeUmbrellaLightShadeVolume"));
+	if (LightShadeVolumeComponent == nullptr)
+	{
+		return;
+	}
+
+	Owner->AddInstanceComponent(LightShadeVolumeComponent);
+	LightShadeVolumeComponent->SetupAttachment(AttachParent);
+	LightShadeVolumeComponent->InitBoxExtent(RuntimeShadeVolumeBoxExtent);
+	LightShadeVolumeComponent->SetShadeEnabled(false);
+	LightShadeVolumeComponent->RegisterComponent();
+	ApplyRuntimeLightShadeVolumePlacement();
+}
+
+USceneComponent* UUOUUmbrellaLightInteractionComponent::GetLightInteractionAttachParent() const
 {
 	AActor* Owner = GetOwner();
 	if (UmbrellaComponent != nullptr)
@@ -144,6 +204,18 @@ USceneComponent* UUOUUmbrellaLightInteractionComponent::GetLightSurfaceAttachPar
 		if (UmbrellaComponent->PickupAttachPoint != nullptr)
 		{
 			return UmbrellaComponent->PickupAttachPoint;
+		}
+	}
+
+	if (Owner != nullptr)
+	{
+		TInlineComponentArray<USceneComponent*> SceneComponents(Owner);
+		for (USceneComponent* SceneComponent : SceneComponents)
+		{
+			if (SceneComponent != nullptr && SceneComponent->GetFName() == TEXT("UmbrellaHeldVisualAnchor"))
+			{
+				return SceneComponent;
+			}
 		}
 	}
 
@@ -161,6 +233,22 @@ void UUOUUmbrellaLightInteractionComponent::ApplyRuntimeLightSurfacePlacement() 
 	LightSurfaceComponent->ReflectionDirectionMode = EUOULightReflectionDirectionMode::OwnerForward;
 	LightSurfaceComponent->SetRelativeLocation(RuntimeSurfaceRelativeLocation);
 	LightSurfaceComponent->SetRelativeRotation(RuntimeSurfaceRelativeRotation);
+}
+
+void UUOUUmbrellaLightInteractionComponent::ApplyRuntimeLightShadeVolumePlacement() const
+{
+	if (LightShadeVolumeComponent == nullptr)
+	{
+		return;
+	}
+
+	const FVector SafeBoxExtent(
+		FMath::Max(0.0f, RuntimeShadeVolumeBoxExtent.X),
+		FMath::Max(0.0f, RuntimeShadeVolumeBoxExtent.Y),
+		FMath::Max(0.0f, RuntimeShadeVolumeBoxExtent.Z));
+	LightShadeVolumeComponent->SetBoxExtent(SafeBoxExtent);
+	LightShadeVolumeComponent->SetRelativeLocation(RuntimeShadeVolumeRelativeLocation);
+	LightShadeVolumeComponent->SetRelativeRotation(RuntimeShadeVolumeRelativeRotation);
 }
 
 void UUOUUmbrellaLightInteractionComponent::HandleUmbrellaStateChanged(EUOUUmbrellaState NewState, bool bHasUmbrella)

@@ -8,6 +8,7 @@
 #include "UOUUmbrellaLightInteractionComponent.generated.h"
 
 class UUOULightInteractionSurfaceComponent;
+class UUOUUmbrellaLightShadeVolumeComponent;
 class USceneComponent;
 
 UCLASS(ClassGroup=(Gameplay), meta=(BlueprintSpawnableComponent, DisplayName="UOU Umbrella Light Interaction"))
@@ -28,13 +29,19 @@ public:
 	bool bAutoFindLightSurfaceComponent = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Light")
+	bool bAutoFindLightShadeVolumeComponent = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Light")
 	bool bSpreadUmbrellaBlocksLight = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Light")
-	bool bUpsideDownUmbrellaReflectsLight = true;
+	bool bLightReflectingStateReflectsLight = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Light")
 	bool bCreateRuntimeLightSurfaceWhenMissing = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Light")
+	bool bCreateRuntimeLightShadeVolumeWhenMissing = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Light", meta = (ClampMin = "0.0"))
 	FVector RuntimeSurfaceBoxExtent = FVector(70.0f, 70.0f, 6.0f);
@@ -45,11 +52,23 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Light")
 	FRotator RuntimeSurfaceRelativeRotation = FRotator::ZeroRotator;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Light Shade", meta = (ClampMin = "0.0", DisplayName = "Shade Volume Box Extent", ToolTip = "펼친 우산 아래에서 게임플레이용 빛과 온도를 차단할 박스의 절반 크기입니다."))
+	FVector RuntimeShadeVolumeBoxExtent = FVector(90.0f, 90.0f, 100.0f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Light Shade", meta = (DisplayName = "Shade Volume Relative Location", ToolTip = "우산 기준점에서 그늘 박스 중심까지의 로컬 위치입니다."))
+	FVector RuntimeShadeVolumeRelativeLocation = FVector(0.0f, 0.0f, -100.0f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Light Shade", meta = (DisplayName = "Shade Volume Relative Rotation", ToolTip = "우산 기준점에 대한 그늘 박스의 로컬 회전입니다."))
+	FRotator RuntimeShadeVolumeRelativeRotation = FRotator::ZeroRotator;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|References")
 	TObjectPtr<UUOUUmbrellaComponent> UmbrellaComponent = nullptr;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|References")
 	TObjectPtr<UUOULightInteractionSurfaceComponent> LightSurfaceComponent = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|References")
+	TObjectPtr<UUOUUmbrellaLightShadeVolumeComponent> LightShadeVolumeComponent = nullptr;
 
 	UFUNCTION(BlueprintCallable, Category = "Umbrella|Light")
 	void RefreshLightInteractionMode();
@@ -57,8 +76,10 @@ public:
 protected:
 	void ResolveReferences();
 	void EnsureRuntimeLightSurface();
-	USceneComponent* GetLightSurfaceAttachParent() const;
+	void EnsureRuntimeLightShadeVolume();
+	USceneComponent* GetLightInteractionAttachParent() const;
 	void ApplyRuntimeLightSurfacePlacement() const;
+	void ApplyRuntimeLightShadeVolumePlacement() const;
 
 	UFUNCTION()
 	void HandleUmbrellaStateChanged(EUOUUmbrellaState NewState, bool bHasUmbrella);
