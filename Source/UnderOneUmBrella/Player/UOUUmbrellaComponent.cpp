@@ -264,6 +264,11 @@ void UUOUUmbrellaComponent::BeginPour()
 		return;
 	}
 
+	if (AActor* Owner = GetOwner())
+	{
+		PourAimWorldDirection = SnapPourDirectionToAngleStep(Owner->GetActorForwardVector());
+	}
+
 	SetState(EUOUUmbrellaState::Pouring);
 }
 
@@ -307,6 +312,30 @@ void UUOUUmbrellaComponent::ToggleLightReflectingState()
 	}
 
 	BeginLightReflecting();
+}
+
+void UUOUUmbrellaComponent::SetPourAimMovementInput(FVector2D MovementInput, float MovementYaw)
+{
+	if (!bUseMovementInputPourAim || CurrentState != EUOUUmbrellaState::Pouring)
+	{
+		return;
+	}
+
+	const float SafeDeadZone = FMath::Clamp(MovementInputPourAimDeadZone, 0.0f, 1.0f);
+	if (MovementInput.SizeSquared() <= FMath::Square(SafeDeadZone))
+	{
+		return;
+	}
+
+	const FRotator YawRotation(0.0f, MovementYaw, 0.0f);
+	const FVector CameraForward = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
+	const FVector CameraRight = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y);
+	FVector WorldDirection = CameraForward * MovementInput.Y + CameraRight * MovementInput.X;
+	WorldDirection.Z = 0.0f;
+	if (!WorldDirection.IsNearlyZero())
+	{
+		PourAimWorldDirection = SnapPourDirectionToAngleStep(WorldDirection);
+	}
 }
 
 // 비나 다른 시스템에서 전달받은 물 양을 우산 저장 컨테이너에 더합니다.
@@ -1838,8 +1867,7 @@ void UUOUUmbrellaComponent::UpdateUmbrellaAimFacing()
 	ApplyAimFacingMovementOverride();
 
 	FVector AimDirection = FVector::ZeroVector;
-	FVector AimPoint = FVector::ZeroVector;
-	if (!TryGetMouseAimDirection(AimDirection, AimPoint))
+	if (!TryGetActivePourAimDirection(AimDirection))
 	{
 		return;
 	}
@@ -2280,6 +2308,36 @@ bool UUOUUmbrellaComponent::TryGetScreenSpaceMouseAimDirection(APlayerController
 	return true;
 }
 
+bool UUOUUmbrellaComponent::TryGetActivePourAimDirection(FVector& AimDirection) const
+{
+	AimDirection = FVector::ZeroVector;
+
+	if (CurrentState == EUOUUmbrellaState::LightReflecting)
+	{
+		FVector AimPoint = FVector::ZeroVector;
+		return TryGetMouseAimDirection(AimDirection, AimPoint);
+	}
+
+	if (bUseMovementInputPourAim)
+	{
+		AimDirection = PourAimWorldDirection;
+		if (AimDirection.IsNearlyZero())
+		{
+			if (const AActor* Owner = GetOwner())
+			{
+				AimDirection = Owner->GetActorForwardVector();
+			}
+		}
+
+		AimDirection.Z = 0.0f;
+		AimDirection = SnapPourDirectionToAngleStep(AimDirection);
+		return !AimDirection.IsNearlyZero();
+	}
+
+	FVector AimPoint = FVector::ZeroVector;
+	return TryGetMouseAimDirection(AimDirection, AimPoint);
+}
+
 FVector UUOUUmbrellaComponent::SnapPourDirectionToAngleStep(const FVector& Direction) const
 {
 	FVector FlatDirection(Direction.X, Direction.Y, 0.0f);
@@ -2343,8 +2401,7 @@ bool UUOUUmbrellaComponent::TryGetPourDirection(FVector& PourOriginLocation, FVe
 	}
 
 	FVector AimDirection = FVector::ZeroVector;
-	FVector AimPoint = FVector::ZeroVector;
-	if (TryGetMouseAimDirection(AimDirection, AimPoint))
+	if (TryGetActivePourAimDirection(AimDirection))
 	{
 		// 물줄기가 손 위치에서 마우스가 가리키는 지점으로 향하도록 방향을 다시 계산합니다.
 		if (!AimDirection.IsNearlyZero())
