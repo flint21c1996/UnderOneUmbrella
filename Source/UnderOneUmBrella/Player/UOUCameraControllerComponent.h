@@ -90,6 +90,17 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Camera|Dialogue")
 	bool IsDialogueFocusActive() const { return bDialogueFocusActive; }
 
+	// 짧은 게임플레이 연출이 기존 카메라 설정을 훼손하지 않고 임시 줌을 요청하는 진입점입니다.
+	UFUNCTION(BlueprintCallable, Category = "Camera|Temporary Zoom")
+	void RequestTemporaryZoom(UObject* RequestSource, float TargetDistance, float TargetOrthoWidth);
+
+	// 자신이 등록한 임시 줌만 해제하여 다른 연출의 요청을 잘못 종료하지 않도록 합니다.
+	UFUNCTION(BlueprintCallable, Category = "Camera|Temporary Zoom")
+	void ReleaseTemporaryZoom(UObject* RequestSource);
+
+	UFUNCTION(BlueprintPure, Category = "Camera|Temporary Zoom")
+	bool IsTemporaryZoomRequestedBy(const UObject* RequestSource) const;
+
 protected:
 	// 참조를 수동으로 넣지 않아도 기본 카메라 구성을 자동으로 찾게 한다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Camera|References")
@@ -227,6 +238,12 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Camera|Runtime")
 	bool bDialogueFocusActive = false;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Camera|Runtime")
+	float TemporaryZoomTargetDistance = 0.0f;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Camera|Runtime")
+	float TemporaryZoomTargetOrthoWidth = 0.0f;
+
 	UPROPERTY(Transient)
 	TMap<TObjectPtr<UMeshComponent>, FOccludedMeshState> OccludedMeshStates;
 
@@ -242,6 +259,9 @@ protected:
 	// 목표 yaw와 거리로 현재 카메라를 부드럽게 갱신한다.
 	void UpdateSnapCamera(float DeltaSeconds);
 	void UpdateDialogueCamera(float DeltaSeconds);
+	bool HasTemporaryZoomRequest() const;
+	float GetEffectiveTargetCameraDistance() const;
+	float GetEffectiveTargetOrthoWidth() const;
 
 	// 플레이어와 카메라 사이를 가리는 메시를 찾아 임시로 투명 처리한다.
 	void UpdateCameraOcclusion();
@@ -264,6 +284,9 @@ protected:
 
 	UPROPERTY(Transient)
 	TObjectPtr<AActor> DialogueSpeakerActor = nullptr;
+
+	UPROPERTY(Transient)
+	TWeakObjectPtr<UObject> TemporaryZoomRequestSource;
 
 	FVector RegularCameraTargetOffset = FVector::ZeroVector;
 	FVector TargetCameraOffset = FVector::ZeroVector;

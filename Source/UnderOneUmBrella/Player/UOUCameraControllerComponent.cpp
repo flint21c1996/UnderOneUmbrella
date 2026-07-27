@@ -39,6 +39,7 @@ void UUOUCameraControllerComponent::BeginPlay()
 
 void UUOUCameraControllerComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	TemporaryZoomRequestSource.Reset();
 	RestoreAllOccludedMeshes();
 	Super::EndPlay(EndPlayReason);
 }
@@ -162,6 +163,36 @@ void UUOUCameraControllerComponent::EndDialogueFocus()
 	TargetCameraOffset = RegularCameraTargetOffset;
 }
 
+void UUOUCameraControllerComponent::RequestTemporaryZoom(
+	UObject* RequestSource,
+	float TargetDistance,
+	float TargetOrthoWidth)
+{
+	if (RequestSource == nullptr)
+	{
+		return;
+	}
+
+	TemporaryZoomRequestSource = RequestSource;
+	TemporaryZoomTargetDistance = FMath::Clamp(TargetDistance, MinCameraDistance, MaxCameraDistance);
+	TemporaryZoomTargetOrthoWidth = FMath::Max(1.0f, TargetOrthoWidth);
+}
+
+void UUOUCameraControllerComponent::ReleaseTemporaryZoom(UObject* RequestSource)
+{
+	if (!IsTemporaryZoomRequestedBy(RequestSource))
+	{
+		return;
+	}
+
+	TemporaryZoomRequestSource.Reset();
+}
+
+bool UUOUCameraControllerComponent::IsTemporaryZoomRequestedBy(const UObject* RequestSource) const
+{
+	return RequestSource != nullptr && TemporaryZoomRequestSource.Get() == RequestSource;
+}
+
 void UUOUCameraControllerComponent::CacheCameraComponents()
 {
 	if (!bAutoFindCameraComponents)
@@ -239,16 +270,39 @@ void UUOUCameraControllerComponent::UpdateSnapCamera(float DeltaSeconds)
 	const FRotator NextRotation = FMath::RInterpTo(CurrentRotation, TargetRotation, DeltaSeconds, CameraRotationInterpSpeed);
 	CameraBoom->SetWorldRotation(NextRotation);
 
-	const float NextDistance = FMath::FInterpTo(CameraBoom->TargetArmLength, TargetCameraDistance, DeltaSeconds, CameraZoomInterpSpeed);
+	const float NextDistance = FMath::FInterpTo(
+		CameraBoom->TargetArmLength,
+		GetEffectiveTargetCameraDistance(),
+		DeltaSeconds,
+		CameraZoomInterpSpeed);
 	CameraBoom->TargetArmLength = NextDistance;
 
 	if (FollowCamera != nullptr && FollowCamera->ProjectionMode == ECameraProjectionMode::Orthographic)
 	{
-		const float NextOrthoWidth = FMath::FInterpTo(FollowCamera->OrthoWidth, OrthographicWidth, DeltaSeconds, CameraZoomInterpSpeed);
+		const float NextOrthoWidth = FMath::FInterpTo(
+			FollowCamera->OrthoWidth,
+			GetEffectiveTargetOrthoWidth(),
+			DeltaSeconds,
+			CameraZoomInterpSpeed);
 		FollowCamera->SetOrthoWidth(FMath::Max(1.0f, NextOrthoWidth));
 	}
 
 	CameraBoom->TargetOffset = FMath::VInterpTo(CameraBoom->TargetOffset, TargetCameraOffset, DeltaSeconds, CameraRotationInterpSpeed);
+}
+
+bool UUOUCameraControllerComponent::HasTemporaryZoomRequest() const
+{
+	return TemporaryZoomRequestSource.IsValid();
+}
+
+float UUOUCameraControllerComponent::GetEffectiveTargetCameraDistance() const
+{
+	return HasTemporaryZoomRequest() ? TemporaryZoomTargetDistance : TargetCameraDistance;
+}
+
+float UUOUCameraControllerComponent::GetEffectiveTargetOrthoWidth() const
+{
+	return HasTemporaryZoomRequest() ? TemporaryZoomTargetOrthoWidth : OrthographicWidth;
 }
 
 void UUOUCameraControllerComponent::UpdateDialogueCamera(float DeltaSeconds)
