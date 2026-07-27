@@ -292,7 +292,13 @@ void UUOUUmbrellaComponent::BeginLightReflecting()
 
 	if (AActor* Owner = GetOwner())
 	{
-		PourAimWorldDirection = SnapLightReflectingDirectionToAngleStep(Owner->GetActorForwardVector());
+		LightReflectingAimReferenceDirection = Owner->GetActorForwardVector().GetSafeNormal2D();
+		PourAimWorldDirection = LightReflectingAimReferenceDirection;
+	}
+	else
+	{
+		LightReflectingAimReferenceDirection = FVector::ForwardVector;
+		PourAimWorldDirection = LightReflectingAimReferenceDirection;
 	}
 
 	SetState(EUOUUmbrellaState::LightReflecting);
@@ -343,7 +349,8 @@ void UUOUUmbrellaComponent::SetPourAimMovementInput(FVector2D MovementInput, flo
 	if (!WorldDirection.IsNearlyZero())
 	{
 		PourAimWorldDirection = CurrentState == EUOUUmbrellaState::LightReflecting
-			? SnapLightReflectingDirectionToAngleStep(WorldDirection)
+			? ConstrainLightReflectingDirectionToAimArc(
+				SnapLightReflectingDirectionToAngleStep(WorldDirection))
 			: SnapPourDirectionToAngleStep(WorldDirection);
 	}
 }
@@ -1889,7 +1896,8 @@ void UUOUUmbrellaComponent::UpdateUmbrellaAimFacing()
 	}
 
 	AimDirection = bIsLightReflectingAimActive
-		? SnapLightReflectingDirectionToAngleStep(AimDirection)
+		? ConstrainLightReflectingDirectionToAimArc(
+			SnapLightReflectingDirectionToAngleStep(AimDirection))
 		: SnapPourDirectionToAngleStep(AimDirection);
 	if (AimDirection.IsNearlyZero())
 	{
@@ -2338,7 +2346,8 @@ bool UUOUUmbrellaComponent::TryGetActivePourAimDirection(FVector& AimDirection) 
 
 		AimDirection.Z = 0.0f;
 		AimDirection = CurrentState == EUOUUmbrellaState::LightReflecting
-			? SnapLightReflectingDirectionToAngleStep(AimDirection)
+			? ConstrainLightReflectingDirectionToAimArc(
+				SnapLightReflectingDirectionToAngleStep(AimDirection))
 			: SnapPourDirectionToAngleStep(AimDirection);
 		return !AimDirection.IsNearlyZero();
 	}
@@ -2375,6 +2384,45 @@ FVector UUOUUmbrellaComponent::SnapLightReflectingDirectionToAngleStep(const FVe
 	const float SnappedAngleDegrees = FMath::GridSnap(AngleDegrees, SafeStep);
 	const float SnappedAngleRadians = FMath::DegreesToRadians(SnappedAngleDegrees);
 	return FVector(FMath::Cos(SnappedAngleRadians), FMath::Sin(SnappedAngleRadians), 0.0f).GetSafeNormal();
+}
+
+FVector UUOUUmbrellaComponent::ConstrainLightReflectingDirectionToAimArc(const FVector& Direction) const
+{
+	const FVector FlatDirection(Direction.X, Direction.Y, 0.0f);
+	if (FlatDirection.IsNearlyZero())
+	{
+		return FVector::ZeroVector;
+	}
+
+	FVector ReferenceDirection(
+		LightReflectingAimReferenceDirection.X,
+		LightReflectingAimReferenceDirection.Y,
+		0.0f);
+	if (ReferenceDirection.IsNearlyZero())
+	{
+		ReferenceDirection = GetOwner() != nullptr
+			? GetOwner()->GetActorForwardVector().GetSafeNormal2D()
+			: FVector::ForwardVector;
+	}
+	ReferenceDirection.Normalize();
+
+	const float ReferenceAngleDegrees =
+		FMath::RadiansToDegrees(FMath::Atan2(ReferenceDirection.Y, ReferenceDirection.X));
+	const FVector SafeDirection = FlatDirection.GetSafeNormal();
+	const float TargetAngleDegrees =
+		FMath::RadiansToDegrees(FMath::Atan2(SafeDirection.Y, SafeDirection.X));
+	const float HalfArcDegrees = FMath::Clamp(LightReflectingAimArcDegrees, 1.0f, 180.0f) * 0.5f;
+	const float DeltaAngleDegrees = FMath::FindDeltaAngleDegrees(
+		ReferenceAngleDegrees,
+		TargetAngleDegrees);
+	const float ConstrainedAngleDegrees =
+		ReferenceAngleDegrees + FMath::Clamp(DeltaAngleDegrees, -HalfArcDegrees, HalfArcDegrees);
+	const float ConstrainedAngleRadians = FMath::DegreesToRadians(ConstrainedAngleDegrees);
+
+	return FVector(
+		FMath::Cos(ConstrainedAngleRadians),
+		FMath::Sin(ConstrainedAngleRadians),
+		0.0f).GetSafeNormal();
 }
 
 bool UUOUUmbrellaComponent::TryGetPourDirection(FVector& PourOriginLocation, FVector& PourDirection) const

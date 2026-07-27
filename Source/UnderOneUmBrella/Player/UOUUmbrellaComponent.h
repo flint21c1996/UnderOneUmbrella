@@ -387,6 +387,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Umbrella|Aim", meta = (ClampMin = "1.0", ClampMax = "180.0", EditCondition = "bSnapLightReflectingAimDirection", EditConditionHides))
 	float LightReflectingAimSnapAngleDegrees = 22.5f;
 
+	// 빛 반사 상태 진입 시 정면을 중심으로 조준할 수 있는 전체 각도입니다. 180도면 좌우 90도까지 조준할 수 있습니다.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Umbrella|Aim", meta = (ClampMin = "1.0", ClampMax = "180.0", Units = "deg", DisplayName = "Light Reflecting Aim Arc", ToolTip = "빛 반사 상태에 들어간 순간의 정면을 기준으로 허용할 전체 조준 각도입니다. 최대 180도이며, 180도는 좌우 90도 범위입니다."))
+	float LightReflectingAimArcDegrees = 180.0f;
+
 	// 우산에 저장된 물이 무게 계산에 얼마나 영향을 줄지 정합니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Rain", meta = (ClampMin = "0.0"))
 	float StoredWaterWeightMultiplier = 1.0f;
@@ -758,6 +762,7 @@ protected:
 
 	FVector SnapPourDirectionToAngleStep(const FVector& Direction) const;
 	FVector SnapLightReflectingDirectionToAngleStep(const FVector& Direction) const;
+	FVector ConstrainLightReflectingDirectionToAimArc(const FVector& Direction) const;
 
 	// 물 붓기 시작 위치와 최종 방향을 계산합니다.
 	bool TryGetPourDirection(FVector& PourOriginLocation, FVector& PourDirection) const;
@@ -789,6 +794,7 @@ protected:
 	float TimeSinceLastPourDropSpawn = 0.0f;
 
 	FVector PourAimWorldDirection = FVector::ZeroVector;
+	FVector LightReflectingAimReferenceDirection = FVector::ForwardVector;
 
 	bool bRainBlockedAudioPlaying = false;
 
