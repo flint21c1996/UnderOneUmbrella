@@ -7,6 +7,7 @@
 #include "UOURewardFeedbackComponent.generated.h"
 
 class AUOUCharacter;
+class UAnimMontage;
 class UNiagaraSystem;
 class UUOUCameraControllerComponent;
 class UUOUPlayerInteractionExecutorComponent;
@@ -49,6 +50,16 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Feedback|Input")
 	bool bStopMovementImmediately = true;
 
+	// 플레이어가 보상을 획득했음을 몸동작으로 보여줄 전용 몽타주입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Feedback|Animation")
+	TObjectPtr<UAnimMontage> CollectionMontage = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Feedback|Animation", meta = (ClampMin = "0.01"))
+	float MontagePlayRate = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Feedback|Animation")
+	FName MontageStartSection = NAME_None;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Feedback|Camera")
 	bool bUseTemporaryCameraZoom = true;
 
@@ -78,11 +89,18 @@ protected:
 private:
 	void SpawnCollectionEffect(const AUOUCharacter* Collector, const FVector& RewardWorldLocation) const;
 	void ApplyPlayerFeedback(AUOUCharacter* Collector);
+	bool StartCollectionMontage();
 	void ReleasePlayerFeedback();
 	void FinishFeedbackInternal(bool bBroadcastFinished);
+	void TryFinishFeedback();
 	void HandleFeedbackTimerFinished();
 
+	UFUNCTION()
+	void HandlePlayerInteractionFinished(UObject* InteractionSource, bool bInterrupted);
+
 	FTimerHandle FeedbackTimerHandle;
+	bool bFeedbackDurationElapsed = false;
+	bool bCollectionMontagePlaying = false;
 
 	UPROPERTY(Transient)
 	TObjectPtr<AUOUCharacter> ActiveCollector = nullptr;

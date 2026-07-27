@@ -3,6 +3,7 @@
 #include "World/Rewards/UOURewardFeedbackComponent.h"
 
 #include "Engine/World.h"
+#include "Interaction/UOUContextInteractionTypes.h"
 #include "NiagaraComponent.h"
 #include "NiagaraFunctionLibrary.h"
 #include "Player/UOUCameraControllerComponent.h"
@@ -29,16 +30,20 @@ bool UUOURewardFeedbackComponent::StartFeedback(AUOUCharacter* Collector, FVecto
 	}
 
 	bFeedbackPlaying = true;
+	bFeedbackDurationElapsed = false;
+	bCollectionMontagePlaying = false;
 	ActiveCollector = Collector;
 
 	SpawnCollectionEffect(Collector, RewardWorldLocation);
 	ApplyPlayerFeedback(Collector);
+	StartCollectionMontage();
 
 	const float SafeDuration = FMath::Max(0.0f, FeedbackDuration);
 	UWorld* World = GetWorld();
 	if (SafeDuration <= KINDA_SMALL_NUMBER || World == nullptr)
 	{
-		FinishFeedbackInternal(true);
+		bFeedbackDurationElapsed = true;
+		TryFinishFeedback();
 		return true;
 	}
 
@@ -97,13 +102,10 @@ void UUOURewardFeedbackComponent::ApplyPlayerFeedback(AUOUCharacter* Collector)
 		return;
 	}
 
-	if (bBlockPlayerInput)
+	ActiveInputExecutor = Collector->GetInteractionExecutorComponent();
+	if (bBlockPlayerInput && ActiveInputExecutor != nullptr)
 	{
-		ActiveInputExecutor = Collector->GetInteractionExecutorComponent();
-		if (ActiveInputExecutor != nullptr)
-		{
-			ActiveInputExecutor->RequestPlayerInputBlock(this, bStopMovementImmediately);
-		}
+		ActiveInputExecutor->RequestPlayerInputBlock(this, bStopMovementImmediately);
 	}
 
 	if (bUseTemporaryCameraZoom)
@@ -119,10 +121,53 @@ void UUOURewardFeedbackComponent::ApplyPlayerFeedback(AUOUCharacter* Collector)
 	}
 }
 
+bool UUOURewardFeedbackComponent::StartCollectionMontage()
+{
+	if (CollectionMontage == nullptr || ActiveInputExecutor == nullptr)
+	{
+		return false;
+	}
+
+	FUOUPlayerInteractionRequest AnimationRequest;
+	AnimationRequest.PlayerMontage = CollectionMontage;
+	AnimationRequest.MontagePlayRate = FMath::Max(0.01f, MontagePlayRate);
+	AnimationRequest.MontageStartSection = MontageStartSection;
+
+	// 전체 피드백의 입력 잠금은 이 컴포넌트가 관리하므로 실행기는 몽타주 수명만 담당합니다.
+	AnimationRequest.bBlockPlayerInputDuringInteraction = false;
+	AnimationRequest.bStopMovementOnStart = false;
+
+	ActiveInputExecutor->OnInteractionFinished.AddUniqueDynamic(
+		this,
+		&UUOURewardFeedbackComponent::HandlePlayerInteractionFinished);
+
+	// 재생 실패 과정에서 종료 이벤트가 동기 호출되어도 상태가 올바르게 정리되도록 먼저 기록합니다.
+	bCollectionMontagePlaying = true;
+	if (ActiveInputExecutor->TryStartInteraction(this, AnimationRequest))
+	{
+		return true;
+	}
+
+	bCollectionMontagePlaying = false;
+	ActiveInputExecutor->OnInteractionFinished.RemoveDynamic(
+		this,
+		&UUOURewardFeedbackComponent::HandlePlayerInteractionFinished);
+	return false;
+}
+
 void UUOURewardFeedbackComponent::ReleasePlayerFeedback()
 {
 	if (ActiveInputExecutor != nullptr)
 	{
+		ActiveInputExecutor->OnInteractionFinished.RemoveDynamic(
+			this,
+			&UUOURewardFeedbackComponent::HandlePlayerInteractionFinished);
+
+		if (ActiveInputExecutor->IsInteractionActiveFor(this))
+		{
+			ActiveInputExecutor->CancelActiveInteraction();
+		}
+
 		ActiveInputExecutor->ReleasePlayerInputBlock(this);
 	}
 
@@ -134,6 +179,7 @@ void UUOURewardFeedbackComponent::ReleasePlayerFeedback()
 	ActiveInputExecutor = nullptr;
 	ActiveCameraController = nullptr;
 	ActiveCollector = nullptr;
+	bCollectionMontagePlaying = false;
 }
 
 void UUOURewardFeedbackComponent::FinishFeedbackInternal(bool bBroadcastFinished)
@@ -157,7 +203,38 @@ void UUOURewardFeedbackComponent::FinishFeedbackInternal(bool bBroadcastFinished
 	}
 }
 
+void UUOURewardFeedbackComponent::TryFinishFeedback()
+{
+	if (!bFeedbackPlaying || !bFeedbackDurationElapsed || bCollectionMontagePlaying)
+	{
+		return;
+	}
+
+	FinishFeedbackInternal(true);
+}
+
 void UUOURewardFeedbackComponent::HandleFeedbackTimerFinished()
 {
-	FinishFeedbackInternal(true);
+	bFeedbackDurationElapsed = true;
+	TryFinishFeedback();
+}
+
+void UUOURewardFeedbackComponent::HandlePlayerInteractionFinished(
+	UObject* InteractionSource,
+	bool bInterrupted)
+{
+	if (InteractionSource != this)
+	{
+		return;
+	}
+
+	if (ActiveInputExecutor != nullptr)
+	{
+		ActiveInputExecutor->OnInteractionFinished.RemoveDynamic(
+			this,
+			&UUOURewardFeedbackComponent::HandlePlayerInteractionFinished);
+	}
+
+	bCollectionMontagePlaying = false;
+	TryFinishFeedback();
 }
