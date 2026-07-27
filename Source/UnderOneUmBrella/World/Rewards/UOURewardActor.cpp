@@ -6,6 +6,7 @@
 #include "Components/SphereComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/CollisionProfile.h"
+#include "NiagaraComponent.h"
 #include "Player/UOUCharacter.h"
 #include "World/Rewards/UOURewardFeedbackComponent.h"
 
@@ -27,6 +28,10 @@ AUOURewardActor::AUOURewardActor()
 	VisualMesh->SetupAttachment(RootScene);
 	VisualMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	VisualMesh->SetGenerateOverlapEvents(false);
+
+	ObjectiveEffect = CreateDefaultSubobject<UNiagaraComponent>(TEXT("ObjectiveEffect"));
+	ObjectiveEffect->SetupAttachment(VisualMesh);
+	ObjectiveEffect->SetAutoActivate(true);
 
 	RewardFeedbackComponent = CreateDefaultSubobject<UUOURewardFeedbackComponent>(TEXT("RewardFeedbackComponent"));
 }
@@ -172,6 +177,13 @@ void AUOURewardActor::DisableAfterCollection()
 	{
 		VisualMesh->SetVisibility(false, true);
 		VisualMesh->SetHiddenInGame(true, true);
+	}
+
+	if (ObjectiveEffect != nullptr)
+	{
+		ObjectiveEffect->Deactivate();
+		ObjectiveEffect->SetVisibility(false, true);
+		ObjectiveEffect->SetHiddenInGame(true, true);
 	}
 }
 

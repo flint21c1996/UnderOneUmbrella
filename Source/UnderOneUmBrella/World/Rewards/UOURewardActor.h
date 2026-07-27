@@ -9,6 +9,7 @@
 class AActor;
 class AUOURewardActor;
 class UPrimitiveComponent;
+class UNiagaraComponent;
 class UUOURewardFeedbackComponent;
 class USceneComponent;
 class USphereComponent;
@@ -62,6 +63,10 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Reward|Components")
 	TObjectPtr<UStaticMeshComponent> VisualMesh = nullptr;
+
+	// 수집 전 보상이 목표임을 지속적으로 알려주는 상시 Niagara 표현입니다.
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Reward|Components")
+	TObjectPtr<UNiagaraComponent> ObjectiveEffect = nullptr;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Reward|Components")
 	TObjectPtr<UUOURewardFeedbackComponent> RewardFeedbackComponent = nullptr;
