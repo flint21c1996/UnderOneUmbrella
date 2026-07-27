@@ -50,11 +50,23 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Interaction|Player")
 	bool ShouldBlockPlayerInput() const;
 
+	UFUNCTION(BlueprintPure, Category = "Interaction|Player")
+	bool ShouldBlockPlayerCameraRotationInput() const;
+
 	UFUNCTION(BlueprintCallable, Category = "Interaction|Player")
 	void RequestPlayerInputBlock(UObject* BlockSource, bool bStopMovementImmediately = true);
 
+	// 이동과 상호작용은 막되 카메라 회전은 허용하는 입력 차단을 요청합니다.
+	UFUNCTION(BlueprintCallable, Category = "Interaction|Player")
+	void RequestPlayerInputBlockAllowingCameraRotation(
+		UObject* BlockSource,
+		bool bStopMovementImmediately = true);
+
 	UFUNCTION(BlueprintCallable, Category = "Interaction|Player")
 	void ReleasePlayerInputBlock(UObject* BlockSource);
+
+	UFUNCTION(BlueprintCallable, Category = "Interaction|Player")
+	void ReleasePlayerInputBlockAllowingCameraRotation(UObject* BlockSource);
 
 	UFUNCTION(BlueprintPure, Category = "Interaction|Player")
 	bool IsPlayerInputBlockedBy(UObject* BlockSource) const;
@@ -69,6 +81,7 @@ protected:
 	void ClearMontageDelegate();
 	void StopOwnerMovementImmediately() const;
 	bool HasExternalPlayerInputBlock() const;
+	bool HasExternalPlayerCameraRotationInputBlock() const;
 
 	void HandleInteractionMontageEnded(UAnimMontage* Montage, bool bInterrupted);
 
@@ -79,4 +92,5 @@ protected:
 	TWeakObjectPtr<UAnimInstance> ActiveAnimInstance;
 
 	TMap<TWeakObjectPtr<UObject>, int32> InputBlockRequestCounts;
+	TMap<TWeakObjectPtr<UObject>, int32> CameraRotationAllowedInputBlockRequestCounts;
 };
