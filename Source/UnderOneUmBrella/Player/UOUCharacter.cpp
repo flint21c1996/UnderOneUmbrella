@@ -302,19 +302,20 @@ void AUOUCharacter::Move(const FInputActionValue& Value)
 		return;
 	}
 
-	if (PushPullInteractorComponent != nullptr)
-	{
-		if (PushPullInteractorComponent->HandleMoveInput(MovementVector, MovementYaw))
-		{
-			return;
-		}
-	}
-
 	if (UUOUUmbrellaComponent* UmbrellaComponent = FindUmbrellaComponent())
 	{
 		if (UmbrellaComponent->IsPouring())
 		{
+			UmbrellaComponent->SetPourAimMovementInput(MovementVector, MovementYaw);
 			GetCharacterMovement()->StopMovementImmediately();
+			return;
+		}
+	}
+
+	if (PushPullInteractorComponent != nullptr)
+	{
+		if (PushPullInteractorComponent->HandleMoveInput(MovementVector, MovementYaw))
+		{
 			return;
 		}
 	}
