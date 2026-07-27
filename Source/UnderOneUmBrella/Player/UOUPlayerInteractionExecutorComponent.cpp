@@ -19,6 +19,7 @@ void UUOUPlayerInteractionExecutorComponent::EndPlay(const EEndPlayReason::Type 
 {
 	ClearMontageDelegate();
 	InputBlockRequestCounts.Empty();
+	CameraRotationAllowedInputBlockRequestCounts.Empty();
 	Super::EndPlay(EndPlayReason);
 }
 
@@ -112,6 +113,12 @@ bool UUOUPlayerInteractionExecutorComponent::ShouldBlockPlayerInput() const
 	return (bInteractionActive && bBlockInputWhileActive) || HasExternalPlayerInputBlock();
 }
 
+bool UUOUPlayerInteractionExecutorComponent::ShouldBlockPlayerCameraRotationInput() const
+{
+	return (bInteractionActive && bBlockInputWhileActive)
+		|| HasExternalPlayerCameraRotationInputBlock();
+}
+
 void UUOUPlayerInteractionExecutorComponent::RequestPlayerInputBlock(UObject* BlockSource, bool bStopMovementImmediately)
 {
 	if (BlockSource == nullptr)
@@ -127,6 +134,22 @@ void UUOUPlayerInteractionExecutorComponent::RequestPlayerInputBlock(UObject* Bl
 	{
 		StopOwnerMovementImmediately();
 	}
+}
+
+void UUOUPlayerInteractionExecutorComponent::RequestPlayerInputBlockAllowingCameraRotation(
+	UObject* BlockSource,
+	bool bStopMovementImmediately)
+{
+	if (BlockSource == nullptr)
+	{
+		return;
+	}
+
+	RequestPlayerInputBlock(BlockSource, bStopMovementImmediately);
+
+	const TWeakObjectPtr<UObject> SourceKey(BlockSource);
+	int32& RequestCount = CameraRotationAllowedInputBlockRequestCounts.FindOrAdd(SourceKey);
+	++RequestCount;
 }
 
 void UUOUPlayerInteractionExecutorComponent::ReleasePlayerInputBlock(UObject* BlockSource)
@@ -148,6 +171,31 @@ void UUOUPlayerInteractionExecutorComponent::ReleasePlayerInputBlock(UObject* Bl
 	{
 		InputBlockRequestCounts.Remove(SourceKey);
 	}
+}
+
+void UUOUPlayerInteractionExecutorComponent::ReleasePlayerInputBlockAllowingCameraRotation(
+	UObject* BlockSource)
+{
+	if (BlockSource == nullptr)
+	{
+		return;
+	}
+
+	const TWeakObjectPtr<UObject> SourceKey(BlockSource);
+	int32* CameraAllowedRequestCount =
+		CameraRotationAllowedInputBlockRequestCounts.Find(SourceKey);
+	if (CameraAllowedRequestCount == nullptr)
+	{
+		return;
+	}
+
+	--(*CameraAllowedRequestCount);
+	if (*CameraAllowedRequestCount <= 0)
+	{
+		CameraRotationAllowedInputBlockRequestCounts.Remove(SourceKey);
+	}
+
+	ReleasePlayerInputBlock(BlockSource);
 }
 
 bool UUOUPlayerInteractionExecutorComponent::IsPlayerInputBlockedBy(UObject* BlockSource) const
@@ -221,6 +269,28 @@ bool UUOUPlayerInteractionExecutorComponent::HasExternalPlayerInputBlock() const
 	for (const TPair<TWeakObjectPtr<UObject>, int32>& RequestPair : InputBlockRequestCounts)
 	{
 		if (RequestPair.Key.IsValid() && RequestPair.Value > 0)
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+bool UUOUPlayerInteractionExecutorComponent::HasExternalPlayerCameraRotationInputBlock() const
+{
+	for (const TPair<TWeakObjectPtr<UObject>, int32>& RequestPair : InputBlockRequestCounts)
+	{
+		if (!RequestPair.Key.IsValid() || RequestPair.Value <= 0)
+		{
+			continue;
+		}
+
+		const int32* CameraAllowedRequestCount =
+			CameraRotationAllowedInputBlockRequestCounts.Find(RequestPair.Key);
+		const int32 CameraAllowedCount =
+			CameraAllowedRequestCount != nullptr ? *CameraAllowedRequestCount : 0;
+		if (RequestPair.Value > CameraAllowedCount)
 		{
 			return true;
 		}

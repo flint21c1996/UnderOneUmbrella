@@ -25,6 +25,7 @@
 #include "Player/UOUInteractionComponent.h"
 #include "Player/UOULadderClimbComponent.h"
 #include "Player/UOUPlayerInteractionExecutorComponent.h"
+#include "Player/UOUPlayerSplineTravelComponent.h"
 #include "Player/UOUPushPullInteractorComponent.h"
 #include "Player/UOUUmbrellaComponent.h"
 #include "UI/UOUUISubsystem.h"
@@ -112,6 +113,7 @@ AUOUCharacter::AUOUCharacter()
 	InteractionExecutorComponent = CreateDefaultSubobject<UUOUPlayerInteractionExecutorComponent>(
 		TEXT("InteractionExecutorComponent"));
 	LadderClimbComponent = CreateDefaultSubobject<UUOULadderClimbComponent>(TEXT("LadderClimbComponent"));
+	SplineTravelComponent = CreateDefaultSubobject<UUOUPlayerSplineTravelComponent>(TEXT("SplineTravelComponent"));
 
 	UmbrellaAttachPoint = CreateDefaultSubobject<UArrowComponent>(TEXT("UmbrellaAttachPoint"));
 	UmbrellaAttachPoint->SetupAttachment(GetMesh());
@@ -183,6 +185,17 @@ void AUOUCharacter::Tick(float DeltaSeconds)
 	{
 		LogPushPullComponentState(this, TEXT("TickMissingPtr"));
 		bLoggedMissingPushPullComponent = true;
+	}
+}
+
+void AUOUCharacter::CheckJumpInput(float DeltaTime)
+{
+	const int32 PreviousJumpCount = JumpCurrentCount;
+	Super::CheckJumpInput(DeltaTime);
+
+	if (JumpCurrentCount > PreviousJumpCount)
+	{
+		OnCharacterJumped.Broadcast();
 	}
 }
 
@@ -336,7 +349,7 @@ void AUOUCharacter::Look(const FInputActionValue& Value)
 
 void AUOUCharacter::RotateCameraLeft()
 {
-	if (IsPlayerInteractionInputBlocked())
+	if (IsPlayerCameraRotationInputBlocked())
 	{
 		return;
 	}
@@ -349,7 +362,7 @@ void AUOUCharacter::RotateCameraLeft()
 
 void AUOUCharacter::RotateCameraRight()
 {
-	if (IsPlayerInteractionInputBlocked())
+	if (IsPlayerCameraRotationInputBlocked())
 	{
 		return;
 	}
@@ -429,8 +442,6 @@ void AUOUCharacter::HandleJumpStarted()
 		{
 			return;
 		}
-
-		UmbrellaComponent->CloseUmbrella();
 	}
 
 	Jump();
@@ -716,4 +727,10 @@ void AUOUCharacter::ClearPlayerAudioListenerOverride()
 bool AUOUCharacter::IsPlayerInteractionInputBlocked() const
 {
 	return InteractionExecutorComponent != nullptr && InteractionExecutorComponent->ShouldBlockPlayerInput();
+}
+
+bool AUOUCharacter::IsPlayerCameraRotationInputBlocked() const
+{
+	return InteractionExecutorComponent != nullptr
+		&& InteractionExecutorComponent->ShouldBlockPlayerCameraRotationInput();
 }
