@@ -21,6 +21,10 @@ public:
 
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+	virtual void TickComponent(
+		float DeltaTime,
+		ELevelTick TickType,
+		FActorComponentTickFunction* ThisTickFunction) override;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Light")
 	bool bAutoFindUmbrellaComponent = true;
@@ -42,6 +46,15 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Light")
 	bool bCreateRuntimeLightShadeVolumeWhenMissing = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Light|Debug", meta = (DisplayName = "Draw Reflector Debug", ToolTip = "Puzzle 월드 디버그가 켜져 있을 때 우산 반사판 박스와 반사 방향을 표시합니다."))
+	bool bDrawReflectorDebug = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Light|Debug", meta = (ClampMin = "0.0", DisplayName = "Reflector Debug Arrow Length", ToolTip = "우산 반사판에서 표시하는 반사 방향 화살표의 길이입니다."))
+	float ReflectorDebugArrowLength = 180.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Light|Debug", meta = (ClampMin = "0.0", DisplayName = "Reflector Debug Thickness", ToolTip = "우산 반사판 디버그 박스와 화살표의 선 두께입니다."))
+	float ReflectorDebugThickness = 3.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Light", meta = (ClampMin = "0.0"))
 	FVector RuntimeSurfaceBoxExtent = FVector(70.0f, 70.0f, 6.0f);
@@ -80,6 +93,7 @@ protected:
 	USceneComponent* GetLightInteractionAttachParent() const;
 	void ApplyRuntimeLightSurfacePlacement() const;
 	void ApplyRuntimeLightShadeVolumePlacement() const;
+	void DrawReflectorDebug() const;
 
 	UFUNCTION()
 	void HandleUmbrellaStateChanged(EUOUUmbrellaState NewState, bool bHasUmbrella);
