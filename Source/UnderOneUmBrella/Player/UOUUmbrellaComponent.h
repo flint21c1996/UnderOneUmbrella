@@ -349,6 +349,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Umbrella|Aim", meta = (ToolTip = "While pouring, uses camera-relative movement input (WASD) to choose the pour direction and keeps the character in place."))
 	bool bUseMovementInputPourAim = true;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Umbrella|Aim", meta = (ToolTip = "빛 반사 중 카메라 기준 이동 입력(WASD)으로 반사 방향을 선택하고 캐릭터를 제자리에 유지합니다."))
+	bool bUseMovementInputLightReflectingAim = true;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Umbrella|Aim", meta = (ClampMin = "0.0", ClampMax = "1.0", EditCondition = "bUseMovementInputPourAim", EditConditionHides, ToolTip = "Movement input smaller than this value does not change the current pour direction."))
 	float MovementInputPourAimDeadZone = 0.1f;
 

@@ -306,7 +306,7 @@ void AUOUCharacter::Move(const FInputActionValue& Value)
 
 	if (UUOUUmbrellaComponent* UmbrellaComponent = FindUmbrellaComponent())
 	{
-		if (UmbrellaComponent->IsPouring())
+		if (UmbrellaComponent->IsPouring() || UmbrellaComponent->IsLightReflecting())
 		{
 			UmbrellaComponent->SetPourAimMovementInput(MovementVector, MovementYaw);
 			GetCharacterMovement()->StopMovementImmediately();

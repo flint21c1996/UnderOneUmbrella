@@ -290,6 +290,11 @@ void UUOUUmbrellaComponent::BeginLightReflecting()
 		return;
 	}
 
+	if (AActor* Owner = GetOwner())
+	{
+		PourAimWorldDirection = SnapLightReflectingDirectionToAngleStep(Owner->GetActorForwardVector());
+	}
+
 	SetState(EUOUUmbrellaState::LightReflecting);
 }
 
@@ -316,7 +321,10 @@ void UUOUUmbrellaComponent::ToggleLightReflectingState()
 
 void UUOUUmbrellaComponent::SetPourAimMovementInput(FVector2D MovementInput, float MovementYaw)
 {
-	if (!bUseMovementInputPourAim || CurrentState != EUOUUmbrellaState::Pouring)
+	const bool bUseMovementAim =
+		(CurrentState == EUOUUmbrellaState::Pouring && bUseMovementInputPourAim) ||
+		(CurrentState == EUOUUmbrellaState::LightReflecting && bUseMovementInputLightReflectingAim);
+	if (!bUseMovementAim)
 	{
 		return;
 	}
@@ -334,7 +342,9 @@ void UUOUUmbrellaComponent::SetPourAimMovementInput(FVector2D MovementInput, flo
 	WorldDirection.Z = 0.0f;
 	if (!WorldDirection.IsNearlyZero())
 	{
-		PourAimWorldDirection = SnapPourDirectionToAngleStep(WorldDirection);
+		PourAimWorldDirection = CurrentState == EUOUUmbrellaState::LightReflecting
+			? SnapLightReflectingDirectionToAngleStep(WorldDirection)
+			: SnapPourDirectionToAngleStep(WorldDirection);
 	}
 }
 
@@ -2312,13 +2322,10 @@ bool UUOUUmbrellaComponent::TryGetActivePourAimDirection(FVector& AimDirection) 
 {
 	AimDirection = FVector::ZeroVector;
 
-	if (CurrentState == EUOUUmbrellaState::LightReflecting)
-	{
-		FVector AimPoint = FVector::ZeroVector;
-		return TryGetMouseAimDirection(AimDirection, AimPoint);
-	}
-
-	if (bUseMovementInputPourAim)
+	const bool bUseMovementAim =
+		(CurrentState == EUOUUmbrellaState::Pouring && bUseMovementInputPourAim) ||
+		(CurrentState == EUOUUmbrellaState::LightReflecting && bUseMovementInputLightReflectingAim);
+	if (bUseMovementAim)
 	{
 		AimDirection = PourAimWorldDirection;
 		if (AimDirection.IsNearlyZero())
@@ -2330,7 +2337,9 @@ bool UUOUUmbrellaComponent::TryGetActivePourAimDirection(FVector& AimDirection) 
 		}
 
 		AimDirection.Z = 0.0f;
-		AimDirection = SnapPourDirectionToAngleStep(AimDirection);
+		AimDirection = CurrentState == EUOUUmbrellaState::LightReflecting
+			? SnapLightReflectingDirectionToAngleStep(AimDirection)
+			: SnapPourDirectionToAngleStep(AimDirection);
 		return !AimDirection.IsNearlyZero();
 	}
 
