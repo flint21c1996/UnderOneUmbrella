@@ -4,6 +4,7 @@
 
 #include "Components/SceneComponent.h"
 #include "Components/SphereComponent.h"
+#include "Components/SplineComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/CollisionProfile.h"
 #include "NiagaraComponent.h"
@@ -29,6 +30,16 @@ AUOURewardActor::AUOURewardActor()
 	VisualMesh->SetupAttachment(RootScene);
 	VisualMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	VisualMesh->SetGenerateOverlapEvents(false);
+
+	CollectionMotionPath = CreateDefaultSubobject<USplineComponent>(TEXT("CollectionMotionPath"));
+	CollectionMotionPath->bEditableWhenInherited = true;
+	CollectionMotionPath->SetupAttachment(RootScene);
+	CollectionMotionPath->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	CollectionMotionPath->ClearSplinePoints(false);
+	CollectionMotionPath->AddSplinePoint(FVector::ZeroVector, ESplineCoordinateSpace::Local, false);
+	CollectionMotionPath->AddSplinePoint(FVector(0.0f, 0.0f, 160.0f), ESplineCoordinateSpace::Local, true);
+	CollectionMotionPath->SetClosedLoop(false);
+	CollectionMotionPath->SetHiddenInGame(true);
 
 	ObjectiveEffect = CreateDefaultSubobject<UNiagaraComponent>(TEXT("ObjectiveEffect"));
 	ObjectiveEffect->SetupAttachment(VisualMesh);
@@ -150,7 +161,7 @@ bool AUOURewardActor::TryCollectReward(AActor* Collector)
 	}
 
 	if (bWaitingForCollectionMotion
-		&& !RewardCollectionMotionComponent->StartCollectionMotion(VisualMesh))
+		&& !RewardCollectionMotionComponent->StartCollectionMotion(VisualMesh, CollectionMotionPath))
 	{
 		bWaitingForCollectionMotion = false;
 	}

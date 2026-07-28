@@ -3,6 +3,34 @@
 #include "World/Rewards/UOURewardCollectionMotionComponent.h"
 
 #include "Components/SceneComponent.h"
+#include "Components/SplineComponent.h"
+
+namespace
+{
+	FVector ConvertWorldLocationToTargetSpace(
+		const USceneComponent* TargetComponent,
+		const FVector& WorldLocation)
+	{
+		const USceneComponent* AttachParent = TargetComponent != nullptr
+			? TargetComponent->GetAttachParent()
+			: nullptr;
+		return AttachParent != nullptr
+			? AttachParent->GetComponentTransform().InverseTransformPosition(WorldLocation)
+			: WorldLocation;
+	}
+
+	FQuat ConvertWorldRotationToTargetSpace(
+		const USceneComponent* TargetComponent,
+		const FQuat& WorldRotation)
+	{
+		const USceneComponent* AttachParent = TargetComponent != nullptr
+			? TargetComponent->GetAttachParent()
+			: nullptr;
+		return AttachParent != nullptr
+			? AttachParent->GetComponentQuat().Inverse() * WorldRotation
+			: WorldRotation;
+	}
+}
 
 UUOURewardCollectionMotionComponent::UUOURewardCollectionMotionComponent()
 {
@@ -22,7 +50,7 @@ void UUOURewardCollectionMotionComponent::TickComponent(
 		return;
 	}
 
-	if (!MotionTarget.IsValid())
+	if (!MotionTarget.IsValid() || !ActiveMotionPath.IsValid())
 	{
 		FinishCollectionMotion();
 		return;
@@ -39,15 +67,28 @@ void UUOURewardCollectionMotionComponent::TickComponent(
 	}
 }
 
-bool UUOURewardCollectionMotionComponent::StartCollectionMotion(USceneComponent* TargetComponent)
+bool UUOURewardCollectionMotionComponent::StartCollectionMotion(
+	USceneComponent* TargetComponent,
+	USplineComponent* MotionPath)
 {
-	if (!bMotionEnabled || !IsValid(TargetComponent) || bMotionPlaying)
+	if (!bMotionEnabled
+		|| !IsValid(TargetComponent)
+		|| !IsValid(MotionPath)
+		|| MotionPath->GetNumberOfSplinePoints() < 2
+		|| bMotionPlaying)
 	{
 		return false;
 	}
 
 	MotionTarget = TargetComponent;
+	ActiveMotionPath = MotionPath;
 	StartRelativeTransform = TargetComponent->GetRelativeTransform();
+	StartPathRelativeLocation = ConvertWorldLocationToTargetSpace(
+		TargetComponent,
+		MotionPath->GetLocationAtDistanceAlongSpline(0.0f, ESplineCoordinateSpace::World));
+	StartPathRelativeRotation = ConvertWorldRotationToTargetSpace(
+		TargetComponent,
+		MotionPath->GetQuaternionAtDistanceAlongSpline(0.0f, ESplineCoordinateSpace::World));
 	ElapsedTime = 0.0f;
 	bMotionPlaying = true;
 
@@ -71,7 +112,8 @@ bool UUOURewardCollectionMotionComponent::IsCollectionMotionPlaying() const
 void UUOURewardCollectionMotionComponent::ApplyMotion(float NormalizedTime)
 {
 	USceneComponent* TargetComponent = MotionTarget.Get();
-	if (TargetComponent == nullptr)
+	USplineComponent* MotionPath = ActiveMotionPath.Get();
+	if (TargetComponent == nullptr || MotionPath == nullptr)
 	{
 		return;
 	}
@@ -82,12 +124,35 @@ void UUOURewardCollectionMotionComponent::ApplyMotion(float NormalizedTime)
 		FMath::Clamp(NormalizedTime, 0.0f, 1.0f),
 		FMath::Max(1.0f, EaseExponent));
 
-	FVector RelativeLocation = StartRelativeTransform.GetLocation();
-	RelativeLocation += EndLocationOffset * EasedTime;
-	RelativeLocation.Z += FMath::Sin(PI * EasedTime) * FMath::Max(0.0f, ArcHeight);
+	const float DistanceAlongSpline = MotionPath->GetSplineLength() * EasedTime;
+	const FVector PathRelativeLocation = ConvertWorldLocationToTargetSpace(
+		TargetComponent,
+		MotionPath->GetLocationAtDistanceAlongSpline(
+			DistanceAlongSpline,
+			ESplineCoordinateSpace::World));
+	const FVector RelativeLocation =
+		StartRelativeTransform.GetLocation()
+		+ (PathRelativeLocation - StartPathRelativeLocation);
 
-	const FRotator StartRotation = StartRelativeTransform.Rotator();
-	const FRotator RelativeRotation = StartRotation + (EndRotationOffset * EasedTime);
+	FQuat RelativeRotation = StartRelativeTransform.GetRotation();
+	if (bFollowSplineRotation)
+	{
+		const FQuat PathRelativeRotation = ConvertWorldRotationToTargetSpace(
+			TargetComponent,
+			MotionPath->GetQuaternionAtDistanceAlongSpline(
+				DistanceAlongSpline,
+				ESplineCoordinateSpace::World));
+		const FQuat SplineRotationDelta =
+			PathRelativeRotation * StartPathRelativeRotation.Inverse();
+		RelativeRotation = SplineRotationDelta * RelativeRotation;
+	}
+
+	const FRotator CurrentAdditionalRotation(
+		AdditionalRotation.Pitch * EasedTime,
+		AdditionalRotation.Yaw * EasedTime,
+		AdditionalRotation.Roll * EasedTime);
+	RelativeRotation *= CurrentAdditionalRotation.Quaternion();
+	RelativeRotation.Normalize();
 
 	const float SafeEndScaleMultiplier = FMath::Max(0.0f, EndScaleMultiplier);
 	const float ScaleMultiplier = FMath::Lerp(1.0f, SafeEndScaleMultiplier, EasedTime);
@@ -107,6 +172,7 @@ void UUOURewardCollectionMotionComponent::FinishCollectionMotion()
 	bMotionPlaying = false;
 	ElapsedTime = 0.0f;
 	MotionTarget.Reset();
+	ActiveMotionPath.Reset();
 	SetComponentTickEnabled(false);
 
 	OnCollectionMotionFinished.Broadcast();

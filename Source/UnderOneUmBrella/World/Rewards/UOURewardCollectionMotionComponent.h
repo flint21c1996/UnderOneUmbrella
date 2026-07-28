@@ -7,6 +7,7 @@
 #include "UOURewardCollectionMotionComponent.generated.h"
 
 class USceneComponent;
+class USplineComponent;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FUOURewardCollectionMotionFinishedSignature);
 
@@ -24,9 +25,9 @@ public:
 		ELevelTick TickType,
 		FActorComponentTickFunction* ThisTickFunction) override;
 
-	// 현재 Transform을 시작점으로 저장하고 수집 움직임을 재생합니다.
+	// 현재 Transform을 시작점으로 저장하고 Spline 경로를 따라 수집 움직임을 재생합니다.
 	UFUNCTION(BlueprintCallable, Category = "Reward|Motion")
-	bool StartCollectionMotion(USceneComponent* TargetComponent);
+	bool StartCollectionMotion(USceneComponent* TargetComponent, USplineComponent* MotionPath);
 
 	UFUNCTION(BlueprintPure, Category = "Reward|Motion")
 	bool IsCollectionMotionPlaying() const;
@@ -41,16 +42,13 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Motion", meta = (ClampMin = "0.0"))
 	float MotionDuration = 0.8f;
 
-	// 시작 위치를 기준으로 움직임이 끝났을 때 도달할 상대 위치 오프셋입니다.
+	// 활성화하면 Spline Point에 설정한 회전을 시작점 기준 상대 회전으로 적용합니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Motion")
-	FVector EndLocationOffset = FVector(0.0f, 0.0f, 80.0f);
+	bool bFollowSplineRotation = false;
 
-	// 시작점과 종료점 사이에 추가되는 포물선 높이입니다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Motion", meta = (ClampMin = "0.0"))
-	float ArcHeight = 60.0f;
-
+	// Spline 회전과 별개로 움직임 전체에 걸쳐 추가되는 회전량입니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Motion")
-	FRotator EndRotationOffset = FRotator(0.0f, 360.0f, 0.0f);
+	FRotator AdditionalRotation = FRotator(0.0f, 360.0f, 0.0f);
 
 	// 시작 크기에 곱해지는 종료 배율입니다. 0이면 움직임 끝에서 완전히 축소됩니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Motion", meta = (ClampMin = "0.0"))
@@ -64,7 +62,10 @@ private:
 	void FinishCollectionMotion();
 
 	TWeakObjectPtr<USceneComponent> MotionTarget;
+	TWeakObjectPtr<USplineComponent> ActiveMotionPath;
 	FTransform StartRelativeTransform = FTransform::Identity;
+	FVector StartPathRelativeLocation = FVector::ZeroVector;
+	FQuat StartPathRelativeRotation = FQuat::Identity;
 	float ElapsedTime = 0.0f;
 	bool bMotionPlaying = false;
 };

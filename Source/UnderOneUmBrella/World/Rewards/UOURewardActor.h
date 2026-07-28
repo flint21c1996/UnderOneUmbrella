@@ -14,6 +14,7 @@ class UUOURewardCollectionMotionComponent;
 class UUOURewardFeedbackComponent;
 class USceneComponent;
 class USphereComponent;
+class USplineComponent;
 class UStaticMeshComponent;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(
@@ -64,6 +65,10 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Reward|Components")
 	TObjectPtr<UStaticMeshComponent> VisualMesh = nullptr;
+
+	// 블루프린트 뷰포트에서 수집 시 VisualMesh가 따라갈 경로를 편집합니다.
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Reward|Components")
+	TObjectPtr<USplineComponent> CollectionMotionPath = nullptr;
 
 	// 수집 전 보상이 목표임을 지속적으로 알려주는 상시 Niagara 표현입니다.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Reward|Components")
