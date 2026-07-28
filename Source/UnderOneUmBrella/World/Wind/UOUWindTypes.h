@@ -7,6 +7,66 @@
 
 class AActor;
 
+namespace UOUWindMotion
+{
+	inline float CalculateCappedAcceleration(
+		float CurrentSpeedAlongWind,
+		float TargetSpeedAlongWind,
+		float MaximumAcceleration,
+		float DeltaTime)
+	{
+		const float RemainingSpeed =
+			FMath::Max(0.0f, TargetSpeedAlongWind - CurrentSpeedAlongWind);
+		if (RemainingSpeed <= 0.0f || MaximumAcceleration <= 0.0f)
+		{
+			return 0.0f;
+		}
+
+		return FMath::Min(
+			MaximumAcceleration,
+			RemainingSpeed / FMath::Max(DeltaTime, KINDA_SMALL_NUMBER));
+	}
+
+	inline float CalculateDirectionalAcceleration(
+		bool bLimitSpeed,
+		float CurrentSpeedAlongWind,
+		float TargetSpeedAlongWind,
+		float RequestedAcceleration,
+		float DeltaTime)
+	{
+		const float SafeRequestedAcceleration =
+			FMath::Max(0.0f, RequestedAcceleration);
+		if (!bLimitSpeed)
+		{
+			return SafeRequestedAcceleration;
+		}
+
+		return CalculateCappedAcceleration(
+			CurrentSpeedAlongWind,
+			TargetSpeedAlongWind,
+			SafeRequestedAcceleration,
+			DeltaTime);
+	}
+
+	inline float CalculateSignedVelocityCorrection(
+		float CurrentVelocity,
+		float TargetVelocity,
+		float MaximumCorrectionAcceleration,
+		float DeltaTime)
+	{
+		if (MaximumCorrectionAcceleration <= 0.0f)
+		{
+			return 0.0f;
+		}
+
+		return FMath::Clamp(
+			(TargetVelocity - CurrentVelocity)
+				/ FMath::Max(DeltaTime, KINDA_SMALL_NUMBER),
+			-MaximumCorrectionAcceleration,
+			MaximumCorrectionAcceleration);
+	}
+}
+
 // 주기형 바람의 현재 ON/OFF 상태와 다음 전환까지 남은 시간입니다.
 USTRUCT(BlueprintType)
 struct FUOUWindPulseRuntimeState

@@ -91,9 +91,6 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|Debug", meta = (ClampMin = "0.0"))
 	float DebugDrawTime = 0.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|Preview")
-	bool bShowDirectionArrowInGame = false;
-
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Wind|Runtime")
 	TArray<FUOUWindPathSegment> WindPathSegments;
 

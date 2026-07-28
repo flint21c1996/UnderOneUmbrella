@@ -41,10 +41,6 @@ void AUOUWindEmitterActor::BeginPlay()
 	Super::BeginPlay();
 	ValidateSettings();
 	InitializePulseCycleState();
-	if (WindOrigin != nullptr)
-	{
-		WindOrigin->SetHiddenInGame(!bShowDirectionArrowInGame);
-	}
 	SetActorTickEnabled(bWindEnabled);
 	RebuildWindPath();
 }
@@ -74,10 +70,6 @@ void AUOUWindEmitterActor::OnConstruction(const FTransform& Transform)
 {
 	Super::OnConstruction(Transform);
 	ValidateSettings();
-	if (WindOrigin != nullptr)
-	{
-		WindOrigin->SetHiddenInGame(!bShowDirectionArrowInGame);
-	}
 }
 
 void AUOUWindEmitterActor::ApplyPuzzleResult_Implementation(EOUUPuzzleResultAction Action)
@@ -512,6 +504,8 @@ void AUOUWindEmitterActor::DrawWindDebug() const
 FCollisionObjectQueryParams AUOUWindEmitterActor::BuildReceiverObjectQueryParams() const
 {
 	FCollisionObjectQueryParams QueryParams;
+	// 플레이어는 동적 바람의 기본 수신체이므로 BP 배열이 비어도 항상 탐색합니다.
+	QueryParams.AddObjectTypesToQuery(ECC_Pawn);
 	for (const TEnumAsByte<EObjectTypeQuery> ObjectType : ReceiverObjectTypes)
 	{
 		const ECollisionChannel CollisionChannel =

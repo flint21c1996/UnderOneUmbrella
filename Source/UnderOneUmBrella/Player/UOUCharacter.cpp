@@ -334,6 +334,15 @@ void AUOUCharacter::Move(const FInputActionValue& Value)
 		return;
 	}
 
+	// 바람을 타는 동안에는 자동 바람 가속 위에 좌우/상하 조향 힘을 더합니다.
+	if (WindReceiverComponent != nullptr
+		&& WindReceiverComponent->ApplyWindborneSteeringInput(
+			MovementVector,
+			MovementYaw))
+	{
+		return;
+	}
+
 	if (Controller != nullptr)
 	{
 		const FRotator YawRotation(0.0f, MovementYaw, 0.0f);

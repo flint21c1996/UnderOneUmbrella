@@ -122,4 +122,79 @@ bool FUOUWindPulseLargeDeltaTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FUOUWindCharacterAccelerationTest,
+	"UnderOneUmbrella.Wind.Character.DirectionalAcceleration",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUOUWindCharacterAccelerationTest::RunTest(const FString& Parameters)
+{
+	TestEqual(
+		TEXT("Continuous wind keeps accelerating after the optional target speed"),
+		UOUWindMotion::CalculateDirectionalAcceleration(
+			false,
+			5000.0f,
+			1200.0f,
+			5000.0f,
+			1.0f / 60.0f),
+		5000.0f);
+
+	TestEqual(
+		TEXT("Limited wind caps acceleration near target speed"),
+		UOUWindMotion::CalculateDirectionalAcceleration(
+			true,
+			1190.0f,
+			1200.0f,
+			5000.0f,
+			0.02f),
+		500.0f);
+
+	TestEqual(
+		TEXT("Limited wind stops accelerating after target speed"),
+		UOUWindMotion::CalculateDirectionalAcceleration(
+			true,
+			1300.0f,
+			1200.0f,
+			5000.0f,
+			1.0f / 60.0f),
+		0.0f);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FUOUWindVerticalFlightCorrectionTest,
+	"UnderOneUmbrella.Wind.Character.VerticalFlightCorrection",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUOUWindVerticalFlightCorrectionTest::RunTest(const FString& Parameters)
+{
+	TestEqual(
+		TEXT("Horizontal wind corrects downward velocity upward"),
+		UOUWindMotion::CalculateSignedVelocityCorrection(
+			-300.0f,
+			0.0f,
+			2500.0f,
+			1.0f / 60.0f),
+		2500.0f);
+
+	TestEqual(
+		TEXT("Vertical correction can reduce excessive upward speed"),
+		UOUWindMotion::CalculateSignedVelocityCorrection(
+			900.0f,
+			600.0f,
+			2500.0f,
+			0.1f),
+		-2500.0f);
+
+	TestEqual(
+		TEXT("Vertical correction stops at target velocity"),
+		UOUWindMotion::CalculateSignedVelocityCorrection(
+			600.0f,
+			600.0f,
+			2500.0f,
+			1.0f / 60.0f),
+		0.0f);
+	return true;
+}
+
 #endif
