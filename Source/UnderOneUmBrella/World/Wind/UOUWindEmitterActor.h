@@ -10,6 +10,7 @@
 #include "UOUWindEmitterActor.generated.h"
 
 class UArrowComponent;
+class UBoxComponent;
 class UPrimitiveComponent;
 class USceneComponent;
 class UStaticMeshComponent;
@@ -39,11 +40,18 @@ public:
 	TObjectPtr<USceneComponent> RootScene = nullptr;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Wind")
-	TObjectPtr<UStaticMeshComponent> FanVisual = nullptr;
+	TObjectPtr<UStaticMeshComponent> EmitterVisual = nullptr;
 
 	// 이 화살표의 위치와 Forward가 바람의 시작점과 최초 방향이 됩니다.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Wind")
 	TObjectPtr<UArrowComponent> WindOrigin = nullptr;
+
+	// 에디터에서 직선 바람의 최대 범위와 반경을 보여 주는 와이어 박스입니다.
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Wind|Preview")
+	TObjectPtr<UBoxComponent> WindRangePreview = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|Preview")
+	bool bShowWindRangePreview = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|Gameplay")
 	bool bWindEnabled = true;
@@ -54,8 +62,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|Gameplay", meta = (ClampMin = "1.0", Units = "cm"))
 	float WindRadius = 120.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|Gameplay", meta = (ClampMin = "0.0"))
-	float BaseStrength = 1.0f;
+	// 수신자의 바람 가속과 물리 힘에 곱해지는 Emitter의 바람 세기입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|Gameplay", meta = (ClampMin = "0.0", UIMin = "0.0", UIMax = "2.0"))
+	float WindStrength = 0.5f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|Gameplay")
 	bool bUseRadialFalloff = true;
@@ -129,6 +138,7 @@ public:
 
 private:
 	void ValidateSettings();
+	void UpdateWindRangePreview();
 	void InitializePulseCycleState();
 	void UpdatePulseCycle(float DeltaSeconds);
 	void HandleWindPhaseChanged(bool bWasBlowing);

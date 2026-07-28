@@ -3,6 +3,7 @@
 #include "World/Wind/UOUWindEmitterActor.h"
 
 #include "Components/ArrowComponent.h"
+#include "Components/BoxComponent.h"
 #include "Components/PrimitiveComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -22,14 +23,24 @@ AUOUWindEmitterActor::AUOUWindEmitterActor()
 	RootScene = CreateDefaultSubobject<USceneComponent>(TEXT("RootScene"));
 	SetRootComponent(RootScene);
 
-	FanVisual = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("FanVisual"));
-	FanVisual->SetupAttachment(RootScene);
-	FanVisual->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	EmitterVisual = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("EmitterVisual"));
+	EmitterVisual->SetupAttachment(RootScene);
+	EmitterVisual->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 
 	WindOrigin = CreateDefaultSubobject<UArrowComponent>(TEXT("WindOrigin"));
 	WindOrigin->SetupAttachment(RootScene);
 	WindOrigin->ArrowColor = FColor::Cyan;
 	WindOrigin->ArrowSize = 2.0f;
+
+	WindRangePreview = CreateDefaultSubobject<UBoxComponent>(TEXT("WindRangePreview"));
+	WindRangePreview->SetupAttachment(WindOrigin);
+	WindRangePreview->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	WindRangePreview->SetGenerateOverlapEvents(false);
+	WindRangePreview->SetCanEverAffectNavigation(false);
+	WindRangePreview->SetHiddenInGame(true);
+	WindRangePreview->ShapeColor = FColor::Cyan;
+	WindRangePreview->SetLineThickness(2.0f);
+	WindRangePreview->bIsEditorOnly = true;
 
 	ReceiverObjectTypes.Add(UEngineTypes::ConvertToObjectType(ECC_Pawn));
 	ReceiverObjectTypes.Add(UEngineTypes::ConvertToObjectType(ECC_PhysicsBody));
@@ -70,6 +81,7 @@ void AUOUWindEmitterActor::OnConstruction(const FTransform& Transform)
 {
 	Super::OnConstruction(Transform);
 	ValidateSettings();
+	UpdateWindRangePreview();
 }
 
 void AUOUWindEmitterActor::ApplyPuzzleResult_Implementation(EOUUPuzzleResultAction Action)
@@ -104,7 +116,7 @@ TArray<FString> AUOUWindEmitterActor::GetPuzzleDebugInfo_Implementation() const
 			PulseRuntimeState.TimeRemaining),
 		FString::Printf(TEXT("Segments: %d / Reflections: %d"), WindPathSegments.Num(), FMath::Max(0, WindPathSegments.Num() - 1)),
 		FString::Printf(TEXT("Affected Receivers: %d"), LastAffectedReceiverCount),
-		FString::Printf(TEXT("Range: %.0f / Radius: %.0f / Strength: %.2f"), MaxWindDistance, WindRadius, BaseStrength)
+		FString::Printf(TEXT("Range: %.0f / Radius: %.0f / Strength: %.2f"), MaxWindDistance, WindRadius, WindStrength)
 	};
 }
 
@@ -211,7 +223,7 @@ void AUOUWindEmitterActor::RebuildWindPath()
 		|| World == nullptr
 		|| WindOrigin == nullptr
 		|| MaxWindDistance <= 0.0f
-		|| BaseStrength <= 0.0f)
+		|| WindStrength <= 0.0f)
 	{
 		OnWindPathChanged.Broadcast();
 		return;
@@ -220,7 +232,7 @@ void AUOUWindEmitterActor::RebuildWindPath()
 	FVector SegmentStart = WindOrigin->GetComponentLocation();
 	FVector SegmentDirection = WindOrigin->GetForwardVector().GetSafeNormal();
 	float RemainingDistance = MaxWindDistance;
-	float CurrentStrength = BaseStrength;
+	float CurrentStrength = WindStrength;
 
 	ACharacter* PlayerCharacter = UGameplayStatics::GetPlayerCharacter(this, 0);
 	UPrimitiveComponent* PreviousReflectionSurface = nullptr;
@@ -296,12 +308,29 @@ void AUOUWindEmitterActor::ValidateSettings()
 {
 	MaxWindDistance = FMath::Max(0.0f, MaxWindDistance);
 	WindRadius = FMath::Max(1.0f, WindRadius);
-	BaseStrength = FMath::Max(0.0f, BaseStrength);
+	WindStrength = FMath::Max(0.0f, WindStrength);
 	WindOnDuration = FMath::Max(0.05f, WindOnDuration);
 	WindOffDuration = FMath::Max(0.05f, WindOffDuration);
 	MaxReflections = FMath::Clamp(MaxReflections, 0, 8);
 	MinimumReflectedStrength = FMath::Max(0.0f, MinimumReflectedStrength);
 	DebugDrawTime = FMath::Max(0.0f, DebugDrawTime);
+}
+
+void AUOUWindEmitterActor::UpdateWindRangePreview()
+{
+	if (WindRangePreview == nullptr)
+	{
+		return;
+	}
+
+	const float SafeDistance = FMath::Max(0.0f, MaxWindDistance);
+	const float SafeRadius = FMath::Max(1.0f, WindRadius);
+	WindRangePreview->SetRelativeLocation(
+		FVector(SafeDistance * 0.5f, 0.0f, 0.0f));
+	WindRangePreview->SetBoxExtent(
+		FVector(SafeDistance * 0.5f, SafeRadius, SafeRadius),
+		false);
+	WindRangePreview->SetVisibility(bShowWindRangePreview);
 }
 
 void AUOUWindEmitterActor::UpdatePulseCycle(float DeltaSeconds)
@@ -466,7 +495,7 @@ void AUOUWindEmitterActor::DrawWindDebug() const
 		const FColor SegmentColor = Segment.ReflectionIndex == 0
 			? FColor::Cyan
 			: FColor::MakeRedToGreenColorFromScalar(
-				FMath::Clamp(Segment.Strength / FMath::Max(BaseStrength, KINDA_SMALL_NUMBER), 0.0f, 1.0f));
+				FMath::Clamp(Segment.Strength / FMath::Max(WindStrength, KINDA_SMALL_NUMBER), 0.0f, 1.0f));
 
 		DrawDebugDirectionalArrow(
 			GetWorld(),

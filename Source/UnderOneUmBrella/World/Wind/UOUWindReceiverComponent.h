@@ -26,7 +26,7 @@ public:
 	bool bReceiveWind = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|Character", meta = (ClampMin = "0.0", Units = "cm/s^2"))
-	float CharacterAcceleration = 5000.0f;
+	float CharacterAcceleration = 450.0f;
 
 	// 꺼 두면 바람 안에 있는 동안 바람 방향 가속을 매 프레임 계속 적용합니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|Character")
@@ -67,7 +67,7 @@ public:
 
 	// 바람 탑승 중 A/D 좌우와 W/S 상하 조향에 더할 가속도입니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|Character|Flight", meta = (ClampMin = "0.0", Units = "cm/s^2"))
-	float WindborneSteeringAcceleration = 1200.0f;
+	float WindborneSteeringAcceleration = 150.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|Physics", meta = (ClampMin = "0.0", Units = "N"))
 	float PhysicsForce = 250000.0f;
