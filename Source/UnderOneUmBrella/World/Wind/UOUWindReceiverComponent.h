@@ -49,9 +49,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|Character|Flight", meta = (EditCondition = "bCancelGravityWhileUmbrellaOpen", ClampMin = "0.0"))
 	float GravityCancellationMultiplier = 1.0f;
 
-	// 바람에 처음 진입하는 순간 기존 낙하/상승 Z 속도만 제거합니다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|Character|Flight")
-	bool bResetVerticalVelocityOnWindEntry = true;
+	// 새 바람 구간에 진입할 때 기존 속도 벡터 중 유지할 비율입니다.
+	// 최초 진입뿐 아니라 반사된 바람 구간으로 넘어갈 때도 적용됩니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|Character|Flight", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float ExistingVelocityRetentionOnWindEntry = 0.15f;
 
 	// 바람을 타는 동안 무입력 공중 제동을 끄고, 바람이 끝나면 원래 값으로 복구합니다.
 	// 기존 WASD 공중 조향은 바람 가속 위에 별도로 더해집니다.
@@ -108,8 +109,10 @@ private:
 	void RestoreFallingBraking();
 
 	TWeakObjectPtr<UCharacterMovementComponent> WindborneMovementComponent;
+	TWeakObjectPtr<AActor> ActiveWindSourceActor;
 	float CachedBrakingDecelerationFalling = 0.0f;
 	float LastCharacterWindReceiveTime = -1.0f;
+	int32 ActiveWindReflectionIndex = INDEX_NONE;
 	bool bCharacterWindActive = false;
 	bool bHasCachedFallingBraking = false;
 };

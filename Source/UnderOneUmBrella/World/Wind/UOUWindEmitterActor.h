@@ -82,6 +82,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|Entry", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float FallingMomentumConversion = 0.5f;
 
+	// DeltaTime 기반 가속과 별개로 진입 순간 한 번만 더하는 고정 속도입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|Entry", meta = (ClampMin = "0.0", Units = "cm/s"))
+	float InitialWindVelocityBoost = 150.0f;
+
 	// 낙하 관성을 전환하더라도 진입 순간 이 속도를 넘지 않습니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|Entry", meta = (ClampMin = "0.0", Units = "cm/s"))
 	float MaximumWindEntrySpeed = 800.0f;

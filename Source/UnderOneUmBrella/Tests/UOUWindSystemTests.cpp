@@ -187,28 +187,23 @@ bool FUOUWindCharacterAccelerationTest::RunTest(const FString& Parameters)
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
-	FUOUWindEntryVelocityResetTest,
-	"UnderOneUmbrella.Wind.Character.EntryVerticalVelocityReset",
+	FUOUWindEntryVelocityRetentionTest,
+	"UnderOneUmbrella.Wind.Character.EntryVelocityRetention",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
-bool FUOUWindEntryVelocityResetTest::RunTest(const FString& Parameters)
+bool FUOUWindEntryVelocityRetentionTest::RunTest(const FString& Parameters)
 {
 	TestEqual(
-		TEXT("Entering wind removes only world vertical velocity"),
-		UOUWindMotion::RemoveWorldVerticalVelocity(
-			FVector(350.0f, -125.0f, -900.0f)),
-		FVector(350.0f, -125.0f, 0.0f));
-
-	TestEqual(
-		TEXT("Slow falling character receives the minimum entry speed"),
+		TEXT("Slow falling character retains fifteen percent of its old velocity"),
 		UOUWindMotion::CalculateWindEntryVelocity(
-			FVector(0.0f, 0.0f, -100.0f),
+			FVector(100.0f, 200.0f, -100.0f),
 			FVector::ForwardVector,
 			400.0f,
 			0.5f,
+			150.0f,
 			800.0f,
-			true),
-		FVector(400.0f, 0.0f, 0.0f));
+			0.15f),
+		FVector(565.0f, 30.0f, -15.0f));
 
 	TestEqual(
 		TEXT("Fast falling momentum is converted into wind direction speed"),
@@ -217,20 +212,34 @@ bool FUOUWindEntryVelocityResetTest::RunTest(const FString& Parameters)
 			FVector::ForwardVector,
 			400.0f,
 			0.5f,
+			150.0f,
 			800.0f,
-			true),
-		FVector(500.0f, 0.0f, 0.0f));
+			0.15f),
+		FVector(665.0f, 0.0f, -150.0f));
 
 	TestEqual(
-		TEXT("Entry boost never slows an already faster character"),
+		TEXT("Wind entry vector is added after retaining existing momentum"),
 		UOUWindMotion::CalculateWindEntryVelocity(
 			FVector(600.0f, 0.0f, -100.0f),
 			FVector::ForwardVector,
 			400.0f,
 			0.5f,
+			150.0f,
 			800.0f,
-			true),
-		FVector(600.0f, 0.0f, 0.0f));
+			0.15f),
+		FVector(640.0f, 0.0f, -15.0f));
+
+	TestEqual(
+		TEXT("Reflected wind also retains fifteen percent before adding its new vector"),
+		UOUWindMotion::CalculateWindEntryVelocity(
+			FVector(1000.0f, 0.0f, -100.0f),
+			-FVector::ForwardVector,
+			400.0f,
+			0.0f,
+			150.0f,
+			800.0f,
+			0.15f),
+		FVector(-400.0f, 0.0f, -15.0f));
 	return true;
 }
 

@@ -271,11 +271,14 @@ void UUOUWindReceiverComponent::BeginWindborneMovement(
 		RestoreFallingBraking();
 	}
 
-	const bool bEnteringWind = !bCharacterWindActive;
+	const bool bEnteringNewWindSegment =
+		!bCharacterWindActive
+		|| ActiveWindSourceActor.Get() != WindData.SourceActor
+		|| ActiveWindReflectionIndex != WindData.ReflectionIndex;
 	WindborneMovementComponent = MovementComponent;
 	bCharacterWindActive = true;
 
-	if (bEnteringWind)
+	if (bEnteringNewWindSegment)
 	{
 		MovementComponent->Velocity =
 			UOUWindMotion::CalculateWindEntryVelocity(
@@ -283,14 +286,17 @@ void UUOUWindReceiverComponent::BeginWindborneMovement(
 				WindData.Direction,
 				WindData.MinimumEntrySpeed,
 				WindData.FallingMomentumConversion,
+				WindData.InitialVelocityBoost,
 				FMath::Min(
 					WindData.MaximumEntrySpeed,
 					WindData.MaximumSpeed),
-				bResetVerticalVelocityOnWindEntry);
+				ExistingVelocityRetentionOnWindEntry);
 		LastWindEntrySpeed = FVector::DotProduct(
 			MovementComponent->Velocity,
 			WindData.Direction.GetSafeNormal());
 	}
+	ActiveWindSourceActor = WindData.SourceActor;
+	ActiveWindReflectionIndex = WindData.ReflectionIndex;
 
 	if (bSuppressFallingBrakingWhileWindborne
 		&& !bHasCachedFallingBraking)
@@ -324,9 +330,11 @@ void UUOUWindReceiverComponent::RestoreFallingBraking()
 	}
 
 	WindborneMovementComponent.Reset();
+	ActiveWindSourceActor.Reset();
 	CachedBrakingDecelerationFalling = 0.0f;
 	LastCharacterWindReceiveTime = -1.0f;
 	LastWindEntrySpeed = 0.0f;
+	ActiveWindReflectionIndex = INDEX_NONE;
 	bCharacterWindActive = false;
 	bHasCachedFallingBraking = false;
 	SetComponentTickEnabled(false);

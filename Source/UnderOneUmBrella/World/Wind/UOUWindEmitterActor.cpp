@@ -124,9 +124,10 @@ TArray<FString> AUOUWindEmitterActor::GetPuzzleDebugInfo_Implementation() const
 			MaximumWindAcceleration,
 			MaximumWindSpeed),
 		FString::Printf(
-			TEXT("Entry Speed: %.0f-%.0f / Fall Conversion: %.2f"),
+			TEXT("Entry Speed: %.0f-%.0f / Initial Boost: %.0f / Fall Conversion: %.2f"),
 			MinimumWindEntrySpeed,
 			MaximumWindEntrySpeed,
+			InitialWindVelocityBoost,
 			FallingMomentumConversion)
 	};
 }
@@ -334,6 +335,8 @@ void AUOUWindEmitterActor::ValidateSettings()
 		MaximumWindEntrySpeed);
 	FallingMomentumConversion =
 		FMath::Clamp(FallingMomentumConversion, 0.0f, 1.0f);
+	InitialWindVelocityBoost =
+		FMath::Max(0.0f, InitialWindVelocityBoost);
 	WindOnDuration = FMath::Max(0.05f, WindOnDuration);
 	WindOffDuration = FMath::Max(0.05f, WindOffDuration);
 	MaxReflections = FMath::Clamp(MaxReflections, 0, 8);
@@ -489,6 +492,8 @@ void AUOUWindEmitterActor::ApplyWindToReceivers(float DeltaSeconds)
 				ExposureData.MinimumEntrySpeed = MinimumWindEntrySpeed;
 				ExposureData.FallingMomentumConversion =
 					FallingMomentumConversion;
+				ExposureData.InitialVelocityBoost =
+					InitialWindVelocityBoost;
 				ExposureData.MaximumEntrySpeed =
 					MaximumWindEntrySpeed;
 				ExposureData.StrengthScale =

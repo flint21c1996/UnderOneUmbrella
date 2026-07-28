@@ -62,45 +62,34 @@ namespace UOUWindMotion
 			DeltaTime);
 	}
 
-	inline FVector RemoveWorldVerticalVelocity(const FVector& Velocity)
-	{
-		return FVector(Velocity.X, Velocity.Y, 0.0f);
-	}
-
 	inline FVector CalculateWindEntryVelocity(
 		const FVector& PreviousVelocity,
 		const FVector& WindDirection,
 		float MinimumEntrySpeed,
 		float FallingMomentumConversion,
+		float InitialVelocityBoost,
 		float MaximumEntrySpeed,
-		bool bResetVerticalVelocity)
+		float ExistingVelocityRetention)
 	{
-		FVector EntryVelocity = bResetVerticalVelocity
-			? RemoveWorldVerticalVelocity(PreviousVelocity)
-			: PreviousVelocity;
+		const FVector RetainedVelocity =
+			PreviousVelocity
+			* FMath::Clamp(ExistingVelocityRetention, 0.0f, 1.0f);
 		const FVector SafeWindDirection = WindDirection.GetSafeNormal();
 		if (SafeWindDirection.IsNearlyZero())
 		{
-			return EntryVelocity;
+			return RetainedVelocity;
 		}
 
-		const float DesiredEntrySpeed = FMath::Clamp(
+		const float WindEntrySpeed = FMath::Clamp(
 			FMath::Max(
 				FMath::Max(0.0f, MinimumEntrySpeed),
 				FMath::Abs(PreviousVelocity.Z)
-					* FMath::Max(0.0f, FallingMomentumConversion)),
+					* FMath::Max(0.0f, FallingMomentumConversion))
+				+ FMath::Max(0.0f, InitialVelocityBoost),
 			0.0f,
 			FMath::Max(0.0f, MaximumEntrySpeed));
-		const float CurrentSpeedAlongWind =
-			FVector::DotProduct(EntryVelocity, SafeWindDirection);
-		if (CurrentSpeedAlongWind < DesiredEntrySpeed)
-		{
-			EntryVelocity +=
-				SafeWindDirection
-				* (DesiredEntrySpeed - CurrentSpeedAlongWind);
-		}
 
-		return EntryVelocity;
+		return RetainedVelocity + SafeWindDirection * WindEntrySpeed;
 	}
 }
 
@@ -214,6 +203,9 @@ struct FUOUWindExposureData
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Wind")
 	float FallingMomentumConversion = 0.0f;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Wind", meta = (Units = "cm/s"))
+	float InitialVelocityBoost = 0.0f;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Wind", meta = (Units = "cm/s"))
 	float MaximumEntrySpeed = 0.0f;
