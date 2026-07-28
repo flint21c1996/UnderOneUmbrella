@@ -15,6 +15,7 @@ class USceneComponent;
 class UStaticMeshComponent;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnUOUWindPathChangedSignature);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnUOUWindPhaseChangedSignature, bool, bIsBlowing);
 
 // 선풍기처럼 현재 방향으로 바람을 방출하고 반사 표면에 따라 실시간 경로를 계산합니다.
 UCLASS(meta=(DisplayName="UOU Wind Emitter"))
@@ -59,6 +60,19 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|Gameplay")
 	bool bUseRadialFalloff = true;
 
+	// 켜면 Wind On Duration과 Wind Off Duration을 번갈아 반복합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|Pulse")
+	bool bUsePulseCycle = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|Pulse", meta = (EditCondition = "bUsePulseCycle", ClampMin = "0.05", Units = "s"))
+	float WindOnDuration = 3.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|Pulse", meta = (EditCondition = "bUsePulseCycle", ClampMin = "0.05", Units = "s"))
+	float WindOffDuration = 3.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|Pulse", meta = (EditCondition = "bUsePulseCycle"))
+	bool bStartCycleWithWind = true;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|Reflection", meta = (ClampMin = "0", ClampMax = "8"))
 	int32 MaxReflections = 3;
 
@@ -86,14 +100,29 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Wind|Runtime")
 	int32 LastAffectedReceiverCount = 0;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Wind|Runtime")
+	FUOUWindPulseRuntimeState PulseRuntimeState;
+
 	UPROPERTY(BlueprintAssignable, Category = "Wind|Events")
 	FOnUOUWindPathChangedSignature OnWindPathChanged;
+
+	UPROPERTY(BlueprintAssignable, Category = "Wind|Events")
+	FOnUOUWindPhaseChangedSignature OnWindPhaseChanged;
 
 	UFUNCTION(BlueprintCallable, Category = "Wind")
 	void SetWindEnabled(bool bNewEnabled);
 
 	UFUNCTION(BlueprintPure, Category = "Wind")
 	bool IsWindEnabled() const { return bWindEnabled; }
+
+	UFUNCTION(BlueprintPure, Category = "Wind|Pulse")
+	bool IsWindBlowing() const;
+
+	UFUNCTION(BlueprintCallable, Category = "Wind|Pulse")
+	void SetPulseCycleEnabled(bool bNewPulseCycleEnabled);
+
+	UFUNCTION(BlueprintCallable, Category = "Wind|Pulse")
+	void ResetPulseCycle();
 
 	UFUNCTION(BlueprintCallable, Category = "Wind")
 	void RebuildWindPath();
@@ -103,6 +132,9 @@ public:
 
 private:
 	void ValidateSettings();
+	void InitializePulseCycleState();
+	void UpdatePulseCycle(float DeltaSeconds);
+	void HandleWindPhaseChanged(bool bWasBlowing);
 	void ApplyWindToReceivers(float DeltaSeconds);
 	void DrawWindDebug() const;
 	FCollisionObjectQueryParams BuildReceiverObjectQueryParams() const;

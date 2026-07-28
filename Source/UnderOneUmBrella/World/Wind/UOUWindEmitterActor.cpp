@@ -40,6 +40,7 @@ void AUOUWindEmitterActor::BeginPlay()
 {
 	Super::BeginPlay();
 	ValidateSettings();
+	InitializePulseCycleState();
 	if (WindOrigin != nullptr)
 	{
 		WindOrigin->SetHiddenInGame(!bShowDirectionArrowInGame);
@@ -54,6 +55,13 @@ void AUOUWindEmitterActor::Tick(float DeltaSeconds)
 
 	if (!bWindEnabled || DeltaSeconds <= 0.0f)
 	{
+		return;
+	}
+
+	UpdatePulseCycle(DeltaSeconds);
+	if (!IsWindBlowing())
+	{
+		LastAffectedReceiverCount = 0;
 		return;
 	}
 
@@ -97,6 +105,11 @@ TArray<FString> AUOUWindEmitterActor::GetPuzzleDebugInfo_Implementation() const
 {
 	return {
 		FString::Printf(TEXT("Wind Enabled: %s"), bWindEnabled ? TEXT("true") : TEXT("false")),
+		FString::Printf(
+			TEXT("Blowing: %s / Pulse: %s / Remaining: %.2fs"),
+			IsWindBlowing() ? TEXT("true") : TEXT("false"),
+			bUsePulseCycle ? TEXT("true") : TEXT("false"),
+			PulseRuntimeState.TimeRemaining),
 		FString::Printf(TEXT("Segments: %d / Reflections: %d"), WindPathSegments.Num(), FMath::Max(0, WindPathSegments.Num() - 1)),
 		FString::Printf(TEXT("Affected Receivers: %d"), LastAffectedReceiverCount),
 		FString::Printf(TEXT("Range: %.0f / Radius: %.0f / Strength: %.2f"), MaxWindDistance, WindRadius, BaseStrength)
@@ -110,10 +123,42 @@ void AUOUWindEmitterActor::SetWindEnabled(bool bNewEnabled)
 		return;
 	}
 
+	const bool bWasBlowing = IsWindBlowing();
 	bWindEnabled = bNewEnabled;
 	SetActorTickEnabled(bWindEnabled);
 
 	if (bWindEnabled)
+	{
+		InitializePulseCycleState();
+		RebuildWindPath();
+	}
+	else
+	{
+		WindPathSegments.Reset();
+		LastAffectedReceiverCount = 0;
+		OnWindPathChanged.Broadcast();
+	}
+
+	HandleWindPhaseChanged(bWasBlowing);
+}
+
+bool AUOUWindEmitterActor::IsWindBlowing() const
+{
+	return bWindEnabled && (!bUsePulseCycle || PulseRuntimeState.bIsBlowing);
+}
+
+void AUOUWindEmitterActor::SetPulseCycleEnabled(bool bNewPulseCycleEnabled)
+{
+	if (bUsePulseCycle == bNewPulseCycleEnabled)
+	{
+		return;
+	}
+
+	const bool bWasBlowing = IsWindBlowing();
+	bUsePulseCycle = bNewPulseCycleEnabled;
+	InitializePulseCycleState();
+
+	if (IsWindBlowing())
 	{
 		RebuildWindPath();
 	}
@@ -123,6 +168,46 @@ void AUOUWindEmitterActor::SetWindEnabled(bool bNewEnabled)
 		LastAffectedReceiverCount = 0;
 		OnWindPathChanged.Broadcast();
 	}
+
+	HandleWindPhaseChanged(bWasBlowing);
+}
+
+void AUOUWindEmitterActor::ResetPulseCycle()
+{
+	const bool bWasBlowing = IsWindBlowing();
+	InitializePulseCycleState();
+
+	if (HasActorBegunPlay())
+	{
+		if (IsWindBlowing())
+		{
+			RebuildWindPath();
+		}
+		else
+		{
+			WindPathSegments.Reset();
+			LastAffectedReceiverCount = 0;
+			OnWindPathChanged.Broadcast();
+		}
+	}
+
+	HandleWindPhaseChanged(bWasBlowing);
+}
+
+void AUOUWindEmitterActor::InitializePulseCycleState()
+{
+	if (bUsePulseCycle)
+	{
+		PulseRuntimeState.Reset(
+			bStartCycleWithWind,
+			WindOnDuration,
+			WindOffDuration);
+	}
+	else
+	{
+		PulseRuntimeState.bIsBlowing = true;
+		PulseRuntimeState.TimeRemaining = 0.0f;
+	}
 }
 
 void AUOUWindEmitterActor::RebuildWindPath()
@@ -130,7 +215,7 @@ void AUOUWindEmitterActor::RebuildWindPath()
 	WindPathSegments.Reset();
 
 	UWorld* World = GetWorld();
-	if (!bWindEnabled
+	if (!IsWindBlowing()
 		|| World == nullptr
 		|| WindOrigin == nullptr
 		|| MaxWindDistance <= 0.0f
@@ -220,9 +305,51 @@ void AUOUWindEmitterActor::ValidateSettings()
 	MaxWindDistance = FMath::Max(0.0f, MaxWindDistance);
 	WindRadius = FMath::Max(1.0f, WindRadius);
 	BaseStrength = FMath::Max(0.0f, BaseStrength);
+	WindOnDuration = FMath::Max(0.05f, WindOnDuration);
+	WindOffDuration = FMath::Max(0.05f, WindOffDuration);
 	MaxReflections = FMath::Clamp(MaxReflections, 0, 8);
 	MinimumReflectedStrength = FMath::Max(0.0f, MinimumReflectedStrength);
 	DebugDrawTime = FMath::Max(0.0f, DebugDrawTime);
+}
+
+void AUOUWindEmitterActor::UpdatePulseCycle(float DeltaSeconds)
+{
+	if (!bUsePulseCycle || !bWindEnabled)
+	{
+		return;
+	}
+
+	const bool bWasBlowing = IsWindBlowing();
+	const bool bPhaseChanged = PulseRuntimeState.Advance(
+		DeltaSeconds,
+		WindOnDuration,
+		WindOffDuration);
+	if (!bPhaseChanged)
+	{
+		return;
+	}
+
+	if (IsWindBlowing())
+	{
+		RebuildWindPath();
+	}
+	else
+	{
+		WindPathSegments.Reset();
+		LastAffectedReceiverCount = 0;
+		OnWindPathChanged.Broadcast();
+	}
+
+	HandleWindPhaseChanged(bWasBlowing);
+}
+
+void AUOUWindEmitterActor::HandleWindPhaseChanged(bool bWasBlowing)
+{
+	const bool bIsBlowing = IsWindBlowing();
+	if (bWasBlowing != bIsBlowing)
+	{
+		OnWindPhaseChanged.Broadcast(bIsBlowing);
+	}
 }
 
 void AUOUWindEmitterActor::ApplyWindToReceivers(float DeltaSeconds)

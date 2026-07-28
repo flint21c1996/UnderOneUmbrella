@@ -78,4 +78,48 @@ bool FUOUWindPathSegmentLengthTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FUOUWindPulseCycleTest,
+	"UnderOneUmbrella.Wind.Pulse.ThreeSecondsOnOff",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUOUWindPulseCycleTest::RunTest(const FString& Parameters)
+{
+	FUOUWindPulseRuntimeState PulseState;
+	PulseState.Reset(true, 3.0f, 3.0f);
+
+	TestTrue(TEXT("Pulse starts with wind"), PulseState.bIsBlowing);
+	TestEqual(TEXT("Initial ON time is three seconds"), PulseState.TimeRemaining, 3.0f);
+
+	TestFalse(TEXT("No phase change before three seconds"), PulseState.Advance(2.9f, 3.0f, 3.0f));
+	TestTrue(TEXT("Wind is still blowing before the boundary"), PulseState.bIsBlowing);
+
+	TestTrue(TEXT("Pulse changes to OFF at three seconds"), PulseState.Advance(0.1f, 3.0f, 3.0f));
+	TestFalse(TEXT("Wind is resting during OFF phase"), PulseState.bIsBlowing);
+	TestEqual(TEXT("OFF time resets to three seconds"), PulseState.TimeRemaining, 3.0f);
+
+	TestTrue(TEXT("Pulse changes back to ON after three more seconds"), PulseState.Advance(3.0f, 3.0f, 3.0f));
+	TestTrue(TEXT("Wind is blowing again"), PulseState.bIsBlowing);
+	TestEqual(TEXT("Next ON time resets to three seconds"), PulseState.TimeRemaining, 3.0f);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FUOUWindPulseLargeDeltaTest,
+	"UnderOneUmbrella.Wind.Pulse.LargeDelta",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUOUWindPulseLargeDeltaTest::RunTest(const FString& Parameters)
+{
+	FUOUWindPulseRuntimeState PulseState;
+	PulseState.Reset(true, 3.0f, 3.0f);
+
+	TestFalse(
+		TEXT("Two complete phases return to the same state"),
+		PulseState.Advance(6.0f, 3.0f, 3.0f));
+	TestTrue(TEXT("Wind returns to ON after a complete cycle"), PulseState.bIsBlowing);
+	TestEqual(TEXT("Complete cycle restores full ON duration"), PulseState.TimeRemaining, 3.0f);
+	return true;
+}
+
 #endif

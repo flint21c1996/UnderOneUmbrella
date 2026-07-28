@@ -7,6 +7,57 @@
 
 class AActor;
 
+// 주기형 바람의 현재 ON/OFF 상태와 다음 전환까지 남은 시간입니다.
+USTRUCT(BlueprintType)
+struct FUOUWindPulseRuntimeState
+{
+	GENERATED_BODY()
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Wind|Pulse")
+	bool bIsBlowing = true;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Wind|Pulse", meta = (Units = "s"))
+	float TimeRemaining = 0.0f;
+
+	void Reset(bool bStartWithWind, float OnDuration, float OffDuration)
+	{
+		bIsBlowing = bStartWithWind;
+		TimeRemaining = bIsBlowing
+			? FMath::Max(OnDuration, KINDA_SMALL_NUMBER)
+			: FMath::Max(OffDuration, KINDA_SMALL_NUMBER);
+	}
+
+	// 한 프레임에 여러 구간을 지나더라도 최종 상태와 남은 시간을 안정적으로 계산합니다.
+	bool Advance(float DeltaTime, float OnDuration, float OffDuration)
+	{
+		if (DeltaTime <= 0.0f)
+		{
+			return false;
+		}
+
+		const float SafeOnDuration = FMath::Max(OnDuration, KINDA_SMALL_NUMBER);
+		const float SafeOffDuration = FMath::Max(OffDuration, KINDA_SMALL_NUMBER);
+		const bool bPreviousBlowing = bIsBlowing;
+		TimeRemaining -= DeltaTime;
+
+		constexpr int32 MaxTransitionsPerAdvance = 128;
+		int32 TransitionCount = 0;
+		while (TimeRemaining <= 0.0f && TransitionCount < MaxTransitionsPerAdvance)
+		{
+			bIsBlowing = !bIsBlowing;
+			TimeRemaining += bIsBlowing ? SafeOnDuration : SafeOffDuration;
+			++TransitionCount;
+		}
+
+		if (TimeRemaining <= 0.0f)
+		{
+			Reset(bIsBlowing, SafeOnDuration, SafeOffDuration);
+		}
+
+		return bIsBlowing != bPreviousBlowing;
+	}
+};
+
 // 런타임에 계산된 하나의 직선 바람 구간입니다.
 USTRUCT(BlueprintType)
 struct FUOUWindPathSegment
