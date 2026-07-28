@@ -3,6 +3,8 @@
 #include "World/Rewards/UOURewardFeedbackComponent.h"
 
 #include "Engine/World.h"
+#include "Engine/LocalPlayer.h"
+#include "GameFramework/PlayerController.h"
 #include "Interaction/UOUContextInteractionTypes.h"
 #include "NiagaraComponent.h"
 #include "NiagaraFunctionLibrary.h"
@@ -10,6 +12,7 @@
 #include "Player/UOUCharacter.h"
 #include "Player/UOUPlayerInteractionExecutorComponent.h"
 #include "TimerManager.h"
+#include "UI/UOUUISubsystem.h"
 
 UUOURewardFeedbackComponent::UUOURewardFeedbackComponent()
 {
@@ -22,7 +25,10 @@ void UUOURewardFeedbackComponent::EndPlay(const EEndPlayReason::Type EndPlayReas
 	Super::EndPlay(EndPlayReason);
 }
 
-bool UUOURewardFeedbackComponent::StartFeedback(AUOUCharacter* Collector, FVector RewardWorldLocation)
+bool UUOURewardFeedbackComponent::StartFeedback(
+	AUOUCharacter* Collector,
+	FName RewardId,
+	FVector RewardWorldLocation)
 {
 	if (!bFeedbackEnabled || Collector == nullptr || bFeedbackPlaying)
 	{
@@ -35,6 +41,10 @@ bool UUOURewardFeedbackComponent::StartFeedback(AUOUCharacter* Collector, FVecto
 	ActiveCollector = Collector;
 
 	SpawnCollectionEffect(Collector, RewardWorldLocation);
+	if (bRequestPresentationOnFeedbackStart)
+	{
+		RequestRewardUIPresentation(Collector, RewardId);
+	}
 	ApplyPlayerFeedback(Collector);
 	StartCollectionMontage();
 
@@ -93,6 +103,30 @@ void UUOURewardFeedbackComponent::SpawnCollectionEffect(
 	{
 		EffectComponent->Activate(true);
 	}
+}
+
+void UUOURewardFeedbackComponent::RequestRewardUIPresentation(
+	AUOUCharacter* Collector,
+	FName RewardId) const
+{
+	if (!PresentationData.bShowResultUI || Collector == nullptr)
+	{
+		return;
+	}
+
+	const APlayerController* PlayerController = Cast<APlayerController>(Collector->GetController());
+	ULocalPlayer* LocalPlayer = PlayerController != nullptr ? PlayerController->GetLocalPlayer() : nullptr;
+	UUOUUISubsystem* UISubsystem = LocalPlayer != nullptr
+		? LocalPlayer->GetSubsystem<UUOUUISubsystem>()
+		: nullptr;
+	if (UISubsystem == nullptr)
+	{
+		return;
+	}
+
+	FUOURewardPresentationData ResolvedPresentationData = PresentationData;
+	ResolvedPresentationData.RewardId = RewardId;
+	UISubsystem->ShowRewardPresentation(ResolvedPresentationData);
 }
 
 void UUOURewardFeedbackComponent::ApplyPlayerFeedback(AUOUCharacter* Collector)

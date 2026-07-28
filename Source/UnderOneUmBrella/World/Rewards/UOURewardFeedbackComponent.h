@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "World/Rewards/UOURewardPresentationTypes.h"
 #include "UOURewardFeedbackComponent.generated.h"
 
 class AUOUCharacter;
@@ -27,6 +28,14 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Feedback")
 	bool bFeedbackEnabled = true;
+
+	// 수집 시작과 동시에 HUD에 전달할 보상 결과 화면 데이터입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Feedback|Presentation")
+	FUOURewardPresentationData PresentationData;
+
+	// false이면 결과 UI는 자동으로 열지 않고 HUD의 Reward Presentation Cue에서 직접 제어합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Feedback|Presentation")
+	bool bRequestPresentationOnFeedbackStart = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Feedback", meta = (ClampMin = "0.0"))
 	float FeedbackDuration = 1.5f;
@@ -74,7 +83,7 @@ public:
 	FUOURewardFeedbackFinishedSignature OnFeedbackFinished;
 
 	UFUNCTION(BlueprintCallable, Category = "Reward|Feedback")
-	bool StartFeedback(AUOUCharacter* Collector, FVector RewardWorldLocation);
+	bool StartFeedback(AUOUCharacter* Collector, FName RewardId, FVector RewardWorldLocation);
 
 	UFUNCTION(BlueprintCallable, Category = "Reward|Feedback")
 	void FinishFeedback();
@@ -88,6 +97,7 @@ protected:
 
 private:
 	void SpawnCollectionEffect(const AUOUCharacter* Collector, const FVector& RewardWorldLocation) const;
+	void RequestRewardUIPresentation(AUOUCharacter* Collector, FName RewardId) const;
 	void ApplyPlayerFeedback(AUOUCharacter* Collector);
 	bool StartCollectionMontage();
 	void ReleasePlayerFeedback();
