@@ -123,6 +123,31 @@ bool FUOUWindPulseLargeDeltaTest::RunTest(const FString& Parameters)
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FUOUWindAdditiveAccelerationTest,
+	"UnderOneUmbrella.Wind.Character.AdditiveAccelerationClamp",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUOUWindAdditiveAccelerationTest::RunTest(const FString& Parameters)
+{
+	TestEqual(
+		TEXT("Wind and character acceleration are added as vectors"),
+		UOUWindMotion::CalculateClampedAdditiveAcceleration(
+			FVector(600.0f, 0.0f, 0.0f),
+			FVector(0.0f, 0.0f, 200.0f),
+			1000.0f),
+		FVector(600.0f, 0.0f, 200.0f));
+
+	TestEqual(
+		TEXT("Combined wind acceleration is clamped to the editor maximum"),
+		UOUWindMotion::CalculateClampedAdditiveAcceleration(
+			FVector(900.0f, 0.0f, 0.0f),
+			FVector(600.0f, 0.0f, 0.0f),
+			1000.0f),
+		FVector(1000.0f, 0.0f, 0.0f));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FUOUWindCharacterAccelerationTest,
 	"UnderOneUmbrella.Wind.Character.DirectionalAcceleration",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
@@ -162,38 +187,50 @@ bool FUOUWindCharacterAccelerationTest::RunTest(const FString& Parameters)
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
-	FUOUWindVerticalFlightCorrectionTest,
-	"UnderOneUmbrella.Wind.Character.VerticalFlightCorrection",
+	FUOUWindEntryVelocityResetTest,
+	"UnderOneUmbrella.Wind.Character.EntryVerticalVelocityReset",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
-bool FUOUWindVerticalFlightCorrectionTest::RunTest(const FString& Parameters)
+bool FUOUWindEntryVelocityResetTest::RunTest(const FString& Parameters)
 {
 	TestEqual(
-		TEXT("Horizontal wind corrects downward velocity upward"),
-		UOUWindMotion::CalculateSignedVelocityCorrection(
-			-300.0f,
-			0.0f,
-			2500.0f,
-			1.0f / 60.0f),
-		2500.0f);
+		TEXT("Entering wind removes only world vertical velocity"),
+		UOUWindMotion::RemoveWorldVerticalVelocity(
+			FVector(350.0f, -125.0f, -900.0f)),
+		FVector(350.0f, -125.0f, 0.0f));
 
 	TestEqual(
-		TEXT("Vertical correction can reduce excessive upward speed"),
-		UOUWindMotion::CalculateSignedVelocityCorrection(
-			900.0f,
-			600.0f,
-			2500.0f,
-			0.1f),
-		-2500.0f);
+		TEXT("Slow falling character receives the minimum entry speed"),
+		UOUWindMotion::CalculateWindEntryVelocity(
+			FVector(0.0f, 0.0f, -100.0f),
+			FVector::ForwardVector,
+			400.0f,
+			0.5f,
+			800.0f,
+			true),
+		FVector(400.0f, 0.0f, 0.0f));
 
 	TestEqual(
-		TEXT("Vertical correction stops at target velocity"),
-		UOUWindMotion::CalculateSignedVelocityCorrection(
-			600.0f,
-			600.0f,
-			2500.0f,
-			1.0f / 60.0f),
-		0.0f);
+		TEXT("Fast falling momentum is converted into wind direction speed"),
+		UOUWindMotion::CalculateWindEntryVelocity(
+			FVector(100.0f, 0.0f, -1000.0f),
+			FVector::ForwardVector,
+			400.0f,
+			0.5f,
+			800.0f,
+			true),
+		FVector(500.0f, 0.0f, 0.0f));
+
+	TestEqual(
+		TEXT("Entry boost never slows an already faster character"),
+		UOUWindMotion::CalculateWindEntryVelocity(
+			FVector(600.0f, 0.0f, -100.0f),
+			FVector::ForwardVector,
+			400.0f,
+			0.5f,
+			800.0f,
+			true),
+		FVector(600.0f, 0.0f, 0.0f));
 	return true;
 }
 

@@ -9,6 +9,20 @@ class AActor;
 
 namespace UOUWindMotion
 {
+	inline FVector CalculateClampedAdditiveAcceleration(
+		const FVector& WindAcceleration,
+		const FVector& AdditionalAcceleration,
+		float MaximumAcceleration)
+	{
+		if (MaximumAcceleration <= 0.0f)
+		{
+			return FVector::ZeroVector;
+		}
+
+		return (WindAcceleration + AdditionalAcceleration)
+			.GetClampedToMaxSize(MaximumAcceleration);
+	}
+
 	inline float CalculateCappedAcceleration(
 		float CurrentSpeedAlongWind,
 		float TargetSpeedAlongWind,
@@ -48,22 +62,45 @@ namespace UOUWindMotion
 			DeltaTime);
 	}
 
-	inline float CalculateSignedVelocityCorrection(
-		float CurrentVelocity,
-		float TargetVelocity,
-		float MaximumCorrectionAcceleration,
-		float DeltaTime)
+	inline FVector RemoveWorldVerticalVelocity(const FVector& Velocity)
 	{
-		if (MaximumCorrectionAcceleration <= 0.0f)
+		return FVector(Velocity.X, Velocity.Y, 0.0f);
+	}
+
+	inline FVector CalculateWindEntryVelocity(
+		const FVector& PreviousVelocity,
+		const FVector& WindDirection,
+		float MinimumEntrySpeed,
+		float FallingMomentumConversion,
+		float MaximumEntrySpeed,
+		bool bResetVerticalVelocity)
+	{
+		FVector EntryVelocity = bResetVerticalVelocity
+			? RemoveWorldVerticalVelocity(PreviousVelocity)
+			: PreviousVelocity;
+		const FVector SafeWindDirection = WindDirection.GetSafeNormal();
+		if (SafeWindDirection.IsNearlyZero())
 		{
-			return 0.0f;
+			return EntryVelocity;
 		}
 
-		return FMath::Clamp(
-			(TargetVelocity - CurrentVelocity)
-				/ FMath::Max(DeltaTime, KINDA_SMALL_NUMBER),
-			-MaximumCorrectionAcceleration,
-			MaximumCorrectionAcceleration);
+		const float DesiredEntrySpeed = FMath::Clamp(
+			FMath::Max(
+				FMath::Max(0.0f, MinimumEntrySpeed),
+				FMath::Abs(PreviousVelocity.Z)
+					* FMath::Max(0.0f, FallingMomentumConversion)),
+			0.0f,
+			FMath::Max(0.0f, MaximumEntrySpeed));
+		const float CurrentSpeedAlongWind =
+			FVector::DotProduct(EntryVelocity, SafeWindDirection);
+		if (CurrentSpeedAlongWind < DesiredEntrySpeed)
+		{
+			EntryVelocity +=
+				SafeWindDirection
+				* (DesiredEntrySpeed - CurrentSpeedAlongWind);
+		}
+
+		return EntryVelocity;
 	}
 }
 
@@ -148,7 +185,7 @@ struct FUOUWindPathSegment
 	}
 };
 
-// 바람 수신체 하나에 전달되는 방향과 세기 정보입니다.
+// 바람 수신체 하나에 전달되는 방향과 실제 가속도 정보입니다.
 USTRUCT(BlueprintType)
 struct FUOUWindExposureData
 {
@@ -163,8 +200,27 @@ struct FUOUWindExposureData
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Wind")
 	FVector ClosestPointOnPath = FVector::ZeroVector;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Wind", meta = (Units = "cm/s^2"))
+	float Acceleration = 0.0f;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Wind", meta = (Units = "cm/s^2"))
+	float MaximumAcceleration = 0.0f;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Wind", meta = (Units = "cm/s"))
+	float MaximumSpeed = 0.0f;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Wind", meta = (Units = "cm/s"))
+	float MinimumEntrySpeed = 0.0f;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Wind")
-	float Strength = 0.0f;
+	float FallingMomentumConversion = 0.0f;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Wind", meta = (Units = "cm/s"))
+	float MaximumEntrySpeed = 0.0f;
+
+	// 물리 오브젝트 힘에 사용하는 0~1 기반 경로 세기입니다.
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Wind")
+	float StrengthScale = 0.0f;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Wind")
 	float DeltaTime = 0.0f;

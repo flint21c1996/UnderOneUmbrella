@@ -17,7 +17,11 @@ UUOUWindReceiverComponent::UUOUWindReceiverComponent()
 
 void UUOUWindReceiverComponent::ReceiveWind_Implementation(const FUOUWindExposureData& WindData)
 {
-	if (!bReceiveWind || WindData.Strength <= 0.0f || WindData.Direction.IsNearlyZero())
+	if (!bReceiveWind
+		|| WindData.Acceleration <= 0.0f
+		|| WindData.MaximumAcceleration <= 0.0f
+		|| WindData.MaximumSpeed <= 0.0f
+		|| WindData.Direction.IsNearlyZero())
 	{
 		return;
 	}
@@ -26,7 +30,6 @@ void UUOUWindReceiverComponent::ReceiveWind_Implementation(const FUOUWindExposur
 	LastAppliedCharacterAcceleration = 0.0f;
 	LastUmbrellaStrengthMultiplier = 0.0f;
 	LastGravityCancellationAcceleration = 0.0f;
-	LastVerticalFlightCorrectionAcceleration = 0.0f;
 
 	if (ACharacter* Character = Cast<ACharacter>(GetOwner()))
 	{
@@ -52,24 +55,29 @@ void UUOUWindReceiverComponent::ReceiveWind_Implementation(const FUOUWindExposur
 			}
 
 			const FVector WindDirection = WindData.Direction.GetSafeNormal();
-			const float EffectiveStrength =
-				FMath::Max(0.0f, WindData.Strength * UmbrellaMultiplier);
-			if (EffectiveStrength <= 0.0f)
+			const float UmbrellaAdjustedAcceleration =
+				FMath::Max(0.0f, WindData.Acceleration * UmbrellaMultiplier);
+			const FVector RequestedWindAcceleration =
+				UOUWindMotion::CalculateClampedAdditiveAcceleration(
+					WindDirection * UmbrellaAdjustedAcceleration,
+					WindDirection
+						* FMath::Max(0.0f, AdditionalCharacterWindAcceleration),
+					WindData.MaximumAcceleration);
+			const float RequestedAcceleration = RequestedWindAcceleration.Size();
+			if (RequestedAcceleration <= 0.0f)
 			{
 				return;
 			}
 
-			BeginWindborneMovement(MovementComponent);
+			BeginWindborneMovement(MovementComponent, WindData);
 
 			const float CurrentSpeedAlongWind =
 				FVector::DotProduct(MovementComponent->Velocity, WindDirection);
 			const float TargetSpeedAlongWind =
-				FMath::Max(0.0f, MaxCharacterWindSpeed) * EffectiveStrength;
-			const float RequestedAcceleration =
-				FMath::Max(0.0f, CharacterAcceleration) * EffectiveStrength;
+				FMath::Max(0.0f, WindData.MaximumSpeed);
 			const float AppliedAcceleration =
 				UOUWindMotion::CalculateDirectionalAcceleration(
-					bLimitCharacterWindSpeed,
+					true,
 					CurrentSpeedAlongWind,
 					TargetSpeedAlongWind,
 					RequestedAcceleration,
@@ -90,23 +98,6 @@ void UUOUWindReceiverComponent::ReceiveWind_Implementation(const FUOUWindExposur
 					GravityCancellationAcceleration;
 				TotalAcceleration +=
 					FVector::UpVector * GravityCancellationAcceleration;
-
-				// 수평 바람에서만 남아 있는 수직 속도를 안정시킵니다.
-				// 수직/대각선 바람의 Z 가속을 상쇄하지 않도록 바람의 수직 성분만큼
-				// 보정량을 줄입니다.
-				const float HorizontalWindFactor =
-					1.0f - FMath::Clamp(FMath::Abs(WindDirection.Z), 0.0f, 1.0f);
-				const float VerticalCorrectionAcceleration =
-					UOUWindMotion::CalculateSignedVelocityCorrection(
-						MovementComponent->Velocity.Z,
-						0.0f,
-						FMath::Max(0.0f, VerticalFlightCorrectionAcceleration)
-							* HorizontalWindFactor,
-						WindData.DeltaTime);
-				LastVerticalFlightCorrectionAcceleration =
-					VerticalCorrectionAcceleration;
-				TotalAcceleration +=
-					FVector::UpVector * VerticalCorrectionAcceleration;
 			}
 
 			LastAppliedCharacterAcceleration = AppliedAcceleration;
@@ -125,7 +116,9 @@ void UUOUWindReceiverComponent::ReceiveWind_Implementation(const FUOUWindExposur
 		if (TargetPrimitive->IsSimulatingPhysics())
 		{
 			TargetPrimitive->AddForce(
-				WindData.Direction.GetSafeNormal() * PhysicsForce * WindData.Strength);
+				WindData.Direction.GetSafeNormal()
+					* PhysicsForce
+					* WindData.StrengthScale);
 		}
 	}
 }
@@ -264,7 +257,8 @@ float UUOUWindReceiverComponent::ResolveCharacterUmbrellaMultiplier(
 }
 
 void UUOUWindReceiverComponent::BeginWindborneMovement(
-	UCharacterMovementComponent* MovementComponent)
+	UCharacterMovementComponent* MovementComponent,
+	const FUOUWindExposureData& WindData)
 {
 	if (MovementComponent == nullptr)
 	{
@@ -277,8 +271,26 @@ void UUOUWindReceiverComponent::BeginWindborneMovement(
 		RestoreFallingBraking();
 	}
 
+	const bool bEnteringWind = !bCharacterWindActive;
 	WindborneMovementComponent = MovementComponent;
 	bCharacterWindActive = true;
+
+	if (bEnteringWind)
+	{
+		MovementComponent->Velocity =
+			UOUWindMotion::CalculateWindEntryVelocity(
+				MovementComponent->Velocity,
+				WindData.Direction,
+				WindData.MinimumEntrySpeed,
+				WindData.FallingMomentumConversion,
+				FMath::Min(
+					WindData.MaximumEntrySpeed,
+					WindData.MaximumSpeed),
+				bResetVerticalVelocityOnWindEntry);
+		LastWindEntrySpeed = FVector::DotProduct(
+			MovementComponent->Velocity,
+			WindData.Direction.GetSafeNormal());
+	}
 
 	if (bSuppressFallingBrakingWhileWindborne
 		&& !bHasCachedFallingBraking)
@@ -314,6 +326,7 @@ void UUOUWindReceiverComponent::RestoreFallingBraking()
 	WindborneMovementComponent.Reset();
 	CachedBrakingDecelerationFalling = 0.0f;
 	LastCharacterWindReceiveTime = -1.0f;
+	LastWindEntrySpeed = 0.0f;
 	bCharacterWindActive = false;
 	bHasCachedFallingBraking = false;
 	SetComponentTickEnabled(false);

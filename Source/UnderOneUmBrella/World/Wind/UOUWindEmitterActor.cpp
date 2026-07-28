@@ -116,7 +116,18 @@ TArray<FString> AUOUWindEmitterActor::GetPuzzleDebugInfo_Implementation() const
 			PulseRuntimeState.TimeRemaining),
 		FString::Printf(TEXT("Segments: %d / Reflections: %d"), WindPathSegments.Num(), FMath::Max(0, WindPathSegments.Num() - 1)),
 		FString::Printf(TEXT("Affected Receivers: %d"), LastAffectedReceiverCount),
-		FString::Printf(TEXT("Range: %.0f / Radius: %.0f / Strength: %.2f"), MaxWindDistance, WindRadius, WindStrength)
+		FString::Printf(
+			TEXT("Range: %.0f / Radius: %.0f / Accel: %.0f / Max Accel: %.0f / Max Speed: %.0f"),
+			MaxWindDistance,
+			WindRadius,
+			WindAcceleration,
+			MaximumWindAcceleration,
+			MaximumWindSpeed),
+		FString::Printf(
+			TEXT("Entry Speed: %.0f-%.0f / Fall Conversion: %.2f"),
+			MinimumWindEntrySpeed,
+			MaximumWindEntrySpeed,
+			FallingMomentumConversion)
 	};
 }
 
@@ -223,7 +234,9 @@ void AUOUWindEmitterActor::RebuildWindPath()
 		|| World == nullptr
 		|| WindOrigin == nullptr
 		|| MaxWindDistance <= 0.0f
-		|| WindStrength <= 0.0f)
+		|| WindAcceleration <= 0.0f
+		|| MaximumWindAcceleration <= 0.0f
+		|| MaximumWindSpeed <= 0.0f)
 	{
 		OnWindPathChanged.Broadcast();
 		return;
@@ -232,7 +245,7 @@ void AUOUWindEmitterActor::RebuildWindPath()
 	FVector SegmentStart = WindOrigin->GetComponentLocation();
 	FVector SegmentDirection = WindOrigin->GetForwardVector().GetSafeNormal();
 	float RemainingDistance = MaxWindDistance;
-	float CurrentStrength = WindStrength;
+	float CurrentStrength = WindAcceleration;
 
 	ACharacter* PlayerCharacter = UGameplayStatics::GetPlayerCharacter(this, 0);
 	UPrimitiveComponent* PreviousReflectionSurface = nullptr;
@@ -308,7 +321,19 @@ void AUOUWindEmitterActor::ValidateSettings()
 {
 	MaxWindDistance = FMath::Max(0.0f, MaxWindDistance);
 	WindRadius = FMath::Max(1.0f, WindRadius);
-	WindStrength = FMath::Max(0.0f, WindStrength);
+	WindAcceleration = FMath::Max(0.0f, WindAcceleration);
+	MaximumWindAcceleration = FMath::Max(0.0f, MaximumWindAcceleration);
+	MaximumWindSpeed = FMath::Max(0.0f, MaximumWindSpeed);
+	MaximumWindEntrySpeed = FMath::Clamp(
+		MaximumWindEntrySpeed,
+		0.0f,
+		MaximumWindSpeed);
+	MinimumWindEntrySpeed = FMath::Clamp(
+		MinimumWindEntrySpeed,
+		0.0f,
+		MaximumWindEntrySpeed);
+	FallingMomentumConversion =
+		FMath::Clamp(FallingMomentumConversion, 0.0f, 1.0f);
 	WindOnDuration = FMath::Max(0.05f, WindOnDuration);
 	WindOffDuration = FMath::Max(0.05f, WindOffDuration);
 	MaxReflections = FMath::Clamp(MaxReflections, 0, 8);
@@ -458,12 +483,22 @@ void AUOUWindEmitterActor::ApplyWindToReceivers(float DeltaSeconds)
 				ExposureData.SourceActor = this;
 				ExposureData.Direction = Segment.Direction;
 				ExposureData.ClosestPointOnPath = ClosestPoint;
-				ExposureData.Strength = FinalStrength;
+				ExposureData.Acceleration = FinalStrength;
+				ExposureData.MaximumAcceleration = MaximumWindAcceleration;
+				ExposureData.MaximumSpeed = MaximumWindSpeed;
+				ExposureData.MinimumEntrySpeed = MinimumWindEntrySpeed;
+				ExposureData.FallingMomentumConversion =
+					FallingMomentumConversion;
+				ExposureData.MaximumEntrySpeed =
+					MaximumWindEntrySpeed;
+				ExposureData.StrengthScale =
+					FinalStrength / FMath::Max(WindAcceleration, KINDA_SMALL_NUMBER);
 				ExposureData.DeltaTime = DeltaSeconds;
 				ExposureData.ReflectionIndex = Segment.ReflectionIndex;
 
 				FUOUWindExposureData* ExistingExposure = BestExposureByReceiver.Find(Receiver);
-				if (ExistingExposure == nullptr || FinalStrength > ExistingExposure->Strength)
+				if (ExistingExposure == nullptr
+					|| FinalStrength > ExistingExposure->Acceleration)
 				{
 					BestExposureByReceiver.Add(Receiver, ExposureData);
 				}
@@ -495,7 +530,10 @@ void AUOUWindEmitterActor::DrawWindDebug() const
 		const FColor SegmentColor = Segment.ReflectionIndex == 0
 			? FColor::Cyan
 			: FColor::MakeRedToGreenColorFromScalar(
-				FMath::Clamp(Segment.Strength / FMath::Max(WindStrength, KINDA_SMALL_NUMBER), 0.0f, 1.0f));
+				FMath::Clamp(
+					Segment.Strength / FMath::Max(WindAcceleration, KINDA_SMALL_NUMBER),
+					0.0f,
+					1.0f));
 
 		DrawDebugDirectionalArrow(
 			GetWorld(),

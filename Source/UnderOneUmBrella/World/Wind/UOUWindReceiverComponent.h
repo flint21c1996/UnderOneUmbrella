@@ -25,16 +25,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|Receiver")
 	bool bReceiveWind = true;
 
+	// Emitter의 실제 바람 가속도에 같은 방향으로 더하는 캐릭터별 보정값입니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|Character", meta = (ClampMin = "0.0", Units = "cm/s^2"))
-	float CharacterAcceleration = 450.0f;
-
-	// 꺼 두면 바람 안에 있는 동안 바람 방향 가속을 매 프레임 계속 적용합니다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|Character")
-	bool bLimitCharacterWindSpeed = false;
-
-	// 바람 방향 성분이 이 속도에 도달하면 추가 가속을 멈춰 무한 가속을 방지합니다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|Character", meta = (EditCondition = "bLimitCharacterWindSpeed", ClampMin = "0.0", Units = "cm/s"))
-	float MaxCharacterWindSpeed = 1200.0f;
+	float AdditionalCharacterWindAcceleration = 0.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|Character", meta = (ClampMin = "0.0"))
 	float OpenUmbrellaStrengthMultiplier = 1.0f;
@@ -56,9 +49,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|Character|Flight", meta = (EditCondition = "bCancelGravityWhileUmbrellaOpen", ClampMin = "0.0"))
 	float GravityCancellationMultiplier = 1.0f;
 
-	// 수평 바람에서 남아 있는 낙하 속도를 0으로 보정합니다. 바람 방향 가속은 제한하지 않습니다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|Character|Flight", meta = (ClampMin = "0.0", Units = "cm/s^2"))
-	float VerticalFlightCorrectionAcceleration = 2500.0f;
+	// 바람에 처음 진입하는 순간 기존 낙하/상승 Z 속도만 제거합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|Character|Flight")
+	bool bResetVerticalVelocityOnWindEntry = true;
 
 	// 바람을 타는 동안 무입력 공중 제동을 끄고, 바람이 끝나면 원래 값으로 복구합니다.
 	// 기존 WASD 공중 조향은 바람 가속 위에 별도로 더해집니다.
@@ -67,7 +60,7 @@ public:
 
 	// 바람 탑승 중 A/D 좌우와 W/S 상하 조향에 더할 가속도입니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|Character|Flight", meta = (ClampMin = "0.0", Units = "cm/s^2"))
-	float WindborneSteeringAcceleration = 150.0f;
+	float WindborneSteeringAcceleration = 250.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|Physics", meta = (ClampMin = "0.0", Units = "N"))
 	float PhysicsForce = 250000.0f;
@@ -87,8 +80,8 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Wind|Runtime")
 	float LastGravityCancellationAcceleration = 0.0f;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Wind|Runtime")
-	float LastVerticalFlightCorrectionAcceleration = 0.0f;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Wind|Runtime", meta = (Units = "cm/s"))
+	float LastWindEntrySpeed = 0.0f;
 
 	virtual void ReceiveWind_Implementation(const FUOUWindExposureData& WindData) override;
 	virtual FVector GetWindReceiverLocation_Implementation() const override;
@@ -109,7 +102,9 @@ public:
 private:
 	UPrimitiveComponent* ResolveTargetPrimitive() const;
 	float ResolveCharacterUmbrellaMultiplier(bool& bOutUmbrellaOpen) const;
-	void BeginWindborneMovement(UCharacterMovementComponent* MovementComponent);
+	void BeginWindborneMovement(
+		UCharacterMovementComponent* MovementComponent,
+		const FUOUWindExposureData& WindData);
 	void RestoreFallingBraking();
 
 	TWeakObjectPtr<UCharacterMovementComponent> WindborneMovementComponent;

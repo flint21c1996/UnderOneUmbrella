@@ -62,9 +62,29 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|Gameplay", meta = (ClampMin = "1.0", Units = "cm"))
 	float WindRadius = 120.0f;
 
-	// 수신자의 바람 가속과 물리 힘에 곱해지는 Emitter의 바람 세기입니다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|Gameplay", meta = (ClampMin = "0.0", UIMin = "0.0", UIMax = "2.0"))
-	float WindStrength = 0.5f;
+	// Emitter가 바람 방향으로 직접 더하는 실제 가속도입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|Gameplay", meta = (ClampMin = "0.0", Units = "cm/s^2"))
+	float WindAcceleration = 700.0f;
+
+	// 수신체에 합산되는 바람 가속도 벡터의 최대 크기입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|Gameplay", meta = (ClampMin = "0.0", Units = "cm/s^2"))
+	float MaximumWindAcceleration = 1200.0f;
+
+	// 바람 방향으로 누적되는 캐릭터 속도의 최대값입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|Gameplay", meta = (ClampMin = "0.0", Units = "cm/s"))
+	float MaximumWindSpeed = 1400.0f;
+
+	// 바람에 처음 진입할 때 즉시 보장할 최소 바람 방향 속도입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|Entry", meta = (ClampMin = "0.0", Units = "cm/s"))
+	float MinimumWindEntrySpeed = 400.0f;
+
+	// 진입 직전 낙하 속도 중 바람 방향 속도로 전환할 비율입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|Entry", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float FallingMomentumConversion = 0.5f;
+
+	// 낙하 관성을 전환하더라도 진입 순간 이 속도를 넘지 않습니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|Entry", meta = (ClampMin = "0.0", Units = "cm/s"))
+	float MaximumWindEntrySpeed = 800.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|Gameplay")
 	bool bUseRadialFalloff = true;
@@ -85,8 +105,8 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|Reflection", meta = (ClampMin = "0", ClampMax = "8"))
 	int32 MaxReflections = 3;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|Reflection", meta = (ClampMin = "0.0"))
-	float MinimumReflectedStrength = 0.05f;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|Reflection", meta = (ClampMin = "0.0", Units = "cm/s^2"))
+	float MinimumReflectedStrength = 25.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|Collision")
 	TEnumAsByte<ECollisionChannel> WindTraceChannel = ECC_Visibility;
