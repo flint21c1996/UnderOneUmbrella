@@ -8,6 +8,7 @@
 #include "Engine/CollisionProfile.h"
 #include "NiagaraComponent.h"
 #include "Player/UOUCharacter.h"
+#include "World/Rewards/UOURewardCollectionMotionComponent.h"
 #include "World/Rewards/UOURewardFeedbackComponent.h"
 
 AUOURewardActor::AUOURewardActor()
@@ -34,6 +35,8 @@ AUOURewardActor::AUOURewardActor()
 	ObjectiveEffect->SetAutoActivate(true);
 
 	RewardFeedbackComponent = CreateDefaultSubobject<UUOURewardFeedbackComponent>(TEXT("RewardFeedbackComponent"));
+	RewardCollectionMotionComponent =
+		CreateDefaultSubobject<UUOURewardCollectionMotionComponent>(TEXT("RewardCollectionMotionComponent"));
 }
 
 void AUOURewardActor::OnConstruction(const FTransform& Transform)
@@ -63,6 +66,12 @@ void AUOURewardActor::BeginPlay()
 			this,
 			&AUOURewardActor::HandleRewardFeedbackFinished);
 	}
+	if (RewardCollectionMotionComponent != nullptr)
+	{
+		RewardCollectionMotionComponent->OnCollectionMotionFinished.AddUniqueDynamic(
+			this,
+			&AUOURewardActor::HandleCollectionMotionFinished);
+	}
 }
 
 void AUOURewardActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -79,6 +88,13 @@ void AUOURewardActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
 		RewardFeedbackComponent->OnFeedbackFinished.RemoveDynamic(
 			this,
 			&AUOURewardActor::HandleRewardFeedbackFinished);
+	}
+
+	if (RewardCollectionMotionComponent != nullptr)
+	{
+		RewardCollectionMotionComponent->OnCollectionMotionFinished.RemoveDynamic(
+			this,
+			&AUOURewardActor::HandleCollectionMotionFinished);
 	}
 
 	Super::EndPlay(EndPlayReason);
@@ -121,16 +137,25 @@ bool AUOURewardActor::TryCollectReward(AActor* Collector)
 	bCollected = true;
 	PendingCollector = Collector;
 	const FVector RewardWorldLocation = GetActorLocation();
-	DisableAfterCollection();
+	DisableCollectionInteraction();
 
 	AUOUCharacter* PlayerCharacter = Cast<AUOUCharacter>(Collector);
-	if (RewardFeedbackComponent != nullptr
-		&& RewardFeedbackComponent->StartFeedback(PlayerCharacter, RewardWorldLocation))
+	bWaitingForRewardFeedback = RewardFeedbackComponent != nullptr;
+	bWaitingForCollectionMotion = RewardCollectionMotionComponent != nullptr;
+
+	if (bWaitingForRewardFeedback
+		&& !RewardFeedbackComponent->StartFeedback(PlayerCharacter, RewardId, RewardWorldLocation))
 	{
-		return true;
+		bWaitingForRewardFeedback = false;
 	}
 
-	CompleteCollection();
+	if (bWaitingForCollectionMotion
+		&& !RewardCollectionMotionComponent->StartCollectionMotion(VisualMesh))
+	{
+		bWaitingForCollectionMotion = false;
+	}
+
+	TryCompleteCollection();
 	return true;
 }
 
@@ -162,7 +187,7 @@ void AUOURewardActor::ApplyComponentSettings()
 	}
 }
 
-void AUOURewardActor::DisableAfterCollection()
+void AUOURewardActor::DisableCollectionInteraction()
 {
 	SetActorTickEnabled(false);
 
@@ -171,7 +196,10 @@ void AUOURewardActor::DisableAfterCollection()
 		CollectionTrigger->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		CollectionTrigger->SetGenerateOverlapEvents(false);
 	}
+}
 
+void AUOURewardActor::HideCollectedVisual()
+{
 	if (VisualMesh != nullptr)
 	{
 		VisualMesh->SetVisibility(false, true);
@@ -184,6 +212,17 @@ void AUOURewardActor::DisableAfterCollection()
 		ObjectiveEffect->SetVisibility(false, true);
 		ObjectiveEffect->SetHiddenInGame(true, true);
 	}
+}
+
+void AUOURewardActor::TryCompleteCollection()
+{
+	if (bWaitingForRewardFeedback || bWaitingForCollectionMotion)
+	{
+		return;
+	}
+
+	HideCollectedVisual();
+	CompleteCollection();
 }
 
 void AUOURewardActor::CompleteCollection()
@@ -210,5 +249,12 @@ bool AUOURewardActor::IsValidCollector(const AActor* Candidate) const
 
 void AUOURewardActor::HandleRewardFeedbackFinished()
 {
-	CompleteCollection();
+	bWaitingForRewardFeedback = false;
+	TryCompleteCollection();
+}
+
+void AUOURewardActor::HandleCollectionMotionFinished()
+{
+	bWaitingForCollectionMotion = false;
+	TryCompleteCollection();
 }

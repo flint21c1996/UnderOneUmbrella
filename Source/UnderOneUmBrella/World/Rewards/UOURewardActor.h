@@ -10,6 +10,7 @@ class AActor;
 class AUOURewardActor;
 class UPrimitiveComponent;
 class UNiagaraComponent;
+class UUOURewardCollectionMotionComponent;
 class UUOURewardFeedbackComponent;
 class USceneComponent;
 class USphereComponent;
@@ -71,6 +72,9 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Reward|Components")
 	TObjectPtr<UUOURewardFeedbackComponent> RewardFeedbackComponent = nullptr;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Reward|Components")
+	TObjectPtr<UUOURewardCollectionMotionComponent> RewardCollectionMotionComponent = nullptr;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Collection", meta = (ClampMin = "0.0"))
 	float TriggerRadius = 75.0f;
 
@@ -106,15 +110,23 @@ private:
 		const FHitResult& SweepResult);
 
 	void ApplyComponentSettings();
-	void DisableAfterCollection();
+	void DisableCollectionInteraction();
+	void HideCollectedVisual();
+	void TryCompleteCollection();
 	void CompleteCollection();
 	bool IsValidCollector(const AActor* Candidate) const;
 
 	UFUNCTION()
 	void HandleRewardFeedbackFinished();
 
+	UFUNCTION()
+	void HandleCollectionMotionFinished();
+
 	UPROPERTY(Transient)
 	TObjectPtr<AActor> PendingCollector = nullptr;
+
+	bool bWaitingForRewardFeedback = false;
+	bool bWaitingForCollectionMotion = false;
 
 	// 에디터에서 VisualMesh에 설정한 Transform을 idle 움직임의 기준으로 보존합니다.
 	FVector BaseVisualRelativeLocation = FVector::ZeroVector;
