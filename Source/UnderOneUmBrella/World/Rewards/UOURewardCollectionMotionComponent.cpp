@@ -36,6 +36,11 @@ UUOURewardCollectionMotionComponent::UUOURewardCollectionMotionComponent()
 {
 	PrimaryComponentTick.bCanEverTick = true;
 	PrimaryComponentTick.bStartWithTickEnabled = false;
+
+	FUOURewardPresentationCue DefaultFeedbackCue;
+	DefaultFeedbackCue.CueId = TEXT("StartFeedback");
+	DefaultFeedbackCue.TriggerTime = 0.25f;
+	PresentationCues.Add(DefaultFeedbackCue);
 }
 
 void UUOURewardCollectionMotionComponent::TickComponent(
@@ -60,6 +65,7 @@ void UUOURewardCollectionMotionComponent::TickComponent(
 	const float SafeDuration = FMath::Max(MotionDuration, KINDA_SMALL_NUMBER);
 	const float NormalizedTime = FMath::Clamp(ElapsedTime / SafeDuration, 0.0f, 1.0f);
 	ApplyMotion(NormalizedTime);
+	BroadcastPassedCues(FMath::Min(ElapsedTime, MotionDuration));
 
 	if (NormalizedTime >= 1.0f)
 	{
@@ -91,16 +97,19 @@ bool UUOURewardCollectionMotionComponent::StartCollectionMotion(
 		MotionPath->GetQuaternionAtDistanceAlongSpline(0.0f, ESplineCoordinateSpace::World));
 	ElapsedTime = 0.0f;
 	bMotionPlaying = true;
+	BuildCueSchedule();
 
 	if (MotionDuration <= KINDA_SMALL_NUMBER)
 	{
 		ApplyMotion(1.0f);
+		BroadcastPassedCues(0.0f);
 		FinishCollectionMotion();
 		return true;
 	}
 
 	SetComponentTickEnabled(true);
 	ApplyMotion(0.0f);
+	BroadcastPassedCues(0.0f);
 	return true;
 }
 
@@ -162,6 +171,51 @@ void UUOURewardCollectionMotionComponent::ApplyMotion(float NormalizedTime)
 	TargetComponent->SetRelativeScale3D(RelativeScale);
 }
 
+void UUOURewardCollectionMotionComponent::BuildCueSchedule()
+{
+	PendingCueIndices.Reset();
+	NextCueIndex = 0;
+
+	for (int32 CueIndex = 0; CueIndex < PresentationCues.Num(); ++CueIndex)
+	{
+		PendingCueIndices.Add(CueIndex);
+	}
+
+	PendingCueIndices.Sort(
+		[this](const int32 LeftIndex, const int32 RightIndex)
+		{
+			const float LeftTime = PresentationCues[LeftIndex].TriggerTime;
+			const float RightTime = PresentationCues[RightIndex].TriggerTime;
+			return FMath::IsNearlyEqual(LeftTime, RightTime)
+				? LeftIndex < RightIndex
+				: LeftTime < RightTime;
+		});
+}
+
+void UUOURewardCollectionMotionComponent::BroadcastPassedCues(float CurrentTime)
+{
+	const float SafeMotionDuration = FMath::Max(0.0f, MotionDuration);
+	const float SafeCurrentTime = FMath::Max(0.0f, CurrentTime);
+
+	while (PendingCueIndices.IsValidIndex(NextCueIndex))
+	{
+		const FUOURewardPresentationCue& Cue =
+			PresentationCues[PendingCueIndices[NextCueIndex]];
+		const float SafeTriggerTime =
+			FMath::Clamp(Cue.TriggerTime, 0.0f, SafeMotionDuration);
+		if (SafeTriggerTime > SafeCurrentTime + KINDA_SMALL_NUMBER)
+		{
+			break;
+		}
+
+		++NextCueIndex;
+		if (!Cue.CueId.IsNone())
+		{
+			OnCollectionMotionCue.Broadcast(Cue);
+		}
+	}
+}
+
 void UUOURewardCollectionMotionComponent::FinishCollectionMotion()
 {
 	if (!bMotionPlaying)
@@ -173,6 +227,8 @@ void UUOURewardCollectionMotionComponent::FinishCollectionMotion()
 	ElapsedTime = 0.0f;
 	MotionTarget.Reset();
 	ActiveMotionPath.Reset();
+	PendingCueIndices.Reset();
+	NextCueIndex = 0;
 	SetComponentTickEnabled(false);
 
 	OnCollectionMotionFinished.Broadcast();

@@ -4,12 +4,17 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "World/Rewards/UOURewardPresentationTypes.h"
 #include "UOURewardCollectionMotionComponent.generated.h"
 
 class USceneComponent;
 class USplineComponent;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FUOURewardCollectionMotionFinishedSignature);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
+	FUOURewardCollectionMotionCueSignature,
+	const FUOURewardPresentationCue&,
+	Cue);
 
 // 수집 순간 Reward의 시각 컴포넌트에 짧은 이동·회전·크기 변화를 적용합니다.
 UCLASS(ClassGroup=(Reward), meta=(BlueprintSpawnableComponent))
@@ -35,6 +40,9 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Reward|Motion|Events")
 	FUOURewardCollectionMotionFinishedSignature OnCollectionMotionFinished;
 
+	UPROPERTY(BlueprintAssignable, Category = "Reward|Motion|Events")
+	FUOURewardCollectionMotionCueSignature OnCollectionMotionCue;
+
 protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Motion")
 	bool bMotionEnabled = true;
@@ -57,8 +65,14 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Motion", meta = (ClampMin = "1.0"))
 	float EaseExponent = 2.0f;
 
+	// 수집 움직임 중 지정된 시간에 발생할 연출 신호입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Motion|Cues")
+	TArray<FUOURewardPresentationCue> PresentationCues;
+
 private:
 	void ApplyMotion(float NormalizedTime);
+	void BuildCueSchedule();
+	void BroadcastPassedCues(float CurrentTime);
 	void FinishCollectionMotion();
 
 	TWeakObjectPtr<USceneComponent> MotionTarget;
@@ -66,6 +80,8 @@ private:
 	FTransform StartRelativeTransform = FTransform::Identity;
 	FVector StartPathRelativeLocation = FVector::ZeroVector;
 	FQuat StartPathRelativeRotation = FQuat::Identity;
+	TArray<int32> PendingCueIndices;
+	int32 NextCueIndex = 0;
 	float ElapsedTime = 0.0f;
 	bool bMotionPlaying = false;
 };
