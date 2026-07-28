@@ -29,6 +29,7 @@
 #include "Player/UOUPushPullInteractorComponent.h"
 #include "Player/UOUUmbrellaComponent.h"
 #include "UI/UOUUISubsystem.h"
+#include "World/Wind/UOUWindReceiverComponent.h"
 
 DEFINE_LOG_CATEGORY(LogTemplateCharacter);
 
@@ -114,6 +115,7 @@ AUOUCharacter::AUOUCharacter()
 		TEXT("InteractionExecutorComponent"));
 	LadderClimbComponent = CreateDefaultSubobject<UUOULadderClimbComponent>(TEXT("LadderClimbComponent"));
 	SplineTravelComponent = CreateDefaultSubobject<UUOUPlayerSplineTravelComponent>(TEXT("SplineTravelComponent"));
+	WindReceiverComponent = CreateDefaultSubobject<UUOUWindReceiverComponent>(TEXT("WindReceiverComponent"));
 
 	UmbrellaAttachPoint = CreateDefaultSubobject<UArrowComponent>(TEXT("UmbrellaAttachPoint"));
 	UmbrellaAttachPoint->SetupAttachment(GetMesh());

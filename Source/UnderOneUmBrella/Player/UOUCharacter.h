@@ -15,6 +15,7 @@ class UUOULadderClimbComponent;
 class UUOUPushPullInteractorComponent;
 class UUOUPlayerInteractionExecutorComponent;
 class UUOUPlayerSplineTravelComponent;
+class UUOUWindReceiverComponent;
 class USceneComponent;
 class USkeletalMeshComponent;
 class USpringArmComponent;
@@ -116,6 +117,10 @@ class AUOUCharacter : public ACharacter
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Gameplay, meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UUOUPlayerSplineTravelComponent> SplineTravelComponent = nullptr;
 
+	// 동적 선풍기형 바람을 캐릭터 이동 힘으로 변환합니다.
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Gameplay, meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UUOUWindReceiverComponent> WindReceiverComponent = nullptr;
+
 public:
 	// 기본 이동 세팅과 공용 컴포넌트 구성을 초기화한다.
 	AUOUCharacter();
@@ -213,6 +218,7 @@ public:
 	FORCEINLINE class UUOUPlayerInteractionExecutorComponent* GetInteractionExecutorComponent() const { return InteractionExecutorComponent; }
 	FORCEINLINE class UUOULadderClimbComponent* GetLadderClimbComponent() const { return LadderClimbComponent; }
 	FORCEINLINE class UUOUPlayerSplineTravelComponent* GetSplineTravelComponent() const { return SplineTravelComponent; }
+	FORCEINLINE class UUOUWindReceiverComponent* GetWindReceiverComponent() const { return WindReceiverComponent; }
 	FORCEINLINE int32 GetContextInteractPressedCount() const { return ContextInteractPressedCount; }
 	FORCEINLINE int32 GetContextInteractReleasedCount() const { return ContextInteractReleasedCount; }
 	FORCEINLINE int32 GetPushPullPressedCount() const { return PushPullPressedCount; }
