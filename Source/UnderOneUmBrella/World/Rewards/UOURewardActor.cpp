@@ -7,8 +7,11 @@
 #include "Components/SplineComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/CollisionProfile.h"
+#include "Engine/LocalPlayer.h"
+#include "GameFramework/PlayerController.h"
 #include "NiagaraComponent.h"
 #include "Player/UOUCharacter.h"
+#include "UI/UOUUISubsystem.h"
 #include "World/Rewards/UOURewardCollectionMotionComponent.h"
 #include "World/Rewards/UOURewardFeedbackComponent.h"
 
@@ -82,6 +85,9 @@ void AUOURewardActor::BeginPlay()
 		RewardCollectionMotionComponent->OnCollectionMotionFinished.AddUniqueDynamic(
 			this,
 			&AUOURewardActor::HandleCollectionMotionFinished);
+		RewardCollectionMotionComponent->OnCollectionMotionCue.AddUniqueDynamic(
+			this,
+			&AUOURewardActor::HandleCollectionMotionCue);
 	}
 }
 
@@ -106,6 +112,9 @@ void AUOURewardActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
 		RewardCollectionMotionComponent->OnCollectionMotionFinished.RemoveDynamic(
 			this,
 			&AUOURewardActor::HandleCollectionMotionFinished);
+		RewardCollectionMotionComponent->OnCollectionMotionCue.RemoveDynamic(
+			this,
+			&AUOURewardActor::HandleCollectionMotionCue);
 	}
 
 	Super::EndPlay(EndPlayReason);
@@ -147,23 +156,21 @@ bool AUOURewardActor::TryCollectReward(AActor* Collector)
 	// 이벤트 콜백에서 다시 수집을 요청하더라도 중복 처리되지 않도록 가장 먼저 잠급니다.
 	bCollected = true;
 	PendingCollector = Collector;
-	const FVector RewardWorldLocation = GetActorLocation();
 	DisableCollectionInteraction();
 
-	AUOUCharacter* PlayerCharacter = Cast<AUOUCharacter>(Collector);
 	bWaitingForRewardFeedback = RewardFeedbackComponent != nullptr;
 	bWaitingForCollectionMotion = RewardCollectionMotionComponent != nullptr;
-
-	if (bWaitingForRewardFeedback
-		&& !RewardFeedbackComponent->StartFeedback(PlayerCharacter, RewardId, RewardWorldLocation))
-	{
-		bWaitingForRewardFeedback = false;
-	}
+	bRewardFeedbackStarted = false;
 
 	if (bWaitingForCollectionMotion
 		&& !RewardCollectionMotionComponent->StartCollectionMotion(VisualMesh, CollectionMotionPath))
 	{
 		bWaitingForCollectionMotion = false;
+	}
+
+	if (!bWaitingForCollectionMotion || FeedbackStartCueId.IsNone())
+	{
+		StartRewardFeedback();
 	}
 
 	TryCompleteCollection();
@@ -225,6 +232,53 @@ void AUOURewardActor::HideCollectedVisual()
 	}
 }
 
+void AUOURewardActor::StartRewardFeedback()
+{
+	if (!bWaitingForRewardFeedback || bRewardFeedbackStarted)
+	{
+		return;
+	}
+
+	bRewardFeedbackStarted = true;
+	AUOUCharacter* PlayerCharacter = Cast<AUOUCharacter>(PendingCollector.Get());
+	if (RewardFeedbackComponent == nullptr
+		|| !RewardFeedbackComponent->StartFeedback(
+			PlayerCharacter,
+			RewardId,
+			GetActorLocation()))
+	{
+		bWaitingForRewardFeedback = false;
+	}
+
+	TryCompleteCollection();
+}
+
+void AUOURewardActor::RoutePresentationCueToUI(const FUOURewardPresentationCue& Cue) const
+{
+	AUOUCharacter* PlayerCharacter = Cast<AUOUCharacter>(PendingCollector.Get());
+	APlayerController* PlayerController = PlayerCharacter != nullptr
+		? Cast<APlayerController>(PlayerCharacter->GetController())
+		: nullptr;
+	ULocalPlayer* LocalPlayer = PlayerController != nullptr
+		? PlayerController->GetLocalPlayer()
+		: nullptr;
+	UUOUUISubsystem* UISubsystem = LocalPlayer != nullptr
+		? LocalPlayer->GetSubsystem<UUOUUISubsystem>()
+		: nullptr;
+	if (UISubsystem == nullptr)
+	{
+		return;
+	}
+
+	FUOURewardPresentationData ResolvedPresentationData;
+	if (RewardFeedbackComponent != nullptr)
+	{
+		ResolvedPresentationData = RewardFeedbackComponent->PresentationData;
+	}
+	ResolvedPresentationData.RewardId = RewardId;
+	UISubsystem->ShowRewardPresentationCue(ResolvedPresentationData, Cue);
+}
+
 void AUOURewardActor::TryCompleteCollection()
 {
 	if (bWaitingForRewardFeedback || bWaitingForCollectionMotion)
@@ -267,5 +321,19 @@ void AUOURewardActor::HandleRewardFeedbackFinished()
 void AUOURewardActor::HandleCollectionMotionFinished()
 {
 	bWaitingForCollectionMotion = false;
+	StartRewardFeedback();
 	TryCompleteCollection();
+}
+
+void AUOURewardActor::HandleCollectionMotionCue(const FUOURewardPresentationCue& Cue)
+{
+	AActor* Collector = PendingCollector.Get();
+	OnRewardPresentationCue.Broadcast(this, RewardId, Cue, Collector);
+	ReceiveRewardPresentationCue(RewardId, Cue, Collector);
+	RoutePresentationCueToUI(Cue);
+
+	if (Cue.CueId == FeedbackStartCueId)
+	{
+		StartRewardFeedback();
+	}
 }

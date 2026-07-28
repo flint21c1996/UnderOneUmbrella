@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "World/Rewards/UOURewardPresentationTypes.h"
 #include "UOURewardActor.generated.h"
 
 class AActor;
@@ -21,6 +22,12 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(
 	FUOURewardCollectedSignature,
 	AUOURewardActor*, RewardActor,
 	FName, RewardId,
+	AActor*, Collector);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_FourParams(
+	FUOURewardActorPresentationCueSignature,
+	AUOURewardActor*, RewardActor,
+	FName, RewardId,
+	const FUOURewardPresentationCue&, Cue,
 	AActor*, Collector);
 
 // 월드에 배치되어 회전·부유하다가 플레이어 접촉 시 한 번만 수집되는 보상 액터입니다.
@@ -45,6 +52,10 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Reward|Events")
 	FUOURewardCollectedSignature OnRewardCollected;
 
+	// 수집 움직임에서 Cue가 발생할 때 월드 연출 시스템과 Blueprint에 전달합니다.
+	UPROPERTY(BlueprintAssignable, Category = "Reward|Events")
+	FUOURewardActorPresentationCueSignature OnRewardPresentationCue;
+
 	// 오버랩 외의 연출이나 Blueprint에서도 동일한 중복 방지 경로로 수집을 요청할 수 있습니다.
 	UFUNCTION(BlueprintCallable, Category = "Reward")
 	bool TryCollectReward(AActor* Collector);
@@ -55,6 +66,12 @@ public:
 	// Blueprint 전용 피드백을 액터 내부에 추가할 수 있는 확장 지점입니다.
 	UFUNCTION(BlueprintImplementableEvent, Category = "Reward|Events")
 	void ReceiveRewardCollected(FName CollectedRewardId, AActor* Collector);
+
+	UFUNCTION(BlueprintImplementableEvent, Category = "Reward|Events")
+	void ReceiveRewardPresentationCue(
+		FName CollectedRewardId,
+		const FUOURewardPresentationCue& Cue,
+		AActor* Collector);
 
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Reward|Components")
@@ -82,6 +99,10 @@ protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Collection", meta = (ClampMin = "0.0"))
 	float TriggerRadius = 75.0f;
+
+	// 이 Cue가 발생하면 기존 RewardFeedbackComponent의 카메라·캐릭터·파티클 피드백을 시작합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Presentation")
+	FName FeedbackStartCueId = TEXT("StartFeedback");
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Visual|Idle")
 	bool bUseHoverMotion = true;
@@ -117,6 +138,8 @@ private:
 	void ApplyComponentSettings();
 	void DisableCollectionInteraction();
 	void HideCollectedVisual();
+	void StartRewardFeedback();
+	void RoutePresentationCueToUI(const FUOURewardPresentationCue& Cue) const;
 	void TryCompleteCollection();
 	void CompleteCollection();
 	bool IsValidCollector(const AActor* Candidate) const;
@@ -127,11 +150,15 @@ private:
 	UFUNCTION()
 	void HandleCollectionMotionFinished();
 
+	UFUNCTION()
+	void HandleCollectionMotionCue(const FUOURewardPresentationCue& Cue);
+
 	UPROPERTY(Transient)
 	TObjectPtr<AActor> PendingCollector = nullptr;
 
 	bool bWaitingForRewardFeedback = false;
 	bool bWaitingForCollectionMotion = false;
+	bool bRewardFeedbackStarted = false;
 
 	// 에디터에서 VisualMesh에 설정한 Transform을 idle 움직임의 기준으로 보존합니다.
 	FVector BaseVisualRelativeLocation = FVector::ZeroVector;
