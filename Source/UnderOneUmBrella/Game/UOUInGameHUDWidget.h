@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
 #include "UI/UOUUITypes.h"
+#include "World/Rewards/UOURewardPresentationTypes.h"
 #include "UOUInGameHUDWidget.generated.h"
 
 class AUOUMenuPlayerController;
@@ -103,6 +104,16 @@ public:
 	// Blueprint event used to display a chapter, place, or stage title card.
 	UFUNCTION(BlueprintImplementableEvent, BlueprintCosmetic, Category = "HUD|Title")
 	void ShowTitleCard(const FUOUTitleDisplayData& TitleData);
+
+	// 보상 수집 시작 시 결과 패널과 UMG 애니메이션을 재생하는 Blueprint 진입점입니다.
+	UFUNCTION(BlueprintImplementableEvent, BlueprintCosmetic, Category = "HUD|Reward")
+	void ShowRewardPresentation(const FUOURewardPresentationData& PresentationData);
+
+	// RewardActor의 수집 움직임 중 발생한 Cue를 해당 프레임에 HUD Blueprint로 전달합니다.
+	UFUNCTION(BlueprintImplementableEvent, BlueprintCosmetic, Category = "HUD|Reward")
+	void HandleRewardPresentationCue(
+		const FUOURewardPresentationData& PresentationData,
+		const FUOURewardPresentationCue& Cue);
 
 private:
 	AUOUMenuPlayerController* GetMenuPlayerController() const;
