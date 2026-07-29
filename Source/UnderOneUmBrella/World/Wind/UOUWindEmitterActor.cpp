@@ -152,14 +152,8 @@ void AUOUWindEmitterActor::SetWindEnabled(bool bNewEnabled)
 	if (bWindEnabled)
 	{
 		InitializePulseCycleState();
-		RebuildWindPath();
 	}
-	else
-	{
-		WindPathSegments.Reset();
-		LastAffectedReceiverCount = 0;
-		OnWindPathChanged.Broadcast();
-	}
+	RefreshWindPathForCurrentState();
 
 	HandleWindPhaseChanged(bWasBlowing);
 }
@@ -179,17 +173,7 @@ void AUOUWindEmitterActor::SetPulseCycleEnabled(bool bNewPulseCycleEnabled)
 	const bool bWasBlowing = IsWindBlowing();
 	bUsePulseCycle = bNewPulseCycleEnabled;
 	InitializePulseCycleState();
-
-	if (IsWindBlowing())
-	{
-		RebuildWindPath();
-	}
-	else
-	{
-		WindPathSegments.Reset();
-		LastAffectedReceiverCount = 0;
-		OnWindPathChanged.Broadcast();
-	}
+	RefreshWindPathForCurrentState();
 
 	HandleWindPhaseChanged(bWasBlowing);
 }
@@ -201,16 +185,7 @@ void AUOUWindEmitterActor::ResetPulseCycle()
 
 	if (HasActorBegunPlay())
 	{
-		if (IsWindBlowing())
-		{
-			RebuildWindPath();
-		}
-		else
-		{
-			WindPathSegments.Reset();
-			LastAffectedReceiverCount = 0;
-			OnWindPathChanged.Broadcast();
-		}
+		RefreshWindPathForCurrentState();
 	}
 
 	HandleWindPhaseChanged(bWasBlowing);
@@ -543,16 +518,7 @@ void AUOUWindEmitterActor::UpdatePulseCycle(float DeltaSeconds)
 		return;
 	}
 
-	if (IsWindBlowing())
-	{
-		RebuildWindPath();
-	}
-	else
-	{
-		WindPathSegments.Reset();
-		LastAffectedReceiverCount = 0;
-		OnWindPathChanged.Broadcast();
-	}
+	RefreshWindPathForCurrentState();
 
 	HandleWindPhaseChanged(bWasBlowing);
 }
@@ -564,6 +530,24 @@ void AUOUWindEmitterActor::HandleWindPhaseChanged(bool bWasBlowing)
 	{
 		OnWindPhaseChanged.Broadcast(bIsBlowing);
 	}
+}
+
+void AUOUWindEmitterActor::RefreshWindPathForCurrentState()
+{
+	if (IsWindBlowing())
+	{
+		RebuildWindPath();
+		return;
+	}
+
+	ClearWindPath();
+}
+
+void AUOUWindEmitterActor::ClearWindPath()
+{
+	WindPathSegments.Reset();
+	LastAffectedReceiverCount = 0;
+	OnWindPathChanged.Broadcast();
 }
 
 void AUOUWindEmitterActor::ApplyWindToReceivers(float DeltaSeconds)
@@ -647,24 +631,12 @@ void AUOUWindEmitterActor::ApplyWindToReceivers(float DeltaSeconds)
 					continue;
 				}
 
-				FUOUWindExposureData ExposureData;
-				ExposureData.SourceActor = this;
-				ExposureData.Direction = Segment.Direction;
-				ExposureData.ClosestPointOnPath = ClosestPoint;
-				ExposureData.Acceleration = FinalStrength;
-				ExposureData.MaximumAcceleration = MaximumWindAcceleration;
-				ExposureData.MaximumSpeed = MaximumWindSpeed;
-				ExposureData.MinimumEntrySpeed = MinimumWindEntrySpeed;
-				ExposureData.FallingMomentumConversion =
-					FallingMomentumConversion;
-				ExposureData.InitialVelocityBoost =
-					InitialWindVelocityBoost;
-				ExposureData.MaximumEntrySpeed =
-					MaximumWindEntrySpeed;
-				ExposureData.StrengthScale =
-					FinalStrength / FMath::Max(WindAcceleration, KINDA_SMALL_NUMBER);
-				ExposureData.DeltaTime = DeltaSeconds;
-				ExposureData.ReflectionIndex = Segment.ReflectionIndex;
+				const FUOUWindExposureData ExposureData =
+					MakeExposureData(
+						Segment,
+						ClosestPoint,
+						FinalStrength,
+						DeltaSeconds);
 
 				FUOUWindExposureData* ExistingExposure = BestExposureByReceiver.Find(Receiver);
 				if (ExistingExposure == nullptr
@@ -686,6 +658,36 @@ void AUOUWindEmitterActor::ApplyWindToReceivers(float DeltaSeconds)
 			++LastAffectedReceiverCount;
 		}
 	}
+}
+
+FUOUWindExposureData AUOUWindEmitterActor::MakeExposureData(
+	const FUOUWindPathSegment& Segment,
+	const FVector& ClosestPoint,
+	float FinalStrength,
+	float DeltaSeconds)
+{
+	FUOUWindExposureData ExposureData;
+	ExposureData.SourceActor = this;
+	ExposureData.Direction = Segment.Direction;
+	ExposureData.ClosestPointOnPath = ClosestPoint;
+	ExposureData.Acceleration = FinalStrength;
+	ExposureData.MaximumAcceleration = MaximumWindAcceleration;
+	ExposureData.MaximumSpeed = MaximumWindSpeed;
+	ExposureData.MinimumEntrySpeed = MinimumWindEntrySpeed;
+	ExposureData.FallingMomentumConversion =
+		FallingMomentumConversion;
+	ExposureData.InitialVelocityBoost =
+		InitialWindVelocityBoost;
+	ExposureData.MaximumEntrySpeed =
+		MaximumWindEntrySpeed;
+	ExposureData.StrengthScale =
+		FinalStrength
+			/ FMath::Max(
+				WindAcceleration,
+				KINDA_SMALL_NUMBER);
+	ExposureData.DeltaTime = DeltaSeconds;
+	ExposureData.ReflectionIndex = Segment.ReflectionIndex;
+	return ExposureData;
 }
 
 void AUOUWindEmitterActor::DrawWindDebug() const

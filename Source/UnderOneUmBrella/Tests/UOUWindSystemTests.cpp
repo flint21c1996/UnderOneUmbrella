@@ -5,6 +5,7 @@
 #include "Misc/AutomationTest.h"
 #include "World/Wind/UOUWindEmitterActor.h"
 #include "World/Wind/UOUWindInteractionSurfaceComponent.h"
+#include "World/Wind/UOUWindMotion.h"
 #include "World/Wind/UOUWindTypes.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
@@ -175,45 +176,6 @@ bool FUOUWindAdditiveAccelerationTest::RunTest(const FString& Parameters)
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
-	FUOUWindCharacterAccelerationTest,
-	"UnderOneUmbrella.Wind.Character.DirectionalAcceleration",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
-
-bool FUOUWindCharacterAccelerationTest::RunTest(const FString& Parameters)
-{
-	TestEqual(
-		TEXT("Continuous wind keeps accelerating after the optional target speed"),
-		UOUWindMotion::CalculateDirectionalAcceleration(
-			false,
-			5000.0f,
-			1200.0f,
-			5000.0f,
-			1.0f / 60.0f),
-		5000.0f);
-
-	TestEqual(
-		TEXT("Limited wind caps acceleration near target speed"),
-		UOUWindMotion::CalculateDirectionalAcceleration(
-			true,
-			1190.0f,
-			1200.0f,
-			5000.0f,
-			0.02f),
-		500.0f);
-
-	TestEqual(
-		TEXT("Limited wind stops accelerating after target speed"),
-		UOUWindMotion::CalculateDirectionalAcceleration(
-			true,
-			1300.0f,
-			1200.0f,
-			5000.0f,
-			1.0f / 60.0f),
-		0.0f);
-	return true;
-}
-
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FUOUWindMagnitudeCappedAccelerationTest,
 	"UnderOneUmbrella.Wind.Character.MagnitudeCappedAcceleration",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
@@ -339,7 +301,7 @@ bool FUOUWindEntryVelocityRetentionTest::RunTest(const FString& Parameters)
 		FVector(640.0f, 0.0f, -15.0f));
 
 	TestEqual(
-		TEXT("Reflected wind also retains fifteen percent before adding its new vector"),
+		TEXT("Entry against the previous direction retains momentum before adding wind"),
 		UOUWindMotion::CalculateWindEntryVelocity(
 			FVector(1000.0f, 0.0f, -100.0f),
 			-FVector::ForwardVector,

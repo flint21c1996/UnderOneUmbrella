@@ -7,6 +7,18 @@
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Player/UOUUmbrellaComponent.h"
+#include "World/Wind/UOUWindMotion.h"
+
+namespace UOUWindReceiverPrivate
+{
+	bool IsUsableExposure(const FUOUWindExposureData& WindData)
+	{
+		return WindData.Acceleration > 0.0f
+			&& WindData.MaximumAcceleration > 0.0f
+			&& WindData.MaximumSpeed > 0.0f
+			&& !WindData.Direction.IsNearlyZero();
+	}
+}
 
 UUOUWindReceiverComponent::UUOUWindReceiverComponent()
 {
@@ -18,10 +30,7 @@ UUOUWindReceiverComponent::UUOUWindReceiverComponent()
 void UUOUWindReceiverComponent::ReceiveWind_Implementation(const FUOUWindExposureData& WindData)
 {
 	if (!bReceiveWind
-		|| WindData.Acceleration <= 0.0f
-		|| WindData.MaximumAcceleration <= 0.0f
-		|| WindData.MaximumSpeed <= 0.0f
-		|| WindData.Direction.IsNearlyZero())
+		|| !UOUWindReceiverPrivate::IsUsableExposure(WindData))
 	{
 		return;
 	}
@@ -33,92 +42,113 @@ void UUOUWindReceiverComponent::ReceiveWind_Implementation(const FUOUWindExposur
 
 	if (ACharacter* Character = Cast<ACharacter>(GetOwner()))
 	{
-		bool bUmbrellaOpen = false;
-		const float UmbrellaMultiplier =
-			ResolveCharacterUmbrellaMultiplier(bUmbrellaOpen);
-		LastUmbrellaStrengthMultiplier = UmbrellaMultiplier;
-		if (UmbrellaMultiplier <= 0.0f)
-		{
-			return;
-		}
-
-		if (UCharacterMovementComponent* MovementComponent = Character->GetCharacterMovement())
-		{
-			if (MovementComponent->MovementMode == MOVE_None)
-			{
-				return;
-			}
-
-			if (bOnlyAffectFallingCharacter && !MovementComponent->IsFalling())
-			{
-				return;
-			}
-
-			const FVector WindDirection = WindData.Direction.GetSafeNormal();
-			const float UmbrellaAdjustedAcceleration =
-				FMath::Max(0.0f, WindData.Acceleration * UmbrellaMultiplier);
-			const FVector RequestedWindAcceleration =
-				UOUWindMotion::CalculateClampedAdditiveAcceleration(
-					WindDirection * UmbrellaAdjustedAcceleration,
-					WindDirection
-						* FMath::Max(0.0f, AdditionalCharacterWindAcceleration),
-					WindData.MaximumAcceleration);
-			const float RequestedAcceleration = RequestedWindAcceleration.Size();
-			if (RequestedAcceleration <= 0.0f)
-			{
-				return;
-			}
-
-			BeginWindborneMovement(MovementComponent, WindData);
-
-			const float TargetSpeedAlongWind =
-				FMath::Max(0.0f, WindData.MaximumSpeed);
-			const float AppliedAcceleration =
-				UOUWindMotion::
-					CalculateMagnitudeCappedDirectionalAcceleration(
-					MovementComponent->Velocity,
-					WindDirection,
-					TargetSpeedAlongWind,
-					RequestedAcceleration,
-					WindData.DeltaTime);
-
-			FVector TotalAcceleration =
-				WindDirection * AppliedAcceleration;
-			if (bUmbrellaOpen
-				&& bCancelGravityWhileUmbrellaOpen
-				&& MovementComponent->IsFalling())
-			{
-				const float GravityCancellationAcceleration =
-					FMath::Max(
-						0.0f,
-						-MovementComponent->GetGravityZ()
-							* FMath::Max(0.0f, GravityCancellationMultiplier));
-				LastGravityCancellationAcceleration =
-					GravityCancellationAcceleration;
-				TotalAcceleration +=
-					FVector::UpVector * GravityCancellationAcceleration;
-			}
-
-			LastAppliedCharacterAcceleration = AppliedAcceleration;
-
-			if (!TotalAcceleration.IsNearlyZero())
-			{
-				MovementComponent->AddForce(
-					TotalAcceleration * MovementComponent->Mass);
-			}
-		}
+		ApplyWindToCharacter(Character, WindData);
 		return;
 	}
 
-	if (UPrimitiveComponent* TargetPrimitive = ResolveTargetPrimitive())
+	ApplyWindToPhysicsBody(WindData);
+}
+
+void UUOUWindReceiverComponent::ApplyWindToCharacter(
+	ACharacter* Character,
+	const FUOUWindExposureData& WindData)
+{
+	if (Character == nullptr)
 	{
-		if (TargetPrimitive->IsSimulatingPhysics())
-		{
-			TargetPrimitive->AddForce(
-				WindData.Direction.GetSafeNormal()
-					* PhysicsForce
-					* WindData.StrengthScale);
-		}
+		return;
+	}
+
+	bool bUmbrellaOpen = false;
+	const float UmbrellaMultiplier =
+		ResolveCharacterUmbrellaMultiplier(bUmbrellaOpen);
+	LastUmbrellaStrengthMultiplier = UmbrellaMultiplier;
+	if (UmbrellaMultiplier <= 0.0f)
+	{
+		return;
+	}
+
+	UCharacterMovementComponent* MovementComponent =
+		Character->GetCharacterMovement();
+	if (MovementComponent == nullptr
+		|| MovementComponent->MovementMode == MOVE_None
+		|| (bOnlyAffectFallingCharacter
+			&& !MovementComponent->IsFalling()))
+	{
+		return;
+	}
+
+	const FVector WindDirection =
+		WindData.Direction.GetSafeNormal();
+	const float UmbrellaAdjustedAcceleration =
+		FMath::Max(
+			0.0f,
+			WindData.Acceleration * UmbrellaMultiplier);
+	const FVector RequestedWindAcceleration =
+		UOUWindMotion::CalculateClampedAdditiveAcceleration(
+			WindDirection * UmbrellaAdjustedAcceleration,
+			WindDirection
+				* FMath::Max(
+					0.0f,
+					AdditionalCharacterWindAcceleration),
+			WindData.MaximumAcceleration);
+	const float RequestedAcceleration =
+		RequestedWindAcceleration.Size();
+	if (RequestedAcceleration <= 0.0f)
+	{
+		return;
+	}
+
+	UpdateWindborneMovement(MovementComponent, WindData);
+
+	const float AppliedAcceleration =
+		UOUWindMotion::
+			CalculateMagnitudeCappedDirectionalAcceleration(
+				MovementComponent->Velocity,
+				WindDirection,
+				WindData.MaximumSpeed,
+				RequestedAcceleration,
+				WindData.DeltaTime);
+
+	FVector TotalAcceleration =
+		WindDirection * AppliedAcceleration;
+	if (bUmbrellaOpen
+		&& bCancelGravityWhileUmbrellaOpen
+		&& MovementComponent->IsFalling())
+	{
+		const float GravityCancellationAcceleration =
+			FMath::Max(
+				0.0f,
+				-MovementComponent->GetGravityZ()
+					* FMath::Max(
+						0.0f,
+						GravityCancellationMultiplier));
+		LastGravityCancellationAcceleration =
+			GravityCancellationAcceleration;
+		TotalAcceleration +=
+			FVector::UpVector
+				* GravityCancellationAcceleration;
+	}
+
+	LastAppliedCharacterAcceleration = AppliedAcceleration;
+	if (!TotalAcceleration.IsNearlyZero())
+	{
+		MovementComponent->AddForce(
+			TotalAcceleration * MovementComponent->Mass);
+	}
+}
+
+void UUOUWindReceiverComponent::ApplyWindToPhysicsBody(
+	const FUOUWindExposureData& WindData)
+{
+	UPrimitiveComponent* TargetPrimitive =
+		ResolveTargetPrimitive();
+	if (TargetPrimitive != nullptr
+		&& TargetPrimitive->IsSimulatingPhysics())
+	{
+		TargetPrimitive->AddForce(
+			WindData.Direction.GetSafeNormal()
+				* PhysicsForce
+				* WindData.StrengthScale);
 	}
 }
 
@@ -255,7 +285,7 @@ float UUOUWindReceiverComponent::ResolveCharacterUmbrellaMultiplier(
 		: FMath::Max(0.0f, ClosedUmbrellaStrengthMultiplier);
 }
 
-void UUOUWindReceiverComponent::BeginWindborneMovement(
+void UUOUWindReceiverComponent::UpdateWindborneMovement(
 	UCharacterMovementComponent* MovementComponent,
 	const FUOUWindExposureData& WindData)
 {

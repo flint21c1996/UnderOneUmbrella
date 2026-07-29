@@ -10,6 +10,7 @@
 
 class UPrimitiveComponent;
 class UCharacterMovementComponent;
+class ACharacter;
 
 // 캐릭터나 물리 오브젝트에 붙여 동적 바람의 힘을 실제 이동으로 변환합니다.
 UCLASS(ClassGroup=(Wind), meta=(BlueprintSpawnableComponent, DisplayName="UOU Wind Receiver"))
@@ -108,7 +109,11 @@ public:
 private:
 	UPrimitiveComponent* ResolveTargetPrimitive() const;
 	float ResolveCharacterUmbrellaMultiplier(bool& bOutUmbrellaOpen) const;
-	void BeginWindborneMovement(
+	void ApplyWindToCharacter(
+		ACharacter* Character,
+		const FUOUWindExposureData& WindData);
+	void ApplyWindToPhysicsBody(const FUOUWindExposureData& WindData);
+	void UpdateWindborneMovement(
 		UCharacterMovementComponent* MovementComponent,
 		const FUOUWindExposureData& WindData);
 	void RestoreFallingBraking();

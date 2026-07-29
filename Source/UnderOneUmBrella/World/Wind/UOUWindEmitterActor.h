@@ -178,7 +178,14 @@ private:
 	void InitializePulseCycleState();
 	void UpdatePulseCycle(float DeltaSeconds);
 	void HandleWindPhaseChanged(bool bWasBlowing);
+	void RefreshWindPathForCurrentState();
+	void ClearWindPath();
 	void ApplyWindToReceivers(float DeltaSeconds);
+	FUOUWindExposureData MakeExposureData(
+		const FUOUWindPathSegment& Segment,
+		const FVector& ClosestPoint,
+		float FinalStrength,
+		float DeltaSeconds);
 	void DrawWindDebug() const;
 	FCollisionObjectQueryParams BuildReceiverObjectQueryParams() const;
 	void AppendWindReceivers(

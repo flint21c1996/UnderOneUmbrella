@@ -76,8 +76,8 @@ FVector UUOUWindInteractionSurfaceComponent::GetOutgoingDirection(
 		ReflectionNormal *= -1.0f;
 	}
 
-	return (SafeIncomingDirection
-		- 2.0f * FVector::DotProduct(SafeIncomingDirection, ReflectionNormal) * ReflectionNormal)
+	return SafeIncomingDirection
+		.MirrorByVector(ReflectionNormal)
 		.GetSafeNormal();
 }
 
