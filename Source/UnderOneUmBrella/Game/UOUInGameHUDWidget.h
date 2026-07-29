@@ -11,8 +11,11 @@
 class AUOUMenuPlayerController;
 class UUOUDialogueBoxWidget;
 class UUOUDialogueSourceComponent;
+class UUOURewardPresentationWidget;
 class UUOUUmbrellaStatusWidget;
 class UUOUUISubsystem;
+class UDataTable;
+class UPanelWidget;
 class UUserWidget;
 class UWidgetComponent;
 
@@ -115,11 +118,22 @@ public:
 		const FUOURewardPresentationData& PresentationData,
 		const FUOURewardPresentationCue& Cue);
 
+	// DataTable의 RowName과 CueId를 연결해 등록된 Reward Presentation Widget을 실행합니다.
+	UFUNCTION(BlueprintCallable, Category = "HUD|Reward")
+	bool ProcessRewardPresentationCue(
+		const FUOURewardPresentationData& PresentationData,
+		const FUOURewardPresentationCue& Cue);
+
 private:
 	AUOUMenuPlayerController* GetMenuPlayerController() const;
 	UUOUUISubsystem* GetUISubsystem() const;
 	UWidgetComponent* ResolveSpeechBubbleWidgetComponent(AActor* SpeakerActor) const;
 	UUOUUmbrellaStatusWidget* ResolveUmbrellaStatusWidget();
+	void InitializeRewardPresentationWidgets();
+	void ClearRewardPresentationWidgets();
+
+	UFUNCTION()
+	void HandleRewardPresentationFinished(UUOURewardPresentationWidget* PresentationWidget);
 
 	// WBP_InGameHUD 안에 같은 이름으로 배치하면 자동 연결됩니다.
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional, AllowPrivateAccess = "true"), Category = "HUD|Dialogue")
@@ -127,4 +141,18 @@ private:
 
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional, AllowPrivateAccess = "true"), Category = "HUD|Umbrella")
 	TObjectPtr<UUOUUmbrellaStatusWidget> UmbrellaStatusWidget = nullptr;
+
+	// WBP_InGameHUD의 같은 이름을 가진 Panel Widget에 자동으로 연결됩니다.
+	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional, AllowPrivateAccess = "true"), Category = "HUD|Reward")
+	TObjectPtr<UPanelWidget> RewardResultRoot = nullptr;
+
+	// RowName을 Presentation Key로 사용하며, 각 행은 실행할 WidgetClass를 지정합니다.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"), Category = "HUD|Reward")
+	TObjectPtr<UDataTable> RewardPresentationLayoutTable = nullptr;
+
+	UPROPERTY(Transient)
+	TMap<FName, TObjectPtr<UUOURewardPresentationWidget>> RewardPresentationWidgets;
+
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UUOURewardPresentationWidget>> CreatedRewardPresentationWidgets;
 };
