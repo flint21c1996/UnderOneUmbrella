@@ -119,7 +119,8 @@ void UUOURewardFeedbackComponent::ApplyPlayerFeedback(AUOUCharacter* Collector)
 				this,
 				CameraTargetDistance,
 				CameraTargetOrthoWidth,
-				CameraFocusOffset);
+				CameraFocusOffset,
+				true);
 		}
 	}
 }

@@ -41,6 +41,7 @@ void UUOUCameraControllerComponent::EndPlay(const EEndPlayReason::Type EndPlayRe
 {
 	TemporaryZoomRequestSource.Reset();
 	TemporaryZoomFocusOffset = FVector::ZeroVector;
+	bTemporaryZoomFaceOwnerFromFront = false;
 	RestoreAllOccludedMeshes();
 	Super::EndPlay(EndPlayReason);
 }
@@ -93,7 +94,9 @@ bool UUOUCameraControllerComponent::IsSnapCameraRotationInProgress() const
 	}
 
 	const float CurrentYaw = CameraBoom->GetComponentRotation().Yaw;
-	const float DeltaYaw = FMath::FindDeltaAngleDegrees(CurrentYaw, TargetCameraYaw);
+	const float DeltaYaw = FMath::FindDeltaAngleDegrees(
+		CurrentYaw,
+		GetEffectiveTargetCameraYaw());
 	return FMath::Abs(DeltaYaw) > CameraRotationCompleteToleranceDegrees;
 }
 
@@ -173,14 +176,16 @@ void UUOUCameraControllerComponent::RequestTemporaryZoom(
 		RequestSource,
 		TargetDistance,
 		TargetOrthoWidth,
-		FVector::ZeroVector);
+		FVector::ZeroVector,
+		false);
 }
 
 void UUOUCameraControllerComponent::RequestTemporaryFocusZoom(
 	UObject* RequestSource,
 	float TargetDistance,
 	float TargetOrthoWidth,
-	FVector FocusOffset)
+	FVector FocusOffset,
+	bool bFaceOwnerFromFront)
 {
 	if (RequestSource == nullptr)
 	{
@@ -191,6 +196,7 @@ void UUOUCameraControllerComponent::RequestTemporaryFocusZoom(
 	TemporaryZoomTargetDistance = FMath::Clamp(TargetDistance, MinCameraDistance, MaxCameraDistance);
 	TemporaryZoomTargetOrthoWidth = FMath::Max(1.0f, TargetOrthoWidth);
 	TemporaryZoomFocusOffset = FocusOffset;
+	bTemporaryZoomFaceOwnerFromFront = bFaceOwnerFromFront;
 }
 
 void UUOUCameraControllerComponent::ReleaseTemporaryZoom(UObject* RequestSource)
@@ -202,6 +208,7 @@ void UUOUCameraControllerComponent::ReleaseTemporaryZoom(UObject* RequestSource)
 
 	TemporaryZoomRequestSource.Reset();
 	TemporaryZoomFocusOffset = FVector::ZeroVector;
+	bTemporaryZoomFaceOwnerFromFront = false;
 }
 
 bool UUOUCameraControllerComponent::IsTemporaryZoomRequestedBy(const UObject* RequestSource) const
@@ -282,7 +289,10 @@ void UUOUCameraControllerComponent::UpdateSnapCamera(float DeltaSeconds)
 	}
 
 	const FRotator CurrentRotation = CameraBoom->GetComponentRotation();
-	const FRotator TargetRotation(CameraPitchAngle, TargetCameraYaw, 0.0f);
+	const FRotator TargetRotation(
+		CameraPitchAngle,
+		GetEffectiveTargetCameraYaw(),
+		0.0f);
 	const FRotator NextRotation = FMath::RInterpTo(CurrentRotation, TargetRotation, DeltaSeconds, CameraRotationInterpSpeed);
 	CameraBoom->SetWorldRotation(NextRotation);
 
@@ -313,6 +323,19 @@ void UUOUCameraControllerComponent::UpdateSnapCamera(float DeltaSeconds)
 bool UUOUCameraControllerComponent::HasTemporaryZoomRequest() const
 {
 	return TemporaryZoomRequestSource.IsValid();
+}
+
+float UUOUCameraControllerComponent::GetEffectiveTargetCameraYaw() const
+{
+	const AActor* Owner = GetOwner();
+	if (!HasTemporaryZoomRequest()
+		|| !bTemporaryZoomFaceOwnerFromFront
+		|| Owner == nullptr)
+	{
+		return TargetCameraYaw;
+	}
+
+	return FRotator::NormalizeAxis(Owner->GetActorRotation().Yaw + 180.0f);
 }
 
 float UUOUCameraControllerComponent::GetEffectiveTargetCameraDistance() const

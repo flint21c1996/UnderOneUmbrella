@@ -100,7 +100,8 @@ public:
 		UObject* RequestSource,
 		float TargetDistance,
 		float TargetOrthoWidth,
-		FVector FocusOffset);
+		FVector FocusOffset,
+		bool bFaceOwnerFromFront);
 
 	// 자신이 등록한 임시 줌만 해제하여 다른 연출의 요청을 잘못 종료하지 않도록 합니다.
 	UFUNCTION(BlueprintCallable, Category = "Camera|Temporary Zoom")
@@ -255,6 +256,9 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Camera|Runtime")
 	FVector TemporaryZoomFocusOffset = FVector::ZeroVector;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Camera|Runtime")
+	bool bTemporaryZoomFaceOwnerFromFront = false;
+
 	UPROPERTY(Transient)
 	TMap<TObjectPtr<UMeshComponent>, FOccludedMeshState> OccludedMeshStates;
 
@@ -271,6 +275,7 @@ protected:
 	void UpdateSnapCamera(float DeltaSeconds);
 	void UpdateDialogueCamera(float DeltaSeconds);
 	bool HasTemporaryZoomRequest() const;
+	float GetEffectiveTargetCameraYaw() const;
 	float GetEffectiveTargetCameraDistance() const;
 	float GetEffectiveTargetOrthoWidth() const;
 	FVector GetEffectiveTargetCameraOffset() const;
