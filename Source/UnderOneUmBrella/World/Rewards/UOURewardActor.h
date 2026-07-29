@@ -88,7 +88,11 @@ protected:
 	TObjectPtr<USplineComponent> CollectionMotionPath = nullptr;
 
 	// 수집 전 보상이 목표임을 지속적으로 알려주는 상시 Niagara 표현입니다.
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Reward|Components")
+	UPROPERTY(
+		VisibleAnywhere,
+		BlueprintReadOnly,
+		Category = "Reward|Components",
+		meta = (ToolTip = "움직이는 액터를 비주얼 이펙트가 따라가도록, 할당한 나이아가라 시스템의 모든 활성 이미터는 Local Space를 사용해야 합니다."))
 	TObjectPtr<UNiagaraComponent> ObjectiveEffect = nullptr;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Reward|Components")
