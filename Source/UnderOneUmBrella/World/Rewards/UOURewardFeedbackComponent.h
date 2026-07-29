@@ -73,7 +73,15 @@ public:
 
 	// 프로젝트의 기본 직교 카메라에서는 값이 작을수록 플레이어가 크게 보입니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Feedback|Camera", meta = (ClampMin = "1.0"))
-	float CameraTargetOrthoWidth = 1100.0f;
+	float CameraTargetOrthoWidth = 500.0f;
+
+	// 임시 줌 중 평상시 주시점에서 이동할 캐릭터 기준 오프셋입니다. Z를 높이면 상체가 화면 중심에 가까워집니다.
+	UPROPERTY(
+		EditAnywhere,
+		BlueprintReadOnly,
+		Category = "Reward|Feedback|Camera",
+		meta = (ToolTip = "임시 줌 중 평상시 주시점에서 이동할 캐릭터 기준 오프셋입니다. X는 앞, Y는 오른쪽, Z는 위쪽이며 Z를 높이면 캐릭터 상체가 화면 중심에 가까워집니다."))
+	FVector CameraFocusOffset = FVector(0.0f, 0.0f, 80.0f);
 
 	UPROPERTY(BlueprintAssignable, Category = "Reward|Feedback|Events")
 	FUOURewardFeedbackFinishedSignature OnFeedbackFinished;

@@ -115,10 +115,11 @@ void UUOURewardFeedbackComponent::ApplyPlayerFeedback(AUOUCharacter* Collector)
 		ActiveCameraController = Collector->GetCameraControllerComponent();
 		if (ActiveCameraController != nullptr)
 		{
-			ActiveCameraController->RequestTemporaryZoom(
+			ActiveCameraController->RequestTemporaryFocusZoom(
 				this,
 				CameraTargetDistance,
-				CameraTargetOrthoWidth);
+				CameraTargetOrthoWidth,
+				CameraFocusOffset);
 		}
 	}
 }

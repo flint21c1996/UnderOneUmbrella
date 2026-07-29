@@ -94,6 +94,14 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Camera|Temporary Zoom")
 	void RequestTemporaryZoom(UObject* RequestSource, float TargetDistance, float TargetOrthoWidth);
 
+	// 임시 줌과 함께 평상시 주시점으로부터 포커스 위치를 이동해 대상이 화면에서 부각되도록 합니다.
+	UFUNCTION(BlueprintCallable, Category = "Camera|Temporary Zoom")
+	void RequestTemporaryFocusZoom(
+		UObject* RequestSource,
+		float TargetDistance,
+		float TargetOrthoWidth,
+		FVector FocusOffset);
+
 	// 자신이 등록한 임시 줌만 해제하여 다른 연출의 요청을 잘못 종료하지 않도록 합니다.
 	UFUNCTION(BlueprintCallable, Category = "Camera|Temporary Zoom")
 	void ReleaseTemporaryZoom(UObject* RequestSource);
@@ -244,6 +252,9 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Camera|Runtime")
 	float TemporaryZoomTargetOrthoWidth = 0.0f;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Camera|Runtime")
+	FVector TemporaryZoomFocusOffset = FVector::ZeroVector;
+
 	UPROPERTY(Transient)
 	TMap<TObjectPtr<UMeshComponent>, FOccludedMeshState> OccludedMeshStates;
 
@@ -262,6 +273,7 @@ protected:
 	bool HasTemporaryZoomRequest() const;
 	float GetEffectiveTargetCameraDistance() const;
 	float GetEffectiveTargetOrthoWidth() const;
+	FVector GetEffectiveTargetCameraOffset() const;
 
 	// 플레이어와 카메라 사이를 가리는 메시를 찾아 임시로 투명 처리한다.
 	void UpdateCameraOcclusion();
