@@ -1361,36 +1361,70 @@ void UUOULightExposureSourceComponent::DrawDebugSource() const
 	const FVector SourcePosition = GetSourceLocation();
 	const FVector SourceForward = GetSourceForwardVector().GetSafeNormal();
 	const float ExposureRange = GetExposureRange();
-	if (ExposureRange <= 0.0f)
+	if (SourceForward.IsNearlyZero() || ExposureRange <= 0.0f)
 	{
 		return;
 	}
 
 	const float OuterConeRadians = FMath::DegreesToRadians(GetEffectiveOuterConeAngle());
 	const FColor SourceDebugColor = UUOUDebugSubsystem::GetDebugCategoryColor(this, EUOUDebugCategory::Puzzle, FColor::Cyan);
+	const FColor ConeDebugColor = UUOUDebugSubsystem::GetDebugCategoryColor(this, EUOUDebugCategory::Puzzle, FColor::Yellow);
+	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(UOULightSourceDebugTrace), false, GetOwner());
+	if (bIgnoreOwner && GetOwner() != nullptr)
+	{
+		QueryParams.AddIgnoredActor(GetOwner());
+	}
+
+	const auto FindClippedRayEnd =
+		[this, World, &QueryParams, &SourcePosition, ExposureRange](const FVector& RayDirection)
+		{
+			const FVector TraceEnd = SourcePosition + RayDirection * ExposureRange;
+			FHitResult BlockingHit;
+			return World->LineTraceSingleByChannel(
+				BlockingHit,
+				SourcePosition,
+				TraceEnd,
+				OcclusionTraceChannel,
+				QueryParams)
+				? BlockingHit.ImpactPoint
+				: TraceEnd;
+		};
+
 	DrawDebugPoint(World, SourcePosition, 10.0f, SourceDebugColor, false, DebugDrawTime);
 	DrawDebugLine(
 		World,
 		SourcePosition,
-		SourcePosition + SourceForward * ExposureRange,
+		FindClippedRayEnd(SourceForward),
 		SourceDebugColor,
 		false,
 		DebugDrawTime,
 		0,
 		1.5f);
-	DrawDebugCone(
-		World,
-		SourcePosition,
-		SourceForward,
-		ExposureRange,
-		OuterConeRadians,
-		OuterConeRadians,
-		24,
-		UUOUDebugSubsystem::GetDebugCategoryColor(this, EUOUDebugCategory::Puzzle, FColor::Yellow),
-		false,
-		DebugDrawTime,
-		0,
-		1.0f);
+
+	FVector ConeAxisX = FVector::ZeroVector;
+	FVector ConeAxisY = FVector::ZeroVector;
+	SourceForward.FindBestAxisVectors(ConeAxisX, ConeAxisY);
+	constexpr int32 ConeSegments = 24;
+	const float ForwardScale = FMath::Cos(OuterConeRadians);
+	const float RadiusScale = FMath::Sin(OuterConeRadians);
+	for (int32 SegmentIndex = 0; SegmentIndex < ConeSegments; ++SegmentIndex)
+	{
+		const float Angle =
+			UE_TWO_PI * static_cast<float>(SegmentIndex) / static_cast<float>(ConeSegments);
+		const FVector RadiusDirection =
+			ConeAxisX * FMath::Cos(Angle) + ConeAxisY * FMath::Sin(Angle);
+		const FVector RayDirection =
+			(SourceForward * ForwardScale + RadiusDirection * RadiusScale).GetSafeNormal();
+		DrawDebugLine(
+			World,
+			SourcePosition,
+			FindClippedRayEnd(RayDirection),
+			ConeDebugColor,
+			false,
+			DebugDrawTime,
+			0,
+			1.0f);
+	}
 }
 
 void UUOULightExposureSourceComponent::DrawDebugResult(const FUOULightExposureData& ExposureData, bool bLit) const
