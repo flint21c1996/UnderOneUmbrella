@@ -168,7 +168,9 @@ bool AUOURewardActor::TryCollectReward(AActor* Collector)
 		bWaitingForCollectionMotion = false;
 	}
 
-	if (!bWaitingForCollectionMotion || FeedbackStartCueId.IsNone())
+	if (!bWaitingForCollectionMotion
+		|| !RewardCollectionMotionComponent->HasCueForChannel(
+			EUOURewardMotionCueChannel::Feedback))
 	{
 		StartRewardFeedback();
 	}
@@ -326,13 +328,19 @@ void AUOURewardActor::HandleCollectionMotionFinished()
 
 void AUOURewardActor::HandleCollectionMotionCue(const FUOURewardPresentationCue& Cue)
 {
-	AActor* Collector = PendingCollector.Get();
-	OnRewardPresentationCue.Broadcast(this, RewardId, Cue, Collector);
-	ReceiveRewardPresentationCue(RewardId, Cue, Collector);
-	RoutePresentationCueToUI(Cue);
-
-	if (Cue.CueId == FeedbackStartCueId)
+	switch (Cue.Channel)
 	{
+	case EUOURewardMotionCueChannel::Feedback:
 		StartRewardFeedback();
+		break;
+
+	case EUOURewardMotionCueChannel::Presentation:
+		{
+			AActor* Collector = PendingCollector.Get();
+			OnRewardPresentationCue.Broadcast(this, RewardId, Cue, Collector);
+			ReceiveRewardPresentationCue(RewardId, Cue, Collector);
+			RoutePresentationCueToUI(Cue);
+			break;
+		}
 	}
 }

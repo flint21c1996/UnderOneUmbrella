@@ -100,10 +100,6 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Collection", meta = (ClampMin = "0.0"))
 	float TriggerRadius = 75.0f;
 
-	// 이 Cue가 발생하면 기존 RewardFeedbackComponent의 카메라·캐릭터·파티클 피드백을 시작합니다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Presentation")
-	FName FeedbackStartCueId = TEXT("StartFeedback");
-
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Visual|Idle")
 	bool bUseHoverMotion = true;
 
