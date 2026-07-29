@@ -95,15 +95,27 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Reward|Feedback")
 	bool IsFeedbackPlaying() const;
 
+	// UI Presentation이 끝날 때까지 현재 임시 카메라 요청을 유지합니다.
+	UFUNCTION(BlueprintCallable, Category = "Reward|Feedback|Camera")
+	bool BeginPresentationCameraHold();
+
+	// UI Presentation 종료 후 Hold를 해제합니다. Feedback도 끝났다면 이때 카메라가 복귀합니다.
+	UFUNCTION(BlueprintCallable, Category = "Reward|Feedback|Camera")
+	void EndPresentationCameraHold();
+
 protected:
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "Reward|Feedback|Runtime")
 	bool bFeedbackPlaying = false;
+
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "Reward|Feedback|Runtime")
+	bool bPresentationCameraHoldActive = false;
 
 private:
 	void SpawnCollectionEffect(const AUOUCharacter* Collector, const FVector& RewardWorldLocation) const;
 	void ApplyPlayerFeedback(AUOUCharacter* Collector);
 	bool StartCollectionMontage();
 	void ReleasePlayerFeedback();
+	void ReleaseCameraFeedback();
 	void FinishFeedbackInternal(bool bBroadcastFinished);
 	void TryFinishFeedback();
 	void HandleFeedbackTimerFinished();

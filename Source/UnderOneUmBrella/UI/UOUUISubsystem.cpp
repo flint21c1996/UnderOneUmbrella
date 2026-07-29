@@ -214,15 +214,19 @@ void UUOUUISubsystem::ShowTitle(const FUOUTitleDisplayData& TitleData)
 	}
 }
 
-void UUOUUISubsystem::ShowRewardPresentationCue(
+bool UUOUUISubsystem::ShowRewardPresentationCue(
 	const FUOURewardPresentationData& PresentationData,
 	const FUOURewardPresentationCue& Cue)
 {
 	OnRewardPresentationCueRequested.Broadcast(PresentationData, Cue);
 	if (RegisteredHUDWidget.IsValid())
 	{
-		RegisteredHUDWidget->ProcessRewardPresentationCue(PresentationData, Cue);
+		return RegisteredHUDWidget->ProcessRewardPresentationCue(
+			PresentationData,
+			Cue);
 	}
+
+	return false;
 }
 
 void UUOUUISubsystem::NotifyRewardPresentationFinished(FName RewardId)

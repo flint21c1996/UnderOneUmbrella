@@ -99,7 +99,7 @@ public:
 	void ShowTitle(const FUOUTitleDisplayData& TitleData);
 
 	UFUNCTION(BlueprintCallable, Category = "UI|Reward")
-	void ShowRewardPresentationCue(
+	bool ShowRewardPresentationCue(
 		const FUOURewardPresentationData& PresentationData,
 		const FUOURewardPresentationCue& Cue);
 

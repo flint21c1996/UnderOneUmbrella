@@ -18,7 +18,9 @@ UUOURewardFeedbackComponent::UUOURewardFeedbackComponent()
 
 void UUOURewardFeedbackComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	bPresentationCameraHoldActive = false;
 	FinishFeedbackInternal(false);
+	ReleaseCameraFeedback();
 	Super::EndPlay(EndPlayReason);
 }
 
@@ -26,7 +28,10 @@ bool UUOURewardFeedbackComponent::StartFeedback(
 	AUOUCharacter* Collector,
 	FVector RewardWorldLocation)
 {
-	if (!bFeedbackEnabled || Collector == nullptr || bFeedbackPlaying)
+	if (!bFeedbackEnabled
+		|| Collector == nullptr
+		|| bFeedbackPlaying
+		|| bPresentationCameraHoldActive)
 	{
 		return false;
 	}
@@ -66,6 +71,36 @@ void UUOURewardFeedbackComponent::FinishFeedback()
 bool UUOURewardFeedbackComponent::IsFeedbackPlaying() const
 {
 	return bFeedbackPlaying;
+}
+
+bool UUOURewardFeedbackComponent::BeginPresentationCameraHold()
+{
+	if (ActiveCameraController == nullptr
+		|| !ActiveCameraController->IsTemporaryZoomRequestedBy(this))
+	{
+		return false;
+	}
+
+	bPresentationCameraHoldActive = true;
+	return true;
+}
+
+void UUOURewardFeedbackComponent::EndPresentationCameraHold()
+{
+	if (!bPresentationCameraHoldActive)
+	{
+		return;
+	}
+
+	bPresentationCameraHoldActive = false;
+	if (bFeedbackPlaying)
+	{
+		TryFinishFeedback();
+	}
+	else
+	{
+		ReleaseCameraFeedback();
+	}
 }
 
 void UUOURewardFeedbackComponent::SpawnCollectionEffect(
@@ -175,15 +210,24 @@ void UUOURewardFeedbackComponent::ReleasePlayerFeedback()
 		ActiveInputExecutor->ReleasePlayerInputBlock(this);
 	}
 
+	ActiveInputExecutor = nullptr;
+	ActiveCollector = nullptr;
+	bCollectionMontagePlaying = false;
+
+	if (!bPresentationCameraHoldActive)
+	{
+		ReleaseCameraFeedback();
+	}
+}
+
+void UUOURewardFeedbackComponent::ReleaseCameraFeedback()
+{
 	if (ActiveCameraController != nullptr)
 	{
 		ActiveCameraController->ReleaseTemporaryZoom(this);
 	}
 
-	ActiveInputExecutor = nullptr;
 	ActiveCameraController = nullptr;
-	ActiveCollector = nullptr;
-	bCollectionMontagePlaying = false;
 }
 
 void UUOURewardFeedbackComponent::FinishFeedbackInternal(bool bBroadcastFinished)
@@ -209,7 +253,10 @@ void UUOURewardFeedbackComponent::FinishFeedbackInternal(bool bBroadcastFinished
 
 void UUOURewardFeedbackComponent::TryFinishFeedback()
 {
-	if (!bFeedbackPlaying || !bFeedbackDurationElapsed || bCollectionMontagePlaying)
+	if (!bFeedbackPlaying
+		|| bPresentationCameraHoldActive
+		|| !bFeedbackDurationElapsed
+		|| bCollectionMontagePlaying)
 	{
 		return;
 	}

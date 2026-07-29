@@ -17,6 +17,7 @@ class USceneComponent;
 class USphereComponent;
 class USplineComponent;
 class UStaticMeshComponent;
+class UUOUUISubsystem;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(
 	FUOURewardCollectedSignature,
@@ -139,10 +140,12 @@ private:
 	void DisableCollectionInteraction();
 	void HideCollectedVisual();
 	void StartRewardFeedback();
-	void RoutePresentationCueToUI(const FUOURewardPresentationCue& Cue) const;
+	bool RoutePresentationCueToUI(const FUOURewardPresentationCue& Cue);
 	void TryCompleteCollection();
 	void CompleteCollection();
 	bool IsValidCollector(const AActor* Candidate) const;
+	void BindRewardPresentationFinished(UUOUUISubsystem* UISubsystem);
+	void UnbindRewardPresentationFinished();
 
 	UFUNCTION()
 	void HandleRewardFeedbackFinished();
@@ -153,12 +156,19 @@ private:
 	UFUNCTION()
 	void HandleCollectionMotionCue(const FUOURewardPresentationCue& Cue);
 
+	UFUNCTION()
+	void HandleRewardPresentationFinished(FName FinishedRewardId);
+
 	UPROPERTY(Transient)
 	TObjectPtr<AActor> PendingCollector = nullptr;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UUOUUISubsystem> ActiveRewardUISubsystem = nullptr;
 
 	bool bWaitingForRewardFeedback = false;
 	bool bWaitingForCollectionMotion = false;
 	bool bRewardFeedbackStarted = false;
+	bool bRewardPresentationActive = false;
 
 	// 에디터에서 VisualMesh에 설정한 Transform을 idle 움직임의 기준으로 보존합니다.
 	FVector BaseVisualRelativeLocation = FVector::ZeroVector;
