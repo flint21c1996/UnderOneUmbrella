@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
+#include "TimerManager.h"
 #include "World/Rewards/UOURewardPresentationTypes.h"
 #include "UOURewardPresentationWidget.generated.h"
 
@@ -31,6 +32,8 @@ class UNDERONEUMBRELLA_API UUOURewardPresentationWidget : public UUserWidget
 	GENERATED_BODY()
 
 public:
+	virtual void NativeDestruct() override;
+
 	// 새 결과 데이터를 한 번 전달하고 Widget을 시작 가능한 상태로 만듭니다.
 	UFUNCTION(BlueprintCallable, Category = "Reward Presentation")
 	bool InitializePresentation(const FUOURewardPresentationData& InPresentationData);
@@ -42,6 +45,10 @@ public:
 	// 현재 활성 Widget에 의미 기반 Cue를 전달합니다.
 	UFUNCTION(BlueprintCallable, Category = "Reward Presentation")
 	bool HandlePresentationCue(const FUOURewardPresentationCue& Cue);
+
+	// Intro가 끝난 뒤 결과를 읽거나 입력을 기다리는 구간을 시작합니다. DisplayDuration이 0이면 자동 종료하지 않습니다.
+	UFUNCTION(BlueprintCallable, Category = "Reward Presentation")
+	bool BeginPresentationHold();
 
 	// 파생 Widget이 자신의 Outro 애니메이션을 시작하도록 요청합니다.
 	UFUNCTION(BlueprintCallable, Category = "Reward Presentation")
@@ -86,4 +93,11 @@ protected:
 
 	UFUNCTION(BlueprintImplementableEvent, BlueprintCosmetic, Category = "Reward Presentation|Events")
 	void ReceivePresentationReset();
+
+private:
+	void ClearAutoCloseTimer();
+	void HandleAutoCloseTimerElapsed();
+
+	FTimerHandle AutoCloseTimerHandle;
+	bool bPresentationHoldStarted = false;
 };
