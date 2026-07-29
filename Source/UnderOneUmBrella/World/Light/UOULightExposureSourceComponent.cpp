@@ -83,6 +83,7 @@ void UUOULightExposureSourceComponent::EmitLight(float DeltaTime)
 	LastReflectorName = TEXT("None");
 	LastReflectionBounceCount = 0;
 	LastReflectionPath = TEXT("None");
+	ReflectionPaths.Reset();
 
 	UWorld* World = GetWorld();
 	const float ExposureRange = GetExposureRange();
@@ -666,6 +667,9 @@ void UUOULightExposureSourceComponent::EmitReflectedLightFromSurface(
 	FVector CurrentRayOrigin = SourcePosition;
 	TSet<const UUOULightInteractionSurfaceComponent*> VisitedSurfaces;
 	TArray<FString> ReflectionPath;
+	FUOULightReflectionPathData PathData;
+	PathData.PathIndex = ReflectionPaths.Num();
+	PathData.SourcePosition = SourcePosition;
 	int32 ReflectionDepth = 0;
 	float IncomingBeamRadius = SurfaceDistance * FMath::Tan(
 		FMath::DegreesToRadians(FMath::Clamp(GetEffectiveOuterConeAngle(), 1.0f, 89.0f)));
@@ -683,12 +687,14 @@ void UUOULightExposureSourceComponent::EmitReflectedLightFromSurface(
 			CurrentSurfaceHit.ImpactNormal);
 		if (IncomingDirection.IsNearlyZero() || ReflectedDirection.IsNearlyZero())
 		{
+			PathData.EndReason = EUOULightReflectionPathEndReason::InvalidReflection;
 			break;
 		}
 		if (!CurrentSurface->CanReflectIncomingLight(
 			IncomingDirection,
 			CurrentSurfaceHit.ImpactNormal))
 		{
+			PathData.EndReason = EUOULightReflectionPathEndReason::InvalidReflection;
 			break;
 		}
 
@@ -724,46 +730,53 @@ void UUOULightExposureSourceComponent::EmitReflectedLightFromSurface(
 				NextSurfaceDistance,
 				NextSurfaceAngle);
 
-		float DebugReflectionLength = bHasNextSurface
-			? FVector::Dist(ReflectionOrigin, NextSurfaceHit.ImpactPoint)
-			: CurrentSurface->ReflectionRange;
-		if (bDrawDebug &&
-			UUOUDebugSubsystem::IsDebugWorldDrawEnabled(this, EUOUDebugCategory::Puzzle))
+		FVector SegmentEnd = bHasNextSurface
+			? NextSurfaceHit.ImpactPoint
+			: ReflectionOrigin + ReflectedDirection * CurrentSurface->ReflectionRange;
+		FHitResult SegmentBlockingHit;
+		if (!bHasNextSurface)
 		{
-			FCollisionQueryParams DebugTraceQueryParams(
-				SCENE_QUERY_STAT(UOULightReflectionDebugTrace),
+			FCollisionQueryParams SegmentTraceQueryParams(
+				SCENE_QUERY_STAT(UOULightReflectionSegmentTrace),
 				false,
 				GetOwner());
 			if (CurrentSurface->GetOwner() != nullptr)
 			{
 				AddActorPrimitiveComponentsToIgnore(
 					CurrentSurface->GetOwner(),
-					DebugTraceQueryParams);
+					SegmentTraceQueryParams);
 			}
 
-			FHitResult DebugBlockingHit;
-			const FVector DebugTraceEnd =
+			const FVector SegmentTraceEnd =
 				ReflectionOrigin + ReflectedDirection * CurrentSurface->ReflectionRange;
 			if (World->LineTraceSingleByChannel(
-				DebugBlockingHit,
+				SegmentBlockingHit,
 				ReflectionOrigin,
-				DebugTraceEnd,
+				SegmentTraceEnd,
 				OcclusionTraceChannel,
-				DebugTraceQueryParams))
+				SegmentTraceQueryParams))
 			{
-				DebugReflectionLength = FMath::Min(
-					DebugReflectionLength,
-					FVector::Dist(ReflectionOrigin, DebugBlockingHit.ImpactPoint));
+				SegmentEnd = SegmentBlockingHit.ImpactPoint;
 			}
 		}
+
+		const float SegmentLength = FVector::Dist(ReflectionOrigin, SegmentEnd);
+		const float ReflectedIntensity = CalculateReflectedSegmentIntensity(
+			CurrentSurface,
+			IncomingSurfaceIntensity,
+			0.0f,
+			0.0f);
+		const float BeamEndRadius = CurrentBeamStartRadius + SegmentLength * FMath::Tan(
+			FMath::DegreesToRadians(FMath::Clamp(CurrentSurface->ReflectionConeAngle, 1.0f, 89.0f)));
 
 		DrawDebugReflectionFrustum(
 			ReflectionOrigin,
 			ReflectedDirection,
-			DebugReflectionLength,
+			SegmentLength,
 			CurrentSurface->ReflectionConeAngle,
 			CurrentBeamStartRadius);
 
+		TArray<TObjectPtr<UObject>> ReachedReceivers;
 		EmitReflectedLightToReceivers(
 			CurrentSurface,
 			ReflectionOrigin,
@@ -771,10 +784,39 @@ void UUOULightExposureSourceComponent::EmitReflectedLightFromSurface(
 			CurrentBeamStartRadius,
 			IncomingSurfaceIntensity,
 			DeltaTime,
-			LitReceivers);
+			LitReceivers,
+			ReachedReceivers);
+
+		FUOULightReflectionSegmentData& SegmentData = PathData.Segments.AddDefaulted_GetRef();
+		SegmentData.BounceIndex = ReflectionDepth;
+		SegmentData.Reflector = CurrentSurface;
+		SegmentData.NextReflector = NextSurface;
+		SegmentData.BlockingComponent = SegmentBlockingHit.GetComponent();
+		SegmentData.ReachedReceivers = MoveTemp(ReachedReceivers);
+		SegmentData.IncomingStart = CurrentRayOrigin;
+		SegmentData.ImpactPoint = CurrentSurfaceHit.ImpactPoint;
+		SegmentData.ReflectionStart = ReflectionOrigin;
+		SegmentData.SegmentEnd = SegmentEnd;
+		SegmentData.IncomingDirection = IncomingDirection;
+		SegmentData.ReflectedDirection = ReflectedDirection;
+		SegmentData.SegmentLength = SegmentLength;
+		SegmentData.BeamStartRadius = CurrentBeamStartRadius;
+		SegmentData.BeamEndRadius = BeamEndRadius;
+		SegmentData.IncomingIntensity = IncomingSurfaceIntensity;
+		SegmentData.ReflectedIntensity = ReflectedIntensity;
+		PathData.FinalIntensity = ReflectedIntensity;
+
+		if (ReflectionDepth >= MaxReflectionBouncesPerPath)
+		{
+			PathData.EndReason = EUOULightReflectionPathEndReason::MaxBounces;
+			break;
+		}
 
 		if (!bHasNextSurface || NextSurface == nullptr)
 		{
+			PathData.EndReason = SegmentBlockingHit.bBlockingHit
+				? EUOULightReflectionPathEndReason::Blocked
+				: EUOULightReflectionPathEndReason::RangeEnded;
 			break;
 		}
 
@@ -785,6 +827,8 @@ void UUOULightExposureSourceComponent::EmitReflectedLightFromSurface(
 			NextSurfaceAngle);
 		if (NextSurfaceIntensity <= MinimumReflectedIntensity)
 		{
+			PathData.FinalIntensity = NextSurfaceIntensity;
+			PathData.EndReason = EUOULightReflectionPathEndReason::MinimumIntensity;
 			break;
 		}
 
@@ -794,6 +838,11 @@ void UUOULightExposureSourceComponent::EmitReflectedLightFromSurface(
 		CurrentSurface = NextSurface;
 		CurrentSurfaceHit = NextSurfaceHit;
 		IncomingSurfaceIntensity = NextSurfaceIntensity;
+	}
+
+	if (!PathData.Segments.IsEmpty())
+	{
+		ReflectionPaths.Add(MoveTemp(PathData));
 	}
 
 	if (ReflectionDepth >= LastReflectionBounceCount)
@@ -812,7 +861,8 @@ void UUOULightExposureSourceComponent::EmitReflectedLightToReceivers(
 	float BeamStartRadius,
 	float SurfaceIntensity,
 	float DeltaTime,
-	TSet<UObject*>& LitReceivers)
+	TSet<UObject*>& LitReceivers,
+	TArray<TObjectPtr<UObject>>& OutReachedReceivers)
 {
 	UWorld* World = GetWorld();
 	if (World == nullptr ||
@@ -881,6 +931,7 @@ void UUOULightExposureSourceComponent::EmitReflectedLightToReceivers(
 			{
 				IUOULightReceivableInterface::Execute_ReceiveLightExposure(ReceiverObject, ExposureData);
 				LitReceivers.Add(ReceiverObject);
+				OutReachedReceivers.Add(ReceiverObject);
 				++LastLitCount;
 				++LastReflectedCount;
 				LastLitTargetName = GetReceivableDebugName(ReceiverObject);

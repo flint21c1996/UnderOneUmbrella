@@ -7,6 +7,7 @@
 #include "Debug/UOUPuzzleDebugInfoProvider.h"
 #include "Engine/EngineTypes.h"
 #include "World/Light/UOULightExposureTypes.h"
+#include "World/Light/UOULightReflectionPathTypes.h"
 #include "UOULightExposureSourceComponent.generated.h"
 
 class UPrimitiveComponent;
@@ -113,8 +114,17 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Runtime", meta = (ToolTip = "마지막 샘플링에서 확인된 가장 긴 반사 경로입니다."))
 	FString LastReflectionPath = TEXT("None");
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Runtime", meta = (DisplayName = "Reflection Paths", ToolTip = "마지막 빛 샘플링에서 계산된 반사 경로 데이터입니다. VFX와 퍼즐 로직에서 사용할 수 있습니다."))
+	TArray<FUOULightReflectionPathData> ReflectionPaths;
+
 	UFUNCTION(BlueprintCallable, Category = "Light", meta = (ToolTip = "입력된 DeltaTime으로 게임플레이 빛 샘플링을 한 번 실행합니다."))
 	void EmitLight(float DeltaTime);
+
+	UFUNCTION(BlueprintPure, Category = "Light|Reflection", meta = (ToolTip = "마지막으로 계산된 모든 반사 경로를 반환합니다."))
+	TArray<FUOULightReflectionPathData> GetReflectionPaths() const
+	{
+		return ReflectionPaths;
+	}
 
 	UFUNCTION(BlueprintCallable, Category = "Light", meta = (ToolTip = "Fallback 원뿔 각도와 게임플레이 빛 세기를 한 번에 설정합니다."))
 	void Configure(float NewConeAngle, float NewIntensity);
@@ -157,7 +167,8 @@ protected:
 		float BeamStartRadius,
 		float SurfaceIntensity,
 		float DeltaTime,
-		TSet<UObject*>& LitReceivers);
+		TSet<UObject*>& LitReceivers,
+		TArray<TObjectPtr<UObject>>& OutReachedReceivers);
 	bool TryFindNextReflectionSurface(
 		const UUOULightInteractionSurfaceComponent* CurrentSurface,
 		const FVector& ReflectionOrigin,
