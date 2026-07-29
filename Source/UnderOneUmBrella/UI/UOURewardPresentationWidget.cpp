@@ -65,6 +65,19 @@ bool UUOURewardPresentationWidget::FinishPresentation()
 	return true;
 }
 
+bool UUOURewardPresentationWidget::ResetPresentation()
+{
+	if (PresentationState != EUOURewardPresentationWidgetState::Finished)
+	{
+		return false;
+	}
+
+	PresentationData = FUOURewardPresentationData();
+	PresentationState = EUOURewardPresentationWidgetState::Uninitialized;
+	ReceivePresentationReset();
+	return true;
+}
+
 EUOURewardPresentationWidgetState
 UUOURewardPresentationWidget::GetPresentationState() const
 {

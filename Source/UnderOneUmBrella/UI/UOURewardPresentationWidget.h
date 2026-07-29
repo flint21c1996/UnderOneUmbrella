@@ -51,6 +51,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Reward Presentation")
 	bool FinishPresentation();
 
+	// 미리 생성된 Widget을 다음 Reward Presentation에 재사용할 수 있도록 초기 상태로 되돌립니다.
+	UFUNCTION(BlueprintCallable, Category = "Reward Presentation")
+	bool ResetPresentation();
+
 	UFUNCTION(BlueprintPure, Category = "Reward Presentation")
 	EUOURewardPresentationWidgetState GetPresentationState() const;
 
@@ -79,4 +83,7 @@ protected:
 
 	UFUNCTION(BlueprintImplementableEvent, BlueprintCosmetic, Category = "Reward Presentation|Events")
 	void ReceivePresentationCloseRequested();
+
+	UFUNCTION(BlueprintImplementableEvent, BlueprintCosmetic, Category = "Reward Presentation|Events")
+	void ReceivePresentationReset();
 };
