@@ -14,6 +14,7 @@ class UBoxComponent;
 class UPrimitiveComponent;
 class USceneComponent;
 class UStaticMeshComponent;
+struct FCollisionObjectQueryParams;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnUOUWindPathChangedSignature);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnUOUWindPhaseChangedSignature, bool, bIsBlowing);
@@ -157,20 +158,48 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Wind")
 	void RebuildWindPath();
 
+	// 에디터에서 버튼을 누른 순간에만 현재 직선/반사 경로와 실제 바람 범위를 다시 표시합니다.
+	UFUNCTION(
+		BlueprintCallable,
+		CallInEditor,
+		Category = "Wind|Preview",
+		meta = (
+			DisplayName = "Rebuild Wind Path Preview",
+			ToolTip = "현재 발생기와 반사 표면 배치로 바람 경로를 한 번 계산하고 에디터 프리뷰를 다시 만듭니다. 실시간 자동 계산은 하지 않습니다."))
+	void RebuildWindPathPreview();
+
 	UFUNCTION(BlueprintPure, Category = "Wind")
 	TArray<FUOUWindPathSegment> GetWindPathSegments() const { return WindPathSegments; }
 
 private:
+	void RebuildWindPathInternal(bool bIgnoreRuntimeWindState);
 	void ValidateSettings();
 	void UpdateWindRangePreview();
 	void InitializePulseCycleState();
 	void UpdatePulseCycle(float DeltaSeconds);
 	void HandleWindPhaseChanged(bool bWasBlowing);
+	void RefreshWindPathForCurrentState();
+	void ClearWindPath();
 	void ApplyWindToReceivers(float DeltaSeconds);
+	FUOUWindExposureData MakeExposureData(
+		const FUOUWindPathSegment& Segment,
+		const FVector& ClosestPoint,
+		float FinalStrength,
+		float DeltaSeconds);
 	void DrawWindDebug() const;
 	FCollisionObjectQueryParams BuildReceiverObjectQueryParams() const;
 	void AppendWindReceivers(
 		AActor* TargetActor,
 		UPrimitiveComponent* TargetComponent,
 		TArray<UObject*>& OutReceivers) const;
+
+#if WITH_EDITOR
+	void RebuildEditorWindPathPreviewComponents();
+	void ClearEditorWindPathPreviewComponents();
+#endif
+
+#if WITH_EDITORONLY_DATA
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<USceneComponent>> EditorWindPathPreviewComponents;
+#endif
 };

@@ -3,8 +3,36 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
 #include "Misc/AutomationTest.h"
+#include "World/Wind/UOUWindEmitterActor.h"
 #include "World/Wind/UOUWindInteractionSurfaceComponent.h"
+#include "World/Wind/UOUWindMotion.h"
 #include "World/Wind/UOUWindTypes.h"
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FUOUWindEditorPreviewButtonTest,
+	"UnderOneUmbrella.Wind.Editor.PreviewButtonIsCallInEditor",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUOUWindEditorPreviewButtonTest::RunTest(
+	const FString& Parameters)
+{
+	const UFunction* PreviewFunction =
+		AUOUWindEmitterActor::StaticClass()->FindFunctionByName(
+			GET_FUNCTION_NAME_CHECKED(
+				AUOUWindEmitterActor,
+				RebuildWindPathPreview));
+	TestNotNull(
+		TEXT("Wind preview rebuild function exists"),
+		PreviewFunction);
+	if (PreviewFunction != nullptr)
+	{
+		TestTrue(
+			TEXT("Wind preview rebuild function is exposed as a Call In Editor button"),
+			PreviewFunction->HasMetaData(
+				TEXT("CallInEditor")));
+	}
+	return true;
+}
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FUOUWindMirrorReflectionTest,
@@ -148,41 +176,84 @@ bool FUOUWindAdditiveAccelerationTest::RunTest(const FString& Parameters)
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
-	FUOUWindCharacterAccelerationTest,
-	"UnderOneUmbrella.Wind.Character.DirectionalAcceleration",
+	FUOUWindMagnitudeCappedAccelerationTest,
+	"UnderOneUmbrella.Wind.Character.MagnitudeCappedAcceleration",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
-bool FUOUWindCharacterAccelerationTest::RunTest(const FString& Parameters)
+bool FUOUWindMagnitudeCappedAccelerationTest::RunTest(
+	const FString& Parameters)
 {
 	TestEqual(
-		TEXT("Continuous wind keeps accelerating after the optional target speed"),
-		UOUWindMotion::CalculateDirectionalAcceleration(
-			false,
-			5000.0f,
-			1200.0f,
-			5000.0f,
-			1.0f / 60.0f),
-		5000.0f);
-
-	TestEqual(
-		TEXT("Limited wind caps acceleration near target speed"),
-		UOUWindMotion::CalculateDirectionalAcceleration(
-			true,
-			1190.0f,
-			1200.0f,
-			5000.0f,
-			0.02f),
+		TEXT("A new wind direction accumulates without resetting existing velocity"),
+		UOUWindMotion::
+			CalculateMagnitudeCappedDirectionalAcceleration(
+				FVector(600.0f, 0.0f, 0.0f),
+				FVector::RightVector,
+				1000.0f,
+				500.0f,
+				1.0f),
 		500.0f);
 
 	TestEqual(
-		TEXT("Limited wind stops accelerating after target speed"),
-		UOUWindMotion::CalculateDirectionalAcceleration(
-			true,
-			1300.0f,
-			1200.0f,
-			5000.0f,
-			1.0f / 60.0f),
+		TEXT("New directional acceleration stops at the total velocity magnitude cap"),
+		UOUWindMotion::
+			CalculateMagnitudeCappedDirectionalAcceleration(
+				FVector(800.0f, 0.0f, 0.0f),
+				FVector::RightVector,
+				1000.0f,
+				1000.0f,
+				1.0f),
+		600.0f);
+
+	TestEqual(
+		TEXT("A perpendicular wind cannot push an already capped velocity over the maximum"),
+		UOUWindMotion::
+			CalculateMagnitudeCappedDirectionalAcceleration(
+				FVector(1000.0f, 0.0f, 0.0f),
+				FVector::RightVector,
+				1000.0f,
+				500.0f,
+				1.0f),
 		0.0f);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FUOUWindTransitionVelocityTest,
+	"UnderOneUmbrella.Wind.Character.TransitionTransfersSpeed",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUOUWindTransitionVelocityTest::RunTest(
+	const FString& Parameters)
+{
+	const FVector TransitionVelocity =
+		UOUWindMotion::CalculateWindTransitionVelocity(
+			FVector(1000.0f, 0.0f, 0.0f),
+			FVector::RightVector,
+			1200.0f,
+			0.8f);
+
+	TestTrue(
+		TEXT("Wind-to-wind transition preserves current speed"),
+		FMath::IsNearlyEqual(
+			TransitionVelocity.Size(),
+			1000.0f,
+			KINDA_SMALL_NUMBER));
+
+	TestTrue(
+		TEXT("Wind-to-wind transition blends twenty percent old direction and eighty percent new direction"),
+		TransitionVelocity.GetSafeNormal().Equals(
+			FVector(0.2f, 0.8f, 0.0f).GetSafeNormal(),
+			KINDA_SMALL_NUMBER));
+
+	TestEqual(
+		TEXT("Transferred current velocity respects the maximum"),
+		UOUWindMotion::CalculateWindTransitionVelocity(
+			FVector(600.0f, 800.0f, 0.0f),
+			FVector::RightVector,
+			900.0f,
+			1.0f),
+		FVector(0.0f, 900.0f, 0.0f));
 	return true;
 }
 
@@ -230,7 +301,7 @@ bool FUOUWindEntryVelocityRetentionTest::RunTest(const FString& Parameters)
 		FVector(640.0f, 0.0f, -15.0f));
 
 	TestEqual(
-		TEXT("Reflected wind also retains fifteen percent before adding its new vector"),
+		TEXT("Entry against the previous direction retains momentum before adding wind"),
 		UOUWindMotion::CalculateWindEntryVelocity(
 			FVector(1000.0f, 0.0f, -100.0f),
 			-FVector::ForwardVector,

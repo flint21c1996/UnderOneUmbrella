@@ -10,6 +10,7 @@
 
 class UPrimitiveComponent;
 class UCharacterMovementComponent;
+class ACharacter;
 
 // 캐릭터나 물리 오브젝트에 붙여 동적 바람의 힘을 실제 이동으로 변환합니다.
 UCLASS(ClassGroup=(Wind), meta=(BlueprintSpawnableComponent, DisplayName="UOU Wind Receiver"))
@@ -49,10 +50,15 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|Character|Flight", meta = (EditCondition = "bCancelGravityWhileUmbrellaOpen", ClampMin = "0.0"))
 	float GravityCancellationMultiplier = 1.0f;
 
-	// 새 바람 구간에 진입할 때 기존 속도 벡터 중 유지할 비율입니다.
-	// 최초 진입뿐 아니라 반사된 바람 구간으로 넘어갈 때도 적용됩니다.
+	// 일반 공간에서 바람에 처음 진입할 때 기존 속도 벡터 중 유지할 비율입니다.
+	// 바람에서 다른 바람이나 반사 구간으로 넘어갈 때는 현재 속력의 크기를 새 바람 방향으로 전달합니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|Character|Flight", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float ExistingVelocityRetentionOnWindEntry = 0.15f;
+
+	// 바람에서 다른 바람이나 반사 구간으로 넘어갈 때 새 바람 방향으로 꺾이는 비율입니다.
+	// 현재 속력은 유지하며, 기본값 0.8은 기존 방향 20%와 새 바람 방향 80%를 보간합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|Character|Flight", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float WindVelocityTransferRatio = 0.8f;
 
 	// 바람을 타는 동안 무입력 공중 제동을 끄고, 바람이 끝나면 원래 값으로 복구합니다.
 	// 기존 WASD 공중 조향은 바람 가속 위에 별도로 더해집니다.
@@ -103,7 +109,11 @@ public:
 private:
 	UPrimitiveComponent* ResolveTargetPrimitive() const;
 	float ResolveCharacterUmbrellaMultiplier(bool& bOutUmbrellaOpen) const;
-	void BeginWindborneMovement(
+	void ApplyWindToCharacter(
+		ACharacter* Character,
+		const FUOUWindExposureData& WindData);
+	void ApplyWindToPhysicsBody(const FUOUWindExposureData& WindData);
+	void UpdateWindborneMovement(
 		UCharacterMovementComponent* MovementComponent,
 		const FUOUWindExposureData& WindData);
 	void RestoreFallingBraking();

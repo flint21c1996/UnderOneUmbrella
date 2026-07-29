@@ -15,6 +15,12 @@
 #include "World/Wind/UOUWindInteractionSurfaceComponent.h"
 #include "World/Wind/UOUWindReceivableInterface.h"
 
+namespace UOUWindEmitterActorPrivate
+{
+	const FName GeneratedWindPathPreviewTag(
+		TEXT("UOU.GeneratedWindPathPreview"));
+}
+
 AUOUWindEmitterActor::AUOUWindEmitterActor()
 {
 	PrimaryActorTick.bCanEverTick = true;
@@ -146,14 +152,8 @@ void AUOUWindEmitterActor::SetWindEnabled(bool bNewEnabled)
 	if (bWindEnabled)
 	{
 		InitializePulseCycleState();
-		RebuildWindPath();
 	}
-	else
-	{
-		WindPathSegments.Reset();
-		LastAffectedReceiverCount = 0;
-		OnWindPathChanged.Broadcast();
-	}
+	RefreshWindPathForCurrentState();
 
 	HandleWindPhaseChanged(bWasBlowing);
 }
@@ -173,17 +173,7 @@ void AUOUWindEmitterActor::SetPulseCycleEnabled(bool bNewPulseCycleEnabled)
 	const bool bWasBlowing = IsWindBlowing();
 	bUsePulseCycle = bNewPulseCycleEnabled;
 	InitializePulseCycleState();
-
-	if (IsWindBlowing())
-	{
-		RebuildWindPath();
-	}
-	else
-	{
-		WindPathSegments.Reset();
-		LastAffectedReceiverCount = 0;
-		OnWindPathChanged.Broadcast();
-	}
+	RefreshWindPathForCurrentState();
 
 	HandleWindPhaseChanged(bWasBlowing);
 }
@@ -195,16 +185,7 @@ void AUOUWindEmitterActor::ResetPulseCycle()
 
 	if (HasActorBegunPlay())
 	{
-		if (IsWindBlowing())
-		{
-			RebuildWindPath();
-		}
-		else
-		{
-			WindPathSegments.Reset();
-			LastAffectedReceiverCount = 0;
-			OnWindPathChanged.Broadcast();
-		}
+		RefreshWindPathForCurrentState();
 	}
 
 	HandleWindPhaseChanged(bWasBlowing);
@@ -228,10 +209,33 @@ void AUOUWindEmitterActor::InitializePulseCycleState()
 
 void AUOUWindEmitterActor::RebuildWindPath()
 {
+	RebuildWindPathInternal(false);
+}
+
+void AUOUWindEmitterActor::RebuildWindPathPreview()
+{
+	ValidateSettings();
+
+#if WITH_EDITOR
+	const UWorld* World = GetWorld();
+	if (World != nullptr && !World->IsGameWorld())
+	{
+		RebuildWindPathInternal(true);
+		RebuildEditorWindPathPreviewComponents();
+		return;
+	}
+#endif
+
+	RebuildWindPath();
+}
+
+void AUOUWindEmitterActor::RebuildWindPathInternal(
+	bool bIgnoreRuntimeWindState)
+{
 	WindPathSegments.Reset();
 
 	UWorld* World = GetWorld();
-	if (!IsWindBlowing()
+	if ((!bIgnoreRuntimeWindState && !IsWindBlowing())
 		|| World == nullptr
 		|| WindOrigin == nullptr
 		|| MaxWindDistance <= 0.0f
@@ -318,6 +322,142 @@ void AUOUWindEmitterActor::RebuildWindPath()
 	OnWindPathChanged.Broadcast();
 }
 
+#if WITH_EDITOR
+void AUOUWindEmitterActor::RebuildEditorWindPathPreviewComponents()
+{
+	ClearEditorWindPathPreviewComponents();
+
+	if (WindRangePreview != nullptr)
+	{
+		WindRangePreview->SetVisibility(false);
+	}
+
+	if (!bShowWindRangePreview || RootScene == nullptr)
+	{
+		return;
+	}
+
+	EditorWindPathPreviewComponents.Reserve(
+		WindPathSegments.Num() * 2);
+
+	for (const FUOUWindPathSegment& Segment : WindPathSegments)
+	{
+		const float SegmentLength = Segment.GetLength();
+		if (SegmentLength <= KINDA_SMALL_NUMBER)
+		{
+			continue;
+		}
+
+		const FColor SegmentColor =
+			Segment.ReflectionIndex == 0
+				? FColor::Cyan
+				: FColor::MakeRedToGreenColorFromScalar(
+					FMath::Clamp(
+						Segment.Strength
+							/ FMath::Max(
+								WindAcceleration,
+								KINDA_SMALL_NUMBER),
+						0.0f,
+						1.0f));
+		const FQuat SegmentRotation =
+			FRotationMatrix::MakeFromX(
+				Segment.Direction.GetSafeNormal())
+				.ToQuat();
+
+		UBoxComponent* RangePreview =
+			NewObject<UBoxComponent>(
+				this,
+				*FString::Printf(
+					TEXT("WindPathRangePreview_%02d"),
+					Segment.ReflectionIndex),
+				RF_Transient | RF_TextExportTransient);
+		if (RangePreview != nullptr)
+		{
+			RangePreview->CreationMethod =
+				EComponentCreationMethod::UserConstructionScript;
+			RangePreview->ComponentTags.AddUnique(
+				UOUWindEmitterActorPrivate::
+					GeneratedWindPathPreviewTag);
+			RangePreview->SetupAttachment(RootScene);
+			RangePreview->SetMobility(
+				EComponentMobility::Movable);
+			RangePreview->SetCollisionEnabled(
+				ECollisionEnabled::NoCollision);
+			RangePreview->SetGenerateOverlapEvents(false);
+			RangePreview->SetCanEverAffectNavigation(false);
+			RangePreview->SetHiddenInGame(true);
+			RangePreview->SetIsVisualizationComponent(true);
+			RangePreview->ShapeColor = SegmentColor;
+			RangePreview->SetLineThickness(2.0f);
+			RangePreview->SetBoxExtent(
+				FVector(
+					SegmentLength * 0.5f,
+					WindRadius,
+					WindRadius),
+				false);
+			RangePreview->RegisterComponent();
+			RangePreview->SetWorldLocationAndRotation(
+				(Segment.Start + Segment.End) * 0.5f,
+				SegmentRotation);
+			EditorWindPathPreviewComponents.Add(
+				RangePreview);
+		}
+
+		UArrowComponent* DirectionPreview =
+			NewObject<UArrowComponent>(
+				this,
+				*FString::Printf(
+					TEXT("WindPathDirectionPreview_%02d"),
+					Segment.ReflectionIndex),
+				RF_Transient | RF_TextExportTransient);
+		if (DirectionPreview != nullptr)
+		{
+			DirectionPreview->CreationMethod =
+				EComponentCreationMethod::UserConstructionScript;
+			DirectionPreview->ComponentTags.AddUnique(
+				UOUWindEmitterActorPrivate::
+					GeneratedWindPathPreviewTag);
+			DirectionPreview->SetupAttachment(RootScene);
+			DirectionPreview->SetMobility(
+				EComponentMobility::Movable);
+			DirectionPreview->SetCollisionEnabled(
+				ECollisionEnabled::NoCollision);
+			DirectionPreview->SetHiddenInGame(true);
+			DirectionPreview->SetIsVisualizationComponent(true);
+			DirectionPreview->SetArrowFColor(SegmentColor);
+			DirectionPreview->SetArrowSize(1.5f);
+			DirectionPreview->SetArrowLength(SegmentLength);
+			DirectionPreview->RegisterComponent();
+			DirectionPreview->SetWorldLocationAndRotation(
+				Segment.Start,
+				SegmentRotation);
+			EditorWindPathPreviewComponents.Add(
+				DirectionPreview);
+		}
+	}
+}
+
+void AUOUWindEmitterActor::ClearEditorWindPathPreviewComponents()
+{
+	TArray<USceneComponent*> ExistingSceneComponents;
+	GetComponents<USceneComponent>(ExistingSceneComponents);
+
+	for (USceneComponent* ExistingComponent :
+		ExistingSceneComponents)
+	{
+		if (ExistingComponent != nullptr
+			&& ExistingComponent->ComponentTags.Contains(
+				UOUWindEmitterActorPrivate::
+					GeneratedWindPathPreviewTag))
+		{
+			ExistingComponent->DestroyComponent();
+		}
+	}
+
+	EditorWindPathPreviewComponents.Reset();
+}
+#endif
+
 void AUOUWindEmitterActor::ValidateSettings()
 {
 	MaxWindDistance = FMath::Max(0.0f, MaxWindDistance);
@@ -378,16 +518,7 @@ void AUOUWindEmitterActor::UpdatePulseCycle(float DeltaSeconds)
 		return;
 	}
 
-	if (IsWindBlowing())
-	{
-		RebuildWindPath();
-	}
-	else
-	{
-		WindPathSegments.Reset();
-		LastAffectedReceiverCount = 0;
-		OnWindPathChanged.Broadcast();
-	}
+	RefreshWindPathForCurrentState();
 
 	HandleWindPhaseChanged(bWasBlowing);
 }
@@ -399,6 +530,24 @@ void AUOUWindEmitterActor::HandleWindPhaseChanged(bool bWasBlowing)
 	{
 		OnWindPhaseChanged.Broadcast(bIsBlowing);
 	}
+}
+
+void AUOUWindEmitterActor::RefreshWindPathForCurrentState()
+{
+	if (IsWindBlowing())
+	{
+		RebuildWindPath();
+		return;
+	}
+
+	ClearWindPath();
+}
+
+void AUOUWindEmitterActor::ClearWindPath()
+{
+	WindPathSegments.Reset();
+	LastAffectedReceiverCount = 0;
+	OnWindPathChanged.Broadcast();
 }
 
 void AUOUWindEmitterActor::ApplyWindToReceivers(float DeltaSeconds)
@@ -482,24 +631,12 @@ void AUOUWindEmitterActor::ApplyWindToReceivers(float DeltaSeconds)
 					continue;
 				}
 
-				FUOUWindExposureData ExposureData;
-				ExposureData.SourceActor = this;
-				ExposureData.Direction = Segment.Direction;
-				ExposureData.ClosestPointOnPath = ClosestPoint;
-				ExposureData.Acceleration = FinalStrength;
-				ExposureData.MaximumAcceleration = MaximumWindAcceleration;
-				ExposureData.MaximumSpeed = MaximumWindSpeed;
-				ExposureData.MinimumEntrySpeed = MinimumWindEntrySpeed;
-				ExposureData.FallingMomentumConversion =
-					FallingMomentumConversion;
-				ExposureData.InitialVelocityBoost =
-					InitialWindVelocityBoost;
-				ExposureData.MaximumEntrySpeed =
-					MaximumWindEntrySpeed;
-				ExposureData.StrengthScale =
-					FinalStrength / FMath::Max(WindAcceleration, KINDA_SMALL_NUMBER);
-				ExposureData.DeltaTime = DeltaSeconds;
-				ExposureData.ReflectionIndex = Segment.ReflectionIndex;
+				const FUOUWindExposureData ExposureData =
+					MakeExposureData(
+						Segment,
+						ClosestPoint,
+						FinalStrength,
+						DeltaSeconds);
 
 				FUOUWindExposureData* ExistingExposure = BestExposureByReceiver.Find(Receiver);
 				if (ExistingExposure == nullptr
@@ -521,6 +658,36 @@ void AUOUWindEmitterActor::ApplyWindToReceivers(float DeltaSeconds)
 			++LastAffectedReceiverCount;
 		}
 	}
+}
+
+FUOUWindExposureData AUOUWindEmitterActor::MakeExposureData(
+	const FUOUWindPathSegment& Segment,
+	const FVector& ClosestPoint,
+	float FinalStrength,
+	float DeltaSeconds)
+{
+	FUOUWindExposureData ExposureData;
+	ExposureData.SourceActor = this;
+	ExposureData.Direction = Segment.Direction;
+	ExposureData.ClosestPointOnPath = ClosestPoint;
+	ExposureData.Acceleration = FinalStrength;
+	ExposureData.MaximumAcceleration = MaximumWindAcceleration;
+	ExposureData.MaximumSpeed = MaximumWindSpeed;
+	ExposureData.MinimumEntrySpeed = MinimumWindEntrySpeed;
+	ExposureData.FallingMomentumConversion =
+		FallingMomentumConversion;
+	ExposureData.InitialVelocityBoost =
+		InitialWindVelocityBoost;
+	ExposureData.MaximumEntrySpeed =
+		MaximumWindEntrySpeed;
+	ExposureData.StrengthScale =
+		FinalStrength
+			/ FMath::Max(
+				WindAcceleration,
+				KINDA_SMALL_NUMBER);
+	ExposureData.DeltaTime = DeltaSeconds;
+	ExposureData.ReflectionIndex = Segment.ReflectionIndex;
+	return ExposureData;
 }
 
 void AUOUWindEmitterActor::DrawWindDebug() const
