@@ -621,7 +621,8 @@ bool UUOULightExposureSourceComponent::TryBuildLightInteractionSurfaceHit(
 		return false;
 	}
 
-	return OutSurfaceHit.GetComponent() == SurfaceComponent;
+	return OutSurfaceHit.GetComponent() == SurfaceComponent &&
+		SurfaceComponent->CanReflectIncomingLight(DirectionToSurface, OutSurfaceHit.ImpactNormal);
 }
 
 void UUOULightExposureSourceComponent::EmitReflectedLightFromSurface(
@@ -666,6 +667,8 @@ void UUOULightExposureSourceComponent::EmitReflectedLightFromSurface(
 	TSet<const UUOULightInteractionSurfaceComponent*> VisitedSurfaces;
 	TArray<FString> ReflectionPath;
 	int32 ReflectionDepth = 0;
+	float IncomingBeamRadius = SurfaceDistance * FMath::Tan(
+		FMath::DegreesToRadians(FMath::Clamp(GetEffectiveOuterConeAngle(), 1.0f, 89.0f)));
 
 	while (CurrentSurface != nullptr && ReflectionDepth < MaxReflectionBouncesPerPath)
 	{
@@ -682,6 +685,17 @@ void UUOULightExposureSourceComponent::EmitReflectedLightFromSurface(
 		{
 			break;
 		}
+		if (!CurrentSurface->CanReflectIncomingLight(
+			IncomingDirection,
+			CurrentSurfaceHit.ImpactNormal))
+		{
+			break;
+		}
+
+		const float CurrentBeamStartRadius = CurrentSurface->ClampReflectionBeamRadius(
+			IncomingBeamRadius,
+			IncomingDirection,
+			CurrentSurfaceHit.ImpactNormal);
 
 		VisitedSurfaces.Add(CurrentSurface);
 		ReflectionPath.Add(FString::Printf(
@@ -703,21 +717,58 @@ void UUOULightExposureSourceComponent::EmitReflectedLightFromSurface(
 				CurrentSurface,
 				ReflectionOrigin,
 				ReflectedDirection,
+				CurrentBeamStartRadius,
 				VisitedSurfaces,
 				NextSurface,
 				NextSurfaceHit,
 				NextSurfaceDistance,
 				NextSurfaceAngle);
 
-		const FVector DebugReflectionEnd = bHasNextSurface
-			? NextSurfaceHit.ImpactPoint
-			: ReflectionOrigin + ReflectedDirection * CurrentSurface->ReflectionRange;
-		DrawDebugReflectionRay(ReflectionOrigin, DebugReflectionEnd);
+		float DebugReflectionLength = bHasNextSurface
+			? FVector::Dist(ReflectionOrigin, NextSurfaceHit.ImpactPoint)
+			: CurrentSurface->ReflectionRange;
+		if (bDrawDebug &&
+			UUOUDebugSubsystem::IsDebugWorldDrawEnabled(this, EUOUDebugCategory::Puzzle))
+		{
+			FCollisionQueryParams DebugTraceQueryParams(
+				SCENE_QUERY_STAT(UOULightReflectionDebugTrace),
+				false,
+				GetOwner());
+			if (CurrentSurface->GetOwner() != nullptr)
+			{
+				AddActorPrimitiveComponentsToIgnore(
+					CurrentSurface->GetOwner(),
+					DebugTraceQueryParams);
+			}
+
+			FHitResult DebugBlockingHit;
+			const FVector DebugTraceEnd =
+				ReflectionOrigin + ReflectedDirection * CurrentSurface->ReflectionRange;
+			if (World->LineTraceSingleByChannel(
+				DebugBlockingHit,
+				ReflectionOrigin,
+				DebugTraceEnd,
+				OcclusionTraceChannel,
+				DebugTraceQueryParams))
+			{
+				DebugReflectionLength = FMath::Min(
+					DebugReflectionLength,
+					FVector::Dist(ReflectionOrigin, DebugBlockingHit.ImpactPoint));
+			}
+		}
+
+		DrawDebugReflectionFrustum(
+			ReflectionOrigin,
+			ReflectedDirection,
+			DebugReflectionLength,
+			CurrentSurface->ReflectionConeAngle,
+			CurrentBeamStartRadius);
 
 		EmitReflectedLightToReceivers(
 			CurrentSurface,
 			ReflectionOrigin,
 			ReflectedDirection,
+			CurrentBeamStartRadius,
 			IncomingSurfaceIntensity,
 			DeltaTime,
 			LitReceivers);
@@ -737,6 +788,8 @@ void UUOULightExposureSourceComponent::EmitReflectedLightFromSurface(
 			break;
 		}
 
+		IncomingBeamRadius = CurrentBeamStartRadius + NextSurfaceDistance * FMath::Tan(
+			FMath::DegreesToRadians(FMath::Clamp(CurrentSurface->ReflectionConeAngle, 1.0f, 89.0f)));
 		CurrentRayOrigin = ReflectionOrigin;
 		CurrentSurface = NextSurface;
 		CurrentSurfaceHit = NextSurfaceHit;
@@ -756,6 +809,7 @@ void UUOULightExposureSourceComponent::EmitReflectedLightToReceivers(
 	UUOULightInteractionSurfaceComponent* SurfaceComponent,
 	const FVector& ReflectionOrigin,
 	const FVector& ReflectedDirection,
+	float BeamStartRadius,
 	float SurfaceIntensity,
 	float DeltaTime,
 	TSet<UObject*>& LitReceivers)
@@ -819,6 +873,7 @@ void UUOULightExposureSourceComponent::EmitReflectedLightToReceivers(
 				SurfaceComponent,
 				ReflectionOrigin,
 				ReflectedDirection,
+				BeamStartRadius,
 				SurfaceIntensity,
 				DeltaTime,
 				ExposureData,
@@ -847,6 +902,7 @@ bool UUOULightExposureSourceComponent::TryFindNextReflectionSurface(
 	const UUOULightInteractionSurfaceComponent* CurrentSurface,
 	const FVector& ReflectionOrigin,
 	const FVector& ReflectedDirection,
+	float BeamStartRadius,
 	const TSet<const UUOULightInteractionSurfaceComponent*>& VisitedSurfaces,
 	UUOULightInteractionSurfaceComponent*& OutSurface,
 	FHitResult& OutSurfaceHit,
@@ -927,15 +983,25 @@ bool UUOULightExposureSourceComponent::TryFindNextReflectionSurface(
 			}
 
 			const FVector DirectionToCandidate = ToCandidate / CandidateDistance;
-			const float DirectionDot = FMath::Clamp(
-				FVector::DotProduct(SafeReflectedDirection, DirectionToCandidate),
-				-1.0f,
-				1.0f);
-			const float CandidateAngle = FMath::RadiansToDegrees(FMath::Acos(DirectionDot));
-			if (CandidateAngle > CurrentSurface->ReflectionConeAngle)
+			const float AxialDistance = FVector::DotProduct(ToCandidate, SafeReflectedDirection);
+			if (AxialDistance <= KINDA_SMALL_NUMBER)
 			{
 				continue;
 			}
+			const float RadialDistance =
+				(ToCandidate - SafeReflectedDirection * AxialDistance).Size();
+			const float ConeAngleRadians = FMath::DegreesToRadians(
+				FMath::Clamp(CurrentSurface->ReflectionConeAngle, 1.0f, 89.0f));
+			const float SafeBeamStartRadius = FMath::Max(0.0f, BeamStartRadius);
+			const float MaximumBeamRadius =
+				SafeBeamStartRadius + AxialDistance * FMath::Tan(ConeAngleRadians);
+			if (RadialDistance > MaximumBeamRadius)
+			{
+				continue;
+			}
+			const float CandidateAngle = FMath::RadiansToDegrees(FMath::Atan2(
+				FMath::Max(0.0f, RadialDistance - SafeBeamStartRadius),
+				AxialDistance));
 
 			FCollisionQueryParams TraceQueryParams(
 				SCENE_QUERY_STAT(UOULightChainedReflectionSurfaceTrace),
@@ -960,6 +1026,12 @@ bool UUOULightExposureSourceComponent::TryFindNextReflectionSurface(
 				OcclusionTraceChannel,
 				TraceQueryParams) ||
 				CandidateHit.GetComponent() != CandidateSurface)
+			{
+				continue;
+			}
+			if (!CandidateSurface->CanReflectIncomingLight(
+				SafeReflectedDirection,
+				CandidateHit.ImpactNormal))
 			{
 				continue;
 			}
@@ -1010,6 +1082,7 @@ bool UUOULightExposureSourceComponent::TryBuildReflectedExposureData(
 	const UUOULightInteractionSurfaceComponent* SurfaceComponent,
 	const FVector& ReflectionOrigin,
 	const FVector& ReflectedDirection,
+	float BeamStartRadius,
 	float SurfaceIntensity,
 	float DeltaTime,
 	FUOULightExposureData& OutExposureData,
@@ -1033,13 +1106,27 @@ bool UUOULightExposureSourceComponent::TryBuildReflectedExposureData(
 		return false;
 	}
 
+	const FVector SafeReflectedDirection = ReflectedDirection.GetSafeNormal();
 	const FVector DirectionToReceiver = ToReceiver / Distance;
-	const float Dot = FMath::Clamp(FVector::DotProduct(ReflectedDirection.GetSafeNormal(), DirectionToReceiver), -1.0f, 1.0f);
-	const float Angle = FMath::RadiansToDegrees(FMath::Acos(Dot));
-	if (Angle > SurfaceComponent->ReflectionConeAngle)
+	const float AxialDistance = FVector::DotProduct(ToReceiver, SafeReflectedDirection);
+	if (AxialDistance <= KINDA_SMALL_NUMBER)
 	{
 		return false;
 	}
+	const float RadialDistance =
+		(ToReceiver - SafeReflectedDirection * AxialDistance).Size();
+	const float ConeAngleRadians = FMath::DegreesToRadians(
+		FMath::Clamp(SurfaceComponent->ReflectionConeAngle, 1.0f, 89.0f));
+	const float SafeBeamStartRadius = FMath::Max(0.0f, BeamStartRadius);
+	const float MaximumBeamRadius =
+		SafeBeamStartRadius + AxialDistance * FMath::Tan(ConeAngleRadians);
+	if (RadialDistance > MaximumBeamRadius)
+	{
+		return false;
+	}
+	const float Angle = FMath::RadiansToDegrees(FMath::Atan2(
+		FMath::Max(0.0f, RadialDistance - SafeBeamStartRadius),
+		AxialDistance));
 
 	if (IsWorldPositionInsideUmbrellaLightShade(ReceiverPosition))
 	{
@@ -1204,9 +1291,21 @@ void UUOULightExposureSourceComponent::DrawDebugBlockedHit(const FVector& Source
 	}
 }
 
-void UUOULightExposureSourceComponent::DrawDebugReflectionRay(const FVector& Start, const FVector& End) const
+void UUOULightExposureSourceComponent::DrawDebugReflectionFrustum(
+	const FVector& Start,
+	const FVector& Direction,
+	float Length,
+	float ConeAngleDegrees,
+	float StartRadius) const
 {
 	if (!bDrawDebug || !UUOUDebugSubsystem::IsDebugWorldDrawEnabled(this, EUOUDebugCategory::Puzzle))
+	{
+		return;
+	}
+
+	const FVector SafeDirection = Direction.GetSafeNormal();
+	const float SafeLength = FMath::Max(0.0f, Length);
+	if (SafeDirection.IsNearlyZero() || SafeLength <= KINDA_SMALL_NUMBER)
 	{
 		return;
 	}
@@ -1214,7 +1313,46 @@ void UUOULightExposureSourceComponent::DrawDebugReflectionRay(const FVector& Sta
 	if (UWorld* World = GetWorld())
 	{
 		const FColor ReflectionColor = UUOUDebugSubsystem::GetDebugCategoryColor(this, EUOUDebugCategory::Puzzle, FColor::Blue);
+		const FVector End = Start + SafeDirection * SafeLength;
+		const float ConeAngleRadians = FMath::DegreesToRadians(
+			FMath::Clamp(ConeAngleDegrees, 1.0f, 89.0f));
+		const float SafeStartRadius = FMath::Max(0.0f, StartRadius);
+		const float EndRadius = SafeStartRadius + SafeLength * FMath::Tan(ConeAngleRadians);
+		constexpr int32 ConeSegments = 24;
+		FVector RadiusAxisX = FVector::ZeroVector;
+		FVector RadiusAxisY = FVector::ZeroVector;
+		SafeDirection.FindBestAxisVectors(RadiusAxisX, RadiusAxisY);
+
 		DrawDebugLine(World, Start, End, ReflectionColor, false, DebugDrawTime, 0, 1.5f);
+		for (int32 SegmentIndex = 0; SegmentIndex < ConeSegments; ++SegmentIndex)
+		{
+			const float Angle = UE_TWO_PI * static_cast<float>(SegmentIndex) / static_cast<float>(ConeSegments);
+			const float NextAngle =
+				UE_TWO_PI * static_cast<float>(SegmentIndex + 1) / static_cast<float>(ConeSegments);
+			const FVector RadiusDirection =
+				RadiusAxisX * FMath::Cos(Angle) + RadiusAxisY * FMath::Sin(Angle);
+			const FVector NextRadiusDirection =
+				RadiusAxisX * FMath::Cos(NextAngle) + RadiusAxisY * FMath::Sin(NextAngle);
+			const FVector StartPoint = Start + RadiusDirection * SafeStartRadius;
+			const FVector NextStartPoint = Start + NextRadiusDirection * SafeStartRadius;
+			const FVector EndPoint = End + RadiusDirection * EndRadius;
+			const FVector NextEndPoint = End + NextRadiusDirection * EndRadius;
+
+			DrawDebugLine(World, StartPoint, EndPoint, ReflectionColor, false, DebugDrawTime, 0, 1.0f);
+			DrawDebugLine(World, EndPoint, NextEndPoint, ReflectionColor, false, DebugDrawTime, 0, 1.0f);
+			if (SafeStartRadius > KINDA_SMALL_NUMBER)
+			{
+				DrawDebugLine(
+					World,
+					StartPoint,
+					NextStartPoint,
+					ReflectionColor,
+					false,
+					DebugDrawTime,
+					0,
+					1.0f);
+			}
+		}
 		DrawDebugPoint(World, Start, 8.0f, ReflectionColor, false, DebugDrawTime);
 	}
 }

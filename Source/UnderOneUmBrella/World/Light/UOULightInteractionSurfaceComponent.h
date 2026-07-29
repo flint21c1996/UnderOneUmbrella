@@ -7,6 +7,14 @@
 #include "UOULightInteractionSurfaceComponent.generated.h"
 
 UENUM(BlueprintType)
+enum class EUOULightReflectionFrontNormalMode : uint8
+{
+	ComponentForward UMETA(DisplayName = "Component Forward", ToolTip = "컴포넌트의 Forward 방향을 반사면 앞면으로 사용합니다."),
+	ComponentUp UMETA(DisplayName = "Component Up", ToolTip = "컴포넌트의 Up 방향을 반사면 앞면으로 사용합니다."),
+	OwnerForward UMETA(DisplayName = "Owner Forward", ToolTip = "소유 액터의 Forward 방향을 반사면 앞면으로 사용합니다.")
+};
+
+UENUM(BlueprintType)
 enum class EUOULightInteractionMode : uint8
 {
 	Disabled UMETA(DisplayName = "Disabled", ToolTip = "게임플레이 빛 상호작용을 무시합니다."),
@@ -54,6 +62,16 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection", meta = (ToolTip = "반사된 게임플레이 빛의 방향을 정하는 방식입니다."))
 	EUOULightReflectionDirectionMode ReflectionDirectionMode = EUOULightReflectionDirectionMode::MirrorByNormal;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection|Facing", meta = (ToolTip = "켜면 지정한 앞면으로 들어온 빛만 반사합니다. 뒤에서 들어온 빛은 차단만 합니다."))
+	bool bReflectFrontFaceOnly = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection|Facing", meta = (EditCondition = "bReflectFrontFaceOnly", ToolTip = "반사면의 앞쪽을 결정할 기준 방향입니다."))
+	EUOULightReflectionFrontNormalMode ReflectionFrontNormalMode =
+		EUOULightReflectionFrontNormalMode::ComponentUp;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection|Facing", meta = (ClampMin = "0.0", ClampMax = "89.0", Units = "deg", ToolTip = "앞면 법선과 입사광 사이에 허용할 최대 각도입니다."))
+	float MaximumReflectionIncidenceAngle = 85.0f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection", meta = (ClampMin = "0.0", ToolTip = "반사된 게임플레이 빛이 도달할 수 있는 최대 거리입니다."))
 	float ReflectionRange = 600.0f;
 
@@ -65,6 +83,12 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection", meta = (ClampMin = "0.0", ToolTip = "반사광 시작 위치를 충돌 지점에서 살짝 띄우는 거리입니다."))
 	float ReflectionStartPadding = 4.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection|Aperture", meta = (ToolTip = "반사되는 빛의 시작 폭을 이 Box 컴포넌트의 실제 크기로 제한합니다."))
+	bool bLimitReflectionBySurfaceAperture = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection|Aperture", meta = (ClampMin = "0.0", ToolTip = "Box 크기에서 계산한 반사 유효 반지름에 곱할 값입니다."))
+	float ReflectionApertureScale = 1.0f;
 
 	UFUNCTION(BlueprintCallable, Category = "Light|Interaction", meta = (ToolTip = "이 표면이 게임플레이 빛을 차단하거나 반사하는 방식을 변경합니다."))
 	void SetLightInteractionMode(EUOULightInteractionMode NewMode);
@@ -78,8 +102,19 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Light|Reflection", meta = (ToolTip = "들어오는 레이를 기준으로 반사된 게임플레이 빛 방향을 계산합니다."))
 	FVector GetReflectionDirection(const FVector& IncomingDirection, const FVector& HitNormal) const;
 
+	UFUNCTION(BlueprintPure, Category = "Light|Reflection", meta = (ToolTip = "입사 방향이 앞면과 최대 입사각 조건을 만족하면 true를 반환합니다."))
+	bool CanReflectIncomingLight(const FVector& IncomingDirection, const FVector& HitNormal) const;
+
+	UFUNCTION(BlueprintPure, Category = "Light|Reflection", meta = (ToolTip = "입사 빛 반지름을 반사면 크기와 입사각에 맞게 잘라 반환합니다."))
+	float ClampReflectionBeamRadius(
+		float IncomingBeamRadius,
+		const FVector& IncomingDirection,
+		const FVector& HitNormal) const;
+
 protected:
 	void ValidateSettings();
 	void ApplyCollisionSettings();
 	FVector GetReflectionNormal(const FVector& HitNormal) const;
+	FVector GetReflectionFrontNormal() const;
+	float GetReflectionApertureRadius() const;
 };

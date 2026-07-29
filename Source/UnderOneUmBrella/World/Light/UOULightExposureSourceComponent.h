@@ -154,6 +154,7 @@ protected:
 		UUOULightInteractionSurfaceComponent* SurfaceComponent,
 		const FVector& ReflectionOrigin,
 		const FVector& ReflectedDirection,
+		float BeamStartRadius,
 		float SurfaceIntensity,
 		float DeltaTime,
 		TSet<UObject*>& LitReceivers);
@@ -161,6 +162,7 @@ protected:
 		const UUOULightInteractionSurfaceComponent* CurrentSurface,
 		const FVector& ReflectionOrigin,
 		const FVector& ReflectedDirection,
+		float BeamStartRadius,
 		const TSet<const UUOULightInteractionSurfaceComponent*>& VisitedSurfaces,
 		UUOULightInteractionSurfaceComponent*& OutSurface,
 		FHitResult& OutSurfaceHit,
@@ -176,6 +178,7 @@ protected:
 		const UUOULightInteractionSurfaceComponent* SurfaceComponent,
 		const FVector& ReflectionOrigin,
 		const FVector& ReflectedDirection,
+		float BeamStartRadius,
 		float SurfaceIntensity,
 		float DeltaTime,
 		FUOULightExposureData& OutExposureData,
@@ -185,7 +188,12 @@ protected:
 	void DrawDebugSource() const;
 	void DrawDebugResult(const FUOULightExposureData& ExposureData, bool bLit) const;
 	void DrawDebugBlockedHit(const FVector& SourcePosition, const FHitResult& BlockingHit) const;
-	void DrawDebugReflectionRay(const FVector& Start, const FVector& End) const;
+	void DrawDebugReflectionFrustum(
+		const FVector& Start,
+		const FVector& Direction,
+		float Length,
+		float ConeAngleDegrees,
+		float StartRadius) const;
 	static void AddActorPrimitiveComponentsToIgnore(
 		const AActor* Actor,
 		FCollisionQueryParams& QueryParams,
