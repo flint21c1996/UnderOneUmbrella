@@ -5,12 +5,12 @@
 #include "Blueprint/WidgetTree.h"
 #include "UOUMenuPlayerController.h"
 #include "Blueprint/UserWidget.h"
-#include "Components/CanvasPanelSlot.h"
 #include "Components/EditableText.h"
 #include "Components/EditableTextBox.h"
 #include "Components/MultiLineEditableText.h"
 #include "Components/MultiLineEditableTextBox.h"
-#include "Components/PanelWidget.h"
+#include "Components/Overlay.h"
+#include "Components/OverlaySlot.h"
 #include "Components/RichTextBlock.h"
 #include "Components/TextBlock.h"
 #include "Components/Widget.h"
@@ -527,7 +527,8 @@ void UUOUInGameHUDWidget::InitializeRewardPresentationWidgets()
 			}
 
 			PresentationWidget->SetVisibility(ESlateVisibility::Collapsed);
-			UPanelSlot* PresentationSlot = RewardResultRoot->AddChild(PresentationWidget);
+			UOverlaySlot* PresentationSlot =
+				RewardResultRoot->AddChildToOverlay(PresentationWidget);
 			if (PresentationSlot == nullptr)
 			{
 				UE_LOG(
@@ -538,11 +539,8 @@ void UUOUInGameHUDWidget::InitializeRewardPresentationWidgets()
 				continue;
 			}
 
-			if (UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(PresentationSlot))
-			{
-				CanvasSlot->SetAnchors(FAnchors(0.0f, 0.0f, 1.0f, 1.0f));
-				CanvasSlot->SetOffsets(FMargin(0.0f));
-			}
+			PresentationSlot->SetHorizontalAlignment(HAlign_Fill);
+			PresentationSlot->SetVerticalAlignment(VAlign_Fill);
 
 			PresentationWidget->OnPresentationFinished.AddUniqueDynamic(
 				this,

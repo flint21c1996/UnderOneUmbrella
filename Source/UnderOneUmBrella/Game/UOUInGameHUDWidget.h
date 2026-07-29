@@ -15,7 +15,7 @@ class UUOURewardPresentationWidget;
 class UUOUUmbrellaStatusWidget;
 class UUOUUISubsystem;
 class UDataTable;
-class UPanelWidget;
+class UOverlay;
 class UUserWidget;
 class UWidgetComponent;
 
@@ -132,9 +132,9 @@ private:
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional, AllowPrivateAccess = "true"), Category = "HUD|Umbrella")
 	TObjectPtr<UUOUUmbrellaStatusWidget> UmbrellaStatusWidget = nullptr;
 
-	// WBP_InGameHUD의 같은 이름을 가진 Panel Widget에 자동으로 연결됩니다.
+	// WBP_InGameHUD의 전체 화면 Reward Presentation Overlay에 자동으로 연결됩니다.
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional, AllowPrivateAccess = "true"), Category = "HUD|Reward")
-	TObjectPtr<UPanelWidget> RewardResultRoot = nullptr;
+	TObjectPtr<UOverlay> RewardResultRoot = nullptr;
 
 	// RowName을 Presentation Key로 사용하며, 각 행은 실행할 WidgetClass를 지정합니다.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"), Category = "HUD|Reward")
