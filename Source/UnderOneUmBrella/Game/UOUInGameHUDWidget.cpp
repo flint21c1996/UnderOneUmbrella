@@ -576,9 +576,17 @@ void UUOUInGameHUDWidget::ClearRewardPresentationWidgets()
 void UUOUInGameHUDWidget::HandleRewardPresentationFinished(
 	UUOURewardPresentationWidget* PresentationWidget)
 {
-	if (IsValid(PresentationWidget))
+	if (!IsValid(PresentationWidget))
 	{
-		PresentationWidget->SetVisibility(ESlateVisibility::Collapsed);
+		return;
+	}
+
+	const FName RewardId = PresentationWidget->GetPresentationRewardId();
+	PresentationWidget->SetVisibility(ESlateVisibility::Collapsed);
+
+	if (UUOUUISubsystem* UISubsystem = GetUISubsystem())
+	{
+		UISubsystem->NotifyRewardPresentationFinished(RewardId);
 	}
 }
 

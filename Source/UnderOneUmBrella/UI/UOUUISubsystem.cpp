@@ -225,6 +225,20 @@ void UUOUUISubsystem::ShowRewardPresentationCue(
 	}
 }
 
+void UUOUUISubsystem::NotifyRewardPresentationFinished(FName RewardId)
+{
+	if (RewardId.IsNone())
+	{
+		UE_LOG(
+			LogTemp,
+			Warning,
+			TEXT("Reward Presentation finished without a valid RewardId."));
+		return;
+	}
+
+	OnRewardPresentationFinished.Broadcast(RewardId);
+}
+
 void UUOUUISubsystem::HandleUmbrellaStateChanged(EUOUUmbrellaState NewState, bool bHasUmbrella)
 {
 	BroadcastUmbrellaHUDState();

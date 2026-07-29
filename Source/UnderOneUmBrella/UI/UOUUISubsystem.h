@@ -25,6 +25,10 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(
 	PresentationData,
 	const FUOURewardPresentationCue&,
 	Cue);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
+	FUOURewardPresentationFinishedSignature,
+	FName,
+	RewardId);
 
 // Local player subsystem that bridges gameplay UI requests to the in-game HUD widget.
 // UMG owns the visuals, while this class owns event routing and dialogue progression.
@@ -54,6 +58,9 @@ public:
 
 	UPROPERTY(BlueprintAssignable, Category = "UI|Reward")
 	FUOURewardPresentationCueRequestedSignature OnRewardPresentationCueRequested;
+
+	UPROPERTY(BlueprintAssignable, Category = "UI|Reward")
+	FUOURewardPresentationFinishedSignature OnRewardPresentationFinished;
 
 	UFUNCTION(BlueprintCallable, Category = "UI|HUD")
 	void RegisterHUD(UUOUInGameHUDWidget* InHUDWidget);
@@ -95,6 +102,9 @@ public:
 	void ShowRewardPresentationCue(
 		const FUOURewardPresentationData& PresentationData,
 		const FUOURewardPresentationCue& Cue);
+
+	UFUNCTION(BlueprintCallable, Category = "UI|Reward")
+	void NotifyRewardPresentationFinished(FName RewardId);
 
 private:
 	UFUNCTION()
