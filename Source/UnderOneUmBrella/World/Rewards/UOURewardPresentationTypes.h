@@ -7,22 +7,35 @@
 
 class UTexture2D;
 
-// Reward 수집 움직임의 특정 시간에 월드 연출과 UI로 전달되는 신호입니다.
-USTRUCT(BlueprintType)
+// Motion Cue를 어느 시스템에서 처리할지 구분합니다.
+UENUM(BlueprintType)
+enum class EUOURewardMotionCueChannel : uint8
+{
+	Presentation,
+	Feedback
+};
+
+// Reward 수집 움직임의 특정 시간에 담당 시스템으로 전달되는 신호입니다.
+USTRUCT(BlueprintType, meta = (DisplayName = "UOU Reward Motion Cue"))
 struct UNDERONEUMBRELLA_API FUOURewardPresentationCue
 {
 	GENERATED_BODY()
 
-	// Blueprint에서 어떤 연출을 실행할지 구분하는 이름입니다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Presentation|Cue")
+	// 이 Cue를 처리할 시스템입니다. Feedback Cue는 UI Host로 전달되지 않습니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Motion|Cue")
+	EUOURewardMotionCueChannel Channel =
+		EUOURewardMotionCueChannel::Presentation;
+
+	// 담당 시스템 안에서 어떤 동작을 실행할지 구분하는 이름입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Motion|Cue")
 	FName CueId = NAME_None;
 
 	// 수집 움직임이 시작된 뒤 Cue가 발생할 시간입니다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Presentation|Cue", meta = (ClampMin = "0.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Motion|Cue", meta = (ClampMin = "0.0"))
 	float TriggerTime = 0.0f;
 
 	// 텍스트 Cue처럼 추가 문자열이 필요할 때 사용하는 선택 값입니다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Presentation|Cue", meta = (MultiLine = "true"))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Motion|Cue", meta = (MultiLine = "true"))
 	FText Text;
 };
 
