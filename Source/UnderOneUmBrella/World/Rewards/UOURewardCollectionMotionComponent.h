@@ -37,6 +37,9 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Reward|Motion")
 	bool IsCollectionMotionPlaying() const;
 
+	UFUNCTION(BlueprintPure, Category = "Reward|Motion|Cues")
+	bool HasCueForChannel(EUOURewardMotionCueChannel Channel) const;
+
 	UPROPERTY(BlueprintAssignable, Category = "Reward|Motion|Events")
 	FUOURewardCollectionMotionFinishedSignature OnCollectionMotionFinished;
 
@@ -66,7 +69,7 @@ protected:
 	float EaseExponent = 2.0f;
 
 	// 수집 움직임 중 지정된 시간에 발생할 연출 신호입니다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Motion|Cues")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Motion|Cues", meta = (DisplayName = "Motion Cues"))
 	TArray<FUOURewardPresentationCue> PresentationCues;
 
 private:

@@ -38,6 +38,7 @@ UUOURewardCollectionMotionComponent::UUOURewardCollectionMotionComponent()
 	PrimaryComponentTick.bStartWithTickEnabled = false;
 
 	FUOURewardPresentationCue DefaultFeedbackCue;
+	DefaultFeedbackCue.Channel = EUOURewardMotionCueChannel::Feedback;
 	DefaultFeedbackCue.CueId = TEXT("StartFeedback");
 	DefaultFeedbackCue.TriggerTime = 0.25f;
 	PresentationCues.Add(DefaultFeedbackCue);
@@ -116,6 +117,16 @@ bool UUOURewardCollectionMotionComponent::StartCollectionMotion(
 bool UUOURewardCollectionMotionComponent::IsCollectionMotionPlaying() const
 {
 	return bMotionPlaying;
+}
+
+bool UUOURewardCollectionMotionComponent::HasCueForChannel(
+	EUOURewardMotionCueChannel Channel) const
+{
+	return PresentationCues.ContainsByPredicate(
+		[Channel](const FUOURewardPresentationCue& Cue)
+		{
+			return Cue.Channel == Channel && !Cue.CueId.IsNone();
+		});
 }
 
 void UUOURewardCollectionMotionComponent::ApplyMotion(float NormalizedTime)
