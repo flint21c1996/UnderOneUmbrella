@@ -67,6 +67,9 @@ struct FUOULightReflectionSegmentData
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Reflection Path")
 	float BeamEndRadius = 0.0f;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Reflection Path", meta = (Units = "deg", ToolTip = "이 반사 구간에서 실제로 사용한 빛의 확산각입니다."))
+	float BeamConeAngle = 0.0f;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Reflection Path")
 	float IncomingIntensity = 0.0f;
 

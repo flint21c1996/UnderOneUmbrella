@@ -52,7 +52,8 @@ bool UUOULightInteractionSurfaceComponent::CanReflectLight() const
 {
 	return LightInteractionMode == EUOULightInteractionMode::Reflecting &&
 		ReflectionRange > 0.0f &&
-		ReflectionConeAngle > 0.0f &&
+		(ReflectionConeAngleMode == EUOULightReflectionConeAngleMode::PreserveIncoming ||
+			ReflectionConeAngle > 0.0f) &&
 		ReflectionIntensityMultiplier > 0.0f &&
 		(!bLimitReflectionBySurfaceAperture || GetReflectionApertureRadius() > KINDA_SMALL_NUMBER);
 }
@@ -120,6 +121,14 @@ float UUOULightInteractionSurfaceComponent::ClampReflectionBeamRadius(
 	const float EffectiveApertureRadius =
 		GetReflectionApertureRadius() * FMath::Clamp(IncidenceProjection, 0.0f, 1.0f);
 	return FMath::Min(SafeIncomingRadius, EffectiveApertureRadius);
+}
+
+float UUOULightInteractionSurfaceComponent::ResolveReflectionConeAngle(float IncomingConeAngle) const
+{
+	const float ConeAngle = ReflectionConeAngleMode == EUOULightReflectionConeAngleMode::PreserveIncoming
+		? IncomingConeAngle
+		: ReflectionConeAngle;
+	return FMath::Clamp(ConeAngle, 1.0f, 89.0f);
 }
 
 FVector UUOULightInteractionSurfaceComponent::GetReflectionDirection(

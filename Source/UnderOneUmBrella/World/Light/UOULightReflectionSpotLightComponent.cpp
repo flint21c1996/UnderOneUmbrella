@@ -178,11 +178,7 @@ void UUOULightReflectionSpotLightComponent::UpdateSpotLight(
 
 	const FVector Direction = SegmentData.ReflectedDirection.GetSafeNormal();
 	const float SegmentLength = FMath::Max(MinimumSegmentLength, SegmentData.SegmentLength);
-	const float EndRadius = FMath::Max(SegmentData.BeamStartRadius, SegmentData.BeamEndRadius);
-	const float OuterConeAngle = FMath::Clamp(
-		FMath::RadiansToDegrees(FMath::Atan2(EndRadius, SegmentLength)),
-		1.0f,
-		89.0f);
+	const float OuterConeAngle = FMath::Clamp(SegmentData.BeamConeAngle, 1.0f, 89.0f);
 
 	SpotLight->SetWorldLocationAndRotation(
 		SegmentData.ReflectionStart,

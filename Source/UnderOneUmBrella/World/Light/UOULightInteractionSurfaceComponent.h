@@ -7,6 +7,13 @@
 #include "UOULightInteractionSurfaceComponent.generated.h"
 
 UENUM(BlueprintType)
+enum class EUOULightReflectionConeAngleMode : uint8
+{
+	PreserveIncoming UMETA(DisplayName = "입사 확산각 유지", ToolTip = "광원에서 전달된 확산각을 다음 반사 구간에도 그대로 사용합니다."),
+	Override UMETA(DisplayName = "직접 지정", ToolTip = "이 반사면의 Reflection Cone Angle을 사용합니다.")
+};
+
+UENUM(BlueprintType)
 enum class EUOULightReflectionFrontNormalMode : uint8
 {
 	ComponentForward UMETA(DisplayName = "Component Forward", ToolTip = "컴포넌트의 Forward 방향을 반사면 앞면으로 사용합니다."),
@@ -75,6 +82,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection", meta = (ClampMin = "0.0", ToolTip = "반사된 게임플레이 빛이 도달할 수 있는 최대 거리입니다."))
 	float ReflectionRange = 600.0f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection", meta = (ToolTip = "입사 광원의 확산각을 유지할지, 이 반사면의 각도를 사용할지 결정합니다."))
+	EUOULightReflectionConeAngleMode ReflectionConeAngleMode =
+		EUOULightReflectionConeAngleMode::PreserveIncoming;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection", meta = (ClampMin = "1.0", ClampMax = "89.0", ToolTip = "반사된 게임플레이 빛의 원뿔 각도입니다."))
 	float ReflectionConeAngle = 12.0f;
 
@@ -110,6 +121,9 @@ public:
 		float IncomingBeamRadius,
 		const FVector& IncomingDirection,
 		const FVector& HitNormal) const;
+
+	UFUNCTION(BlueprintPure, Category = "Light|Reflection", meta = (ToolTip = "입사 확산각과 반사면 설정을 바탕으로 실제 반사 확산각을 반환합니다."))
+	float ResolveReflectionConeAngle(float IncomingConeAngle) const;
 
 protected:
 	void ValidateSettings();

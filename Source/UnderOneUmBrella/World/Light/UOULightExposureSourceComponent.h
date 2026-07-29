@@ -182,6 +182,7 @@ protected:
 		const FVector& ReflectionOrigin,
 		const FVector& ReflectedDirection,
 		float BeamStartRadius,
+		float BeamConeAngle,
 		float SurfaceIntensity,
 		float DeltaTime,
 		TSet<UObject*>& LitReceivers,
@@ -191,6 +192,7 @@ protected:
 		const FVector& ReflectionOrigin,
 		const FVector& ReflectedDirection,
 		float BeamStartRadius,
+		float BeamConeAngle,
 		const TSet<const UUOULightInteractionSurfaceComponent*>& VisitedSurfaces,
 		UUOULightInteractionSurfaceComponent*& OutSurface,
 		FHitResult& OutSurfaceHit,
@@ -200,13 +202,15 @@ protected:
 		const UUOULightInteractionSurfaceComponent* SurfaceComponent,
 		float IncomingIntensity,
 		float Distance,
-		float Angle) const;
+		float Angle,
+		float BeamConeAngle) const;
 	bool TryBuildReflectedExposureData(
 		UObject* ReceiverObject,
 		const UUOULightInteractionSurfaceComponent* SurfaceComponent,
 		const FVector& ReflectionOrigin,
 		const FVector& ReflectedDirection,
 		float BeamStartRadius,
+		float BeamConeAngle,
 		float SurfaceIntensity,
 		float DeltaTime,
 		FUOULightExposureData& OutExposureData,
