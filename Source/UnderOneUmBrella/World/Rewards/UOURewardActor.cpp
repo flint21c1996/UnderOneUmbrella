@@ -244,7 +244,6 @@ void AUOURewardActor::StartRewardFeedback()
 	if (RewardFeedbackComponent == nullptr
 		|| !RewardFeedbackComponent->StartFeedback(
 			PlayerCharacter,
-			RewardId,
 			GetActorLocation()))
 	{
 		bWaitingForRewardFeedback = false;

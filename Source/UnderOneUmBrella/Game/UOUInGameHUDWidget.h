@@ -108,16 +108,6 @@ public:
 	UFUNCTION(BlueprintImplementableEvent, BlueprintCosmetic, Category = "HUD|Title")
 	void ShowTitleCard(const FUOUTitleDisplayData& TitleData);
 
-	// 보상 수집 시작 시 결과 패널과 UMG 애니메이션을 재생하는 Blueprint 진입점입니다.
-	UFUNCTION(BlueprintImplementableEvent, BlueprintCosmetic, Category = "HUD|Reward")
-	void ShowRewardPresentation(const FUOURewardPresentationData& PresentationData);
-
-	// RewardActor의 수집 움직임 중 발생한 Cue를 해당 프레임에 HUD Blueprint로 전달합니다.
-	UFUNCTION(BlueprintImplementableEvent, BlueprintCosmetic, Category = "HUD|Reward")
-	void HandleRewardPresentationCue(
-		const FUOURewardPresentationData& PresentationData,
-		const FUOURewardPresentationCue& Cue);
-
 	// DataTable의 RowName과 CueId를 연결해 등록된 Reward Presentation Widget을 실행합니다.
 	UFUNCTION(BlueprintCallable, Category = "HUD|Reward")
 	bool ProcessRewardPresentationCue(

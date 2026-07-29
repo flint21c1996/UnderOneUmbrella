@@ -33,10 +33,6 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Feedback|Presentation")
 	FUOURewardPresentationData PresentationData;
 
-	// false이면 결과 UI는 자동으로 열지 않고 HUD의 Reward Presentation Cue에서 직접 제어합니다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Feedback|Presentation")
-	bool bRequestPresentationOnFeedbackStart = true;
-
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Feedback", meta = (ClampMin = "0.0"))
 	float FeedbackDuration = 1.5f;
 
@@ -83,7 +79,7 @@ public:
 	FUOURewardFeedbackFinishedSignature OnFeedbackFinished;
 
 	UFUNCTION(BlueprintCallable, Category = "Reward|Feedback")
-	bool StartFeedback(AUOUCharacter* Collector, FName RewardId, FVector RewardWorldLocation);
+	bool StartFeedback(AUOUCharacter* Collector, FVector RewardWorldLocation);
 
 	UFUNCTION(BlueprintCallable, Category = "Reward|Feedback")
 	void FinishFeedback();
@@ -97,7 +93,6 @@ protected:
 
 private:
 	void SpawnCollectionEffect(const AUOUCharacter* Collector, const FVector& RewardWorldLocation) const;
-	void RequestRewardUIPresentation(AUOUCharacter* Collector, FName RewardId) const;
 	void ApplyPlayerFeedback(AUOUCharacter* Collector);
 	bool StartCollectionMontage();
 	void ReleasePlayerFeedback();

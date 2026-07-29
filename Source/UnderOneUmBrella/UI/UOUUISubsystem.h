@@ -19,10 +19,6 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FUOUDialogueBubbleRequestedSignat
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FUOUDialogueLineStartedSignature, AActor*, SpeakerActor, const FUOUDialogueLine&, Line);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FUOUDialogueEndedSignature);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FUOUTitleRequestedSignature, const FUOUTitleDisplayData&, TitleData);
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
-	FUOURewardPresentationRequestedSignature,
-	const FUOURewardPresentationData&,
-	PresentationData);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(
 	FUOURewardPresentationCueRequestedSignature,
 	const FUOURewardPresentationData&,
@@ -55,9 +51,6 @@ public:
 
 	UPROPERTY(BlueprintAssignable, Category = "UI|Title")
 	FUOUTitleRequestedSignature OnTitleRequested;
-
-	UPROPERTY(BlueprintAssignable, Category = "UI|Reward")
-	FUOURewardPresentationRequestedSignature OnRewardPresentationRequested;
 
 	UPROPERTY(BlueprintAssignable, Category = "UI|Reward")
 	FUOURewardPresentationCueRequestedSignature OnRewardPresentationCueRequested;
@@ -97,9 +90,6 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "UI|Title")
 	void ShowTitle(const FUOUTitleDisplayData& TitleData);
-
-	UFUNCTION(BlueprintCallable, Category = "UI|Reward")
-	void ShowRewardPresentation(const FUOURewardPresentationData& PresentationData);
 
 	UFUNCTION(BlueprintCallable, Category = "UI|Reward")
 	void ShowRewardPresentationCue(

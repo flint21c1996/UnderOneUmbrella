@@ -214,15 +214,6 @@ void UUOUUISubsystem::ShowTitle(const FUOUTitleDisplayData& TitleData)
 	}
 }
 
-void UUOUUISubsystem::ShowRewardPresentation(const FUOURewardPresentationData& PresentationData)
-{
-	OnRewardPresentationRequested.Broadcast(PresentationData);
-	if (RegisteredHUDWidget.IsValid())
-	{
-		RegisteredHUDWidget->ShowRewardPresentation(PresentationData);
-	}
-}
-
 void UUOUUISubsystem::ShowRewardPresentationCue(
 	const FUOURewardPresentationData& PresentationData,
 	const FUOURewardPresentationCue& Cue)
@@ -230,7 +221,7 @@ void UUOUUISubsystem::ShowRewardPresentationCue(
 	OnRewardPresentationCueRequested.Broadcast(PresentationData, Cue);
 	if (RegisteredHUDWidget.IsValid())
 	{
-		RegisteredHUDWidget->HandleRewardPresentationCue(PresentationData, Cue);
+		RegisteredHUDWidget->ProcessRewardPresentationCue(PresentationData, Cue);
 	}
 }
 
