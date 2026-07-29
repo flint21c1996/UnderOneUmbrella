@@ -214,6 +214,88 @@ bool FUOUWindCharacterAccelerationTest::RunTest(const FString& Parameters)
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FUOUWindMagnitudeCappedAccelerationTest,
+	"UnderOneUmbrella.Wind.Character.MagnitudeCappedAcceleration",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUOUWindMagnitudeCappedAccelerationTest::RunTest(
+	const FString& Parameters)
+{
+	TestEqual(
+		TEXT("A new wind direction accumulates without resetting existing velocity"),
+		UOUWindMotion::
+			CalculateMagnitudeCappedDirectionalAcceleration(
+				FVector(600.0f, 0.0f, 0.0f),
+				FVector::RightVector,
+				1000.0f,
+				500.0f,
+				1.0f),
+		500.0f);
+
+	TestEqual(
+		TEXT("New directional acceleration stops at the total velocity magnitude cap"),
+		UOUWindMotion::
+			CalculateMagnitudeCappedDirectionalAcceleration(
+				FVector(800.0f, 0.0f, 0.0f),
+				FVector::RightVector,
+				1000.0f,
+				1000.0f,
+				1.0f),
+		600.0f);
+
+	TestEqual(
+		TEXT("A perpendicular wind cannot push an already capped velocity over the maximum"),
+		UOUWindMotion::
+			CalculateMagnitudeCappedDirectionalAcceleration(
+				FVector(1000.0f, 0.0f, 0.0f),
+				FVector::RightVector,
+				1000.0f,
+				500.0f,
+				1.0f),
+		0.0f);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FUOUWindTransitionVelocityTest,
+	"UnderOneUmbrella.Wind.Character.TransitionTransfersSpeed",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUOUWindTransitionVelocityTest::RunTest(
+	const FString& Parameters)
+{
+	const FVector TransitionVelocity =
+		UOUWindMotion::CalculateWindTransitionVelocity(
+			FVector(1000.0f, 0.0f, 0.0f),
+			FVector::RightVector,
+			1200.0f,
+			0.8f);
+
+	TestTrue(
+		TEXT("Wind-to-wind transition preserves current speed"),
+		FMath::IsNearlyEqual(
+			TransitionVelocity.Size(),
+			1000.0f,
+			KINDA_SMALL_NUMBER));
+
+	TestTrue(
+		TEXT("Wind-to-wind transition blends twenty percent old direction and eighty percent new direction"),
+		TransitionVelocity.GetSafeNormal().Equals(
+			FVector(0.2f, 0.8f, 0.0f).GetSafeNormal(),
+			KINDA_SMALL_NUMBER));
+
+	TestEqual(
+		TEXT("Transferred current velocity respects the maximum"),
+		UOUWindMotion::CalculateWindTransitionVelocity(
+			FVector(600.0f, 800.0f, 0.0f),
+			FVector::RightVector,
+			900.0f,
+			1.0f),
+		FVector(0.0f, 900.0f, 0.0f));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FUOUWindEntryVelocityRetentionTest,
 	"UnderOneUmbrella.Wind.Character.EntryVelocityRetention",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)

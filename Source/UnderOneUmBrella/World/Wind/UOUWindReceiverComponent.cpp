@@ -71,14 +71,13 @@ void UUOUWindReceiverComponent::ReceiveWind_Implementation(const FUOUWindExposur
 
 			BeginWindborneMovement(MovementComponent, WindData);
 
-			const float CurrentSpeedAlongWind =
-				FVector::DotProduct(MovementComponent->Velocity, WindDirection);
 			const float TargetSpeedAlongWind =
 				FMath::Max(0.0f, WindData.MaximumSpeed);
 			const float AppliedAcceleration =
-				UOUWindMotion::CalculateDirectionalAcceleration(
-					true,
-					CurrentSpeedAlongWind,
+				UOUWindMotion::
+					CalculateMagnitudeCappedDirectionalAcceleration(
+					MovementComponent->Velocity,
+					WindDirection,
 					TargetSpeedAlongWind,
 					RequestedAcceleration,
 					WindData.DeltaTime);
@@ -271,14 +270,16 @@ void UUOUWindReceiverComponent::BeginWindborneMovement(
 		RestoreFallingBraking();
 	}
 
-	const bool bEnteringNewWindSegment =
-		!bCharacterWindActive
-		|| ActiveWindSourceActor.Get() != WindData.SourceActor
-		|| ActiveWindReflectionIndex != WindData.ReflectionIndex;
+	const bool bEnteringWind = !bCharacterWindActive;
+	const bool bChangingWindSegment =
+		bCharacterWindActive
+		&& (ActiveWindSourceActor.Get() != WindData.SourceActor
+			|| ActiveWindReflectionIndex
+				!= WindData.ReflectionIndex);
 	WindborneMovementComponent = MovementComponent;
 	bCharacterWindActive = true;
 
-	if (bEnteringNewWindSegment)
+	if (bEnteringWind)
 	{
 		MovementComponent->Velocity =
 			UOUWindMotion::CalculateWindEntryVelocity(
@@ -290,7 +291,24 @@ void UUOUWindReceiverComponent::BeginWindborneMovement(
 				FMath::Min(
 					WindData.MaximumEntrySpeed,
 					WindData.MaximumSpeed),
-				ExistingVelocityRetentionOnWindEntry);
+				ExistingVelocityRetentionOnWindEntry)
+				.GetClampedToMaxSize(
+					FMath::Max(
+						0.0f,
+						WindData.MaximumSpeed));
+	}
+	else if (bChangingWindSegment)
+	{
+		MovementComponent->Velocity =
+			UOUWindMotion::CalculateWindTransitionVelocity(
+				MovementComponent->Velocity,
+				WindData.Direction,
+				WindData.MaximumSpeed,
+				WindVelocityTransferRatio);
+	}
+
+	if (bEnteringWind || bChangingWindSegment)
+	{
 		LastWindEntrySpeed = FVector::DotProduct(
 			MovementComponent->Velocity,
 			WindData.Direction.GetSafeNormal());

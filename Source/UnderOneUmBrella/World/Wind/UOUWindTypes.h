@@ -62,6 +62,94 @@ namespace UOUWindMotion
 			DeltaTime);
 	}
 
+	inline float CalculateMagnitudeCappedDirectionalAcceleration(
+		const FVector& CurrentVelocity,
+		const FVector& AccelerationDirection,
+		float MaximumSpeed,
+		float RequestedAcceleration,
+		float DeltaTime)
+	{
+		const FVector SafeDirection =
+			AccelerationDirection.GetSafeNormal();
+		const float SafeMaximumSpeed =
+			FMath::Max(0.0f, MaximumSpeed);
+		const float SafeRequestedAcceleration =
+			FMath::Max(0.0f, RequestedAcceleration);
+		if (SafeDirection.IsNearlyZero()
+			|| SafeMaximumSpeed <= 0.0f
+			|| SafeRequestedAcceleration <= 0.0f
+			|| DeltaTime <= 0.0f)
+		{
+			return 0.0f;
+		}
+
+		const float CurrentSpeedSquared =
+			CurrentVelocity.SizeSquared();
+		const float CurrentSpeedAlongDirection =
+			FVector::DotProduct(
+				CurrentVelocity,
+				SafeDirection);
+		const float Discriminant =
+			FMath::Square(CurrentSpeedAlongDirection)
+			+ FMath::Square(SafeMaximumSpeed)
+			- CurrentSpeedSquared;
+		if (Discriminant <= 0.0f)
+		{
+			return 0.0f;
+		}
+
+		const float MaximumVelocityDelta =
+			FMath::Max(
+				0.0f,
+				-CurrentSpeedAlongDirection
+					+ FMath::Sqrt(Discriminant));
+		return FMath::Min(
+			SafeRequestedAcceleration,
+			MaximumVelocityDelta
+				/ FMath::Max(
+					DeltaTime,
+					KINDA_SMALL_NUMBER));
+	}
+
+	inline FVector CalculateWindTransitionVelocity(
+		const FVector& PreviousVelocity,
+		const FVector& NewWindDirection,
+		float MaximumSpeed,
+		float VelocityTransferRatio)
+	{
+		const FVector SafeNewWindDirection =
+			NewWindDirection.GetSafeNormal();
+		if (SafeNewWindDirection.IsNearlyZero())
+		{
+			return PreviousVelocity.GetClampedToMaxSize(
+				FMath::Max(0.0f, MaximumSpeed));
+		}
+
+		const float SafeTransferRatio =
+			FMath::Clamp(
+				VelocityTransferRatio,
+				0.0f,
+				1.0f);
+		const float PreviousSpeed = PreviousVelocity.Size();
+		const FVector PreviousDirection =
+			PreviousVelocity.GetSafeNormal();
+		FVector BlendedDirection =
+			PreviousDirection * (1.0f - SafeTransferRatio)
+			+ SafeNewWindDirection * SafeTransferRatio;
+		if (!BlendedDirection.Normalize())
+		{
+			BlendedDirection =
+				SafeTransferRatio >= 0.5f
+					? SafeNewWindDirection
+					: PreviousDirection;
+		}
+
+		return BlendedDirection
+			* FMath::Min(
+				PreviousSpeed,
+				FMath::Max(0.0f, MaximumSpeed));
+	}
+
 	inline FVector CalculateWindEntryVelocity(
 		const FVector& PreviousVelocity,
 		const FVector& WindDirection,

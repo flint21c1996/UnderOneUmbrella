@@ -14,6 +14,7 @@ class UBoxComponent;
 class UPrimitiveComponent;
 class USceneComponent;
 class UStaticMeshComponent;
+struct FCollisionObjectQueryParams;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnUOUWindPathChangedSignature);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnUOUWindPhaseChangedSignature, bool, bIsBlowing);
