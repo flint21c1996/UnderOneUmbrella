@@ -221,7 +221,8 @@ protected:
 		const FVector& Direction,
 		float Length,
 		float ConeAngleDegrees,
-		float StartRadius) const;
+		float StartRadius,
+		const FColor& Color) const;
 	static void AddActorPrimitiveComponentsToIgnore(
 		const AActor* Actor,
 		FCollisionQueryParams& QueryParams,

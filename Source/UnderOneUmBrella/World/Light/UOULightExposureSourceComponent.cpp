@@ -838,12 +838,38 @@ void UUOULightExposureSourceComponent::EmitReflectedLightFromSurface(
 		const float BeamEndRadius = CurrentBeamStartRadius + SegmentLength * FMath::Tan(
 			FMath::DegreesToRadians(FMath::Clamp(CurrentSurface->ReflectionConeAngle, 1.0f, 89.0f)));
 
+		const float NextSurfaceIntensity = bHasNextSurface
+			? CalculateReflectedSegmentIntensity(
+				CurrentSurface,
+				IncomingSurfaceIntensity,
+				NextSurfaceDistance,
+				NextSurfaceAngle)
+			: 0.0f;
+		FColor ReflectionDebugColor = FColor::White;
+		if (ReflectionDepth >= MaxReflectionBouncesPerPath)
+		{
+			ReflectionDebugColor = FColor::Purple;
+		}
+		else if (bHasNextSurface && NextSurfaceIntensity <= MinimumReflectedIntensity)
+		{
+			ReflectionDebugColor = FColor::Yellow;
+		}
+		else if (bHasNextSurface)
+		{
+			ReflectionDebugColor = FColor::Blue;
+		}
+		else if (SegmentBlockingHit.bBlockingHit)
+		{
+			ReflectionDebugColor = FColor::Red;
+		}
+
 		DrawDebugReflectionFrustum(
 			ReflectionOrigin,
 			ReflectedDirection,
 			SegmentLength,
 			CurrentSurface->ReflectionConeAngle,
-			CurrentBeamStartRadius);
+			CurrentBeamStartRadius,
+			ReflectionDebugColor);
 
 		TArray<TObjectPtr<UObject>> ReachedReceivers;
 		EmitReflectedLightToReceivers(
@@ -889,11 +915,6 @@ void UUOULightExposureSourceComponent::EmitReflectedLightFromSurface(
 			break;
 		}
 
-		const float NextSurfaceIntensity = CalculateReflectedSegmentIntensity(
-			CurrentSurface,
-			IncomingSurfaceIntensity,
-			NextSurfaceDistance,
-			NextSurfaceAngle);
 		if (NextSurfaceIntensity <= MinimumReflectedIntensity)
 		{
 			PathData.FinalIntensity = NextSurfaceIntensity;
@@ -1416,7 +1437,8 @@ void UUOULightExposureSourceComponent::DrawDebugReflectionFrustum(
 	const FVector& Direction,
 	float Length,
 	float ConeAngleDegrees,
-	float StartRadius) const
+	float StartRadius,
+	const FColor& Color) const
 {
 	if (!bDrawDebug || !UUOUDebugSubsystem::IsDebugWorldDrawEnabled(this, EUOUDebugCategory::Puzzle))
 	{
@@ -1432,7 +1454,6 @@ void UUOULightExposureSourceComponent::DrawDebugReflectionFrustum(
 
 	if (UWorld* World = GetWorld())
 	{
-		const FColor ReflectionColor = UUOUDebugSubsystem::GetDebugCategoryColor(this, EUOUDebugCategory::Puzzle, FColor::Blue);
 		const FVector End = Start + SafeDirection * SafeLength;
 		const float ConeAngleRadians = FMath::DegreesToRadians(
 			FMath::Clamp(ConeAngleDegrees, 1.0f, 89.0f));
@@ -1443,7 +1464,7 @@ void UUOULightExposureSourceComponent::DrawDebugReflectionFrustum(
 		FVector RadiusAxisY = FVector::ZeroVector;
 		SafeDirection.FindBestAxisVectors(RadiusAxisX, RadiusAxisY);
 
-		DrawDebugLine(World, Start, End, ReflectionColor, false, DebugDrawTime, 0, 1.5f);
+		DrawDebugLine(World, Start, End, Color, false, DebugDrawTime, 0, 1.5f);
 		for (int32 SegmentIndex = 0; SegmentIndex < ConeSegments; ++SegmentIndex)
 		{
 			const float Angle = UE_TWO_PI * static_cast<float>(SegmentIndex) / static_cast<float>(ConeSegments);
@@ -1458,22 +1479,22 @@ void UUOULightExposureSourceComponent::DrawDebugReflectionFrustum(
 			const FVector EndPoint = End + RadiusDirection * EndRadius;
 			const FVector NextEndPoint = End + NextRadiusDirection * EndRadius;
 
-			DrawDebugLine(World, StartPoint, EndPoint, ReflectionColor, false, DebugDrawTime, 0, 1.0f);
-			DrawDebugLine(World, EndPoint, NextEndPoint, ReflectionColor, false, DebugDrawTime, 0, 1.0f);
+			DrawDebugLine(World, StartPoint, EndPoint, Color, false, DebugDrawTime, 0, 1.0f);
+			DrawDebugLine(World, EndPoint, NextEndPoint, Color, false, DebugDrawTime, 0, 1.0f);
 			if (SafeStartRadius > KINDA_SMALL_NUMBER)
 			{
 				DrawDebugLine(
 					World,
 					StartPoint,
 					NextStartPoint,
-					ReflectionColor,
+					Color,
 					false,
 					DebugDrawTime,
 					0,
 					1.0f);
 			}
 		}
-		DrawDebugPoint(World, Start, 8.0f, ReflectionColor, false, DebugDrawTime);
+		DrawDebugPoint(World, Start, 8.0f, Color, false, DebugDrawTime);
 	}
 }
 
