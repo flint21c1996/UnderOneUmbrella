@@ -15,6 +15,12 @@
 #include "World/Wind/UOUWindInteractionSurfaceComponent.h"
 #include "World/Wind/UOUWindReceivableInterface.h"
 
+namespace UOUWindEmitterActorPrivate
+{
+	const FName GeneratedWindPathPreviewTag(
+		TEXT("UOU.GeneratedWindPathPreview"));
+}
+
 AUOUWindEmitterActor::AUOUWindEmitterActor()
 {
 	PrimaryActorTick.bCanEverTick = true;
@@ -228,10 +234,33 @@ void AUOUWindEmitterActor::InitializePulseCycleState()
 
 void AUOUWindEmitterActor::RebuildWindPath()
 {
+	RebuildWindPathInternal(false);
+}
+
+void AUOUWindEmitterActor::RebuildWindPathPreview()
+{
+	ValidateSettings();
+
+#if WITH_EDITOR
+	const UWorld* World = GetWorld();
+	if (World != nullptr && !World->IsGameWorld())
+	{
+		RebuildWindPathInternal(true);
+		RebuildEditorWindPathPreviewComponents();
+		return;
+	}
+#endif
+
+	RebuildWindPath();
+}
+
+void AUOUWindEmitterActor::RebuildWindPathInternal(
+	bool bIgnoreRuntimeWindState)
+{
 	WindPathSegments.Reset();
 
 	UWorld* World = GetWorld();
-	if (!IsWindBlowing()
+	if ((!bIgnoreRuntimeWindState && !IsWindBlowing())
 		|| World == nullptr
 		|| WindOrigin == nullptr
 		|| MaxWindDistance <= 0.0f
@@ -317,6 +346,142 @@ void AUOUWindEmitterActor::RebuildWindPath()
 
 	OnWindPathChanged.Broadcast();
 }
+
+#if WITH_EDITOR
+void AUOUWindEmitterActor::RebuildEditorWindPathPreviewComponents()
+{
+	ClearEditorWindPathPreviewComponents();
+
+	if (WindRangePreview != nullptr)
+	{
+		WindRangePreview->SetVisibility(false);
+	}
+
+	if (!bShowWindRangePreview || RootScene == nullptr)
+	{
+		return;
+	}
+
+	EditorWindPathPreviewComponents.Reserve(
+		WindPathSegments.Num() * 2);
+
+	for (const FUOUWindPathSegment& Segment : WindPathSegments)
+	{
+		const float SegmentLength = Segment.GetLength();
+		if (SegmentLength <= KINDA_SMALL_NUMBER)
+		{
+			continue;
+		}
+
+		const FColor SegmentColor =
+			Segment.ReflectionIndex == 0
+				? FColor::Cyan
+				: FColor::MakeRedToGreenColorFromScalar(
+					FMath::Clamp(
+						Segment.Strength
+							/ FMath::Max(
+								WindAcceleration,
+								KINDA_SMALL_NUMBER),
+						0.0f,
+						1.0f));
+		const FQuat SegmentRotation =
+			FRotationMatrix::MakeFromX(
+				Segment.Direction.GetSafeNormal())
+				.ToQuat();
+
+		UBoxComponent* RangePreview =
+			NewObject<UBoxComponent>(
+				this,
+				*FString::Printf(
+					TEXT("WindPathRangePreview_%02d"),
+					Segment.ReflectionIndex),
+				RF_Transient | RF_TextExportTransient);
+		if (RangePreview != nullptr)
+		{
+			RangePreview->CreationMethod =
+				EComponentCreationMethod::UserConstructionScript;
+			RangePreview->ComponentTags.AddUnique(
+				UOUWindEmitterActorPrivate::
+					GeneratedWindPathPreviewTag);
+			RangePreview->SetupAttachment(RootScene);
+			RangePreview->SetMobility(
+				EComponentMobility::Movable);
+			RangePreview->SetCollisionEnabled(
+				ECollisionEnabled::NoCollision);
+			RangePreview->SetGenerateOverlapEvents(false);
+			RangePreview->SetCanEverAffectNavigation(false);
+			RangePreview->SetHiddenInGame(true);
+			RangePreview->SetIsVisualizationComponent(true);
+			RangePreview->ShapeColor = SegmentColor;
+			RangePreview->SetLineThickness(2.0f);
+			RangePreview->SetBoxExtent(
+				FVector(
+					SegmentLength * 0.5f,
+					WindRadius,
+					WindRadius),
+				false);
+			RangePreview->RegisterComponent();
+			RangePreview->SetWorldLocationAndRotation(
+				(Segment.Start + Segment.End) * 0.5f,
+				SegmentRotation);
+			EditorWindPathPreviewComponents.Add(
+				RangePreview);
+		}
+
+		UArrowComponent* DirectionPreview =
+			NewObject<UArrowComponent>(
+				this,
+				*FString::Printf(
+					TEXT("WindPathDirectionPreview_%02d"),
+					Segment.ReflectionIndex),
+				RF_Transient | RF_TextExportTransient);
+		if (DirectionPreview != nullptr)
+		{
+			DirectionPreview->CreationMethod =
+				EComponentCreationMethod::UserConstructionScript;
+			DirectionPreview->ComponentTags.AddUnique(
+				UOUWindEmitterActorPrivate::
+					GeneratedWindPathPreviewTag);
+			DirectionPreview->SetupAttachment(RootScene);
+			DirectionPreview->SetMobility(
+				EComponentMobility::Movable);
+			DirectionPreview->SetCollisionEnabled(
+				ECollisionEnabled::NoCollision);
+			DirectionPreview->SetHiddenInGame(true);
+			DirectionPreview->SetIsVisualizationComponent(true);
+			DirectionPreview->SetArrowFColor(SegmentColor);
+			DirectionPreview->SetArrowSize(1.5f);
+			DirectionPreview->SetArrowLength(SegmentLength);
+			DirectionPreview->RegisterComponent();
+			DirectionPreview->SetWorldLocationAndRotation(
+				Segment.Start,
+				SegmentRotation);
+			EditorWindPathPreviewComponents.Add(
+				DirectionPreview);
+		}
+	}
+}
+
+void AUOUWindEmitterActor::ClearEditorWindPathPreviewComponents()
+{
+	TArray<USceneComponent*> ExistingSceneComponents;
+	GetComponents<USceneComponent>(ExistingSceneComponents);
+
+	for (USceneComponent* ExistingComponent :
+		ExistingSceneComponents)
+	{
+		if (ExistingComponent != nullptr
+			&& ExistingComponent->ComponentTags.Contains(
+				UOUWindEmitterActorPrivate::
+					GeneratedWindPathPreviewTag))
+		{
+			ExistingComponent->DestroyComponent();
+		}
+	}
+
+	EditorWindPathPreviewComponents.Reset();
+}
+#endif
 
 void AUOUWindEmitterActor::ValidateSettings()
 {

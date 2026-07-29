@@ -3,8 +3,35 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
 #include "Misc/AutomationTest.h"
+#include "World/Wind/UOUWindEmitterActor.h"
 #include "World/Wind/UOUWindInteractionSurfaceComponent.h"
 #include "World/Wind/UOUWindTypes.h"
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FUOUWindEditorPreviewButtonTest,
+	"UnderOneUmbrella.Wind.Editor.PreviewButtonIsCallInEditor",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUOUWindEditorPreviewButtonTest::RunTest(
+	const FString& Parameters)
+{
+	const UFunction* PreviewFunction =
+		AUOUWindEmitterActor::StaticClass()->FindFunctionByName(
+			GET_FUNCTION_NAME_CHECKED(
+				AUOUWindEmitterActor,
+				RebuildWindPathPreview));
+	TestNotNull(
+		TEXT("Wind preview rebuild function exists"),
+		PreviewFunction);
+	if (PreviewFunction != nullptr)
+	{
+		TestTrue(
+			TEXT("Wind preview rebuild function is exposed as a Call In Editor button"),
+			PreviewFunction->HasMetaData(
+				TEXT("CallInEditor")));
+	}
+	return true;
+}
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FUOUWindMirrorReflectionTest,
