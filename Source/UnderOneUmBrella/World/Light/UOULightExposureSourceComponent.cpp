@@ -89,6 +89,7 @@ void UUOULightExposureSourceComponent::EmitLight(float DeltaTime)
 	const float ExposureRange = GetExposureRange();
 	if (World == nullptr || DeltaTime <= 0.0f || ExposureRange <= 0.0f || Intensity <= 0.0f)
 	{
+		NotifyReflectionPathsUpdatedIfChanged();
 		return;
 	}
 
@@ -111,6 +112,7 @@ void UUOULightExposureSourceComponent::EmitLight(float DeltaTime)
 
 	if (!bHasOverlaps)
 	{
+		NotifyReflectionPathsUpdatedIfChanged();
 		return;
 	}
 
@@ -160,6 +162,7 @@ void UUOULightExposureSourceComponent::EmitLight(float DeltaTime)
 
 	if (!bEnableReflectedLight || MaxReflectionSurfacesPerTick <= 0)
 	{
+		NotifyReflectionPathsUpdatedIfChanged();
 		return;
 	}
 
@@ -196,6 +199,8 @@ void UUOULightExposureSourceComponent::EmitLight(float DeltaTime)
 			EmitReflectedLightFromSurface(InteractionSurface, SurfaceHit, DeltaTime, LitReceivers);
 		}
 	}
+
+	NotifyReflectionPathsUpdatedIfChanged();
 }
 
 void UUOULightExposureSourceComponent::Configure(float NewConeAngle, float NewIntensity)
@@ -215,6 +220,70 @@ void UUOULightExposureSourceComponent::ValidateSettings()
 	MaxReflectionBouncesPerPath = FMath::Clamp(MaxReflectionBouncesPerPath, 1, 16);
 	MinimumReflectedIntensity = FMath::Max(0.0f, MinimumReflectedIntensity);
 	DebugDrawTime = FMath::Max(0.0f, DebugDrawTime);
+}
+
+void UUOULightExposureSourceComponent::NotifyReflectionPathsUpdatedIfChanged()
+{
+	if (bHasPublishedReflectionPaths &&
+		AreReflectionPathsEquivalent(LastPublishedReflectionPaths, ReflectionPaths))
+	{
+		return;
+	}
+
+	LastPublishedReflectionPaths = ReflectionPaths;
+	bHasPublishedReflectionPaths = true;
+	OnReflectionPathsUpdated.Broadcast(ReflectionPaths);
+}
+
+bool UUOULightExposureSourceComponent::AreReflectionPathsEquivalent(
+	const TArray<FUOULightReflectionPathData>& A,
+	const TArray<FUOULightReflectionPathData>& B)
+{
+	if (A.Num() != B.Num())
+	{
+		return false;
+	}
+
+	for (int32 PathIndex = 0; PathIndex < A.Num(); ++PathIndex)
+	{
+		const FUOULightReflectionPathData& LeftPath = A[PathIndex];
+		const FUOULightReflectionPathData& RightPath = B[PathIndex];
+		if (LeftPath.PathIndex != RightPath.PathIndex ||
+			LeftPath.SourcePosition != RightPath.SourcePosition ||
+			LeftPath.EndReason != RightPath.EndReason ||
+			LeftPath.FinalIntensity != RightPath.FinalIntensity ||
+			LeftPath.Segments.Num() != RightPath.Segments.Num())
+		{
+			return false;
+		}
+
+		for (int32 SegmentIndex = 0; SegmentIndex < LeftPath.Segments.Num(); ++SegmentIndex)
+		{
+			const FUOULightReflectionSegmentData& LeftSegment = LeftPath.Segments[SegmentIndex];
+			const FUOULightReflectionSegmentData& RightSegment = RightPath.Segments[SegmentIndex];
+			if (LeftSegment.BounceIndex != RightSegment.BounceIndex ||
+				LeftSegment.Reflector != RightSegment.Reflector ||
+				LeftSegment.NextReflector != RightSegment.NextReflector ||
+				LeftSegment.BlockingComponent != RightSegment.BlockingComponent ||
+				LeftSegment.ReachedReceivers != RightSegment.ReachedReceivers ||
+				LeftSegment.IncomingStart != RightSegment.IncomingStart ||
+				LeftSegment.ImpactPoint != RightSegment.ImpactPoint ||
+				LeftSegment.ReflectionStart != RightSegment.ReflectionStart ||
+				LeftSegment.SegmentEnd != RightSegment.SegmentEnd ||
+				LeftSegment.IncomingDirection != RightSegment.IncomingDirection ||
+				LeftSegment.ReflectedDirection != RightSegment.ReflectedDirection ||
+				LeftSegment.SegmentLength != RightSegment.SegmentLength ||
+				LeftSegment.BeamStartRadius != RightSegment.BeamStartRadius ||
+				LeftSegment.BeamEndRadius != RightSegment.BeamEndRadius ||
+				LeftSegment.IncomingIntensity != RightSegment.IncomingIntensity ||
+				LeftSegment.ReflectedIntensity != RightSegment.ReflectedIntensity)
+			{
+				return false;
+			}
+		}
+	}
+
+	return true;
 }
 
 USceneComponent* UUOULightExposureSourceComponent::GetReferencedSourceTransform() const

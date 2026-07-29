@@ -17,6 +17,11 @@ class USpotLightComponent;
 class UUOULightInteractionSurfaceComponent;
 class UUOUUmbrellaLightShadeVolumeComponent;
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
+	FUOULightReflectionPathsUpdatedSignature,
+	const TArray<FUOULightReflectionPathData>&,
+	ReflectionPaths);
+
 // 스포트라이트 형태의 광원에서 주변 수신체로 게임플레이용 빛 노출을 전달합니다.
 UCLASS(ClassGroup=(Light), meta=(BlueprintSpawnableComponent, DisplayName="UOU Light Exposure Source", ToolTip = "광원 원뿔 범위 안의 수신체에 게임플레이용 빛 노출을 전달합니다."))
 class UUOULightExposureSourceComponent : public UActorComponent, public IUOUPuzzleDebugInfoProvider
@@ -117,6 +122,9 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Runtime", meta = (DisplayName = "Reflection Paths", ToolTip = "마지막 빛 샘플링에서 계산된 반사 경로 데이터입니다. VFX와 퍼즐 로직에서 사용할 수 있습니다."))
 	TArray<FUOULightReflectionPathData> ReflectionPaths;
 
+	UPROPERTY(BlueprintAssignable, Category = "Light|Reflection", meta = (ToolTip = "계산된 반사 경로가 이전 결과와 달라졌을 때 호출됩니다."))
+	FUOULightReflectionPathsUpdatedSignature OnReflectionPathsUpdated;
+
 	UFUNCTION(BlueprintCallable, Category = "Light", meta = (ToolTip = "입력된 DeltaTime으로 게임플레이 빛 샘플링을 한 번 실행합니다."))
 	void EmitLight(float DeltaTime);
 
@@ -132,7 +140,16 @@ public:
 protected:
 	float PendingDeltaTime = 0.0f;
 
+	UPROPERTY(Transient)
+	TArray<FUOULightReflectionPathData> LastPublishedReflectionPaths;
+
+	bool bHasPublishedReflectionPaths = false;
+
 	void ValidateSettings();
+	void NotifyReflectionPathsUpdatedIfChanged();
+	static bool AreReflectionPathsEquivalent(
+		const TArray<FUOULightReflectionPathData>& A,
+		const TArray<FUOULightReflectionPathData>& B);
 	USceneComponent* GetReferencedSourceTransform() const;
 	USpotLightComponent* GetSourceSpotLightComponent() const;
 	ULocalLightComponent* GetSourceLocalLightComponent() const;
