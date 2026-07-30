@@ -36,13 +36,6 @@ UUOURewardCollectionMotionComponent::UUOURewardCollectionMotionComponent()
 {
 	PrimaryComponentTick.bCanEverTick = true;
 	PrimaryComponentTick.bStartWithTickEnabled = false;
-
-	FUOURewardPresentationCue DefaultFeedbackCue;
-	DefaultFeedbackCue.Channel = EUOURewardMotionCueChannel::Feedback;
-	DefaultFeedbackCue.FeedbackAction =
-		EUOURewardFeedbackCueAction::PlayPlayerAnimation;
-	DefaultFeedbackCue.TriggerTime = 0.25f;
-	PresentationCues.Add(DefaultFeedbackCue);
 }
 
 void UUOURewardCollectionMotionComponent::TickComponent(
@@ -77,7 +70,8 @@ void UUOURewardCollectionMotionComponent::TickComponent(
 
 bool UUOURewardCollectionMotionComponent::StartCollectionMotion(
 	USceneComponent* TargetComponent,
-	USplineComponent* MotionPath)
+	USplineComponent* MotionPath,
+	const TArray<FUOURewardPresentationCue>& CueRequests)
 {
 	if (!bMotionEnabled
 		|| !IsValid(TargetComponent)
@@ -97,6 +91,7 @@ bool UUOURewardCollectionMotionComponent::StartCollectionMotion(
 	StartPathRelativeRotation = ConvertWorldRotationToTargetSpace(
 		TargetComponent,
 		MotionPath->GetQuaternionAtDistanceAlongSpline(0.0f, ESplineCoordinateSpace::World));
+	ActiveCueRequests = CueRequests;
 	ElapsedTime = 0.0f;
 	bMotionPlaying = true;
 	BuildCueSchedule();
@@ -123,7 +118,7 @@ bool UUOURewardCollectionMotionComponent::IsCollectionMotionPlaying() const
 bool UUOURewardCollectionMotionComponent::HasCueForChannel(
 	EUOURewardMotionCueChannel Channel) const
 {
-	return PresentationCues.ContainsByPredicate(
+	return ActiveCueRequests.ContainsByPredicate(
 		[Channel](const FUOURewardPresentationCue& Cue)
 		{
 			return Cue.Channel == Channel
@@ -190,7 +185,7 @@ void UUOURewardCollectionMotionComponent::BuildCueSchedule()
 	PendingCueIndices.Reset();
 	NextCueIndex = 0;
 
-	for (int32 CueIndex = 0; CueIndex < PresentationCues.Num(); ++CueIndex)
+	for (int32 CueIndex = 0; CueIndex < ActiveCueRequests.Num(); ++CueIndex)
 	{
 		PendingCueIndices.Add(CueIndex);
 	}
@@ -198,8 +193,8 @@ void UUOURewardCollectionMotionComponent::BuildCueSchedule()
 	PendingCueIndices.Sort(
 		[this](const int32 LeftIndex, const int32 RightIndex)
 		{
-			const float LeftTime = PresentationCues[LeftIndex].TriggerTime;
-			const float RightTime = PresentationCues[RightIndex].TriggerTime;
+			const float LeftTime = ActiveCueRequests[LeftIndex].TriggerTime;
+			const float RightTime = ActiveCueRequests[RightIndex].TriggerTime;
 			return FMath::IsNearlyEqual(LeftTime, RightTime)
 				? LeftIndex < RightIndex
 				: LeftTime < RightTime;
@@ -214,7 +209,7 @@ void UUOURewardCollectionMotionComponent::BroadcastPassedCues(float CurrentTime)
 	while (PendingCueIndices.IsValidIndex(NextCueIndex))
 	{
 		const FUOURewardPresentationCue& Cue =
-			PresentationCues[PendingCueIndices[NextCueIndex]];
+			ActiveCueRequests[PendingCueIndices[NextCueIndex]];
 		const float SafeTriggerTime =
 			FMath::Clamp(Cue.TriggerTime, 0.0f, SafeMotionDuration);
 		if (SafeTriggerTime > SafeCurrentTime + KINDA_SMALL_NUMBER)
@@ -242,6 +237,7 @@ void UUOURewardCollectionMotionComponent::FinishCollectionMotion()
 	ElapsedTime = 0.0f;
 	MotionTarget.Reset();
 	ActiveMotionPath.Reset();
+	ActiveCueRequests.Reset();
 	PendingCueIndices.Reset();
 	NextCueIndex = 0;
 	SetComponentTickEnabled(false);

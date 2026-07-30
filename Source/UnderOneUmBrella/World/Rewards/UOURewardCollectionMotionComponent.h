@@ -32,7 +32,10 @@ public:
 
 	// 현재 Transform을 시작점으로 저장하고 Spline 경로를 따라 수집 움직임을 재생합니다.
 	UFUNCTION(BlueprintCallable, Category = "Reward|Motion")
-	bool StartCollectionMotion(USceneComponent* TargetComponent, USplineComponent* MotionPath);
+	bool StartCollectionMotion(
+		USceneComponent* TargetComponent,
+		USplineComponent* MotionPath,
+		const TArray<FUOURewardPresentationCue>& CueRequests);
 
 	UFUNCTION(BlueprintPure, Category = "Reward|Motion")
 	bool IsCollectionMotionPlaying() const;
@@ -68,10 +71,6 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Motion", meta = (ClampMin = "1.0"))
 	float EaseExponent = 2.0f;
 
-	// 수집 움직임 중 지정된 시간에 발생할 연출 신호입니다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Motion|Cues", meta = (DisplayName = "Motion Cues"))
-	TArray<FUOURewardPresentationCue> PresentationCues;
-
 private:
 	void ApplyMotion(float NormalizedTime);
 	void BuildCueSchedule();
@@ -83,6 +82,8 @@ private:
 	FTransform StartRelativeTransform = FTransform::Identity;
 	FVector StartPathRelativeLocation = FVector::ZeroVector;
 	FQuat StartPathRelativeRotation = FQuat::Identity;
+	// FeedbackComponent에서 전달받아 현재 재생 중에만 사용하는 Cue 복사본입니다.
+	TArray<FUOURewardPresentationCue> ActiveCueRequests;
 	TArray<int32> PendingCueIndices;
 	int32 NextCueIndex = 0;
 	float ElapsedTime = 0.0f;

@@ -169,8 +169,17 @@ bool AUOURewardActor::TryCollectReward(AActor* Collector)
 	bWaitingForCollectionMotion = RewardCollectionMotionComponent != nullptr;
 	BeginRewardFeedback();
 
+	const TArray<FUOURewardPresentationCue> EmptyCueRequests;
+	const TArray<FUOURewardPresentationCue>& CueRequests =
+		RewardFeedbackComponent != nullptr
+			? RewardFeedbackComponent->GetCueRequests()
+			: EmptyCueRequests;
+
 	if (bWaitingForCollectionMotion
-		&& !RewardCollectionMotionComponent->StartCollectionMotion(VisualMesh, CollectionMotionPath))
+		&& !RewardCollectionMotionComponent->StartCollectionMotion(
+			VisualMesh,
+			CollectionMotionPath,
+			CueRequests))
 	{
 		bWaitingForCollectionMotion = false;
 	}

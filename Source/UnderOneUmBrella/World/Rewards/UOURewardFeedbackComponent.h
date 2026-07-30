@@ -36,6 +36,17 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Feedback", meta = (ClampMin = "0.0"))
 	float FeedbackDuration = 1.5f;
 
+	// 하나의 Motion 시간축에서 실행할 Feedback 및 Presentation 요청 목록입니다.
+	UPROPERTY(
+		EditAnywhere,
+		BlueprintReadOnly,
+		Category = "Reward|Feedback|Timeline",
+		meta = (DisplayName = "Cue Requests"))
+	TArray<FUOURewardPresentationCue> CueRequests;
+
+	// MotionComponent가 수집 시작 시 복사할 Cue 요청 목록을 제공합니다.
+	const TArray<FUOURewardPresentationCue>& GetCueRequests() const;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Feedback|Effect")
 	TObjectPtr<UNiagaraSystem> CollectionEffect = nullptr;
 

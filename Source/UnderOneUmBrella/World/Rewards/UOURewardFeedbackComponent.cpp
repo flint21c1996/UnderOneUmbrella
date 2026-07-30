@@ -14,6 +14,13 @@
 UUOURewardFeedbackComponent::UUOURewardFeedbackComponent()
 {
 	PrimaryComponentTick.bCanEverTick = false;
+
+	FUOURewardPresentationCue DefaultFeedbackCue;
+	DefaultFeedbackCue.Channel = EUOURewardMotionCueChannel::Feedback;
+	DefaultFeedbackCue.FeedbackAction =
+		EUOURewardFeedbackCueAction::PlayPlayerAnimation;
+	DefaultFeedbackCue.TriggerTime = 0.25f;
+	CueRequests.Add(DefaultFeedbackCue);
 }
 
 void UUOURewardFeedbackComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -22,6 +29,12 @@ void UUOURewardFeedbackComponent::EndPlay(const EEndPlayReason::Type EndPlayReas
 	FinishFeedbackInternal(false);
 	ReleaseCameraFeedback();
 	Super::EndPlay(EndPlayReason);
+}
+
+const TArray<FUOURewardPresentationCue>&
+UUOURewardFeedbackComponent::GetCueRequests() const
+{
+	return CueRequests;
 }
 
 bool UUOURewardFeedbackComponent::BeginFeedback(
