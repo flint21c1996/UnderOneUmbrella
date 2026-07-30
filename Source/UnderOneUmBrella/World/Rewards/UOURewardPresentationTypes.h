@@ -15,6 +15,15 @@ enum class EUOURewardMotionCueChannel : uint8
 	Feedback
 };
 
+// Feedback Cue가 실행할 플레이어 연출 동작을 목록으로 제한합니다.
+UENUM(BlueprintType)
+enum class EUOURewardFeedbackCueAction : uint8
+{
+	PlayPlayerAnimation UMETA(DisplayName = "플레이어 애니메이션 재생"),
+	SpawnNiagara UMETA(DisplayName = "나이아가라 생성"),
+	StartCameraFocus UMETA(DisplayName = "카메라 포커스 시작")
+};
+
 // Reward 수집 움직임의 특정 시간에 담당 시스템으로 전달되는 신호입니다.
 USTRUCT(BlueprintType, meta = (DisplayName = "UOU Reward Motion Cue"))
 struct UNDERONEUMBRELLA_API FUOURewardPresentationCue
@@ -26,9 +35,26 @@ struct UNDERONEUMBRELLA_API FUOURewardPresentationCue
 	EUOURewardMotionCueChannel Channel =
 		EUOURewardMotionCueChannel::Presentation;
 
-	// 담당 시스템 안에서 어떤 동작을 실행할지 구분하는 이름입니다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Motion|Cue")
+	// Presentation 채널에서 실행할 DataTable Row Name입니다.
+	UPROPERTY(
+		EditAnywhere,
+		BlueprintReadOnly,
+		Category = "Reward|Motion|Cue",
+		meta = (
+			EditCondition = "Channel == EUOURewardMotionCueChannel::Presentation",
+			EditConditionHides))
 	FName CueId = NAME_None;
+
+	// Feedback 채널에서 실행할 개별 동작입니다.
+	UPROPERTY(
+		EditAnywhere,
+		BlueprintReadOnly,
+		Category = "Reward|Motion|Cue",
+		meta = (
+			EditCondition = "Channel == EUOURewardMotionCueChannel::Feedback",
+			EditConditionHides))
+	EUOURewardFeedbackCueAction FeedbackAction =
+		EUOURewardFeedbackCueAction::PlayPlayerAnimation;
 
 	// 수집 움직임이 시작된 뒤 Cue가 발생할 시간입니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Motion|Cue", meta = (ClampMin = "0.0"))
