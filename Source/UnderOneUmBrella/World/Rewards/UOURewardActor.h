@@ -139,7 +139,7 @@ private:
 	void ApplyComponentSettings();
 	void DisableCollectionInteraction();
 	void HideCollectedVisual();
-	void StartRewardFeedback();
+	void BeginRewardFeedback();
 	bool RoutePresentationCueToUI(const FUOURewardPresentationCue& Cue);
 	void TryCompleteCollection();
 	void CompleteCollection();
@@ -167,7 +167,6 @@ private:
 
 	bool bWaitingForRewardFeedback = false;
 	bool bWaitingForCollectionMotion = false;
-	bool bRewardFeedbackStarted = false;
 	bool bRewardPresentationActive = false;
 
 	// 에디터에서 VisualMesh에 설정한 Transform을 idle 움직임의 기준으로 보존합니다.

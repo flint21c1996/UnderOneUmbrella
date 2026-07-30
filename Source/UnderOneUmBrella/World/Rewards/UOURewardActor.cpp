@@ -167,7 +167,7 @@ bool AUOURewardActor::TryCollectReward(AActor* Collector)
 
 	bWaitingForRewardFeedback = RewardFeedbackComponent != nullptr;
 	bWaitingForCollectionMotion = RewardCollectionMotionComponent != nullptr;
-	bRewardFeedbackStarted = false;
+	BeginRewardFeedback();
 
 	if (bWaitingForCollectionMotion
 		&& !RewardCollectionMotionComponent->StartCollectionMotion(VisualMesh, CollectionMotionPath))
@@ -175,11 +175,9 @@ bool AUOURewardActor::TryCollectReward(AActor* Collector)
 		bWaitingForCollectionMotion = false;
 	}
 
-	if (!bWaitingForCollectionMotion
-		|| !RewardCollectionMotionComponent->HasCueForChannel(
-			EUOURewardMotionCueChannel::Feedback))
+	if (!bWaitingForCollectionMotion && RewardFeedbackComponent != nullptr)
 	{
-		StartRewardFeedback();
+		RewardFeedbackComponent->CompleteFeedbackSequence();
 	}
 
 	TryCompleteCollection();
@@ -241,14 +239,13 @@ void AUOURewardActor::HideCollectedVisual()
 	}
 }
 
-void AUOURewardActor::StartRewardFeedback()
+void AUOURewardActor::BeginRewardFeedback()
 {
-	if (!bWaitingForRewardFeedback || bRewardFeedbackStarted)
+	if (!bWaitingForRewardFeedback)
 	{
 		return;
 	}
 
-	bRewardFeedbackStarted = true;
 	AUOUCharacter* PlayerCharacter = Cast<AUOUCharacter>(PendingCollector.Get());
 	if (RewardFeedbackComponent == nullptr)
 	{
@@ -257,24 +254,13 @@ void AUOURewardActor::StartRewardFeedback()
 		return;
 	}
 
-	if (!RewardFeedbackComponent->StartFeedback(
+	if (!RewardFeedbackComponent->BeginFeedback(
 			PlayerCharacter,
 			GetActorLocation()))
 	{
 		bWaitingForRewardFeedback = false;
 		TryCompleteCollection();
 		return;
-	}
-
-	const bool bPresentationCueExpected =
-		!RewardId.IsNone()
-		&& bWaitingForCollectionMotion
-		&& RewardCollectionMotionComponent != nullptr
-		&& RewardCollectionMotionComponent->HasCueForChannel(
-			EUOURewardMotionCueChannel::Presentation);
-	if (bRewardPresentationActive || bPresentationCueExpected)
-	{
-		RewardFeedbackComponent->BeginPresentationCameraHold();
 	}
 
 	TryCompleteCollection();
@@ -387,10 +373,13 @@ void AUOURewardActor::HandleRewardFeedbackFinished()
 void AUOURewardActor::HandleCollectionMotionFinished()
 {
 	bWaitingForCollectionMotion = false;
-	StartRewardFeedback();
 	if (!bRewardPresentationActive && RewardFeedbackComponent != nullptr)
 	{
 		RewardFeedbackComponent->EndPresentationCameraHold();
+	}
+	if (RewardFeedbackComponent != nullptr)
+	{
+		RewardFeedbackComponent->CompleteFeedbackSequence();
 	}
 	TryCompleteCollection();
 }
@@ -400,7 +389,10 @@ void AUOURewardActor::HandleCollectionMotionCue(const FUOURewardPresentationCue&
 	switch (Cue.Channel)
 	{
 	case EUOURewardMotionCueChannel::Feedback:
-		StartRewardFeedback();
+		if (RewardFeedbackComponent != nullptr)
+		{
+			RewardFeedbackComponent->ExecuteFeedbackCue(Cue.FeedbackAction);
+		}
 		break;
 
 	case EUOURewardMotionCueChannel::Presentation:

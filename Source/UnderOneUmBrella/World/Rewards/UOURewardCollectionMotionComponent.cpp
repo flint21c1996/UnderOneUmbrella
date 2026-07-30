@@ -39,7 +39,8 @@ UUOURewardCollectionMotionComponent::UUOURewardCollectionMotionComponent()
 
 	FUOURewardPresentationCue DefaultFeedbackCue;
 	DefaultFeedbackCue.Channel = EUOURewardMotionCueChannel::Feedback;
-	DefaultFeedbackCue.CueId = TEXT("StartFeedback");
+	DefaultFeedbackCue.FeedbackAction =
+		EUOURewardFeedbackCueAction::PlayPlayerAnimation;
 	DefaultFeedbackCue.TriggerTime = 0.25f;
 	PresentationCues.Add(DefaultFeedbackCue);
 }
@@ -125,7 +126,9 @@ bool UUOURewardCollectionMotionComponent::HasCueForChannel(
 	return PresentationCues.ContainsByPredicate(
 		[Channel](const FUOURewardPresentationCue& Cue)
 		{
-			return Cue.Channel == Channel && !Cue.CueId.IsNone();
+			return Cue.Channel == Channel
+				&& (Channel == EUOURewardMotionCueChannel::Feedback
+					|| !Cue.CueId.IsNone());
 		});
 }
 
@@ -220,7 +223,8 @@ void UUOURewardCollectionMotionComponent::BroadcastPassedCues(float CurrentTime)
 		}
 
 		++NextCueIndex;
-		if (!Cue.CueId.IsNone())
+		if (Cue.Channel == EUOURewardMotionCueChannel::Feedback
+			|| !Cue.CueId.IsNone())
 		{
 			OnCollectionMotionCue.Broadcast(Cue);
 		}
