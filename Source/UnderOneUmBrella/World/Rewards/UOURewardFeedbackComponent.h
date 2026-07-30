@@ -29,10 +29,6 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Feedback")
 	bool bFeedbackEnabled = true;
 
-	// 수집 시작과 동시에 HUD에 전달할 보상 결과 화면 데이터입니다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Feedback|Presentation")
-	FUOURewardPresentationData PresentationData;
-
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Feedback", meta = (ClampMin = "0.0"))
 	float FeedbackDuration = 1.5f;
 

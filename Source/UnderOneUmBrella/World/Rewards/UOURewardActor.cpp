@@ -293,12 +293,8 @@ bool AUOURewardActor::RoutePresentationCueToUI(
 		return false;
 	}
 
-	FUOURewardPresentationData ResolvedPresentationData;
-	if (RewardFeedbackComponent != nullptr)
-	{
-		ResolvedPresentationData = RewardFeedbackComponent->PresentationData;
-	}
-	ResolvedPresentationData.RewardId = RewardId;
+	FUOURewardPresentationData PresentationData;
+	PresentationData.RewardId = RewardId;
 
 	if (RewardId.IsNone())
 	{
@@ -307,7 +303,7 @@ bool AUOURewardActor::RoutePresentationCueToUI(
 			Warning,
 			TEXT("Reward Presentation cannot hold camera because RewardId is None."));
 		return UISubsystem->ShowRewardPresentationCue(
-			ResolvedPresentationData,
+			PresentationData,
 			Cue);
 	}
 
@@ -317,7 +313,7 @@ bool AUOURewardActor::RoutePresentationCueToUI(
 
 	const bool bPresentationShown =
 		UISubsystem->ShowRewardPresentationCue(
-			ResolvedPresentationData,
+			PresentationData,
 			Cue);
 	if (!bPresentationShown)
 	{
