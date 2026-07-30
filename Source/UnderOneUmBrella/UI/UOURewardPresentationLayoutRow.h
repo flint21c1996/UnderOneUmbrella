@@ -10,7 +10,7 @@ class UUOURewardPresentationWidget;
 
 /**
  * Reward Presentation Key와 실제 연출 Widget Blueprint를 연결하는 DataTable 행입니다.
- * DataTable의 RowName을 Motion Cue의 CueId와 동일하게 사용합니다.
+ * Cue의 Presentation Row가 이 행을 직접 선택합니다.
  */
 USTRUCT(BlueprintType)
 struct UNDERONEUMBRELLA_API FUOURewardPresentationLayoutRow : public FTableRowBase

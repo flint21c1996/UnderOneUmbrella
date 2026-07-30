@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Engine/DataTable.h"
 #include "UOURewardPresentationTypes.generated.h"
 
 class UTexture2D;
@@ -35,15 +36,16 @@ struct UNDERONEUMBRELLA_API FUOURewardPresentationCue
 	EUOURewardMotionCueChannel Channel =
 		EUOURewardMotionCueChannel::Presentation;
 
-	// Presentation 채널에서 실행할 DataTable Row Name입니다.
+	// Presentation 채널에서 실행할 Layout DataTable 행입니다.
 	UPROPERTY(
 		EditAnywhere,
 		BlueprintReadOnly,
 		Category = "Reward|Motion|Cue",
 		meta = (
 			EditCondition = "Channel == EUOURewardMotionCueChannel::Presentation",
-			EditConditionHides))
-	FName CueId = NAME_None;
+			EditConditionHides,
+			RowType = "/Script/UnderOneUmBrella.UOURewardPresentationLayoutRow"))
+	FDataTableRowHandle PresentationRow;
 
 	// Feedback 채널에서 실행할 개별 동작입니다.
 	UPROPERTY(
@@ -63,6 +65,12 @@ struct UNDERONEUMBRELLA_API FUOURewardPresentationCue
 	// 텍스트 Cue처럼 추가 문자열이 필요할 때 사용하는 선택 값입니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Motion|Cue", meta = (MultiLine = "true"))
 	FText Text;
+
+	// HUD가 미리 생성한 Presentation Widget을 찾을 Row Name을 반환합니다.
+	FName GetPresentationKey() const
+	{
+		return PresentationRow.RowName;
+	}
 };
 
 // 보상 수집 시 HUD가 결과 화면과 애니메이션을 구성하는 데 사용하는 표시 데이터입니다.
