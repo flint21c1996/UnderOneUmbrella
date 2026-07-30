@@ -123,7 +123,8 @@ bool UUOURewardCollectionMotionComponent::HasCueForChannel(
 		{
 			return Cue.Channel == Channel
 				&& (Channel == EUOURewardMotionCueChannel::Feedback
-					|| !Cue.CueId.IsNone());
+					|| (Cue.PresentationRow.DataTable != nullptr
+						&& !Cue.GetPresentationKey().IsNone()));
 		});
 }
 
@@ -219,7 +220,8 @@ void UUOURewardCollectionMotionComponent::BroadcastPassedCues(float CurrentTime)
 
 		++NextCueIndex;
 		if (Cue.Channel == EUOURewardMotionCueChannel::Feedback
-			|| !Cue.CueId.IsNone())
+			|| (Cue.PresentationRow.DataTable != nullptr
+				&& !Cue.GetPresentationKey().IsNone()))
 		{
 			OnCollectionMotionCue.Broadcast(Cue);
 		}

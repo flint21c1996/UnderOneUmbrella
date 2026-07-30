@@ -279,21 +279,42 @@ bool UUOUInGameHUDWidget::ProcessRewardPresentationCue(
 	const FUOURewardPresentationData& PresentationData,
 	const FUOURewardPresentationCue& Cue)
 {
-	if (Cue.CueId.IsNone())
+	const FDataTableRowHandle& PresentationRow = Cue.PresentationRow;
+	const FName PresentationKey = Cue.GetPresentationKey();
+	const UDataTable* SelectedPresentationTable =
+		PresentationRow.DataTable.Get();
+	const UDataTable* HUDPresentationTable =
+		RewardPresentationLayoutTable.Get();
+	if (SelectedPresentationTable == nullptr || PresentationKey.IsNone())
 	{
-		UE_LOG(LogTemp, Warning, TEXT("Reward Presentation Cue has no CueId."));
+		UE_LOG(
+			LogTemp,
+			Warning,
+			TEXT("Reward Presentation Cue has no DataTable Row selected."));
+		return false;
+	}
+
+	if (SelectedPresentationTable != HUDPresentationTable)
+	{
+		UE_LOG(
+			LogTemp,
+			Warning,
+			TEXT("Reward Presentation Row '%s' uses DataTable '%s', but the HUD uses '%s'."),
+			*PresentationKey.ToString(),
+			*GetNameSafe(SelectedPresentationTable),
+			*GetNameSafe(HUDPresentationTable));
 		return false;
 	}
 
 	TObjectPtr<UUOURewardPresentationWidget>* FoundWidget =
-		RewardPresentationWidgets.Find(Cue.CueId);
+		RewardPresentationWidgets.Find(PresentationKey);
 	if (FoundWidget == nullptr || !IsValid(FoundWidget->Get()))
 	{
 		UE_LOG(
 			LogTemp,
 			Warning,
 			TEXT("Reward Presentation Key '%s' was not found in the HUD layout table."),
-			*Cue.CueId.ToString());
+			*PresentationKey.ToString());
 		return false;
 	}
 
@@ -312,7 +333,7 @@ bool UUOUInGameHUDWidget::ProcessRewardPresentationCue(
 			LogTemp,
 			Warning,
 			TEXT("Reward Presentation Key '%s' was requested while its Widget was closing."),
-			*Cue.CueId.ToString());
+			*PresentationKey.ToString());
 		return false;
 	}
 

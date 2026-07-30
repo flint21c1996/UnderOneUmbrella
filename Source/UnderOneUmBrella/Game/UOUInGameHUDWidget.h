@@ -108,7 +108,7 @@ public:
 	UFUNCTION(BlueprintImplementableEvent, BlueprintCosmetic, Category = "HUD|Title")
 	void ShowTitleCard(const FUOUTitleDisplayData& TitleData);
 
-	// DataTable의 RowName과 CueId를 연결해 등록된 Reward Presentation Widget을 실행합니다.
+	// 선택된 DataTable RowName으로 등록된 Reward Presentation Widget을 실행합니다.
 	UFUNCTION(BlueprintCallable, Category = "HUD|Reward")
 	bool ProcessRewardPresentationCue(
 		const FUOURewardPresentationData& PresentationData,
