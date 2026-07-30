@@ -86,8 +86,29 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Reward|Feedback|Events")
 	FUOURewardFeedbackFinishedSignature OnFeedbackFinished;
 
+	// 기존과 같이 세션 준비와 모든 피드백 동작을 한 번에 실행하는 편의 함수입니다.
 	UFUNCTION(BlueprintCallable, Category = "Reward|Feedback")
 	bool StartFeedback(AUOUCharacter* Collector, FVector RewardWorldLocation);
+
+	// 개별 피드백 동작을 실행하기 전에 플레이어 참조와 입력 차단 상태를 준비합니다.
+	UFUNCTION(BlueprintCallable, Category = "Reward|Feedback")
+	bool BeginFeedback(AUOUCharacter* Collector, FVector RewardWorldLocation);
+
+	// 준비된 피드백 세션에서 플레이어 수집 애니메이션만 재생합니다.
+	UFUNCTION(BlueprintCallable, Category = "Reward|Feedback|Animation")
+	bool PlayPlayerAnimationFeedback();
+
+	// 준비된 피드백 세션에서 수집 Niagara만 생성합니다.
+	UFUNCTION(BlueprintCallable, Category = "Reward|Feedback|Effect")
+	bool SpawnNiagaraFeedback();
+
+	// 준비된 피드백 세션에서 임시 카메라 포커스만 시작합니다.
+	UFUNCTION(BlueprintCallable, Category = "Reward|Feedback|Camera")
+	bool StartCameraFeedback();
+
+	// 예약된 개별 피드백 Cue가 모두 전달되었음을 알려 종료 조건 평가를 허용합니다.
+	UFUNCTION(BlueprintCallable, Category = "Reward|Feedback")
+	void CompleteFeedbackSequence();
 
 	UFUNCTION(BlueprintCallable, Category = "Reward|Feedback")
 	void FinishFeedback();
@@ -111,13 +132,13 @@ protected:
 	bool bPresentationCameraHoldActive = false;
 
 private:
-	void SpawnCollectionEffect(const AUOUCharacter* Collector, const FVector& RewardWorldLocation) const;
-	void ApplyPlayerFeedback(AUOUCharacter* Collector);
+	void ApplyPlayerInputBlock(AUOUCharacter* Collector);
 	bool StartCollectionMontage();
 	void ReleasePlayerFeedback();
 	void ReleaseCameraFeedback();
 	void FinishFeedbackInternal(bool bBroadcastFinished);
 	void TryFinishFeedback();
+	void StartFeedbackDurationTimer();
 	void HandleFeedbackTimerFinished();
 
 	UFUNCTION()
@@ -125,7 +146,11 @@ private:
 
 	FTimerHandle FeedbackTimerHandle;
 	bool bFeedbackDurationElapsed = false;
+	// true가 되기 전에는 Duration이 지나도 예약된 개별 피드백을 위해 세션을 유지합니다.
+	bool bFeedbackSequenceCompleted = false;
 	bool bCollectionMontagePlaying = false;
+	// Niagara를 Reward 위치에 생성할 때 사용하는 수집 시작 시점의 위치입니다.
+	FVector ActiveRewardWorldLocation = FVector::ZeroVector;
 
 	UPROPERTY(Transient)
 	TObjectPtr<AUOUCharacter> ActiveCollector = nullptr;

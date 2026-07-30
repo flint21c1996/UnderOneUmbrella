@@ -28,6 +28,22 @@ bool UUOURewardFeedbackComponent::StartFeedback(
 	AUOUCharacter* Collector,
 	FVector RewardWorldLocation)
 {
+	if (!BeginFeedback(Collector, RewardWorldLocation))
+	{
+		return false;
+	}
+
+	SpawnNiagaraFeedback();
+	StartCameraFeedback();
+	PlayPlayerAnimationFeedback();
+	CompleteFeedbackSequence();
+	return true;
+}
+
+bool UUOURewardFeedbackComponent::BeginFeedback(
+	AUOUCharacter* Collector,
+	FVector RewardWorldLocation)
+{
 	if (!bFeedbackEnabled
 		|| Collector == nullptr
 		|| bFeedbackPlaying
@@ -38,20 +54,105 @@ bool UUOURewardFeedbackComponent::StartFeedback(
 
 	bFeedbackPlaying = true;
 	bFeedbackDurationElapsed = false;
+	bFeedbackSequenceCompleted = false;
 	bCollectionMontagePlaying = false;
 	ActiveCollector = Collector;
+	ActiveRewardWorldLocation = RewardWorldLocation;
 
-	SpawnCollectionEffect(Collector, RewardWorldLocation);
-	ApplyPlayerFeedback(Collector);
-	StartCollectionMontage();
+	ApplyPlayerInputBlock(Collector);
+	StartFeedbackDurationTimer();
+	return true;
+}
 
+bool UUOURewardFeedbackComponent::PlayPlayerAnimationFeedback()
+{
+	if (!bFeedbackPlaying)
+	{
+		return false;
+	}
+
+	return StartCollectionMontage();
+}
+
+bool UUOURewardFeedbackComponent::SpawnNiagaraFeedback()
+{
+	UWorld* World = GetWorld();
+	if (!bFeedbackPlaying || CollectionEffect == nullptr || World == nullptr)
+	{
+		return false;
+	}
+
+	const FVector BaseLocation =
+		bSpawnEffectAtCollector && ActiveCollector != nullptr
+			? ActiveCollector->GetActorLocation()
+			: ActiveRewardWorldLocation;
+
+	UNiagaraComponent* EffectComponent = UNiagaraFunctionLibrary::SpawnSystemAtLocation(
+		World,
+		CollectionEffect,
+		BaseLocation + EffectLocationOffset,
+		FRotator::ZeroRotator,
+		EffectScale,
+		true,
+		false);
+
+	if (EffectComponent == nullptr)
+	{
+		return false;
+	}
+
+	EffectComponent->Activate(true);
+	return true;
+}
+
+bool UUOURewardFeedbackComponent::StartCameraFeedback()
+{
+	if (!bFeedbackPlaying
+		|| !bUseTemporaryCameraZoom
+		|| ActiveCollector == nullptr)
+	{
+		return false;
+	}
+
+	if (ActiveCameraController == nullptr)
+	{
+		ActiveCameraController = ActiveCollector->GetCameraControllerComponent();
+	}
+
+	if (ActiveCameraController == nullptr)
+	{
+		return false;
+	}
+
+	ActiveCameraController->RequestTemporaryFocusZoom(
+		this,
+		CameraTargetDistance,
+		CameraTargetOrthoWidth,
+		CameraFocusOffset,
+		true);
+	return ActiveCameraController->IsTemporaryZoomRequestedBy(this);
+}
+
+void UUOURewardFeedbackComponent::CompleteFeedbackSequence()
+{
+	if (!bFeedbackPlaying || bFeedbackSequenceCompleted)
+	{
+		return;
+	}
+
+	bFeedbackSequenceCompleted = true;
+	TryFinishFeedback();
+}
+
+void UUOURewardFeedbackComponent::StartFeedbackDurationTimer()
+{
 	const float SafeDuration = FMath::Max(0.0f, FeedbackDuration);
 	UWorld* World = GetWorld();
 	if (SafeDuration <= KINDA_SMALL_NUMBER || World == nullptr)
 	{
 		bFeedbackDurationElapsed = true;
 		TryFinishFeedback();
-		return true;
+		return;
 	}
 
 	World->GetTimerManager().SetTimer(
@@ -60,7 +161,6 @@ bool UUOURewardFeedbackComponent::StartFeedback(
 		&UUOURewardFeedbackComponent::HandleFeedbackTimerFinished,
 		SafeDuration,
 		false);
-	return true;
 }
 
 void UUOURewardFeedbackComponent::FinishFeedback()
@@ -103,36 +203,7 @@ void UUOURewardFeedbackComponent::EndPresentationCameraHold()
 	}
 }
 
-void UUOURewardFeedbackComponent::SpawnCollectionEffect(
-	const AUOUCharacter* Collector,
-	const FVector& RewardWorldLocation) const
-{
-	UWorld* World = GetWorld();
-	if (CollectionEffect == nullptr || World == nullptr)
-	{
-		return;
-	}
-
-	const FVector BaseLocation = bSpawnEffectAtCollector && Collector != nullptr
-		? Collector->GetActorLocation()
-		: RewardWorldLocation;
-
-	UNiagaraComponent* EffectComponent = UNiagaraFunctionLibrary::SpawnSystemAtLocation(
-		World,
-		CollectionEffect,
-		BaseLocation + EffectLocationOffset,
-		FRotator::ZeroRotator,
-		EffectScale,
-		true,
-		false);
-
-	if (EffectComponent != nullptr)
-	{
-		EffectComponent->Activate(true);
-	}
-}
-
-void UUOURewardFeedbackComponent::ApplyPlayerFeedback(AUOUCharacter* Collector)
+void UUOURewardFeedbackComponent::ApplyPlayerInputBlock(AUOUCharacter* Collector)
 {
 	if (Collector == nullptr)
 	{
@@ -144,25 +215,13 @@ void UUOURewardFeedbackComponent::ApplyPlayerFeedback(AUOUCharacter* Collector)
 	{
 		ActiveInputExecutor->RequestPlayerInputBlock(this, bStopMovementImmediately);
 	}
-
-	if (bUseTemporaryCameraZoom)
-	{
-		ActiveCameraController = Collector->GetCameraControllerComponent();
-		if (ActiveCameraController != nullptr)
-		{
-			ActiveCameraController->RequestTemporaryFocusZoom(
-				this,
-				CameraTargetDistance,
-				CameraTargetOrthoWidth,
-				CameraFocusOffset,
-				true);
-		}
-	}
 }
 
 bool UUOURewardFeedbackComponent::StartCollectionMontage()
 {
-	if (CollectionMontage == nullptr || ActiveInputExecutor == nullptr)
+	if (bCollectionMontagePlaying
+		|| CollectionMontage == nullptr
+		|| ActiveInputExecutor == nullptr)
 	{
 		return false;
 	}
@@ -243,6 +302,8 @@ void UUOURewardFeedbackComponent::FinishFeedbackInternal(bool bBroadcastFinished
 	}
 
 	bFeedbackPlaying = false;
+	bFeedbackSequenceCompleted = false;
+	ActiveRewardWorldLocation = FVector::ZeroVector;
 	ReleasePlayerFeedback();
 
 	if (bBroadcastFinished)
@@ -254,6 +315,7 @@ void UUOURewardFeedbackComponent::FinishFeedbackInternal(bool bBroadcastFinished
 void UUOURewardFeedbackComponent::TryFinishFeedback()
 {
 	if (!bFeedbackPlaying
+		|| !bFeedbackSequenceCompleted
 		|| bPresentationCameraHoldActive
 		|| !bFeedbackDurationElapsed
 		|| bCollectionMontagePlaying)
