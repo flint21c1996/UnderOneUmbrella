@@ -51,39 +51,80 @@ public:
 	TObjectPtr<UNiagaraSystem> CollectionEffect = nullptr;
 
 	// true면 플레이어 위치, false면 수집되기 직전 보상 위치를 파티클 기준점으로 사용합니다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Feedback|Effect")
+	UPROPERTY(
+		EditAnywhere,
+		BlueprintReadOnly,
+		Category = "Reward|Feedback|Effect",
+		meta = (EditCondition = "CollectionEffect != nullptr", EditConditionHides))
 	bool bSpawnEffectAtCollector = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Feedback|Effect")
+	UPROPERTY(
+		EditAnywhere,
+		BlueprintReadOnly,
+		Category = "Reward|Feedback|Effect",
+		meta = (EditCondition = "CollectionEffect != nullptr", EditConditionHides))
 	FVector EffectLocationOffset = FVector(0.0f, 0.0f, 100.0f);
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Feedback|Effect")
+	UPROPERTY(
+		EditAnywhere,
+		BlueprintReadOnly,
+		Category = "Reward|Feedback|Effect",
+		meta = (EditCondition = "CollectionEffect != nullptr", EditConditionHides))
 	FVector EffectScale = FVector::OneVector;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Feedback|Input")
 	bool bBlockPlayerInput = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Feedback|Input")
+	UPROPERTY(
+		EditAnywhere,
+		BlueprintReadOnly,
+		Category = "Reward|Feedback|Input",
+		meta = (EditCondition = "bBlockPlayerInput", EditConditionHides))
 	bool bStopMovementImmediately = true;
 
 	// 플레이어가 보상을 획득했음을 몸동작으로 보여줄 전용 몽타주입니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Feedback|Animation")
 	TObjectPtr<UAnimMontage> CollectionMontage = nullptr;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Feedback|Animation", meta = (ClampMin = "0.01"))
+	UPROPERTY(
+		EditAnywhere,
+		BlueprintReadOnly,
+		Category = "Reward|Feedback|Animation",
+		meta = (
+			ClampMin = "0.01",
+			EditCondition = "CollectionMontage != nullptr",
+			EditConditionHides))
 	float MontagePlayRate = 1.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Feedback|Animation")
+	UPROPERTY(
+		EditAnywhere,
+		BlueprintReadOnly,
+		Category = "Reward|Feedback|Animation",
+		meta = (EditCondition = "CollectionMontage != nullptr", EditConditionHides))
 	FName MontageStartSection = NAME_None;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Feedback|Camera")
 	bool bUseTemporaryCameraZoom = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Feedback|Camera", meta = (ClampMin = "0.0"))
+	UPROPERTY(
+		EditAnywhere,
+		BlueprintReadOnly,
+		Category = "Reward|Feedback|Camera",
+		meta = (
+			ClampMin = "0.0",
+			EditCondition = "bUseTemporaryCameraZoom",
+			EditConditionHides))
 	float CameraTargetDistance = 300.0f;
 
 	// 프로젝트의 기본 직교 카메라에서는 값이 작을수록 플레이어가 크게 보입니다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Feedback|Camera", meta = (ClampMin = "1.0"))
+	UPROPERTY(
+		EditAnywhere,
+		BlueprintReadOnly,
+		Category = "Reward|Feedback|Camera",
+		meta = (
+			ClampMin = "1.0",
+			EditCondition = "bUseTemporaryCameraZoom",
+			EditConditionHides))
 	float CameraTargetOrthoWidth = 500.0f;
 
 	// 임시 줌 중 평상시 주시점에서 이동할 캐릭터 기준 오프셋입니다. Z를 높이면 상체가 화면 중심에 가까워집니다.
@@ -91,7 +132,10 @@ public:
 		EditAnywhere,
 		BlueprintReadOnly,
 		Category = "Reward|Feedback|Camera",
-		meta = (ToolTip = "임시 줌 중 평상시 주시점에서 이동할 캐릭터 기준 오프셋입니다. X는 앞, Y는 오른쪽, Z는 위쪽이며 Z를 높이면 캐릭터 상체가 화면 중심에 가까워집니다."))
+		meta = (
+			EditCondition = "bUseTemporaryCameraZoom",
+			EditConditionHides,
+			ToolTip = "임시 줌 중 평상시 주시점에서 이동할 캐릭터 기준 오프셋입니다. X는 앞, Y는 오른쪽, Z는 위쪽이며 Z를 높이면 캐릭터 상체가 화면 중심에 가까워집니다."))
 	FVector CameraFocusOffset = FVector(0.0f, 0.0f, 80.0f);
 
 	UPROPERTY(BlueprintAssignable, Category = "Reward|Feedback|Events")

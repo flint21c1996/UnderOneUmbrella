@@ -62,10 +62,6 @@ struct UNDERONEUMBRELLA_API FUOURewardPresentationCue
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Motion|Cue", meta = (ClampMin = "0.0"))
 	float TriggerTime = 0.0f;
 
-	// 텍스트 Cue처럼 추가 문자열이 필요할 때 사용하는 선택 값입니다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Motion|Cue", meta = (MultiLine = "true"))
-	FText Text;
-
 	// HUD가 미리 생성한 Presentation Widget을 찾을 Row Name을 반환합니다.
 	FName GetPresentationKey() const
 	{
