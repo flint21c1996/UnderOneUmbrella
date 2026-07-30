@@ -24,22 +24,6 @@ void UUOURewardFeedbackComponent::EndPlay(const EEndPlayReason::Type EndPlayReas
 	Super::EndPlay(EndPlayReason);
 }
 
-bool UUOURewardFeedbackComponent::StartFeedback(
-	AUOUCharacter* Collector,
-	FVector RewardWorldLocation)
-{
-	if (!BeginFeedback(Collector, RewardWorldLocation))
-	{
-		return false;
-	}
-
-	SpawnNiagaraFeedback();
-	StartCameraFeedback();
-	PlayPlayerAnimationFeedback();
-	CompleteFeedbackSequence();
-	return true;
-}
-
 bool UUOURewardFeedbackComponent::BeginFeedback(
 	AUOUCharacter* Collector,
 	FVector RewardWorldLocation)
@@ -60,8 +44,26 @@ bool UUOURewardFeedbackComponent::BeginFeedback(
 	ActiveRewardWorldLocation = RewardWorldLocation;
 
 	ApplyPlayerInputBlock(Collector);
-	StartFeedbackDurationTimer();
+	BeginFeedbackDurationTimer();
 	return true;
+}
+
+bool UUOURewardFeedbackComponent::ExecuteFeedbackCue(
+	EUOURewardFeedbackCueAction FeedbackAction)
+{
+	switch (FeedbackAction)
+	{
+	case EUOURewardFeedbackCueAction::PlayPlayerAnimation:
+		return PlayPlayerAnimationFeedback();
+
+	case EUOURewardFeedbackCueAction::SpawnNiagara:
+		return SpawnNiagaraFeedback();
+
+	case EUOURewardFeedbackCueAction::StartCameraFocus:
+		return StartCameraFeedback();
+	}
+
+	return false;
 }
 
 bool UUOURewardFeedbackComponent::PlayPlayerAnimationFeedback()
@@ -144,7 +146,7 @@ void UUOURewardFeedbackComponent::CompleteFeedbackSequence()
 	TryFinishFeedback();
 }
 
-void UUOURewardFeedbackComponent::StartFeedbackDurationTimer()
+void UUOURewardFeedbackComponent::BeginFeedbackDurationTimer()
 {
 	const float SafeDuration = FMath::Max(0.0f, FeedbackDuration);
 	UWorld* World = GetWorld();
@@ -175,8 +177,7 @@ bool UUOURewardFeedbackComponent::IsFeedbackPlaying() const
 
 bool UUOURewardFeedbackComponent::BeginPresentationCameraHold()
 {
-	if (ActiveCameraController == nullptr
-		|| !ActiveCameraController->IsTemporaryZoomRequestedBy(this))
+	if (!bFeedbackPlaying)
 	{
 		return false;
 	}

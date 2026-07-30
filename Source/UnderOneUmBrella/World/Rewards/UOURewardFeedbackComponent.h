@@ -86,13 +86,13 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Reward|Feedback|Events")
 	FUOURewardFeedbackFinishedSignature OnFeedbackFinished;
 
-	// 기존과 같이 세션 준비와 모든 피드백 동작을 한 번에 실행하는 편의 함수입니다.
-	UFUNCTION(BlueprintCallable, Category = "Reward|Feedback")
-	bool StartFeedback(AUOUCharacter* Collector, FVector RewardWorldLocation);
-
 	// 개별 피드백 동작을 실행하기 전에 플레이어 참조와 입력 차단 상태를 준비합니다.
 	UFUNCTION(BlueprintCallable, Category = "Reward|Feedback")
 	bool BeginFeedback(AUOUCharacter* Collector, FVector RewardWorldLocation);
+
+	// Feedback Cue 목록에서 선택한 동작 하나만 실행합니다.
+	UFUNCTION(BlueprintCallable, Category = "Reward|Feedback|Cue")
+	bool ExecuteFeedbackCue(EUOURewardFeedbackCueAction FeedbackAction);
 
 	// 준비된 피드백 세션에서 플레이어 수집 애니메이션만 재생합니다.
 	UFUNCTION(BlueprintCallable, Category = "Reward|Feedback|Animation")
@@ -138,7 +138,7 @@ private:
 	void ReleaseCameraFeedback();
 	void FinishFeedbackInternal(bool bBroadcastFinished);
 	void TryFinishFeedback();
-	void StartFeedbackDurationTimer();
+	void BeginFeedbackDurationTimer();
 	void HandleFeedbackTimerFinished();
 
 	UFUNCTION()
