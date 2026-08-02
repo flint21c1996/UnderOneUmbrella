@@ -60,7 +60,7 @@ public:
 	bool bUseAngleFalloff = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Exposure", meta = (ClampMin = "0.0", ToolTip = "빛 샘플링 간격입니다. 0이면 매 틱 샘플링합니다."))
-	float SampleInterval = 0.0f;
+	float SampleInterval = 0.05f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Collision", meta = (ToolTip = "빛 수신체와 상호작용 표면을 찾을 오브젝트 타입 목록입니다."))
 	TArray<TEnumAsByte<EObjectTypeQuery>> ReceiverObjectTypes;
@@ -102,7 +102,7 @@ public:
 	bool bDrawDebug = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Debug", meta = (ClampMin = "0.0", ToolTip = "디버그 드로우 유지 시간입니다. 0이면 한 프레임만 표시합니다."))
-	float DebugDrawTime = 0.0f;
+	float DebugDrawTime = 0.06f;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Runtime", meta = (ToolTip = "마지막 샘플링에서 검사한 수신체 개수입니다."))
 	int32 LastReceiverCount = 0;
