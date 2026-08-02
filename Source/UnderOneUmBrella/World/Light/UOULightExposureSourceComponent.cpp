@@ -17,6 +17,59 @@
 #include "Player/UOUUmbrellaLightShadeVolumeComponent.h"
 #include "World/Light/UOULightReceivableInterface.h"
 
+namespace
+{
+	FString BuildReflectionPathTopologyKey(const FUOULightReflectionPathData& PathData)
+	{
+		FString Key;
+		for (const FUOULightReflectionSegmentData& SegmentData : PathData.Segments)
+		{
+			if (!Key.IsEmpty())
+			{
+				Key += TEXT(" -> ");
+			}
+
+			Key += GetPathNameSafe(SegmentData.Reflector);
+		}
+
+		return Key;
+	}
+
+	bool AreDirectionsNearlyEqual(const FVector& A, const FVector& B, float AngleToleranceDegrees)
+	{
+		const FVector SafeA = A.GetSafeNormal();
+		const FVector SafeB = B.GetSafeNormal();
+		if (SafeA.IsNearlyZero() || SafeB.IsNearlyZero())
+		{
+			return SafeA.IsNearlyZero() && SafeB.IsNearlyZero();
+		}
+
+		const float MinimumDot = FMath::Cos(FMath::DegreesToRadians(
+			FMath::Clamp(AngleToleranceDegrees, 0.0f, 180.0f)));
+		return FVector::DotProduct(SafeA, SafeB) >= MinimumDot;
+	}
+
+	bool HaveSameReceivers(
+		const TArray<TObjectPtr<UObject>>& A,
+		const TArray<TObjectPtr<UObject>>& B)
+	{
+		if (A.Num() != B.Num())
+		{
+			return false;
+		}
+
+		for (const TObjectPtr<UObject>& Receiver : A)
+		{
+			if (!B.Contains(Receiver))
+			{
+				return false;
+			}
+		}
+
+		return true;
+	}
+}
+
 UUOULightExposureSourceComponent::UUOULightExposureSourceComponent()
 {
 	PrimaryComponentTick.bCanEverTick = true;
@@ -39,7 +92,18 @@ void UUOULightExposureSourceComponent::TickComponent(
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
-	if (!bEmitLight || DeltaTime <= 0.0f)
+	if (!bEmitLight)
+	{
+		PendingDeltaTime = 0.0f;
+		if (!ReflectionPaths.IsEmpty() || !LastPublishedReflectionPaths.IsEmpty())
+		{
+			ReflectionPaths.Reset();
+			NotifyReflectionPathsUpdatedIfChanged(false);
+		}
+		return;
+	}
+
+	if (DeltaTime <= 0.0f)
 	{
 		return;
 	}
@@ -219,25 +283,74 @@ void UUOULightExposureSourceComponent::ValidateSettings()
 	MaxReflectionSurfacesPerTick = FMath::Max(0, MaxReflectionSurfacesPerTick);
 	MaxReflectionBouncesPerPath = FMath::Clamp(MaxReflectionBouncesPerPath, 1, 16);
 	MinimumReflectedIntensity = FMath::Max(0.0f, MinimumReflectedIntensity);
+	ReflectionPathPositionTolerance = FMath::Max(0.0f, ReflectionPathPositionTolerance);
+	ReflectionPathDirectionToleranceDegrees = FMath::Clamp(
+		ReflectionPathDirectionToleranceDegrees,
+		0.0f,
+		180.0f);
+	ReflectionPathIntensityTolerance = FMath::Max(0.0f, ReflectionPathIntensityTolerance);
+	ReflectionPathLossGraceTime = FMath::Max(0.0f, ReflectionPathLossGraceTime);
 	DebugDrawTime = FMath::Max(0.0f, DebugDrawTime);
 }
 
-void UUOULightExposureSourceComponent::NotifyReflectionPathsUpdatedIfChanged()
+void UUOULightExposureSourceComponent::NotifyReflectionPathsUpdatedIfChanged(bool bAllowLossGrace)
 {
+	NormalizeReflectionPathOrder();
+
 	if (bHasPublishedReflectionPaths &&
 		AreReflectionPathsEquivalent(LastPublishedReflectionPaths, ReflectionPaths))
 	{
+		ReflectionPaths = LastPublishedReflectionPaths;
+		ReflectionPathLossStartWorldTime = -1.0f;
 		return;
 	}
+
+	UWorld* World = GetWorld();
+	const bool bHasTopologyLoss = bHasPublishedReflectionPaths &&
+		HasReflectionPathTopologyLoss(LastPublishedReflectionPaths, ReflectionPaths);
+	if (bAllowLossGrace &&
+		bHasTopologyLoss &&
+		ReflectionPathLossGraceTime > 0.0f &&
+		World != nullptr)
+	{
+		const float CurrentWorldTime = World->GetTimeSeconds();
+		if (ReflectionPathLossStartWorldTime < 0.0f)
+		{
+			ReflectionPathLossStartWorldTime = CurrentWorldTime;
+		}
+
+		if (CurrentWorldTime - ReflectionPathLossStartWorldTime < ReflectionPathLossGraceTime)
+		{
+			ReflectionPaths = LastPublishedReflectionPaths;
+			return;
+		}
+	}
+
+	ReflectionPathLossStartWorldTime = -1.0f;
 
 	LastPublishedReflectionPaths = ReflectionPaths;
 	bHasPublishedReflectionPaths = true;
 	OnReflectionPathsUpdated.Broadcast(ReflectionPaths);
 }
 
+void UUOULightExposureSourceComponent::NormalizeReflectionPathOrder()
+{
+	ReflectionPaths.Sort([](
+		const FUOULightReflectionPathData& A,
+		const FUOULightReflectionPathData& B)
+	{
+		return BuildReflectionPathTopologyKey(A) < BuildReflectionPathTopologyKey(B);
+	});
+
+	for (int32 PathIndex = 0; PathIndex < ReflectionPaths.Num(); ++PathIndex)
+	{
+		ReflectionPaths[PathIndex].PathIndex = PathIndex;
+	}
+}
+
 bool UUOULightExposureSourceComponent::AreReflectionPathsEquivalent(
 	const TArray<FUOULightReflectionPathData>& A,
-	const TArray<FUOULightReflectionPathData>& B)
+	const TArray<FUOULightReflectionPathData>& B) const
 {
 	if (A.Num() != B.Num())
 	{
@@ -249,9 +362,9 @@ bool UUOULightExposureSourceComponent::AreReflectionPathsEquivalent(
 		const FUOULightReflectionPathData& LeftPath = A[PathIndex];
 		const FUOULightReflectionPathData& RightPath = B[PathIndex];
 		if (LeftPath.PathIndex != RightPath.PathIndex ||
-			LeftPath.SourcePosition != RightPath.SourcePosition ||
+			!LeftPath.SourcePosition.Equals(RightPath.SourcePosition, ReflectionPathPositionTolerance) ||
 			LeftPath.EndReason != RightPath.EndReason ||
-			LeftPath.FinalIntensity != RightPath.FinalIntensity ||
+			!FMath::IsNearlyEqual(LeftPath.FinalIntensity, RightPath.FinalIntensity, ReflectionPathIntensityTolerance) ||
 			LeftPath.Segments.Num() != RightPath.Segments.Num())
 		{
 			return false;
@@ -265,19 +378,19 @@ bool UUOULightExposureSourceComponent::AreReflectionPathsEquivalent(
 				LeftSegment.Reflector != RightSegment.Reflector ||
 				LeftSegment.NextReflector != RightSegment.NextReflector ||
 				LeftSegment.BlockingComponent != RightSegment.BlockingComponent ||
-				LeftSegment.ReachedReceivers != RightSegment.ReachedReceivers ||
-				LeftSegment.IncomingStart != RightSegment.IncomingStart ||
-				LeftSegment.ImpactPoint != RightSegment.ImpactPoint ||
-				LeftSegment.ReflectionStart != RightSegment.ReflectionStart ||
-				LeftSegment.SegmentEnd != RightSegment.SegmentEnd ||
-				LeftSegment.IncomingDirection != RightSegment.IncomingDirection ||
-				LeftSegment.ReflectedDirection != RightSegment.ReflectedDirection ||
-				LeftSegment.SegmentLength != RightSegment.SegmentLength ||
-				LeftSegment.BeamStartRadius != RightSegment.BeamStartRadius ||
-				LeftSegment.BeamEndRadius != RightSegment.BeamEndRadius ||
-				LeftSegment.BeamConeAngle != RightSegment.BeamConeAngle ||
-				LeftSegment.IncomingIntensity != RightSegment.IncomingIntensity ||
-				LeftSegment.ReflectedIntensity != RightSegment.ReflectedIntensity)
+				!HaveSameReceivers(LeftSegment.ReachedReceivers, RightSegment.ReachedReceivers) ||
+				!LeftSegment.IncomingStart.Equals(RightSegment.IncomingStart, ReflectionPathPositionTolerance) ||
+				!LeftSegment.ImpactPoint.Equals(RightSegment.ImpactPoint, ReflectionPathPositionTolerance) ||
+				!LeftSegment.ReflectionStart.Equals(RightSegment.ReflectionStart, ReflectionPathPositionTolerance) ||
+				!LeftSegment.SegmentEnd.Equals(RightSegment.SegmentEnd, ReflectionPathPositionTolerance) ||
+				!AreDirectionsNearlyEqual(LeftSegment.IncomingDirection, RightSegment.IncomingDirection, ReflectionPathDirectionToleranceDegrees) ||
+				!AreDirectionsNearlyEqual(LeftSegment.ReflectedDirection, RightSegment.ReflectedDirection, ReflectionPathDirectionToleranceDegrees) ||
+				!FMath::IsNearlyEqual(LeftSegment.SegmentLength, RightSegment.SegmentLength, ReflectionPathPositionTolerance) ||
+				!FMath::IsNearlyEqual(LeftSegment.BeamStartRadius, RightSegment.BeamStartRadius, ReflectionPathPositionTolerance) ||
+				!FMath::IsNearlyEqual(LeftSegment.BeamEndRadius, RightSegment.BeamEndRadius, ReflectionPathPositionTolerance) ||
+				!FMath::IsNearlyEqual(LeftSegment.BeamConeAngle, RightSegment.BeamConeAngle, ReflectionPathDirectionToleranceDegrees) ||
+				!FMath::IsNearlyEqual(LeftSegment.IncomingIntensity, RightSegment.IncomingIntensity, ReflectionPathIntensityTolerance) ||
+				!FMath::IsNearlyEqual(LeftSegment.ReflectedIntensity, RightSegment.ReflectedIntensity, ReflectionPathIntensityTolerance))
 			{
 				return false;
 			}
@@ -285,6 +398,32 @@ bool UUOULightExposureSourceComponent::AreReflectionPathsEquivalent(
 	}
 
 	return true;
+}
+
+bool UUOULightExposureSourceComponent::HasReflectionPathTopologyLoss(
+	const TArray<FUOULightReflectionPathData>& PreviousPaths,
+	const TArray<FUOULightReflectionPathData>& CurrentPaths)
+{
+	if (CurrentPaths.Num() < PreviousPaths.Num())
+	{
+		return true;
+	}
+
+	for (const FUOULightReflectionPathData& PreviousPath : PreviousPaths)
+	{
+		const FString PreviousKey = BuildReflectionPathTopologyKey(PreviousPath);
+		const bool bPathStillExists = CurrentPaths.ContainsByPredicate(
+			[&PreviousKey](const FUOULightReflectionPathData& CurrentPath)
+			{
+				return BuildReflectionPathTopologyKey(CurrentPath) == PreviousKey;
+			});
+		if (!bPathStillExists)
+		{
+			return true;
+		}
+	}
+
+	return false;
 }
 
 USceneComponent* UUOULightExposureSourceComponent::GetReferencedSourceTransform() const

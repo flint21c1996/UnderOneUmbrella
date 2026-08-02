@@ -86,6 +86,18 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection", meta = (ClampMin = "0.0", ToolTip = "누적 감쇠된 빛 세기가 이 값 이하가 되면 이후 반사 탐색을 중단합니다."))
 	float MinimumReflectedIntensity = 0.01f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection|Stability", meta = (ClampMin = "0.0", Units = "cm", ToolTip = "반사 경로 위치 변화가 이 값 이하이면 같은 경로로 판단합니다."))
+	float ReflectionPathPositionTolerance = 2.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection|Stability", meta = (ClampMin = "0.0", ClampMax = "180.0", Units = "deg", ToolTip = "반사 경로 방향 변화가 이 각도 이하이면 같은 경로로 판단합니다."))
+	float ReflectionPathDirectionToleranceDegrees = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection|Stability", meta = (ClampMin = "0.0", ToolTip = "반사 경로 광량 변화가 이 값 이하이면 같은 경로로 판단합니다."))
+	float ReflectionPathIntensityTolerance = 0.01f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection|Stability", meta = (ClampMin = "0.0", Units = "s", ToolTip = "거울 가장자리에서 반사 경로가 순간적으로 줄어들었을 때 직전 경로를 유지하는 시간입니다."))
+	float ReflectionPathLossGraceTime = 0.1f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Debug", meta = (ToolTip = "광원 원뿔, 히트 라인, 반사 디버그 도형을 그립니다."))
 	bool bDrawDebug = false;
 
@@ -144,12 +156,17 @@ protected:
 	TArray<FUOULightReflectionPathData> LastPublishedReflectionPaths;
 
 	bool bHasPublishedReflectionPaths = false;
+	float ReflectionPathLossStartWorldTime = -1.0f;
 
 	void ValidateSettings();
-	void NotifyReflectionPathsUpdatedIfChanged();
-	static bool AreReflectionPathsEquivalent(
+	void NotifyReflectionPathsUpdatedIfChanged(bool bAllowLossGrace = true);
+	void NormalizeReflectionPathOrder();
+	bool AreReflectionPathsEquivalent(
 		const TArray<FUOULightReflectionPathData>& A,
-		const TArray<FUOULightReflectionPathData>& B);
+		const TArray<FUOULightReflectionPathData>& B) const;
+	static bool HasReflectionPathTopologyLoss(
+		const TArray<FUOULightReflectionPathData>& PreviousPaths,
+		const TArray<FUOULightReflectionPathData>& CurrentPaths);
 	USceneComponent* GetReferencedSourceTransform() const;
 	USpotLightComponent* GetSourceSpotLightComponent() const;
 	ULocalLightComponent* GetSourceLocalLightComponent() const;
