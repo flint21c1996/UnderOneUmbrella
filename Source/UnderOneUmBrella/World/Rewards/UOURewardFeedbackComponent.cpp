@@ -16,10 +16,10 @@ UUOURewardFeedbackComponent::UUOURewardFeedbackComponent()
 	PrimaryComponentTick.bCanEverTick = false;
 
 	FUOURewardPresentationCue DefaultFeedbackCue;
+	DefaultFeedbackCue.RequestId = FGuid::NewGuid();
 	DefaultFeedbackCue.Channel = EUOURewardMotionCueChannel::Feedback;
 	DefaultFeedbackCue.FeedbackAction =
 		EUOURewardFeedbackCueAction::PlayPlayerAnimation;
-	DefaultFeedbackCue.TriggerTime = 0.25f;
 	CueRequests.Add(DefaultFeedbackCue);
 }
 

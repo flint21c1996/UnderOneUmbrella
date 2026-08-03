@@ -43,6 +43,14 @@ public:
 	// MotionComponent가 수집 시작 시 복사할 Cue 요청 목록을 제공합니다.
 	const TArray<FUOURewardPresentationCue>& GetCueRequests() const;
 
+#if WITH_EDITOR
+	// Motion 타임라인 편집기가 CueRequest의 내부 식별자를 준비할 때만 사용합니다.
+	TArray<FUOURewardPresentationCue>& GetMutableCueRequestsForEditor()
+	{
+		return CueRequests;
+	}
+#endif
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Feedback|Effect")
 	TObjectPtr<UNiagaraSystem> CollectionEffect = nullptr;
 

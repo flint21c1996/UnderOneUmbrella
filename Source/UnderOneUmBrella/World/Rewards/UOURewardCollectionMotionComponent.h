@@ -43,6 +43,15 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Reward|Motion|Cues")
 	bool HasCueForChannel(EUOURewardMotionCueChannel Channel) const;
 
+#if WITH_EDITOR
+	float GetMotionDurationForEditor() const { return MotionDuration; }
+	const TArray<FUOURewardMotionCueTiming>& GetCueTimelineForEditor() const
+	{
+		return CueTimeline;
+	}
+	void SetCueTriggerTimeForEditor(const FGuid& RequestId, float TriggerTime);
+#endif
+
 	UPROPERTY(BlueprintAssignable, Category = "Reward|Motion|Events")
 	FUOURewardCollectionMotionFinishedSignature OnCollectionMotionFinished;
 
@@ -71,7 +80,17 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Motion", meta = (ClampMin = "1.0"))
 	float EaseExponent = 2.0f;
 
+	// CueRequest별 실행 시간입니다. 값 편집은 MotionComponent의 전용 타임라인 UI가 담당합니다.
+	UPROPERTY()
+	TArray<FUOURewardMotionCueTiming> CueTimeline;
+
 private:
+	struct FActiveCueTiming
+	{
+		int32 CueIndex = INDEX_NONE;
+		float TriggerTime = 0.0f;
+	};
+
 	void ApplyMotion(float NormalizedTime);
 	void BuildCueSchedule();
 	void BroadcastPassedCues(float CurrentTime);
@@ -84,7 +103,7 @@ private:
 	FQuat StartPathRelativeRotation = FQuat::Identity;
 	// FeedbackComponent에서 전달받아 현재 재생 중에만 사용하는 Cue 복사본입니다.
 	TArray<FUOURewardPresentationCue> ActiveCueRequests;
-	TArray<int32> PendingCueIndices;
+	TArray<FActiveCueTiming> ActiveCueTimeline;
 	int32 NextCueIndex = 0;
 	float ElapsedTime = 0.0f;
 	bool bMotionPlaying = false;

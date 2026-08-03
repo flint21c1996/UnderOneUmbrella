@@ -128,6 +128,34 @@ bool UUOURewardCollectionMotionComponent::HasCueForChannel(
 		});
 }
 
+#if WITH_EDITOR
+void UUOURewardCollectionMotionComponent::SetCueTriggerTimeForEditor(
+	const FGuid& RequestId,
+	float TriggerTime)
+{
+	if (!RequestId.IsValid())
+	{
+		return;
+	}
+
+	FUOURewardMotionCueTiming* Timing = CueTimeline.FindByPredicate(
+		[&RequestId](const FUOURewardMotionCueTiming& Candidate)
+		{
+			return Candidate.RequestId == RequestId;
+		});
+	if (Timing == nullptr)
+	{
+		Timing = &CueTimeline.AddDefaulted_GetRef();
+		Timing->RequestId = RequestId;
+	}
+
+	Timing->TriggerTime = FMath::Clamp(
+		TriggerTime,
+		0.0f,
+		FMath::Max(0.0f, MotionDuration));
+}
+#endif
+
 void UUOURewardCollectionMotionComponent::ApplyMotion(float NormalizedTime)
 {
 	USceneComponent* TargetComponent = MotionTarget.Get();
@@ -183,22 +211,34 @@ void UUOURewardCollectionMotionComponent::ApplyMotion(float NormalizedTime)
 
 void UUOURewardCollectionMotionComponent::BuildCueSchedule()
 {
-	PendingCueIndices.Reset();
+	ActiveCueTimeline.Reset();
 	NextCueIndex = 0;
 
 	for (int32 CueIndex = 0; CueIndex < ActiveCueRequests.Num(); ++CueIndex)
 	{
-		PendingCueIndices.Add(CueIndex);
+		const FUOURewardPresentationCue& Cue = ActiveCueRequests[CueIndex];
+		const FUOURewardMotionCueTiming* ConfiguredTiming =
+			Cue.RequestId.IsValid()
+				? CueTimeline.FindByPredicate(
+					[&Cue](const FUOURewardMotionCueTiming& Timing)
+					{
+						return Timing.RequestId == Cue.RequestId;
+					})
+				: nullptr;
+
+		FActiveCueTiming& ActiveTiming = ActiveCueTimeline.AddDefaulted_GetRef();
+		ActiveTiming.CueIndex = CueIndex;
+		ActiveTiming.TriggerTime = ConfiguredTiming != nullptr
+			? ConfiguredTiming->TriggerTime
+			: 0.0f;
 	}
 
-	PendingCueIndices.Sort(
-		[this](const int32 LeftIndex, const int32 RightIndex)
+	ActiveCueTimeline.Sort(
+		[](const FActiveCueTiming& Left, const FActiveCueTiming& Right)
 		{
-			const float LeftTime = ActiveCueRequests[LeftIndex].TriggerTime;
-			const float RightTime = ActiveCueRequests[RightIndex].TriggerTime;
-			return FMath::IsNearlyEqual(LeftTime, RightTime)
-				? LeftIndex < RightIndex
-				: LeftTime < RightTime;
+			return FMath::IsNearlyEqual(Left.TriggerTime, Right.TriggerTime)
+				? Left.CueIndex < Right.CueIndex
+				: Left.TriggerTime < Right.TriggerTime;
 		});
 }
 
@@ -207,12 +247,19 @@ void UUOURewardCollectionMotionComponent::BroadcastPassedCues(float CurrentTime)
 	const float SafeMotionDuration = FMath::Max(0.0f, MotionDuration);
 	const float SafeCurrentTime = FMath::Max(0.0f, CurrentTime);
 
-	while (PendingCueIndices.IsValidIndex(NextCueIndex))
+	while (ActiveCueTimeline.IsValidIndex(NextCueIndex))
 	{
+		const FActiveCueTiming& Timing = ActiveCueTimeline[NextCueIndex];
+		if (!ActiveCueRequests.IsValidIndex(Timing.CueIndex))
+		{
+			++NextCueIndex;
+			continue;
+		}
+
 		const FUOURewardPresentationCue& Cue =
-			ActiveCueRequests[PendingCueIndices[NextCueIndex]];
+			ActiveCueRequests[Timing.CueIndex];
 		const float SafeTriggerTime =
-			FMath::Clamp(Cue.TriggerTime, 0.0f, SafeMotionDuration);
+			FMath::Clamp(Timing.TriggerTime, 0.0f, SafeMotionDuration);
 		if (SafeTriggerTime > SafeCurrentTime + KINDA_SMALL_NUMBER)
 		{
 			break;
@@ -240,7 +287,7 @@ void UUOURewardCollectionMotionComponent::FinishCollectionMotion()
 	MotionTarget.Reset();
 	ActiveMotionPath.Reset();
 	ActiveCueRequests.Reset();
-	PendingCueIndices.Reset();
+	ActiveCueTimeline.Reset();
 	NextCueIndex = 0;
 	SetComponentTickEnabled(false);
 

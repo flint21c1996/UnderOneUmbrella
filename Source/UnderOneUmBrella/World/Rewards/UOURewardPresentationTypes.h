@@ -31,6 +31,10 @@ struct UNDERONEUMBRELLA_API FUOURewardPresentationCue
 {
 	GENERATED_BODY()
 
+	// Motion 타임라인이 이 요청의 실행 시점을 연결할 때 사용하는 내부 식별자입니다.
+	UPROPERTY()
+	FGuid RequestId;
+
 	// 이 Cue를 처리할 시스템입니다. Feedback Cue는 UI Host로 전달되지 않습니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Motion|Cue")
 	EUOURewardMotionCueChannel Channel =
@@ -58,15 +62,26 @@ struct UNDERONEUMBRELLA_API FUOURewardPresentationCue
 	EUOURewardFeedbackCueAction FeedbackAction =
 		EUOURewardFeedbackCueAction::PlayPlayerAnimation;
 
-	// 수집 움직임이 시작된 뒤 Cue가 발생할 시간입니다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Motion|Cue", meta = (ClampMin = "0.0"))
-	float TriggerTime = 0.0f;
-
 	// HUD가 미리 생성한 Presentation Widget을 찾을 Row Name을 반환합니다.
 	FName GetPresentationKey() const
 	{
 		return PresentationRow.RowName;
 	}
+};
+
+// MotionComponent가 CueRequest와 실행 시간을 연결해 보존하는 스케줄 항목입니다.
+USTRUCT(BlueprintType, meta = (DisplayName = "UOU Reward Motion Cue Timing"))
+struct UNDERONEUMBRELLA_API FUOURewardMotionCueTiming
+{
+	GENERATED_BODY()
+
+	// FeedbackComponent CueRequest의 내부 식별자입니다. 타임라인 UI가 자동으로 관리합니다.
+	UPROPERTY()
+	FGuid RequestId;
+
+	// 수집 움직임이 시작된 뒤 CueRequest를 실행할 시간입니다.
+	UPROPERTY()
+	float TriggerTime = 0.0f;
 };
 
 // 보상 수집 시 HUD가 결과 화면과 애니메이션을 구성하는 데 사용하는 표시 데이터입니다.
