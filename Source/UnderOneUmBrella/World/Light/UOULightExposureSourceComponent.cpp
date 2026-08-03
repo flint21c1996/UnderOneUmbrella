@@ -824,6 +824,13 @@ bool UUOULightExposureSourceComponent::TryBuildLightInteractionSurfaceHit(
 	{
 		QueryParams.AddIgnoredActor(GetOwner());
 	}
+	if (SurfaceComponent->GetOwner() != nullptr)
+	{
+		AddActorPrimitiveComponentsToIgnore(
+			SurfaceComponent->GetOwner(),
+			QueryParams,
+			SurfaceComponent);
+	}
 
 	const FVector TraceEnd = SurfacePosition + DirectionToSurface * SurfaceComponent->ReflectionStartPadding;
 	if (!World->LineTraceSingleByChannel(OutSurfaceHit, SourcePosition, TraceEnd, OcclusionTraceChannel, QueryParams))
@@ -1307,6 +1314,13 @@ bool UUOULightExposureSourceComponent::TryFindNextReflectionSurface(
 			if (CurrentSurface->GetOwner() != nullptr)
 			{
 				AddActorPrimitiveComponentsToIgnore(CurrentSurface->GetOwner(), TraceQueryParams);
+			}
+			if (CandidateSurface->GetOwner() != nullptr)
+			{
+				AddActorPrimitiveComponentsToIgnore(
+					CandidateSurface->GetOwner(),
+					TraceQueryParams,
+					CandidateSurface);
 			}
 
 			FHitResult CandidateHit;

@@ -33,11 +33,6 @@ void UUOULightInteractionSurfaceComponent::PostEditChangeProperty(FPropertyChang
 
 void UUOULightInteractionSurfaceComponent::SetLightInteractionMode(EUOULightInteractionMode NewMode)
 {
-	if (LightInteractionMode == NewMode)
-	{
-		return;
-	}
-
 	LightInteractionMode = NewMode;
 	ApplyCollisionSettings();
 }

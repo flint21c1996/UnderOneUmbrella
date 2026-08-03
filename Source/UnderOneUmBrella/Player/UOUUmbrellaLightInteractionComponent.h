@@ -41,6 +41,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Light")
 	bool bLightReflectingStateReflectsLight = true;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Light", meta = (ToolTip = "빛 반사 상태에서 우산 반사판과 그늘 범위가 입사광을 차단하도록 합니다."))
+	bool bLightReflectingStateBlocksLight = true;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Light")
 	bool bCreateRuntimeLightSurfaceWhenMissing = true;
 

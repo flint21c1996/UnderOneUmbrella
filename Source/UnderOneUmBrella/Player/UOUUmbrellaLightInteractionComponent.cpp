@@ -88,14 +88,24 @@ void UUOUUmbrellaLightInteractionComponent::RefreshLightInteractionMode()
 
 	if (LightShadeVolumeComponent != nullptr)
 	{
+		const bool bShouldBlockNormally = bIsNormallySpread && bSpreadUmbrellaBlocksLight;
+		const bool bShouldBlockWhileReflecting =
+			bIsLightReflecting && bLightReflectingStateBlocksLight;
 		LightShadeVolumeComponent->SetShadeEnabled(
-			bHasUmbrella && bIsNormallySpread && bSpreadUmbrellaBlocksLight);
+			bHasUmbrella && (bShouldBlockNormally || bShouldBlockWhileReflecting));
 	}
 
 	EUOULightInteractionMode NextMode = EUOULightInteractionMode::Disabled;
-	if (bHasUmbrella && bIsLightReflecting && bLightReflectingStateReflectsLight)
+	if (bHasUmbrella && bIsLightReflecting)
 	{
-		NextMode = EUOULightInteractionMode::Reflecting;
+		if (bLightReflectingStateReflectsLight)
+		{
+			NextMode = EUOULightInteractionMode::Reflecting;
+		}
+		else if (bLightReflectingStateBlocksLight)
+		{
+			NextMode = EUOULightInteractionMode::Blocking;
+		}
 	}
 
 	if (LightSurfaceComponent != nullptr)
