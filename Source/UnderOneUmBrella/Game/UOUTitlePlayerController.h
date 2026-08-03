@@ -7,8 +7,6 @@
 #include "UOUMenuPlayerController.h"
 #include "UOUTitlePlayerController.generated.h"
 
-class AUOULevelTransitionSettingsActor;
-class AUOUTitleLevelTransitionActor;
 class UWorld;
 class UUserWidget;
 
@@ -34,12 +32,10 @@ protected:
 
 private:
 	void ApplyTitleMenuInputMode();
-	const AUOULevelTransitionSettingsActor* FindLevelTransitionSettingsActor() const;
-	AUOUTitleLevelTransitionActor* FindTitleLevelTransitionActor() const;
 
-	// Start 버튼을 눌렀을 때 넘어갈 임시 플레이 맵입니다.
+	// Start 버튼을 눌렀을 때 넘어갈 맵 선택 레벨입니다.
 	UPROPERTY(EditDefaultsOnly, Config, Category = "Title")
-	TSoftObjectPtr<UWorld> nextLevel;
+	TSoftObjectPtr<UWorld> MapSelectLevel;
 
 	// 타이틀 화면에 띄울 WBP_TitleMenu 클래스입니다.
 	UPROPERTY(EditDefaultsOnly, Config, Category = "Title")
