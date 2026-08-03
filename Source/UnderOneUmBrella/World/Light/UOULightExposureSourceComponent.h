@@ -22,8 +22,15 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
 	const TArray<FUOULightReflectionPathData>&,
 	ReflectionPaths);
 
-// 스포트라이트 형태의 광원에서 주변 수신체로 게임플레이용 빛 노출을 전달합니다.
-UCLASS(ClassGroup=(Light), meta=(BlueprintSpawnableComponent, DisplayName="UOU Light Exposure Source", ToolTip = "광원 원뿔 범위 안의 수신체에 게임플레이용 빛 노출을 전달합니다."))
+UENUM(BlueprintType)
+enum class EUOULightBeamShape : uint8
+{
+	Cone UMETA(DisplayName = "원뿔", ToolTip = "SpotLight의 원뿔 각도를 사용하는 빛입니다."),
+	Cylinder UMETA(DisplayName = "원기둥", ToolTip = "지정한 반지름을 끝까지 유지하는 평행광입니다.")
+};
+
+// 원뿔 또는 원기둥 형태의 광원에서 주변 수신체로 게임플레이용 빛 노출을 전달합니다.
+UCLASS(ClassGroup=(Light), meta=(BlueprintSpawnableComponent, DisplayName="UOU Light Exposure Source", ToolTip = "선택한 광원 형상 안의 수신체에 게임플레이용 빛 노출을 전달합니다."))
 class UUOULightExposureSourceComponent : public UActorComponent, public IUOUPuzzleDebugInfoProvider
 {
 	GENERATED_BODY()
@@ -38,17 +45,29 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Source", meta = (ToolTip = "이 광원에서 게임플레이용 빛을 발사할지 여부입니다."))
 	bool bEmitLight = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Source", meta = (UseComponentPicker, AllowedClasses = "/Script/Engine.SpotLightComponent", DisplayName = "Source Transform", ToolTip = "광원의 위치, 방향, 거리, 원뿔 각도를 가져올 SpotLight 컴포넌트입니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Source", meta = (UseComponentPicker, AllowedClasses = "/Script/Engine.SceneComponent", DisplayName = "Source Transform", ToolTip = "광원의 위치와 방향을 가져올 Scene Component입니다. 원뿔형에서 SpotLight를 선택하면 거리와 원뿔 각도도 함께 사용합니다."))
 	FComponentReference SourceTransformReference;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Source", meta = (ToolTip = "Source Transform이 비어 있으면 소유 액터의 첫 번째 SpotLight 컴포넌트를 자동으로 사용합니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Source", meta = (ToolTip = "Source Transform이 비어 있으면 소유 액터의 첫 번째 SpotLight 컴포넌트를 위치와 방향 기준으로 자동 사용합니다."))
 	bool bAutoFindSourceSpotLight = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Shape", meta = (ClampMin = "1.0", ClampMax = "89.0", ToolTip = "SpotLight 컴포넌트를 찾지 못했을 때 사용할 원뿔 각도입니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Shape", meta = (ToolTip = "게임플레이 빛의 형상을 선택합니다."))
+	EUOULightBeamShape BeamShape = EUOULightBeamShape::Cone;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Shape|Cone", meta = (ClampMin = "1.0", ClampMax = "89.0", EditCondition = "BeamShape == EUOULightBeamShape::Cone", EditConditionHides, ToolTip = "SpotLight 컴포넌트를 찾지 못했을 때 사용할 원뿔 각도입니다."))
 	float FallbackOuterConeAngle = 45.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Shape", meta = (ClampMin = "0.0", ClampMax = "1.0", ToolTip = "SpotLight 컴포넌트를 찾지 못했을 때 사용할 내부 원뿔 비율입니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Shape|Cone", meta = (ClampMin = "0.0", ClampMax = "1.0", EditCondition = "BeamShape == EUOULightBeamShape::Cone", EditConditionHides, ToolTip = "SpotLight 컴포넌트를 찾지 못했을 때 사용할 내부 원뿔 비율입니다."))
 	float FallbackInnerConeRatio = 0.55f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Shape|Cylinder", meta = (ClampMin = "0.0", Units = "cm", EditCondition = "BeamShape == EUOULightBeamShape::Cylinder", EditConditionHides, ToolTip = "원기둥형 빛의 반지름입니다."))
+	float CylinderRadius = 100.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Shape|Cylinder", meta = (ClampMin = "0.0", Units = "cm", EditCondition = "BeamShape == EUOULightBeamShape::Cylinder", EditConditionHides, ToolTip = "원기둥형 빛이 도달하는 길이입니다."))
+	float CylinderLength = 800.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Shape|Cylinder", meta = (ClampMin = "0.0", ClampMax = "1.0", EditCondition = "BeamShape == EUOULightBeamShape::Cylinder && bUseAngleFalloff", EditConditionHides, ToolTip = "원기둥 반지름 중 최대 광량을 유지하는 내부 영역의 비율입니다."))
+	float CylinderInnerRadiusRatio = 0.75f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Exposure", meta = (ClampMin = "0.0", ToolTip = "거리/각도 감쇠 전 수신체에 적용할 기본 게임플레이 빛 세기입니다."))
 	float Intensity = 1.0f;
@@ -173,8 +192,15 @@ protected:
 	FVector GetSourceLocation() const;
 	FVector GetSourceForwardVector() const;
 	float GetExposureRange() const;
+	float GetReceiverSearchRadius() const;
 	float GetEffectiveOuterConeAngle() const;
 	float GetEffectiveInnerConeAngle(float OuterConeAngle) const;
+	bool TryEvaluateSourceBeamPoint(
+		const FVector& WorldPosition,
+		float& OutDistance,
+		FVector& OutDirection,
+		float& OutDistanceFactor,
+		float& OutShapeFactor) const;
 	FCollisionObjectQueryParams BuildReceiverObjectQueryParams() const;
 	void AppendReceivableObjects(AActor* TargetActor, UPrimitiveComponent* TargetComponent, TArray<UObject*>& OutReceivers) const;
 	void AppendLightInteractionSurfaces(AActor* TargetActor, UPrimitiveComponent* TargetComponent, TArray<UUOULightInteractionSurfaceComponent*>& OutSurfaces) const;
@@ -234,6 +260,7 @@ protected:
 		FHitResult& OutBlockingHit) const;
 	float CalculateIntensity(float Distance, float Angle, float& OutDistanceFactor, float& OutAngleFactor) const;
 	float CalculateConeFactor(float Angle, float ConeAngle) const;
+	float CalculateCylinderFactor(float RadialDistance) const;
 	void DrawDebugSource() const;
 	void DrawDebugResult(const FUOULightExposureData& ExposureData, bool bLit) const;
 	void DrawDebugBlockedHit(const FVector& SourcePosition, const FHitResult& BlockingHit) const;

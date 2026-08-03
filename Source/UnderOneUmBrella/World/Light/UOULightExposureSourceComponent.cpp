@@ -122,6 +122,9 @@ TArray<FString> UUOULightExposureSourceComponent::GetPuzzleDebugInfo_Implementat
 {
 	return {
 		FString::Printf(TEXT("Light Source: %s"), bEmitLight ? TEXT("On") : TEXT("Off")),
+		FString::Printf(
+			TEXT("Beam Shape: %s"),
+			BeamShape == EUOULightBeamShape::Cylinder ? TEXT("Cylinder") : TEXT("Cone")),
 		FString::Printf(TEXT("Intensity: %.2f"), Intensity),
 		FString::Printf(
 			TEXT("Receivers / Lit / Blocked: %d / %d / %d"),
@@ -151,6 +154,7 @@ void UUOULightExposureSourceComponent::EmitLight(float DeltaTime)
 
 	UWorld* World = GetWorld();
 	const float ExposureRange = GetExposureRange();
+	const float ReceiverSearchRadius = GetReceiverSearchRadius();
 	if (World == nullptr || DeltaTime <= 0.0f || ExposureRange <= 0.0f || Intensity <= 0.0f)
 	{
 		NotifyReflectionPathsUpdatedIfChanged();
@@ -171,7 +175,7 @@ void UUOULightExposureSourceComponent::EmitLight(float DeltaTime)
 		GetSourceLocation(),
 		FQuat::Identity,
 		BuildReceiverObjectQueryParams(),
-		FCollisionShape::MakeSphere(ExposureRange),
+		FCollisionShape::MakeSphere(ReceiverSearchRadius),
 		QueryParams);
 
 	if (!bHasOverlaps)
@@ -278,6 +282,9 @@ void UUOULightExposureSourceComponent::ValidateSettings()
 {
 	FallbackOuterConeAngle = FMath::Clamp(FallbackOuterConeAngle, 1.0f, 89.0f);
 	FallbackInnerConeRatio = FMath::Clamp(FallbackInnerConeRatio, 0.0f, 1.0f);
+	CylinderRadius = FMath::Max(0.0f, CylinderRadius);
+	CylinderLength = FMath::Max(0.0f, CylinderLength);
+	CylinderInnerRadiusRatio = FMath::Clamp(CylinderInnerRadiusRatio, 0.0f, 1.0f);
 	Intensity = FMath::Max(0.0f, Intensity);
 	SampleInterval = FMath::Max(0.0f, SampleInterval);
 	MaxReflectionSurfacesPerTick = FMath::Max(0, MaxReflectionSurfacesPerTick);
@@ -504,12 +511,29 @@ FVector UUOULightExposureSourceComponent::GetSourceForwardVector() const
 
 float UUOULightExposureSourceComponent::GetExposureRange() const
 {
+	if (BeamShape == EUOULightBeamShape::Cylinder)
+	{
+		return FMath::Max(0.0f, CylinderLength);
+	}
+
 	if (const ULocalLightComponent* SourceLight = GetSourceLocalLightComponent())
 	{
 		return FMath::Max(0.0f, SourceLight->AttenuationRadius);
 	}
 
 	return 0.0f;
+}
+
+float UUOULightExposureSourceComponent::GetReceiverSearchRadius() const
+{
+	if (BeamShape == EUOULightBeamShape::Cylinder)
+	{
+		return FMath::Sqrt(
+			FMath::Square(FMath::Max(0.0f, CylinderLength)) +
+			FMath::Square(FMath::Max(0.0f, CylinderRadius)));
+	}
+
+	return GetExposureRange();
 }
 
 float UUOULightExposureSourceComponent::GetEffectiveOuterConeAngle() const
@@ -530,6 +554,73 @@ float UUOULightExposureSourceComponent::GetEffectiveInnerConeAngle(float OuterCo
 	}
 
 	return FMath::Clamp(OuterConeAngle * FallbackInnerConeRatio, 0.0f, OuterConeAngle);
+}
+
+bool UUOULightExposureSourceComponent::TryEvaluateSourceBeamPoint(
+	const FVector& WorldPosition,
+	float& OutDistance,
+	FVector& OutDirection,
+	float& OutDistanceFactor,
+	float& OutShapeFactor) const
+{
+	OutDistance = 0.0f;
+	OutDirection = FVector::ZeroVector;
+	OutDistanceFactor = 0.0f;
+	OutShapeFactor = 0.0f;
+
+	const FVector SourcePosition = GetSourceLocation();
+	const FVector SourceForward = GetSourceForwardVector().GetSafeNormal();
+	if (SourceForward.IsNearlyZero())
+	{
+		return false;
+	}
+
+	const FVector ToPoint = WorldPosition - SourcePosition;
+	OutDistance = ToPoint.Size();
+	if (BeamShape == EUOULightBeamShape::Cylinder)
+	{
+		const float SafeLength = FMath::Max(0.0f, CylinderLength);
+		const float SafeRadius = FMath::Max(0.0f, CylinderRadius);
+		const float AxialDistance = FVector::DotProduct(ToPoint, SourceForward);
+		if (SafeLength <= 0.0f || SafeRadius <= 0.0f ||
+			AxialDistance <= KINDA_SMALL_NUMBER || AxialDistance > SafeLength)
+		{
+			return false;
+		}
+
+		const float RadialDistance =
+			(ToPoint - SourceForward * AxialDistance).Size();
+		if (RadialDistance > SafeRadius)
+		{
+			return false;
+		}
+
+		OutDirection = SourceForward;
+		OutDistanceFactor = bUseDistanceFalloff
+			? 1.0f - FMath::Clamp(AxialDistance / SafeLength, 0.0f, 1.0f)
+			: 1.0f;
+		OutShapeFactor = bUseAngleFalloff
+			? CalculateCylinderFactor(RadialDistance)
+			: 1.0f;
+		return OutDistanceFactor > 0.0f && OutShapeFactor > 0.0f;
+	}
+
+	const float ExposureRange = GetExposureRange();
+	if (OutDistance <= KINDA_SMALL_NUMBER || OutDistance > ExposureRange)
+	{
+		return false;
+	}
+
+	OutDirection = ToPoint / OutDistance;
+	const float Dot = FMath::Clamp(FVector::DotProduct(SourceForward, OutDirection), -1.0f, 1.0f);
+	const float Angle = FMath::RadiansToDegrees(FMath::Acos(Dot));
+	if (Angle > GetEffectiveOuterConeAngle())
+	{
+		return false;
+	}
+
+	CalculateIntensity(OutDistance, Angle, OutDistanceFactor, OutShapeFactor);
+	return OutDistanceFactor > 0.0f && OutShapeFactor > 0.0f;
 }
 
 FCollisionObjectQueryParams UUOULightExposureSourceComponent::BuildReceiverObjectQueryParams() const
@@ -648,20 +739,16 @@ bool UUOULightExposureSourceComponent::TryBuildExposureData(
 
 	const FVector SourcePosition = GetSourceLocation();
 	const FVector ReceiverPosition = IUOULightReceivableInterface::Execute_GetLightReceiverPosition(ReceiverObject);
-	const FVector ToReceiver = ReceiverPosition - SourcePosition;
-	const float Distance = ToReceiver.Size();
-	const float ExposureRange = GetExposureRange();
-	if (Distance <= KINDA_SMALL_NUMBER || Distance > ExposureRange)
-	{
-		return false;
-	}
-
-	const FVector Direction = ToReceiver / Distance;
-	const FVector SourceForward = GetSourceForwardVector().GetSafeNormal();
-	const float Dot = FMath::Clamp(FVector::DotProduct(SourceForward, Direction), -1.0f, 1.0f);
-	const float Angle = FMath::RadiansToDegrees(FMath::Acos(Dot));
-	const float OuterConeAngle = GetEffectiveOuterConeAngle();
-	if (Angle > OuterConeAngle)
+	float Distance = 0.0f;
+	FVector Direction = FVector::ZeroVector;
+	float DistanceFactor = 0.0f;
+	float ShapeFactor = 0.0f;
+	if (!TryEvaluateSourceBeamPoint(
+		ReceiverPosition,
+		Distance,
+		Direction,
+		DistanceFactor,
+		ShapeFactor))
 	{
 		return false;
 	}
@@ -671,14 +758,24 @@ bool UUOULightExposureSourceComponent::TryBuildExposureData(
 		return false;
 	}
 
-	if (bRequireLineOfSight && !HasLineOfSight(ReceiverObject, SourcePosition, ReceiverPosition, OutBlockingHit))
+	FVector RayStart = SourcePosition;
+	if (BeamShape == EUOULightBeamShape::Cylinder)
+	{
+		const FVector SourceForward = GetSourceForwardVector().GetSafeNormal();
+		const float AxialDistance = FVector::DotProduct(
+			ReceiverPosition - SourcePosition,
+			SourceForward);
+		RayStart = ReceiverPosition - SourceForward * AxialDistance;
+	}
+
+	if (bRequireLineOfSight && !HasLineOfSight(ReceiverObject, RayStart, ReceiverPosition, OutBlockingHit))
 	{
 		return false;
 	}
 
-	float DistanceFactor = 0.0f;
-	float AngleFactor = 0.0f;
-	const float FinalIntensity = CalculateIntensity(Distance, Angle, DistanceFactor, AngleFactor);
+	const float FinalIntensity = Intensity *
+		FMath::Clamp(DistanceFactor, 0.0f, 1.0f) *
+		FMath::Clamp(ShapeFactor, 0.0f, 1.0f);
 	if (FinalIntensity <= 0.0f)
 	{
 		return false;
@@ -686,13 +783,13 @@ bool UUOULightExposureSourceComponent::TryBuildExposureData(
 
 	OutExposureData = FUOULightExposureData(
 		const_cast<UUOULightExposureSourceComponent*>(this),
-		SourcePosition,
+		RayStart,
 		ReceiverPosition,
 		Direction,
 		Distance,
 		FinalIntensity,
 		DistanceFactor,
-		AngleFactor,
+		ShapeFactor,
 		DeltaTime);
 
 	return true;
@@ -802,21 +899,28 @@ bool UUOULightExposureSourceComponent::TryBuildLightInteractionSurfaceHit(
 
 	const FVector SourcePosition = GetSourceLocation();
 	const FVector SurfacePosition = SurfaceComponent->GetComponentLocation();
-	const FVector ToSurface = SurfacePosition - SourcePosition;
-	const float SurfaceDistance = ToSurface.Size();
-	const float ExposureRange = GetExposureRange();
-	if (SurfaceDistance <= KINDA_SMALL_NUMBER || SurfaceDistance > ExposureRange)
+	float SurfaceDistance = 0.0f;
+	FVector DirectionToSurface = FVector::ZeroVector;
+	float DistanceFactor = 0.0f;
+	float ShapeFactor = 0.0f;
+	if (!TryEvaluateSourceBeamPoint(
+		SurfacePosition,
+		SurfaceDistance,
+		DirectionToSurface,
+		DistanceFactor,
+		ShapeFactor))
 	{
 		return false;
 	}
 
-	const FVector DirectionToSurface = ToSurface / SurfaceDistance;
-	const FVector SourceForward = GetSourceForwardVector().GetSafeNormal();
-	const float Dot = FMath::Clamp(FVector::DotProduct(SourceForward, DirectionToSurface), -1.0f, 1.0f);
-	const float SurfaceAngle = FMath::RadiansToDegrees(FMath::Acos(Dot));
-	if (SurfaceAngle > GetEffectiveOuterConeAngle())
+	FVector TraceStart = SourcePosition;
+	if (BeamShape == EUOULightBeamShape::Cylinder)
 	{
-		return false;
+		const FVector SourceForward = GetSourceForwardVector().GetSafeNormal();
+		const float AxialDistance = FVector::DotProduct(
+			SurfacePosition - SourcePosition,
+			SourceForward);
+		TraceStart = SurfacePosition - SourceForward * AxialDistance;
 	}
 
 	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(UOULightInteractionSurfaceTrace), false, GetOwner());
@@ -833,7 +937,7 @@ bool UUOULightExposureSourceComponent::TryBuildLightInteractionSurfaceHit(
 	}
 
 	const FVector TraceEnd = SurfacePosition + DirectionToSurface * SurfaceComponent->ReflectionStartPadding;
-	if (!World->LineTraceSingleByChannel(OutSurfaceHit, SourcePosition, TraceEnd, OcclusionTraceChannel, QueryParams))
+	if (!World->LineTraceSingleByChannel(OutSurfaceHit, TraceStart, TraceEnd, OcclusionTraceChannel, QueryParams))
 	{
 		return false;
 	}
@@ -855,24 +959,32 @@ void UUOULightExposureSourceComponent::EmitReflectedLightFromSurface(
 	}
 
 	const FVector SourcePosition = GetSourceLocation();
-	const FVector InitialIncomingDirection = (SurfaceHit.ImpactPoint - SourcePosition).GetSafeNormal();
+	const FVector SourceForward = GetSourceForwardVector().GetSafeNormal();
+	const FVector InitialIncomingDirection = BeamShape == EUOULightBeamShape::Cylinder
+		? SourceForward
+		: (SurfaceHit.ImpactPoint - SourcePosition).GetSafeNormal();
 	if (InitialIncomingDirection.IsNearlyZero())
 	{
 		return;
 	}
 
-	const FVector SourceForward = GetSourceForwardVector().GetSafeNormal();
-	const float SurfaceDistance = FVector::Dist(SourcePosition, SurfaceHit.ImpactPoint);
-	const float Dot = FMath::Clamp(FVector::DotProduct(SourceForward, InitialIncomingDirection), -1.0f, 1.0f);
-	const float SurfaceAngle = FMath::RadiansToDegrees(FMath::Acos(Dot));
-
+	float SurfaceDistance = 0.0f;
+	FVector EvaluatedDirection = FVector::ZeroVector;
 	float SourceDistanceFactor = 0.0f;
-	float SourceAngleFactor = 0.0f;
-	float IncomingSurfaceIntensity = CalculateIntensity(
+	float SourceShapeFactor = 0.0f;
+	if (!TryEvaluateSourceBeamPoint(
+		SurfaceHit.ImpactPoint,
 		SurfaceDistance,
-		SurfaceAngle,
+		EvaluatedDirection,
 		SourceDistanceFactor,
-		SourceAngleFactor);
+		SourceShapeFactor))
+	{
+		return;
+	}
+
+	float IncomingSurfaceIntensity = Intensity *
+		FMath::Clamp(SourceDistanceFactor, 0.0f, 1.0f) *
+		FMath::Clamp(SourceShapeFactor, 0.0f, 1.0f);
 	if (IncomingSurfaceIntensity <= 0.0f)
 	{
 		return;
@@ -881,15 +993,26 @@ void UUOULightExposureSourceComponent::EmitReflectedLightFromSurface(
 	UUOULightInteractionSurfaceComponent* CurrentSurface = SurfaceComponent;
 	FHitResult CurrentSurfaceHit = SurfaceHit;
 	FVector CurrentRayOrigin = SourcePosition;
+	if (BeamShape == EUOULightBeamShape::Cylinder)
+	{
+		const float AxialDistance = FVector::DotProduct(
+			SurfaceHit.ImpactPoint - SourcePosition,
+			SourceForward);
+		CurrentRayOrigin = SurfaceHit.ImpactPoint - SourceForward * AxialDistance;
+	}
 	TSet<const UUOULightInteractionSurfaceComponent*> VisitedSurfaces;
 	TArray<FString> ReflectionPath;
 	FUOULightReflectionPathData PathData;
 	PathData.PathIndex = ReflectionPaths.Num();
 	PathData.SourcePosition = SourcePosition;
 	int32 ReflectionDepth = 0;
-	float IncomingBeamRadius = SurfaceDistance * FMath::Tan(
-		FMath::DegreesToRadians(FMath::Clamp(GetEffectiveOuterConeAngle(), 1.0f, 89.0f)));
-	float CurrentBeamConeAngle = GetEffectiveOuterConeAngle();
+	float IncomingBeamRadius = BeamShape == EUOULightBeamShape::Cylinder
+		? FMath::Max(0.0f, CylinderRadius)
+		: SurfaceDistance * FMath::Tan(
+			FMath::DegreesToRadians(FMath::Clamp(GetEffectiveOuterConeAngle(), 1.0f, 89.0f)));
+	float CurrentBeamConeAngle = BeamShape == EUOULightBeamShape::Cylinder
+		? 0.0f
+		: GetEffectiveOuterConeAngle();
 
 	while (CurrentSurface != nullptr && ReflectionDepth < MaxReflectionBouncesPerPath)
 	{
@@ -1291,7 +1414,7 @@ bool UUOULightExposureSourceComponent::TryFindNextReflectionSurface(
 			const float RadialDistance =
 				(ToCandidate - SafeReflectedDirection * AxialDistance).Size();
 			const float ConeAngleRadians = FMath::DegreesToRadians(
-				FMath::Clamp(BeamConeAngle, 1.0f, 89.0f));
+				FMath::Clamp(BeamConeAngle, 0.0f, 89.0f));
 			const float SafeBeamStartRadius = FMath::Max(0.0f, BeamStartRadius);
 			const float MaximumBeamRadius =
 				SafeBeamStartRadius + AxialDistance * FMath::Tan(ConeAngleRadians);
@@ -1425,7 +1548,7 @@ bool UUOULightExposureSourceComponent::TryBuildReflectedExposureData(
 	const float RadialDistance =
 		(ToReceiver - SafeReflectedDirection * AxialDistance).Size();
 	const float ConeAngleRadians = FMath::DegreesToRadians(
-		FMath::Clamp(BeamConeAngle, 1.0f, 89.0f));
+		FMath::Clamp(BeamConeAngle, 0.0f, 89.0f));
 	const float SafeBeamStartRadius = FMath::Max(0.0f, BeamStartRadius);
 	const float MaximumBeamRadius =
 		SafeBeamStartRadius + AxialDistance * FMath::Tan(ConeAngleRadians);
@@ -1513,6 +1636,27 @@ float UUOULightExposureSourceComponent::CalculateConeFactor(float Angle, float C
 	return 1.0f - FMath::Clamp(Angle / SafeConeAngle, 0.0f, 1.0f);
 }
 
+float UUOULightExposureSourceComponent::CalculateCylinderFactor(float RadialDistance) const
+{
+	const float SafeRadius = FMath::Max(0.0f, CylinderRadius);
+	if (SafeRadius <= KINDA_SMALL_NUMBER || RadialDistance >= SafeRadius)
+	{
+		return 0.0f;
+	}
+
+	const float InnerRadius = SafeRadius * FMath::Clamp(CylinderInnerRadiusRatio, 0.0f, 1.0f);
+	if (RadialDistance <= InnerRadius)
+	{
+		return 1.0f;
+	}
+
+	const float FalloffWidth = FMath::Max(0.001f, SafeRadius - InnerRadius);
+	return 1.0f - FMath::Clamp(
+		(RadialDistance - InnerRadius) / FalloffWidth,
+		0.0f,
+		1.0f);
+}
+
 void UUOULightExposureSourceComponent::DrawDebugSource() const
 {
 	if (!bDrawDebug || !UUOUDebugSubsystem::IsDebugWorldDrawEnabled(this, EUOUDebugCategory::Puzzle))
@@ -1541,6 +1685,75 @@ void UUOULightExposureSourceComponent::DrawDebugSource() const
 	if (bIgnoreOwner && GetOwner() != nullptr)
 	{
 		QueryParams.AddIgnoredActor(GetOwner());
+	}
+
+	if (BeamShape == EUOULightBeamShape::Cylinder)
+	{
+		constexpr int32 CylinderSegments = 24;
+		const float SafeRadius = FMath::Max(0.0f, CylinderRadius);
+		FVector RadiusAxisX = FVector::ZeroVector;
+		FVector RadiusAxisY = FVector::ZeroVector;
+		SourceForward.FindBestAxisVectors(RadiusAxisX, RadiusAxisY);
+		TArray<FVector, TInlineAllocator<CylinderSegments>> StartPoints;
+		TArray<FVector, TInlineAllocator<CylinderSegments>> EndPoints;
+		StartPoints.Reserve(CylinderSegments);
+		EndPoints.Reserve(CylinderSegments);
+
+		for (int32 SegmentIndex = 0; SegmentIndex < CylinderSegments; ++SegmentIndex)
+		{
+			const float Angle =
+				UE_TWO_PI * static_cast<float>(SegmentIndex) / static_cast<float>(CylinderSegments);
+			const FVector RadiusDirection =
+				RadiusAxisX * FMath::Cos(Angle) + RadiusAxisY * FMath::Sin(Angle);
+			const FVector RayStart = SourcePosition + RadiusDirection * SafeRadius;
+			const FVector TraceEnd = RayStart + SourceForward * ExposureRange;
+			FHitResult BlockingHit;
+			const FVector RayEnd = World->LineTraceSingleByChannel(
+				BlockingHit,
+				RayStart,
+				TraceEnd,
+				OcclusionTraceChannel,
+				QueryParams)
+				? BlockingHit.ImpactPoint
+				: TraceEnd;
+			StartPoints.Add(RayStart);
+			EndPoints.Add(RayEnd);
+		}
+
+		DrawDebugPoint(World, SourcePosition, 10.0f, SourceDebugColor, false, DebugDrawTime);
+		for (int32 SegmentIndex = 0; SegmentIndex < CylinderSegments; ++SegmentIndex)
+		{
+			const int32 NextSegmentIndex = (SegmentIndex + 1) % CylinderSegments;
+			DrawDebugLine(
+				World,
+				StartPoints[SegmentIndex],
+				EndPoints[SegmentIndex],
+				ConeDebugColor,
+				false,
+				DebugDrawTime,
+				0,
+				1.0f);
+			DrawDebugLine(
+				World,
+				StartPoints[SegmentIndex],
+				StartPoints[NextSegmentIndex],
+				ConeDebugColor,
+				false,
+				DebugDrawTime,
+				0,
+				1.0f);
+			DrawDebugLine(
+				World,
+				EndPoints[SegmentIndex],
+				EndPoints[NextSegmentIndex],
+				ConeDebugColor,
+				false,
+				DebugDrawTime,
+				0,
+				1.0f);
+		}
+
+		return;
 	}
 
 	const auto FindClippedRayEnd =
@@ -1658,7 +1871,7 @@ void UUOULightExposureSourceComponent::DrawDebugReflectionFrustum(
 	{
 		const FVector End = Start + SafeDirection * SafeLength;
 		const float ConeAngleRadians = FMath::DegreesToRadians(
-			FMath::Clamp(ConeAngleDegrees, 1.0f, 89.0f));
+			FMath::Clamp(ConeAngleDegrees, 0.0f, 89.0f));
 		const float SafeStartRadius = FMath::Max(0.0f, StartRadius);
 		const float EndRadius = SafeStartRadius + SafeLength * FMath::Tan(ConeAngleRadians);
 		constexpr int32 ConeSegments = 24;

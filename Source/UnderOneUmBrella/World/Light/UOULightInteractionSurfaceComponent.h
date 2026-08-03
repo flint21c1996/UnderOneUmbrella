@@ -86,7 +86,7 @@ public:
 	EUOULightReflectionConeAngleMode ReflectionConeAngleMode =
 		EUOULightReflectionConeAngleMode::PreserveIncoming;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection", meta = (ClampMin = "1.0", ClampMax = "89.0", ToolTip = "반사된 게임플레이 빛의 원뿔 각도입니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection", meta = (ClampMin = "0.0", ClampMax = "89.0", ToolTip = "반사된 게임플레이 빛의 확산각입니다. 0이면 원기둥 형태를 유지합니다."))
 	float ReflectionConeAngle = 12.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection", meta = (ClampMin = "0.0", ToolTip = "광원의 감쇠 계산 뒤 반사광 세기에 곱할 값입니다."))

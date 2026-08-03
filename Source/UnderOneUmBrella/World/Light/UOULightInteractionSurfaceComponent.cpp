@@ -47,8 +47,6 @@ bool UUOULightInteractionSurfaceComponent::CanReflectLight() const
 {
 	return LightInteractionMode == EUOULightInteractionMode::Reflecting &&
 		ReflectionRange > 0.0f &&
-		(ReflectionConeAngleMode == EUOULightReflectionConeAngleMode::PreserveIncoming ||
-			ReflectionConeAngle > 0.0f) &&
 		ReflectionIntensityMultiplier > 0.0f &&
 		(!bLimitReflectionBySurfaceAperture || GetReflectionApertureRadius() > KINDA_SMALL_NUMBER);
 }
@@ -123,7 +121,7 @@ float UUOULightInteractionSurfaceComponent::ResolveReflectionConeAngle(float Inc
 	const float ConeAngle = ReflectionConeAngleMode == EUOULightReflectionConeAngleMode::PreserveIncoming
 		? IncomingConeAngle
 		: ReflectionConeAngle;
-	return FMath::Clamp(ConeAngle, 1.0f, 89.0f);
+	return FMath::Clamp(ConeAngle, 0.0f, 89.0f);
 }
 
 FVector UUOULightInteractionSurfaceComponent::GetReflectionDirection(
@@ -161,7 +159,7 @@ FVector UUOULightInteractionSurfaceComponent::GetReflectionDirection(
 void UUOULightInteractionSurfaceComponent::ValidateSettings()
 {
 	ReflectionRange = FMath::Max(0.0f, ReflectionRange);
-	ReflectionConeAngle = FMath::Clamp(ReflectionConeAngle, 1.0f, 89.0f);
+	ReflectionConeAngle = FMath::Clamp(ReflectionConeAngle, 0.0f, 89.0f);
 	ReflectionIntensityMultiplier = FMath::Max(0.0f, ReflectionIntensityMultiplier);
 	ReflectionStartPadding = FMath::Max(0.0f, ReflectionStartPadding);
 	MaximumReflectionIncidenceAngle = FMath::Clamp(MaximumReflectionIncidenceAngle, 0.0f, 89.0f);
