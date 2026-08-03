@@ -6,8 +6,6 @@
 #include "Engine/DataTable.h"
 #include "UOURewardPresentationTypes.generated.h"
 
-class UTexture2D;
-
 // Motion Cue를 어느 시스템에서 처리할지 구분합니다.
 UENUM(BlueprintType)
 enum class EUOURewardMotionCueChannel : uint8
@@ -70,7 +68,7 @@ struct UNDERONEUMBRELLA_API FUOURewardPresentationCue
 };
 
 // MotionComponent가 CueRequest와 실행 시간을 연결해 보존하는 스케줄 항목입니다.
-USTRUCT(BlueprintType, meta = (DisplayName = "UOU Reward Motion Cue Timing"))
+USTRUCT()
 struct UNDERONEUMBRELLA_API FUOURewardMotionCueTiming
 {
 	GENERATED_BODY()
@@ -93,32 +91,6 @@ struct UNDERONEUMBRELLA_API FUOURewardPresentationData
 	// RewardActor가 수집 시작 시 자신의 고유 ID로 채우는 런타임 값입니다.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Reward|Presentation")
 	FName RewardId = NAME_None;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Presentation")
-	FText DisplayName;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Presentation", meta = (MultiLine = "true"))
-	FText Description;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Presentation", meta = (MultiLine = "true"))
-	FText ResultMessage;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Presentation")
-	TObjectPtr<UTexture2D> Icon = nullptr;
-
-	// 이번 수집으로 획득한 양입니다. 누적 개수는 추후 진행도 시스템이 별도로 제공할 수 있습니다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Presentation", meta = (ClampMin = "1"))
-	int32 AcquiredAmount = 1;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Presentation")
-	bool bShowAcquiredAmount = true;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Presentation")
-	bool bShowResultUI = true;
-
-	// HUD Blueprint가 Compact, FullScreen 같은 연출 형태를 선택할 때 사용하는 식별자입니다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Presentation")
-	FName PresentationStyleId = TEXT("Default");
 
 	// HUD 애니메이션의 권장 표시 시간입니다. 실제 종료 처리는 UMG가 선택할 수 있습니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Presentation", meta = (ClampMin = "0.0"))
