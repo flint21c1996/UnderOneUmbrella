@@ -153,18 +153,6 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Reward|Feedback|Cue")
 	bool ExecuteFeedbackCue(EUOURewardFeedbackCueAction FeedbackAction);
 
-	// 준비된 피드백 세션에서 플레이어 수집 애니메이션만 재생합니다.
-	UFUNCTION(BlueprintCallable, Category = "Reward|Feedback|Animation")
-	bool PlayPlayerAnimationFeedback();
-
-	// 준비된 피드백 세션에서 수집 Niagara만 생성합니다.
-	UFUNCTION(BlueprintCallable, Category = "Reward|Feedback|Effect")
-	bool SpawnNiagaraFeedback();
-
-	// 준비된 피드백 세션에서 임시 카메라 포커스만 시작합니다.
-	UFUNCTION(BlueprintCallable, Category = "Reward|Feedback|Camera")
-	bool StartCameraFeedback();
-
 	// 예약된 개별 피드백 Cue가 모두 전달되었음을 알려 종료 조건 평가를 허용합니다.
 	UFUNCTION(BlueprintCallable, Category = "Reward|Feedback")
 	void CompleteFeedbackSequence();
@@ -191,6 +179,11 @@ protected:
 	bool bPresentationCameraHoldActive = false;
 
 private:
+	// ExecuteFeedbackCue가 선택한 개별 피드백 동작을 실제로 실행합니다.
+	bool PlayPlayerAnimationFeedback();
+	bool SpawnNiagaraFeedback();
+	bool StartCameraFeedback();
+
 	void ApplyPlayerInputBlock(AUOUCharacter* Collector);
 	bool StartCollectionMontage();
 	void ReleasePlayerFeedback();

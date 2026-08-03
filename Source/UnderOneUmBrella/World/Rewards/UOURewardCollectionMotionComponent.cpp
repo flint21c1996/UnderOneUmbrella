@@ -110,24 +110,6 @@ bool UUOURewardCollectionMotionComponent::StartCollectionMotion(
 	return true;
 }
 
-bool UUOURewardCollectionMotionComponent::IsCollectionMotionPlaying() const
-{
-	return bMotionPlaying;
-}
-
-bool UUOURewardCollectionMotionComponent::HasCueForChannel(
-	EUOURewardMotionCueChannel Channel) const
-{
-	return ActiveCueRequests.ContainsByPredicate(
-		[Channel](const FUOURewardPresentationCue& Cue)
-		{
-			return Cue.Channel == Channel
-				&& (Channel == EUOURewardMotionCueChannel::Feedback
-					|| (Cue.PresentationRow.DataTable != nullptr
-						&& !Cue.GetPresentationKey().IsNone()));
-		});
-}
-
 #if WITH_EDITOR
 void UUOURewardCollectionMotionComponent::SetCueTriggerTimeForEditor(
 	const FGuid& RequestId,

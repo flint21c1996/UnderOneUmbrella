@@ -37,12 +37,6 @@ public:
 		USplineComponent* MotionPath,
 		const TArray<FUOURewardPresentationCue>& CueRequests);
 
-	UFUNCTION(BlueprintPure, Category = "Reward|Motion")
-	bool IsCollectionMotionPlaying() const;
-
-	UFUNCTION(BlueprintPure, Category = "Reward|Motion|Cues")
-	bool HasCueForChannel(EUOURewardMotionCueChannel Channel) const;
-
 #if WITH_EDITOR
 	float GetMotionDurationForEditor() const { return MotionDuration; }
 	const TArray<FUOURewardMotionCueTiming>& GetCueTimelineForEditor() const
