@@ -85,6 +85,8 @@ private:
 	{
 		int32 CueIndex = INDEX_NONE;
 		float TriggerTime = 0.0f;
+		// true이면 Presentation 행의 두 번째 Outro 마커 이벤트입니다.
+		bool bPresentationClose = false;
 	};
 
 	void ApplyMotion(float NormalizedTime);

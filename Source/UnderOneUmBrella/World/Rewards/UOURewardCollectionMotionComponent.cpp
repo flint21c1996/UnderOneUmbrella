@@ -131,14 +131,10 @@ void UUOURewardCollectionMotionComponent::SetCueTriggerTimeForEditor(
 		Timing->RequestId = RequestId;
 	}
 
-	const float SafeMotionDuration = FMath::Max(0.0f, MotionDuration);
-	const float MaximumTriggerTime = Timing->PresentationCloseTime >= 0.0f
-		? FMath::Clamp(Timing->PresentationCloseTime, 0.0f, SafeMotionDuration)
-		: SafeMotionDuration;
 	Timing->TriggerTime = FMath::Clamp(
 		TriggerTime,
 		0.0f,
-		MaximumTriggerTime);
+		FMath::Max(0.0f, MotionDuration));
 }
 
 void UUOURewardCollectionMotionComponent::SetPresentationCloseTimeForEditor(
@@ -230,6 +226,7 @@ void UUOURewardCollectionMotionComponent::BuildCueSchedule()
 {
 	ActiveCueTimeline.Reset();
 	NextCueIndex = 0;
+	const float SafeMotionDuration = FMath::Max(0.0f, MotionDuration);
 
 	for (int32 CueIndex = 0; CueIndex < ActiveCueRequests.Num(); ++CueIndex)
 	{
@@ -243,19 +240,44 @@ void UUOURewardCollectionMotionComponent::BuildCueSchedule()
 					})
 				: nullptr;
 
-		FActiveCueTiming& ActiveTiming = ActiveCueTimeline.AddDefaulted_GetRef();
-		ActiveTiming.CueIndex = CueIndex;
-		ActiveTiming.TriggerTime = ConfiguredTiming != nullptr
-			? ConfiguredTiming->TriggerTime
-			: 0.0f;
+		const float ShowTime = FMath::Clamp(
+			ConfiguredTiming != nullptr ? ConfiguredTiming->TriggerTime : 0.0f,
+			0.0f,
+			SafeMotionDuration);
+		FActiveCueTiming& ShowTiming = ActiveCueTimeline.AddDefaulted_GetRef();
+		ShowTiming.CueIndex = CueIndex;
+		ShowTiming.TriggerTime = ShowTime;
+
+		if (Cue.Channel == EUOURewardMotionCueChannel::Presentation)
+		{
+			const float ConfiguredCloseTime =
+				ConfiguredTiming != nullptr
+					&& ConfiguredTiming->PresentationCloseTime >= 0.0f
+					? ConfiguredTiming->PresentationCloseTime
+					: SafeMotionDuration;
+			FActiveCueTiming& CloseTiming =
+				ActiveCueTimeline.AddDefaulted_GetRef();
+			CloseTiming.CueIndex = CueIndex;
+			CloseTiming.TriggerTime = FMath::Clamp(
+				ConfiguredCloseTime,
+				ShowTime,
+				SafeMotionDuration);
+			CloseTiming.bPresentationClose = true;
+		}
 	}
 
 	ActiveCueTimeline.Sort(
 		[](const FActiveCueTiming& Left, const FActiveCueTiming& Right)
 		{
-			return FMath::IsNearlyEqual(Left.TriggerTime, Right.TriggerTime)
-				? Left.CueIndex < Right.CueIndex
-				: Left.TriggerTime < Right.TriggerTime;
+			if (!FMath::IsNearlyEqual(Left.TriggerTime, Right.TriggerTime))
+			{
+				return Left.TriggerTime < Right.TriggerTime;
+			}
+			if (Left.CueIndex != Right.CueIndex)
+			{
+				return Left.CueIndex < Right.CueIndex;
+			}
+			return !Left.bPresentationClose && Right.bPresentationClose;
 		});
 }
 
@@ -287,7 +309,11 @@ void UUOURewardCollectionMotionComponent::BroadcastPassedCues(float CurrentTime)
 			|| (Cue.PresentationRow.DataTable != nullptr
 				&& !Cue.GetPresentationKey().IsNone()))
 		{
-			OnCollectionMotionCue.Broadcast(Cue);
+			FUOURewardPresentationCue CueEvent = Cue;
+			CueEvent.PresentationPhase = Timing.bPresentationClose
+				? EUOURewardPresentationCuePhase::Close
+				: EUOURewardPresentationCuePhase::Show;
+			OnCollectionMotionCue.Broadcast(CueEvent);
 		}
 	}
 }
