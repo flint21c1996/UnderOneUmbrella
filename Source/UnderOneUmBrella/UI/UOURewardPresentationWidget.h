@@ -9,6 +9,7 @@
 #include "UOURewardPresentationWidget.generated.h"
 
 class UUOURewardPresentationWidget;
+class UWidgetAnimation;
 
 UENUM(BlueprintType)
 enum class EUOURewardPresentationWidgetState : uint8
@@ -76,6 +77,33 @@ public:
 	FUOURewardPresentationWidgetFinishedSignature OnPresentationFinished;
 
 protected:
+	virtual void NativeOnInitialized() override;
+
+#if WITH_EDITOR
+	virtual void ValidateCompiledDefaults(
+		class IWidgetCompilerLog& CompileLog) const override;
+#endif
+
+	// WBP가 가진 애니메이션 중 Presentation 시작에 사용할 항목입니다. None이면 즉시 Hold로 진입합니다.
+	UPROPERTY(
+		EditDefaultsOnly,
+		BlueprintReadOnly,
+		Category = "Reward Presentation|Animation",
+		meta = (
+			DisplayName = "Intro Animation",
+			GetOptions = "GetAvailableAnimationNames"))
+	FName IntroAnimationName = NAME_None;
+
+	// WBP가 가진 애니메이션 중 Presentation 종료에 사용할 항목입니다. None이면 즉시 종료합니다.
+	UPROPERTY(
+		EditDefaultsOnly,
+		BlueprintReadOnly,
+		Category = "Reward Presentation|Animation",
+		meta = (
+			DisplayName = "Outro Animation",
+			GetOptions = "GetAvailableAnimationNames"))
+	FName OutroAnimationName = NAME_None;
+
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "Reward Presentation|Runtime")
 	FUOURewardPresentationData PresentationData;
 
@@ -87,20 +115,31 @@ protected:
 	void ReceivePresentationInitialized(const FUOURewardPresentationData& InPresentationData);
 
 	UFUNCTION(BlueprintImplementableEvent, BlueprintCosmetic, Category = "Reward Presentation|Events")
-	void ReceivePresentationStarted();
-
-	UFUNCTION(BlueprintImplementableEvent, BlueprintCosmetic, Category = "Reward Presentation|Events")
 	void ReceivePresentationCue(const FUOURewardPresentationCue& Cue);
-
-	UFUNCTION(BlueprintImplementableEvent, BlueprintCosmetic, Category = "Reward Presentation|Events")
-	void ReceivePresentationCloseRequested();
 
 	UFUNCTION(BlueprintImplementableEvent, BlueprintCosmetic, Category = "Reward Presentation|Events")
 	void ReceivePresentationReset();
 
 private:
+	UFUNCTION()
+	TArray<FName> GetAvailableAnimationNames() const;
+
+	UWidgetAnimation* FindAnimationByName(FName AnimationName) const;
+
+	UFUNCTION()
+	void HandleIntroAnimationFinished();
+
+	UFUNCTION()
+	void HandleOutroAnimationFinished();
+
 	void ClearAutoCloseTimer();
 	void HandleAutoCloseTimerElapsed();
+
+	UPROPERTY(Transient)
+	TObjectPtr<UWidgetAnimation> ResolvedIntroAnimation = nullptr;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UWidgetAnimation> ResolvedOutroAnimation = nullptr;
 
 	FTimerHandle AutoCloseTimerHandle;
 	bool bPresentationHoldStarted = false;
