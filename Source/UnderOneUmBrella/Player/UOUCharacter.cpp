@@ -29,6 +29,7 @@
 #include "Player/UOUPushPullInteractorComponent.h"
 #include "Player/UOUUmbrellaComponent.h"
 #include "UI/UOUUISubsystem.h"
+#include "World/Wind/UOUWindReceiverComponent.h"
 
 DEFINE_LOG_CATEGORY(LogTemplateCharacter);
 
@@ -114,6 +115,7 @@ AUOUCharacter::AUOUCharacter()
 		TEXT("InteractionExecutorComponent"));
 	LadderClimbComponent = CreateDefaultSubobject<UUOULadderClimbComponent>(TEXT("LadderClimbComponent"));
 	SplineTravelComponent = CreateDefaultSubobject<UUOUPlayerSplineTravelComponent>(TEXT("SplineTravelComponent"));
+	WindReceiverComponent = CreateDefaultSubobject<UUOUWindReceiverComponent>(TEXT("WindReceiverComponent"));
 
 	UmbrellaAttachPoint = CreateDefaultSubobject<UArrowComponent>(TEXT("UmbrellaAttachPoint"));
 	UmbrellaAttachPoint->SetupAttachment(GetMesh());
@@ -293,7 +295,6 @@ void AUOUCharacter::Move(const FInputActionValue& Value)
 		{
 			LadderClimbComponent->HandleMoveInput(FVector2D::ZeroVector, MovementYaw);
 		}
-		GetCharacterMovement()->StopMovementImmediately();
 		return;
 	}
 
@@ -331,6 +332,15 @@ void AUOUCharacter::Move(const FInputActionValue& Value)
 				UmbrellaComponent->CloseUmbrella();
 			}
 		}
+		return;
+	}
+
+	// 바람을 타는 동안에는 자동 바람 가속 위에 좌우/상하 조향 힘을 더합니다.
+	if (WindReceiverComponent != nullptr
+		&& WindReceiverComponent->ApplyWindborneSteeringInput(
+			MovementVector,
+			MovementYaw))
+	{
 		return;
 	}
 

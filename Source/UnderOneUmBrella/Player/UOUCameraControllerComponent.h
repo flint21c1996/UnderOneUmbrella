@@ -90,6 +90,22 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Camera|Dialogue")
 	bool IsDialogueFocusActive() const { return bDialogueFocusActive; }
 
+	// 임시 줌과 함께 평상시 주시점으로부터 포커스 위치를 이동해 대상이 화면에서 부각되도록 합니다.
+	UFUNCTION(BlueprintCallable, Category = "Camera|Temporary Zoom")
+	void RequestTemporaryFocusZoom(
+		UObject* RequestSource,
+		float TargetDistance,
+		float TargetOrthoWidth,
+		FVector FocusOffset,
+		bool bFaceOwnerFromFront);
+
+	// 자신이 등록한 임시 줌만 해제하여 다른 연출의 요청을 잘못 종료하지 않도록 합니다.
+	UFUNCTION(BlueprintCallable, Category = "Camera|Temporary Zoom")
+	void ReleaseTemporaryZoom(UObject* RequestSource);
+
+	UFUNCTION(BlueprintPure, Category = "Camera|Temporary Zoom")
+	bool IsTemporaryZoomRequestedBy(const UObject* RequestSource) const;
+
 protected:
 	// 참조를 수동으로 넣지 않아도 기본 카메라 구성을 자동으로 찾게 한다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Camera|References")
@@ -227,6 +243,18 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Camera|Runtime")
 	bool bDialogueFocusActive = false;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Camera|Runtime")
+	float TemporaryZoomTargetDistance = 0.0f;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Camera|Runtime")
+	float TemporaryZoomTargetOrthoWidth = 0.0f;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Camera|Runtime")
+	FVector TemporaryZoomFocusOffset = FVector::ZeroVector;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Camera|Runtime")
+	bool bTemporaryZoomFaceOwnerFromFront = false;
+
 	UPROPERTY(Transient)
 	TMap<TObjectPtr<UMeshComponent>, FOccludedMeshState> OccludedMeshStates;
 
@@ -242,6 +270,11 @@ protected:
 	// 목표 yaw와 거리로 현재 카메라를 부드럽게 갱신한다.
 	void UpdateSnapCamera(float DeltaSeconds);
 	void UpdateDialogueCamera(float DeltaSeconds);
+	bool HasTemporaryZoomRequest() const;
+	float GetEffectiveTargetCameraYaw() const;
+	float GetEffectiveTargetCameraDistance() const;
+	float GetEffectiveTargetOrthoWidth() const;
+	FVector GetEffectiveTargetCameraOffset() const;
 
 	// 플레이어와 카메라 사이를 가리는 메시를 찾아 임시로 투명 처리한다.
 	void UpdateCameraOcclusion();
@@ -264,6 +297,9 @@ protected:
 
 	UPROPERTY(Transient)
 	TObjectPtr<AActor> DialogueSpeakerActor = nullptr;
+
+	UPROPERTY(Transient)
+	TWeakObjectPtr<UObject> TemporaryZoomRequestSource;
 
 	FVector RegularCameraTargetOffset = FVector::ZeroVector;
 	FVector TargetCameraOffset = FVector::ZeroVector;

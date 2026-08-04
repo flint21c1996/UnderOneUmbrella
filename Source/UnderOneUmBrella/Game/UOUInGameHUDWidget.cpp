@@ -9,14 +9,19 @@
 #include "Components/EditableTextBox.h"
 #include "Components/MultiLineEditableText.h"
 #include "Components/MultiLineEditableTextBox.h"
+#include "Components/Overlay.h"
+#include "Components/OverlaySlot.h"
 #include "Components/RichTextBlock.h"
 #include "Components/TextBlock.h"
 #include "Components/Widget.h"
 #include "Components/WidgetComponent.h"
+#include "Engine/DataTable.h"
 #include "Engine/LocalPlayer.h"
 #include "GameFramework/Pawn.h"
 #include "Player/UOUUmbrellaComponent.h"
 #include "UI/UOUDialogueBoxWidget.h"
+#include "UI/UOURewardPresentationLayoutRow.h"
+#include "UI/UOURewardPresentationWidget.h"
 #include "UI/UOUUmbrellaStatusWidget.h"
 #include "UI/UOUSpeechBubbleWidget.h"
 #include "UI/UOUUISubsystem.h"
@@ -135,6 +140,8 @@ void UUOUInGameHUDWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
 
+	InitializeRewardPresentationWidgets();
+
 	if (UUOUUISubsystem* UISubsystem = GetUISubsystem())
 	{
 		UISubsystem->RegisterHUD(this);
@@ -149,6 +156,8 @@ void UUOUInGameHUDWidget::NativeDestruct()
 	{
 		UISubsystem->UnregisterHUD(this);
 	}
+
+	ClearRewardPresentationWidgets();
 
 	Super::NativeDestruct();
 }
@@ -266,6 +275,110 @@ void UUOUInGameHUDWidget::ApplyUmbrellaHUDState(const FUOUUmbrellaHUDState& Stat
 	}
 }
 
+bool UUOUInGameHUDWidget::ProcessRewardPresentationCue(
+	const FUOURewardPresentationData& PresentationData,
+	const FUOURewardPresentationCue& Cue)
+{
+	const FDataTableRowHandle& PresentationRow = Cue.PresentationRow;
+	const FName PresentationKey = Cue.GetPresentationKey();
+	const UDataTable* SelectedPresentationTable =
+		PresentationRow.DataTable.Get();
+	const UDataTable* HUDPresentationTable =
+		RewardPresentationLayoutTable.Get();
+	if (SelectedPresentationTable == nullptr || PresentationKey.IsNone())
+	{
+		UE_LOG(
+			LogTemp,
+			Warning,
+			TEXT("Reward Presentation Cue has no DataTable Row selected."));
+		return false;
+	}
+
+	if (SelectedPresentationTable != HUDPresentationTable)
+	{
+		UE_LOG(
+			LogTemp,
+			Warning,
+			TEXT("Reward Presentation Row '%s' uses DataTable '%s', but the HUD uses '%s'."),
+			*PresentationKey.ToString(),
+			*GetNameSafe(SelectedPresentationTable),
+			*GetNameSafe(HUDPresentationTable));
+		return false;
+	}
+
+	TObjectPtr<UUOURewardPresentationWidget>* FoundWidget =
+		RewardPresentationWidgets.Find(PresentationKey);
+	if (FoundWidget == nullptr || !IsValid(FoundWidget->Get()))
+	{
+		UE_LOG(
+			LogTemp,
+			Warning,
+			TEXT("Reward Presentation Key '%s' was not found in the HUD layout table."),
+			*PresentationKey.ToString());
+		return false;
+	}
+
+	UUOURewardPresentationWidget* PresentationWidget = FoundWidget->Get();
+	const EUOURewardPresentationWidgetState CurrentState =
+		PresentationWidget->GetPresentationState();
+	if (Cue.PresentationPhase == EUOURewardPresentationCuePhase::Close)
+	{
+		if (CurrentState == EUOURewardPresentationWidgetState::Presenting)
+		{
+			return PresentationWidget->RequestClose();
+		}
+		if (CurrentState == EUOURewardPresentationWidgetState::Closing
+			|| CurrentState == EUOURewardPresentationWidgetState::Finished)
+		{
+			return true;
+		}
+
+		UE_LOG(
+			LogTemp,
+			Warning,
+			TEXT("Reward Presentation Key '%s' received an Outro request before it was started."),
+			*PresentationKey.ToString());
+		return false;
+	}
+
+	if (CurrentState == EUOURewardPresentationWidgetState::Presenting)
+	{
+		return true;
+	}
+
+	if (CurrentState == EUOURewardPresentationWidgetState::Closing)
+	{
+		UE_LOG(
+			LogTemp,
+			Warning,
+			TEXT("Reward Presentation Key '%s' was requested while its Widget was closing."),
+			*PresentationKey.ToString());
+		return false;
+	}
+
+	if (CurrentState == EUOURewardPresentationWidgetState::Finished
+		&& !PresentationWidget->ResetPresentation())
+	{
+		return false;
+	}
+
+	if (PresentationWidget->GetPresentationState()
+			== EUOURewardPresentationWidgetState::Uninitialized
+		&& !PresentationWidget->InitializePresentation(PresentationData))
+	{
+		return false;
+	}
+
+	PresentationWidget->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+	if (!PresentationWidget->StartPresentation())
+	{
+		PresentationWidget->SetVisibility(ESlateVisibility::Collapsed);
+		return false;
+	}
+
+	return true;
+}
+
 void UUOUInGameHUDWidget::BeginDialoguePresentation_Implementation(AActor* SpeakerActor, UUOUDialogueSourceComponent* DialogueSource)
 {
 }
@@ -374,6 +487,147 @@ UUOUUmbrellaStatusWidget* UUOUInGameHUDWidget::ResolveUmbrellaStatusWidget()
 
 	UmbrellaStatusWidget = FirstUmbrellaStatusWidget;
 	return UmbrellaStatusWidget;
+}
+
+void UUOUInGameHUDWidget::InitializeRewardPresentationWidgets()
+{
+	if (!RewardPresentationWidgets.IsEmpty())
+	{
+		return;
+	}
+
+	if (RewardResultRoot == nullptr)
+	{
+		UE_LOG(
+			LogTemp,
+			Warning,
+			TEXT("Reward Presentation initialization failed: WBP_InGameHUD has no RewardResultRoot panel."));
+		return;
+	}
+
+	if (RewardPresentationLayoutTable == nullptr)
+	{
+		UE_LOG(
+			LogTemp,
+			Warning,
+			TEXT("Reward Presentation initialization failed: no layout DataTable was assigned."));
+		return;
+	}
+
+	if (RewardPresentationLayoutTable->GetRowStruct()
+		!= FUOURewardPresentationLayoutRow::StaticStruct())
+	{
+		UE_LOG(
+			LogTemp,
+			Warning,
+			TEXT("Reward Presentation initialization failed: '%s' uses an unexpected row structure."),
+			*GetNameSafe(RewardPresentationLayoutTable));
+		return;
+	}
+
+	RewardResultRoot->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+
+	TMap<UClass*, UUOURewardPresentationWidget*> WidgetInstancesByClass;
+	for (const TPair<FName, uint8*>& RowPair : RewardPresentationLayoutTable->GetRowMap())
+	{
+		const FName PresentationKey = RowPair.Key;
+		const FUOURewardPresentationLayoutRow* LayoutRow =
+			reinterpret_cast<const FUOURewardPresentationLayoutRow*>(RowPair.Value);
+
+		if (PresentationKey.IsNone()
+			|| LayoutRow == nullptr
+			|| LayoutRow->WidgetClass.Get() == nullptr)
+		{
+			UE_LOG(
+				LogTemp,
+				Warning,
+				TEXT("Reward Presentation layout table '%s' has an invalid row '%s'."),
+				*GetNameSafe(RewardPresentationLayoutTable),
+				*PresentationKey.ToString());
+			continue;
+		}
+
+		UClass* WidgetClass = LayoutRow->WidgetClass.Get();
+		UUOURewardPresentationWidget* PresentationWidget =
+			WidgetInstancesByClass.FindRef(WidgetClass);
+
+		if (PresentationWidget == nullptr)
+		{
+			PresentationWidget = CreateWidget<UUOURewardPresentationWidget>(
+				GetOwningPlayer(),
+				LayoutRow->WidgetClass);
+			if (PresentationWidget == nullptr)
+			{
+				UE_LOG(
+					LogTemp,
+					Warning,
+					TEXT("Failed to create Reward Presentation Widget for key '%s'."),
+					*PresentationKey.ToString());
+				continue;
+			}
+
+			PresentationWidget->SetVisibility(ESlateVisibility::Collapsed);
+			UOverlaySlot* PresentationSlot =
+				RewardResultRoot->AddChildToOverlay(PresentationWidget);
+			if (PresentationSlot == nullptr)
+			{
+				UE_LOG(
+					LogTemp,
+					Warning,
+					TEXT("Failed to add Reward Presentation Widget for key '%s' to RewardResultRoot."),
+					*PresentationKey.ToString());
+				continue;
+			}
+
+			PresentationSlot->SetHorizontalAlignment(HAlign_Fill);
+			PresentationSlot->SetVerticalAlignment(VAlign_Fill);
+
+			PresentationWidget->OnPresentationFinished.AddUniqueDynamic(
+				this,
+				&UUOUInGameHUDWidget::HandleRewardPresentationFinished);
+
+			WidgetInstancesByClass.Add(WidgetClass, PresentationWidget);
+			CreatedRewardPresentationWidgets.Add(PresentationWidget);
+		}
+
+		RewardPresentationWidgets.Add(PresentationKey, PresentationWidget);
+	}
+}
+
+void UUOUInGameHUDWidget::ClearRewardPresentationWidgets()
+{
+	for (UUOURewardPresentationWidget* PresentationWidget : CreatedRewardPresentationWidgets)
+	{
+		if (!IsValid(PresentationWidget))
+		{
+			continue;
+		}
+
+		PresentationWidget->OnPresentationFinished.RemoveDynamic(
+			this,
+			&UUOUInGameHUDWidget::HandleRewardPresentationFinished);
+		PresentationWidget->RemoveFromParent();
+	}
+
+	RewardPresentationWidgets.Empty();
+	CreatedRewardPresentationWidgets.Empty();
+}
+
+void UUOUInGameHUDWidget::HandleRewardPresentationFinished(
+	UUOURewardPresentationWidget* PresentationWidget)
+{
+	if (!IsValid(PresentationWidget))
+	{
+		return;
+	}
+
+	const FName RewardId = PresentationWidget->GetPresentationRewardId();
+	PresentationWidget->SetVisibility(ESlateVisibility::Collapsed);
+
+	if (UUOUUISubsystem* UISubsystem = GetUISubsystem())
+	{
+		UISubsystem->NotifyRewardPresentationFinished(RewardId);
+	}
 }
 
 UWidgetComponent* UUOUInGameHUDWidget::ResolveSpeechBubbleWidgetComponent(AActor* SpeakerActor) const

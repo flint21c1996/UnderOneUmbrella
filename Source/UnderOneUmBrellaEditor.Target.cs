@@ -11,5 +11,6 @@ public class UnderOneUmBrellaEditorTarget : TargetRules
 		DefaultBuildSettings = BuildSettingsVersion.V6;
 		IncludeOrderVersion = EngineIncludeOrderVersion.Unreal5_7;
 		ExtraModuleNames.Add("UnderOneUmBrella");
+		ExtraModuleNames.Add("UnderOneUmBrellaEditor");
 	}
 }
