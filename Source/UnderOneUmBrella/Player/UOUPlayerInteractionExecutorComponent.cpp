@@ -72,6 +72,16 @@ bool UUOUPlayerInteractionExecutorComponent::TryStartInteraction(
 		return false;
 	}
 
+	if (InteractionRequest.bHoldMontageLastPoseUntilInteractionEnds)
+	{
+		if (FAnimMontageInstance* MontageInstance =
+			AnimInstance->GetActiveInstanceForMontage(
+				InteractionRequest.PlayerMontage.Get()))
+		{
+			MontageInstance->bEnableAutoBlendOut = false;
+		}
+	}
+
 	ActiveMontage = InteractionRequest.PlayerMontage;
 	ActiveAnimInstance = AnimInstance;
 

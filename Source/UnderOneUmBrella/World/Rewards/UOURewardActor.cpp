@@ -93,13 +93,6 @@ void AUOURewardActor::BeginPlay()
 
 void AUOURewardActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
-	UnbindRewardPresentationFinished();
-	bRewardPresentationActive = false;
-	if (RewardFeedbackComponent != nullptr)
-	{
-		RewardFeedbackComponent->EndPresentationCameraHold();
-	}
-
 	if (CollectionTrigger != nullptr)
 	{
 		CollectionTrigger->OnComponentBeginOverlap.RemoveDynamic(
@@ -295,45 +288,7 @@ bool AUOURewardActor::RoutePresentationCueToUI(
 
 	FUOURewardPresentationData PresentationData;
 	PresentationData.RewardId = RewardId;
-
-	if (RewardId.IsNone())
-	{
-		UE_LOG(
-			LogTemp,
-			Warning,
-			TEXT("Reward Presentation cannot hold camera because RewardId is None."));
-		return UISubsystem->ShowRewardPresentationCue(
-			PresentationData,
-			Cue);
-	}
-
-	const bool bWasPresentationActive = bRewardPresentationActive;
-	BindRewardPresentationFinished(UISubsystem);
-	bRewardPresentationActive = true;
-
-	const bool bPresentationShown =
-		UISubsystem->ShowRewardPresentationCue(
-			PresentationData,
-			Cue);
-	if (!bPresentationShown)
-	{
-		if (!bWasPresentationActive)
-		{
-			bRewardPresentationActive = false;
-			UnbindRewardPresentationFinished();
-			if (RewardFeedbackComponent != nullptr)
-			{
-				RewardFeedbackComponent->EndPresentationCameraHold();
-			}
-		}
-		return false;
-	}
-
-	if (bRewardPresentationActive && RewardFeedbackComponent != nullptr)
-	{
-		RewardFeedbackComponent->BeginPresentationCameraHold();
-	}
-	return true;
+	return UISubsystem->ShowRewardPresentationCue(PresentationData, Cue);
 }
 
 void AUOURewardActor::TryCompleteCollection()
@@ -377,10 +332,6 @@ void AUOURewardActor::HandleRewardFeedbackFinished()
 void AUOURewardActor::HandleCollectionMotionFinished()
 {
 	bWaitingForCollectionMotion = false;
-	if (!bRewardPresentationActive && RewardFeedbackComponent != nullptr)
-	{
-		RewardFeedbackComponent->EndPresentationCameraHold();
-	}
 	if (RewardFeedbackComponent != nullptr)
 	{
 		RewardFeedbackComponent->CompleteFeedbackSequence();
@@ -404,51 +355,5 @@ void AUOURewardActor::HandleCollectionMotionCue(const FUOURewardPresentationCue&
 			RoutePresentationCueToUI(Cue);
 			break;
 		}
-	}
-}
-
-void AUOURewardActor::BindRewardPresentationFinished(
-	UUOUUISubsystem* UISubsystem)
-{
-	if (ActiveRewardUISubsystem == UISubsystem)
-	{
-		return;
-	}
-
-	UnbindRewardPresentationFinished();
-	ActiveRewardUISubsystem = UISubsystem;
-	if (ActiveRewardUISubsystem != nullptr)
-	{
-		ActiveRewardUISubsystem->OnRewardPresentationFinished.AddUniqueDynamic(
-			this,
-			&AUOURewardActor::HandleRewardPresentationFinished);
-	}
-}
-
-void AUOURewardActor::UnbindRewardPresentationFinished()
-{
-	if (ActiveRewardUISubsystem != nullptr)
-	{
-		ActiveRewardUISubsystem->OnRewardPresentationFinished.RemoveDynamic(
-			this,
-			&AUOURewardActor::HandleRewardPresentationFinished);
-	}
-
-	ActiveRewardUISubsystem = nullptr;
-}
-
-void AUOURewardActor::HandleRewardPresentationFinished(
-	FName FinishedRewardId)
-{
-	if (FinishedRewardId != RewardId)
-	{
-		return;
-	}
-
-	bRewardPresentationActive = false;
-	UnbindRewardPresentationFinished();
-	if (RewardFeedbackComponent != nullptr)
-	{
-		RewardFeedbackComponent->EndPresentationCameraHold();
 	}
 }

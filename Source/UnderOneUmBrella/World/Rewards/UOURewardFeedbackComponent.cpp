@@ -23,7 +23,6 @@ UUOURewardFeedbackComponent::UUOURewardFeedbackComponent()
 
 void UUOURewardFeedbackComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
-	bPresentationCameraHoldActive = false;
 	FinishFeedbackInternal(false);
 	ReleaseCameraFeedback();
 	Super::EndPlay(EndPlayReason);
@@ -111,8 +110,7 @@ bool UUOURewardFeedbackComponent::BeginFeedback(
 {
 	if (!bFeedbackEnabled
 		|| Collector == nullptr
-		|| bFeedbackPlaying
-		|| bPresentationCameraHoldActive)
+		|| bFeedbackPlaying)
 	{
 		return false;
 	}
@@ -235,35 +233,6 @@ bool UUOURewardFeedbackComponent::IsFeedbackPlaying() const
 	return bFeedbackPlaying;
 }
 
-bool UUOURewardFeedbackComponent::BeginPresentationCameraHold()
-{
-	if (!bFeedbackPlaying)
-	{
-		return false;
-	}
-
-	bPresentationCameraHoldActive = true;
-	return true;
-}
-
-void UUOURewardFeedbackComponent::EndPresentationCameraHold()
-{
-	if (!bPresentationCameraHoldActive)
-	{
-		return;
-	}
-
-	bPresentationCameraHoldActive = false;
-	if (bFeedbackPlaying)
-	{
-		TryFinishFeedback();
-	}
-	else
-	{
-		ReleaseCameraFeedback();
-	}
-}
-
 void UUOURewardFeedbackComponent::ApplyPlayerInputBlock(AUOUCharacter* Collector)
 {
 	if (Collector == nullptr)
@@ -291,6 +260,7 @@ bool UUOURewardFeedbackComponent::StartCollectionMontage()
 	AnimationRequest.PlayerMontage = CollectionMontage;
 	AnimationRequest.MontagePlayRate = FMath::Max(0.01f, MontagePlayRate);
 	AnimationRequest.MontageStartSection = MontageStartSection;
+	AnimationRequest.bHoldMontageLastPoseUntilInteractionEnds = true;
 
 	// 전체 피드백의 입력 잠금은 이 컴포넌트가 관리하므로 실행기는 몽타주 수명만 담당합니다.
 	AnimationRequest.bBlockPlayerInputDuringInteraction = false;
@@ -333,11 +303,7 @@ void UUOURewardFeedbackComponent::ReleasePlayerFeedback()
 	ActiveInputExecutor = nullptr;
 	ActiveCollector = nullptr;
 	bCollectionMontagePlaying = false;
-
-	if (!bPresentationCameraHoldActive)
-	{
-		ReleaseCameraFeedback();
-	}
+	ReleaseCameraFeedback();
 }
 
 void UUOURewardFeedbackComponent::ReleaseCameraFeedback()
@@ -371,8 +337,7 @@ void UUOURewardFeedbackComponent::FinishFeedbackInternal(bool bBroadcastFinished
 void UUOURewardFeedbackComponent::TryFinishFeedback()
 {
 	if (!bFeedbackPlaying
-		|| !bFeedbackSequenceCompleted
-		|| bPresentationCameraHoldActive)
+		|| !bFeedbackSequenceCompleted)
 	{
 		return;
 	}
