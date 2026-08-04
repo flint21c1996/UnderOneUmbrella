@@ -13,13 +13,6 @@
 UUOURewardFeedbackComponent::UUOURewardFeedbackComponent()
 {
 	PrimaryComponentTick.bCanEverTick = false;
-
-	FUOURewardPresentationCue DefaultFeedbackCue;
-	DefaultFeedbackCue.RequestId = FGuid::NewGuid();
-	DefaultFeedbackCue.Channel = EUOURewardMotionCueChannel::Feedback;
-	DefaultFeedbackCue.FeedbackAction =
-		EUOURewardFeedbackCueAction::PlayPlayerAnimation;
-	CueRequests.Add(DefaultFeedbackCue);
 }
 
 void UUOURewardFeedbackComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
