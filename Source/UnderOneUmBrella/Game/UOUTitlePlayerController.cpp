@@ -5,18 +5,16 @@
 #include "Blueprint/UserWidget.h"
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
-#include "EngineUtils.h"
-#include "Game/UOULevelTransitionSettingsActor.h"
 #include "Game/UOULevelTransitionSubsystem.h"
-#include "Game/UOUTitleLevelTransitionActor.h"
 #include "InputCoreTypes.h"
 #include "Kismet/KismetSystemLibrary.h"
+#include "Misc/PackageName.h"
 #include "UObject/SoftObjectPath.h"
 
 namespace
 {
 // config가 비어 있어도 타이틀 메뉴를 바로 테스트할 수 있도록 기본 경로를 둡니다.
-constexpr TCHAR DefaultTestLevelPath[] = TEXT("/Game/UOU/Maps/TempMap.TempMap");
+constexpr TCHAR DefaultMapSelectLevelPath[] = TEXT("/Game/UOU/Maps/L_MapSelect.L_MapSelect");
 constexpr TCHAR DefaultTitleMenuWidgetClassPath[] = TEXT("/Game/UOU/UI/WBP_TitleMenu.WBP_TitleMenu_C");
 }
 
@@ -30,10 +28,10 @@ void AUOUTitlePlayerController::BeginPlay()
 	Super::BeginPlay();
 
 	// 타이틀 메뉴는 PlayerController가 직접 생성해서 맵 자체는 비어 있는 상태로 유지합니다.
-	if (nextLevel.IsNull())
+	if (MapSelectLevel.IsNull())
 	{
-		nextLevel = TSoftObjectPtr<UWorld>(FSoftObjectPath(DefaultTestLevelPath));
-		UE_LOG(LogTemp, Warning, TEXT("Title test level was not configured. Falling back to %s."), DefaultTestLevelPath);
+		MapSelectLevel = TSoftObjectPtr<UWorld>(FSoftObjectPath(DefaultMapSelectLevelPath));
+		UE_LOG(LogTemp, Warning, TEXT("Map select level was not configured. Falling back to %s."), DefaultMapSelectLevelPath);
 	}
 
 	if (TitleMenuWidgetClass.IsNull())
@@ -84,8 +82,15 @@ void AUOUTitlePlayerController::SetupInputComponent()
 void AUOUTitlePlayerController::StartGame()
 {
 	// 맵 전환 중에 버튼이 다시 눌려도 OpenLevel을 한 번만 요청합니다.
-	if (bIsOpeningLevel || nextLevel.IsNull())
+	if (bIsOpeningLevel || MapSelectLevel.IsNull())
 	{
+		return;
+	}
+
+	const FString MapSelectPackageName = MapSelectLevel.ToSoftObjectPath().GetLongPackageName();
+	if (!FPackageName::DoesPackageExist(MapSelectPackageName))
+	{
+		UE_LOG(LogTemp, Error, TEXT("Cannot start the game because the map select level does not exist: %s"), *MapSelectPackageName);
 		return;
 	}
 
@@ -98,31 +103,7 @@ void AUOUTitlePlayerController::StartGame()
 		return;
 	}
 
-	TSoftObjectPtr<UWorld> TargetLevel = nextLevel;
-	bool bFoundSettingsTargetLevel = false;
-	if (const AUOULevelTransitionSettingsActor* SettingsActor = FindLevelTransitionSettingsActor())
-	{
-		if (!SettingsActor->TargetLevel.IsNull())
-		{
-			TargetLevel = SettingsActor->TargetLevel;
-			bFoundSettingsTargetLevel = true;
-		}
-	}
-
-	if (const AUOUTitleLevelTransitionActor* TransitionActor = FindTitleLevelTransitionActor())
-	{
-		if (!TransitionActor->TargetLevel.IsNull() && !bFoundSettingsTargetLevel)
-		{
-			TargetLevel = TransitionActor->TargetLevel;
-		}
-	}
-
-	if (TargetLevel.IsNull())
-	{
-		return;
-	}
-
-	bIsOpeningLevel = TransitionSubsystem->RequestLevelTransition(TargetLevel, FUOULevelTransitionSettings());
+	bIsOpeningLevel = TransitionSubsystem->RequestLevelTransition(MapSelectLevel, FUOULevelTransitionSettings());
 }
 
 void AUOUTitlePlayerController::QuitGame()
@@ -157,36 +138,4 @@ void AUOUTitlePlayerController::ApplyTitleMenuInputMode()
 	ResetIgnoreLookInput();
 	SetIgnoreMoveInput(true);
 	SetIgnoreLookInput(true);
-}
-
-const AUOULevelTransitionSettingsActor* AUOUTitlePlayerController::FindLevelTransitionSettingsActor() const
-{
-	UWorld* World = GetWorld();
-	if (World == nullptr)
-	{
-		return nullptr;
-	}
-
-	for (TActorIterator<AUOULevelTransitionSettingsActor> It(World); It; ++It)
-	{
-		return *It;
-	}
-
-	return nullptr;
-}
-
-AUOUTitleLevelTransitionActor* AUOUTitlePlayerController::FindTitleLevelTransitionActor() const
-{
-	UWorld* World = GetWorld();
-	if (World == nullptr)
-	{
-		return nullptr;
-	}
-
-	for (TActorIterator<AUOUTitleLevelTransitionActor> It(World); It; ++It)
-	{
-		return *It;
-	}
-
-	return nullptr;
 }
