@@ -321,6 +321,25 @@ bool UUOUInGameHUDWidget::ProcessRewardPresentationCue(
 	UUOURewardPresentationWidget* PresentationWidget = FoundWidget->Get();
 	const EUOURewardPresentationWidgetState CurrentState =
 		PresentationWidget->GetPresentationState();
+	if (Cue.PresentationPhase == EUOURewardPresentationCuePhase::Close)
+	{
+		if (CurrentState == EUOURewardPresentationWidgetState::Presenting)
+		{
+			return PresentationWidget->RequestClose();
+		}
+		if (CurrentState == EUOURewardPresentationWidgetState::Closing
+			|| CurrentState == EUOURewardPresentationWidgetState::Finished)
+		{
+			return true;
+		}
+
+		UE_LOG(
+			LogTemp,
+			Warning,
+			TEXT("Reward Presentation Key '%s' received an Outro request before it was started."),
+			*PresentationKey.ToString());
+		return false;
+	}
 
 	if (CurrentState == EUOURewardPresentationWidgetState::Presenting)
 	{

@@ -555,9 +555,18 @@ void SUOURewardCueTimeline::UpdateDraggedMarker(float LocalX, float Width)
 	}
 	else
 	{
+		const FUOURewardPresentationCue& Cue =
+			Feedback->GetCueRequests()[DraggedCueIndex];
+		const float RequestedTime = LocalXToTime(LocalX, Width);
+		const float ClampedTime =
+			Cue.Channel == EUOURewardMotionCueChannel::Presentation
+				? FMath::Min(
+					RequestedTime,
+					GetPresentationCloseTime(DraggedCueIndex))
+				: RequestedTime;
 		Motion->SetCueTriggerTimeForEditor(
 			RequestId,
-			LocalXToTime(LocalX, Width));
+			ClampedTime);
 	}
 	Invalidate(EInvalidateWidgetReason::Paint);
 }

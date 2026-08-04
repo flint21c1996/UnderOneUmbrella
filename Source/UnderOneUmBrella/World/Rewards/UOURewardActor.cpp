@@ -450,9 +450,5 @@ void AUOURewardActor::HandleRewardPresentationFinished(
 	if (RewardFeedbackComponent != nullptr)
 	{
 		RewardFeedbackComponent->EndPresentationCameraHold();
-		if (RewardFeedbackComponent->IsFeedbackPlaying())
-		{
-			RewardFeedbackComponent->FinishFeedback();
-		}
 	}
 }
