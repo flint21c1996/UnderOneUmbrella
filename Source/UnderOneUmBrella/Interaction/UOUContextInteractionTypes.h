@@ -22,6 +22,10 @@ struct FUOUPlayerInteractionRequest
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Interaction|Player", meta = (ToolTip = "플레이어 몽타주를 시작할 섹션 이름입니다. None이면 기본 시작 섹션을 사용합니다."))
 	FName MontageStartSection = NAME_None;
 
+	// true이면 Montage 에셋을 변경하지 않고 이번 재생 인스턴스의 마지막 포즈를 유지합니다.
+	UPROPERTY(Transient)
+	bool bHoldMontageLastPoseUntilInteractionEnds = false;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Interaction|Player", meta = (ToolTip = "상호작용 연출이 진행되는 동안 플레이어 조작 입력을 무시합니다."))
 	bool bBlockPlayerInputDuringInteraction = true;
 

@@ -293,7 +293,6 @@ void AUOUCharacter::Move(const FInputActionValue& Value)
 		{
 			LadderClimbComponent->HandleMoveInput(FVector2D::ZeroVector, MovementYaw);
 		}
-		GetCharacterMovement()->StopMovementImmediately();
 		return;
 	}
 

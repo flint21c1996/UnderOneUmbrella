@@ -6,6 +6,7 @@
 #include "Player/UOUUmbrellaComponent.h"
 #include "Subsystems/LocalPlayerSubsystem.h"
 #include "UI/UOUUITypes.h"
+#include "World/Rewards/UOURewardPresentationTypes.h"
 #include "UOUUISubsystem.generated.h"
 
 class UUOUDialogueSourceComponent;
@@ -18,6 +19,10 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FUOUDialogueBubbleRequestedSignat
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FUOUDialogueLineStartedSignature, AActor*, SpeakerActor, const FUOUDialogueLine&, Line);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FUOUDialogueEndedSignature);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FUOUTitleRequestedSignature, const FUOUTitleDisplayData&, TitleData);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
+	FUOURewardPresentationFinishedSignature,
+	FName,
+	RewardId);
 
 // Local player subsystem that bridges gameplay UI requests to the in-game HUD widget.
 // UMG owns the visuals, while this class owns event routing and dialogue progression.
@@ -44,6 +49,9 @@ public:
 
 	UPROPERTY(BlueprintAssignable, Category = "UI|Title")
 	FUOUTitleRequestedSignature OnTitleRequested;
+
+	UPROPERTY(BlueprintAssignable, Category = "UI|Reward")
+	FUOURewardPresentationFinishedSignature OnRewardPresentationFinished;
 
 	UFUNCTION(BlueprintCallable, Category = "UI|HUD")
 	void RegisterHUD(UUOUInGameHUDWidget* InHUDWidget);
@@ -80,6 +88,14 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "UI|Title")
 	void ShowTitle(const FUOUTitleDisplayData& TitleData);
+
+	UFUNCTION(BlueprintCallable, Category = "UI|Reward")
+	bool ShowRewardPresentationCue(
+		const FUOURewardPresentationData& PresentationData,
+		const FUOURewardPresentationCue& Cue);
+
+	UFUNCTION(BlueprintCallable, Category = "UI|Reward")
+	void NotifyRewardPresentationFinished(FName RewardId);
 
 private:
 	UFUNCTION()
