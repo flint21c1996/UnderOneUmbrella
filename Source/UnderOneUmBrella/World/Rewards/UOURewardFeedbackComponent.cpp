@@ -10,6 +10,12 @@
 #include "Player/UOUCharacter.h"
 #include "Player/UOUPlayerInteractionExecutorComponent.h"
 
+#if WITH_EDITOR
+#include "GameFramework/Actor.h"
+#include "UObject/UnrealType.h"
+#include "World/Rewards/UOURewardCollectionMotionComponent.h"
+#endif
+
 UUOURewardFeedbackComponent::UUOURewardFeedbackComponent()
 {
 	PrimaryComponentTick.bCanEverTick = false;
@@ -28,6 +34,76 @@ UUOURewardFeedbackComponent::GetCueRequests() const
 {
 	return CueRequests;
 }
+
+#if WITH_EDITOR
+void UUOURewardFeedbackComponent::PostEditChangeChainProperty(
+	FPropertyChangedChainEvent& PropertyChangedEvent)
+{
+	Super::PostEditChangeChainProperty(PropertyChangedEvent);
+
+	const FName CueRequestsPropertyName =
+		GET_MEMBER_NAME_CHECKED(UUOURewardFeedbackComponent, CueRequests);
+	if (PropertyChangedEvent.GetMemberPropertyName() == CueRequestsPropertyName
+		|| PropertyChangedEvent.GetPropertyName() == CueRequestsPropertyName)
+	{
+		SynchronizeCueRequestsForEditor();
+	}
+}
+
+void UUOURewardFeedbackComponent::SynchronizeCueRequestsForEditor()
+{
+	const bool bRequestIdsChanged = NormalizeCueRequestIdsForEditor();
+
+	AActor* RewardOwner = GetOwner();
+	if (RewardOwner == nullptr)
+	{
+		RewardOwner = GetTypedOuter<AActor>();
+	}
+
+	if (RewardOwner != nullptr)
+	{
+		if (UUOURewardCollectionMotionComponent* MotionComponent =
+			RewardOwner->FindComponentByClass<UUOURewardCollectionMotionComponent>())
+		{
+			MotionComponent->SynchronizeCueTimelineForEditor(CueRequests);
+		}
+	}
+
+	if (bRequestIdsChanged)
+	{
+		MarkPackageDirty();
+	}
+}
+
+bool UUOURewardFeedbackComponent::NormalizeCueRequestIdsForEditor()
+{
+	TSet<FGuid> UsedRequestIds;
+	bool bChanged = false;
+
+	for (FUOURewardPresentationCue& CueRequest : CueRequests)
+	{
+		if (!CueRequest.RequestId.IsValid()
+			|| UsedRequestIds.Contains(CueRequest.RequestId))
+		{
+			if (!bChanged)
+			{
+				Modify();
+				bChanged = true;
+			}
+
+			do
+			{
+				CueRequest.RequestId = FGuid::NewGuid();
+			}
+			while (UsedRequestIds.Contains(CueRequest.RequestId));
+		}
+
+		UsedRequestIds.Add(CueRequest.RequestId);
+	}
+
+	return bChanged;
+}
+#endif
 
 bool UUOURewardFeedbackComponent::BeginFeedback(
 	AUOUCharacter* Collector,

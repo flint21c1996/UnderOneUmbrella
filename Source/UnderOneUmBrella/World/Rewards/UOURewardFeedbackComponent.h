@@ -12,6 +12,9 @@ class UAnimMontage;
 class UNiagaraSystem;
 class UUOUCameraControllerComponent;
 class UUOUPlayerInteractionExecutorComponent;
+#if WITH_EDITOR
+struct FPropertyChangedChainEvent;
+#endif
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FUOURewardFeedbackFinishedSignature);
 
@@ -26,6 +29,14 @@ public:
 
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
+#if WITH_EDITOR
+	virtual void PostEditChangeChainProperty(
+		FPropertyChangedChainEvent& PropertyChangedEvent) override;
+
+	// Cue 요청 ID를 정규화하고 같은 Actor의 Motion 타임라인과 동기화합니다.
+	void SynchronizeCueRequestsForEditor();
+#endif
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Feedback")
 	bool bFeedbackEnabled = true;
 
@@ -39,14 +50,6 @@ public:
 
 	// MotionComponent가 수집 시작 시 복사할 Cue 요청 목록을 제공합니다.
 	const TArray<FUOURewardPresentationCue>& GetCueRequests() const;
-
-#if WITH_EDITOR
-	// Motion 타임라인 편집기가 CueRequest의 내부 식별자를 준비할 때만 사용합니다.
-	TArray<FUOURewardPresentationCue>& GetMutableCueRequestsForEditor()
-	{
-		return CueRequests;
-	}
-#endif
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Feedback|Effect")
 	TObjectPtr<UNiagaraSystem> CollectionEffect = nullptr;
@@ -176,6 +179,10 @@ protected:
 	bool bPresentationCameraHoldActive = false;
 
 private:
+#if WITH_EDITOR
+	bool NormalizeCueRequestIdsForEditor();
+#endif
+
 	// ExecuteFeedbackCue가 선택한 개별 피드백 동작을 실제로 실행합니다.
 	bool PlayPlayerAnimationFeedback();
 	bool SpawnNiagaraFeedback();

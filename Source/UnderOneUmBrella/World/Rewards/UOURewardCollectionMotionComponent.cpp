@@ -111,6 +111,92 @@ bool UUOURewardCollectionMotionComponent::StartCollectionMotion(
 }
 
 #if WITH_EDITOR
+bool UUOURewardCollectionMotionComponent::SynchronizeCueTimelineForEditor(
+	const TArray<FUOURewardPresentationCue>& CueRequests)
+{
+	TMap<FGuid, EUOURewardMotionCueChannel> ActiveCueChannels;
+	for (const FUOURewardPresentationCue& CueRequest : CueRequests)
+	{
+		if (CueRequest.RequestId.IsValid()
+			&& !ActiveCueChannels.Contains(CueRequest.RequestId))
+		{
+			ActiveCueChannels.Add(CueRequest.RequestId, CueRequest.Channel);
+		}
+	}
+
+	const float SafeMotionDuration = FMath::IsFinite(MotionDuration)
+		? FMath::Max(0.0f, MotionDuration)
+		: 0.0f;
+	TSet<FGuid> AddedRequestIds;
+	TArray<FUOURewardMotionCueTiming> SynchronizedTimeline;
+	SynchronizedTimeline.Reserve(
+		FMath::Min(CueTimeline.Num(), ActiveCueChannels.Num()));
+
+	for (const FUOURewardMotionCueTiming& ExistingTiming : CueTimeline)
+	{
+		const EUOURewardMotionCueChannel* CueChannel =
+			ActiveCueChannels.Find(ExistingTiming.RequestId);
+		if (CueChannel == nullptr
+			|| AddedRequestIds.Contains(ExistingTiming.RequestId))
+		{
+			continue;
+		}
+
+		AddedRequestIds.Add(ExistingTiming.RequestId);
+		FUOURewardMotionCueTiming& SynchronizedTiming =
+			SynchronizedTimeline.Add_GetRef(ExistingTiming);
+		SynchronizedTiming.TriggerTime = FMath::IsFinite(ExistingTiming.TriggerTime)
+			? FMath::Clamp(ExistingTiming.TriggerTime, 0.0f, SafeMotionDuration)
+			: 0.0f;
+
+		if (*CueChannel == EUOURewardMotionCueChannel::Feedback
+			|| !FMath::IsFinite(ExistingTiming.PresentationCloseTime)
+			|| ExistingTiming.PresentationCloseTime < 0.0f)
+		{
+			SynchronizedTiming.PresentationCloseTime = -1.0f;
+		}
+		else
+		{
+			SynchronizedTiming.PresentationCloseTime = FMath::Clamp(
+				ExistingTiming.PresentationCloseTime,
+				SynchronizedTiming.TriggerTime,
+				SafeMotionDuration);
+		}
+	}
+
+	bool bChanged = CueTimeline.Num() != SynchronizedTimeline.Num();
+	if (!bChanged)
+	{
+		for (int32 TimingIndex = 0;
+			TimingIndex < CueTimeline.Num();
+			++TimingIndex)
+		{
+			const FUOURewardMotionCueTiming& ExistingTiming =
+				CueTimeline[TimingIndex];
+			const FUOURewardMotionCueTiming& SynchronizedTiming =
+				SynchronizedTimeline[TimingIndex];
+			if (ExistingTiming.RequestId != SynchronizedTiming.RequestId
+				|| ExistingTiming.TriggerTime != SynchronizedTiming.TriggerTime
+				|| ExistingTiming.PresentationCloseTime
+					!= SynchronizedTiming.PresentationCloseTime)
+			{
+				bChanged = true;
+				break;
+			}
+		}
+	}
+
+	if (!bChanged)
+	{
+		return false;
+	}
+
+	Modify();
+	CueTimeline = MoveTemp(SynchronizedTimeline);
+	MarkPackageDirty();
+	return true;
+}
+
 void UUOURewardCollectionMotionComponent::SetCueTriggerTimeForEditor(
 	const FGuid& RequestId,
 	float TriggerTime)

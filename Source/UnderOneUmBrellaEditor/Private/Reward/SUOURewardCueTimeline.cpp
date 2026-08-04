@@ -482,43 +482,26 @@ bool SUOURewardCueTimeline::BeginMarkerDrag(
 		return false;
 	}
 
-	const FUOURewardPresentationCue& SelectedCue =
-		Feedback->GetCueRequests()[CueIndex];
-	const bool bCanDragCloseMarker =
-		bPresentationCloseMarker
-		&& SelectedCue.Channel == EUOURewardMotionCueChannel::Presentation;
-	const float CurrentTime = bCanDragCloseMarker
-		? GetPresentationCloseTime(CueIndex)
-		: GetCueTime(CueIndex);
 	ActiveTransaction = MakeUnique<FScopedTransaction>(
-		bCanDragCloseMarker
+		bPresentationCloseMarker
 			? LOCTEXT(
 				"MovePresentationCloseMarkerTransaction",
 				"Move Reward Presentation Outro Marker")
 			: LOCTEXT("MoveCueMarkerTransaction", "Move Reward Cue Marker"));
+
+	// 기존 에셋의 고아 Timing도 마커를 편집하는 순간 같은 규칙으로 정리합니다.
+	Feedback->SynchronizeCueRequestsForEditor();
 	Motion->Modify();
 	Feedback->Modify();
 
-	TArray<FUOURewardPresentationCue>& CueRequests =
-		Feedback->GetMutableCueRequestsForEditor();
-	FUOURewardPresentationCue& Cue = CueRequests[CueIndex];
-	bool bRequestIdDuplicated = false;
-	for (int32 OtherCueIndex = 0;
-		OtherCueIndex < CueRequests.Num();
-		++OtherCueIndex)
-	{
-		if (OtherCueIndex != CueIndex
-			&& Cue.RequestId.IsValid()
-			&& CueRequests[OtherCueIndex].RequestId == Cue.RequestId)
-		{
-			bRequestIdDuplicated = true;
-			break;
-		}
-	}
-	if (!Cue.RequestId.IsValid() || bRequestIdDuplicated)
-	{
-		Cue.RequestId = FGuid::NewGuid();
-	}
+	const FUOURewardPresentationCue& Cue =
+		Feedback->GetCueRequests()[CueIndex];
+	const bool bCanDragCloseMarker =
+		bPresentationCloseMarker
+		&& Cue.Channel == EUOURewardMotionCueChannel::Presentation;
+	const float CurrentTime = bCanDragCloseMarker
+		? GetPresentationCloseTime(CueIndex)
+		: GetCueTime(CueIndex);
 
 	if (bCanDragCloseMarker)
 	{

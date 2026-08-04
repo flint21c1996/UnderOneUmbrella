@@ -43,6 +43,9 @@ public:
 	{
 		return CueTimeline;
 	}
+	// CueRequests에 연결되지 않은 Timing과 중복 Timing을 제거하고 시간을 유효 범위로 보정합니다.
+	bool SynchronizeCueTimelineForEditor(
+		const TArray<FUOURewardPresentationCue>& CueRequests);
 	void SetCueTriggerTimeForEditor(const FGuid& RequestId, float TriggerTime);
 	// Intro 중지와 Outro 시작을 요청하는 O 마커 시간을 Motion 타임라인 데이터에 저장합니다.
 	void SetPresentationCloseTimeForEditor(const FGuid& RequestId, float CloseTime);
