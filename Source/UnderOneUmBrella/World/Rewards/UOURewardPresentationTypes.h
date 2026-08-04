@@ -14,6 +14,14 @@ enum class EUOURewardMotionCueChannel : uint8
 	Feedback
 };
 
+// 하나의 Presentation Cue에서 시작과 Outro 요청을 런타임에 구분합니다.
+UENUM()
+enum class EUOURewardPresentationCuePhase : uint8
+{
+	Show,
+	Close
+};
+
 // Feedback Cue가 실행할 플레이어 연출 동작을 목록으로 제한합니다.
 UENUM(BlueprintType)
 enum class EUOURewardFeedbackCueAction : uint8
@@ -37,6 +45,11 @@ struct UNDERONEUMBRELLA_API FUOURewardPresentationCue
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Motion|Cue")
 	EUOURewardMotionCueChannel Channel =
 		EUOURewardMotionCueChannel::Presentation;
+
+	// MotionComponent가 같은 Presentation Cue를 두 시점에 전달할 때 설정하는 런타임 값입니다.
+	UPROPERTY(Transient)
+	EUOURewardPresentationCuePhase PresentationPhase =
+		EUOURewardPresentationCuePhase::Show;
 
 	// Presentation 채널에서 실행할 Layout DataTable 행입니다.
 	UPROPERTY(
@@ -96,7 +109,4 @@ struct UNDERONEUMBRELLA_API FUOURewardPresentationData
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Reward|Presentation")
 	FName RewardId = NAME_None;
 
-	// HUD 애니메이션의 권장 표시 시간입니다. 실제 종료 처리는 UMG가 선택할 수 있습니다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Presentation", meta = (ClampMin = "0.0"))
-	float DisplayDuration = 1.5f;
 };
