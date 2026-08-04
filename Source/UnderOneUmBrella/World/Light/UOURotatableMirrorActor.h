@@ -37,6 +37,14 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Mirror|Components")
 	TObjectPtr<UBoxComponent> PushVolume = nullptr;
 
+	// 거울 왼쪽에서 플레이어가 잡을 기본 손잡이 위치입니다.
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Mirror|Components")
+	TObjectPtr<USceneComponent> PushHandleLeft = nullptr;
+
+	// 거울 오른쪽에서 플레이어가 잡을 기본 손잡이 위치입니다.
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Mirror|Components")
+	TObjectPtr<USceneComponent> PushHandleRight = nullptr;
+
 	// Push Volume 안의 플레이어 이동을 중앙 회전축 기준 회전으로 변환합니다.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Mirror|Components")
 	TObjectPtr<UUOURotatableMirrorComponent> RotatableMirror = nullptr;

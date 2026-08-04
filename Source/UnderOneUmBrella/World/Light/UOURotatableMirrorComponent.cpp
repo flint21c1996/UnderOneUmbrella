@@ -2,11 +2,13 @@
 
 #include "World/Light/UOURotatableMirrorComponent.h"
 
+#include "Animation/AnimMontage.h"
 #include "Components/PrimitiveComponent.h"
 #include "Components/SceneComponent.h"
 #include "Debug/UOUDebugSubsystem.h"
 #include "DrawDebugHelpers.h"
 #include "GameFramework/Actor.h"
+#include "GameFramework/Character.h"
 #include "GameFramework/Pawn.h"
 
 UUOURotatableMirrorComponent::UUOURotatableMirrorComponent()
@@ -25,6 +27,12 @@ void UUOURotatableMirrorComponent::BeginPlay()
 	CaptureInitialTransform();
 }
 
+void UUOURotatableMirrorComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	EndMirrorPush(CurrentPusher.Get());
+	Super::EndPlay(EndPlayReason);
+}
+
 void UUOURotatableMirrorComponent::TickComponent(
 	float DeltaTime,
 	ELevelTick TickType,
@@ -32,13 +40,24 @@ void UUOURotatableMirrorComponent::TickComponent(
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
-	if (!bRotationEnabled || DeltaTime <= 0.0f || RotatingComponent == nullptr || PushVolume == nullptr)
+	TArray<AActor*> OverlappingPushers;
+	if (PushVolume != nullptr)
 	{
+		PushVolume->GetOverlappingActors(OverlappingPushers, APawn::StaticClass());
+	}
+
+	if (CurrentPusher != nullptr)
+	{
+		DrawDebugState(OverlappingPushers);
 		return;
 	}
 
-	TArray<AActor*> OverlappingPushers;
-	PushVolume->GetOverlappingActors(OverlappingPushers, APawn::StaticClass());
+	if (!bAllowProximityPush || !bRotationEnabled || DeltaTime <= 0.0f ||
+		RotatingComponent == nullptr || PushVolume == nullptr)
+	{
+		DrawDebugState(OverlappingPushers);
+		return;
+	}
 
 	float CombinedPushInput = 0.0f;
 	for (AActor* OverlappingActor : OverlappingPushers)
@@ -91,6 +110,163 @@ void UUOURotatableMirrorComponent::ResetMirrorAngle()
 	SetMirrorAngle(0.0f);
 }
 
+bool UUOURotatableMirrorComponent::CanBeginMirrorPush(const APawn* Pusher) const
+{
+	if (!bEnableGrabPush || !bRotationEnabled || Pusher == nullptr ||
+		RotatingComponent == nullptr ||
+		(bPlayerControlledOnly && !Pusher->IsPlayerControlled()) ||
+		(CurrentPusher != nullptr && CurrentPusher != Pusher))
+	{
+		return false;
+	}
+
+	const USceneComponent* PushHandle = FindNearestPushHandle(Pusher);
+	return PushHandle != nullptr &&
+		FVector::DistSquared2D(Pusher->GetActorLocation(), PushHandle->GetComponentLocation()) <=
+		FMath::Square(FMath::Max(0.0f, MaximumGrabDistance));
+}
+
+bool UUOURotatableMirrorComponent::TryBeginMirrorPush(APawn* Pusher)
+{
+	if (CurrentPusher == Pusher)
+	{
+		return true;
+	}
+	if (!CanBeginMirrorPush(Pusher))
+	{
+		return false;
+	}
+
+	ActivePushHandle = FindNearestPushHandle(Pusher);
+	if (ActivePushHandle == nullptr)
+	{
+		return false;
+	}
+
+	const FVector HandleLocation = ActivePushHandle->GetComponentLocation();
+	FVector HandleToPlayer = Pusher->GetActorLocation() - HandleLocation;
+	HandleToPlayer.Z = 0.0f;
+	if (HandleToPlayer.IsNearlyZero())
+	{
+		HandleToPlayer = RotatingComponent->GetForwardVector();
+		HandleToPlayer.Z = 0.0f;
+	}
+	HandleToPlayer.Normalize();
+
+	FVector AttachLocation = HandleLocation + HandleToPlayer * FMath::Max(0.0f, PlayerAttachDistance);
+	AttachLocation.Z = Pusher->GetActorLocation().Z;
+	AttachedPlayerLocalLocation =
+		RotatingComponent->GetComponentTransform().InverseTransformPosition(AttachLocation);
+	CurrentPusher = Pusher;
+
+	if (bSnapPlayerOnGrab && !UpdateAttachedPlayerTransform(true))
+	{
+		CurrentPusher = nullptr;
+		ActivePushHandle = nullptr;
+		return false;
+	}
+
+	ApplyPusherFacing();
+	if (ACharacter* Character = Cast<ACharacter>(Pusher); Character != nullptr && PushMontage != nullptr)
+	{
+		Character->PlayAnimMontage(PushMontage, FMath::Max(0.01f, PushMontagePlayRate));
+	}
+
+	OnMirrorPushStarted.Broadcast(Pusher, ActivePushHandle.Get());
+	return true;
+}
+
+void UUOURotatableMirrorComponent::EndMirrorPush(APawn* Pusher)
+{
+	if (CurrentPusher == nullptr || (Pusher != nullptr && CurrentPusher != Pusher))
+	{
+		return;
+	}
+
+	APawn* ReleasedPusher = CurrentPusher.Get();
+	if (ACharacter* Character = Cast<ACharacter>(ReleasedPusher);
+		Character != nullptr && PushMontage != nullptr)
+	{
+		Character->StopAnimMontage(PushMontage);
+	}
+
+	CurrentPusher = nullptr;
+	ActivePushHandle = nullptr;
+	OnMirrorPushEnded.Broadcast(ReleasedPusher);
+}
+
+float UUOURotatableMirrorComponent::ApplyMirrorPushInput(float AxisInput, float DeltaTime)
+{
+	if (CurrentPusher == nullptr || DeltaTime <= 0.0f)
+	{
+		return 0.0f;
+	}
+
+	const float SafeInput = FMath::Clamp(AxisInput, -1.0f, 1.0f);
+	if (FMath::IsNearlyZero(SafeInput))
+	{
+		return 0.0f;
+	}
+
+	const float PreviousAngle = CurrentAngle;
+	const FVector PreviousPusherLocation = CurrentPusher->GetActorLocation();
+	const FRotator PreviousPusherRotation = CurrentPusher->GetActorRotation();
+	SetMirrorAngle(CurrentAngle + SafeInput * MaximumRotationSpeed * DeltaTime);
+	const float AppliedAngleDelta = CurrentAngle - PreviousAngle;
+	if (FMath::IsNearlyZero(AppliedAngleDelta))
+	{
+		return 0.0f;
+	}
+
+	if (!UpdateAttachedPlayerTransform(true))
+	{
+		SetMirrorAngle(PreviousAngle);
+		CurrentPusher->SetActorLocationAndRotation(
+			PreviousPusherLocation,
+			PreviousPusherRotation,
+			false,
+			nullptr,
+			ETeleportType::None);
+		return 0.0f;
+	}
+
+	return AppliedAngleDelta;
+}
+
+FVector UUOURotatableMirrorComponent::GetGrabReferenceLocation() const
+{
+	if (ActivePushHandle != nullptr)
+	{
+		return ActivePushHandle->GetComponentLocation();
+	}
+	if (RotatingComponent != nullptr)
+	{
+		return RotatingComponent->GetComponentLocation();
+	}
+	return GetOwner() != nullptr ? GetOwner()->GetActorLocation() : FVector::ZeroVector;
+}
+
+FVector UUOURotatableMirrorComponent::GetWorldInputAxisForInteractor(const AActor* Interactor) const
+{
+	const USceneComponent* PushHandle = ActivePushHandle != nullptr
+		? ActivePushHandle.Get()
+		: FindNearestPushHandle(Interactor);
+	if (RotatingComponent == nullptr || PushHandle == nullptr)
+	{
+		return FVector::ZeroVector;
+	}
+
+	const FVector RotationAxis = GetRotationAxisWorld();
+	FVector RadialDirection = PushHandle->GetComponentLocation() - GetPivotWorldLocation();
+	RadialDirection -= RotationAxis * FVector::DotProduct(RadialDirection, RotationAxis);
+	if (RadialDirection.IsNearlyZero())
+	{
+		return FVector::ZeroVector;
+	}
+
+	return FVector::CrossProduct(RotationAxis, RadialDirection.GetSafeNormal()).GetSafeNormal();
+}
+
 void UUOURotatableMirrorComponent::ValidateSettings()
 {
 	LocalRotationAxis = LocalRotationAxis.GetSafeNormal();
@@ -108,6 +284,9 @@ void UUOURotatableMirrorComponent::ValidateSettings()
 
 	MaximumRotationSpeed = FMath::Max(0.0f, MaximumRotationSpeed);
 	MinimumPushSpeed = FMath::Max(0.0f, MinimumPushSpeed);
+	MaximumGrabDistance = FMath::Max(0.0f, MaximumGrabDistance);
+	PlayerAttachDistance = FMath::Max(0.0f, PlayerAttachDistance);
+	PushMontagePlayRate = FMath::Max(0.01f, PushMontagePlayRate);
 	MinimumLeverArm = FMath::Max(0.0f, MinimumLeverArm);
 	FullTorqueLeverArm = FMath::Max(MinimumLeverArm + 1.0f, FullTorqueLeverArm);
 	CurrentAngle = FMath::Clamp(CurrentAngle, MinimumAngle, MaximumAngle);
@@ -254,6 +433,77 @@ FVector UUOURotatableMirrorComponent::GetRotationAxisWorld() const
 	return RotatingComponent != nullptr
 		? RotatingComponent->GetComponentTransform().TransformVectorNoScale(LocalRotationAxis).GetSafeNormal()
 		: FVector::UpVector;
+}
+
+USceneComponent* UUOURotatableMirrorComponent::FindNearestPushHandle(const AActor* Interactor) const
+{
+	AActor* Owner = GetOwner();
+	if (Owner == nullptr || Interactor == nullptr)
+	{
+		return nullptr;
+	}
+
+	USceneComponent* NearestHandle = nullptr;
+	float NearestDistanceSquared = TNumericLimits<float>::Max();
+	TInlineComponentArray<USceneComponent*> SceneComponents(Owner);
+	for (USceneComponent* SceneComponent : SceneComponents)
+	{
+		if (SceneComponent == nullptr || !SceneComponent->ComponentTags.Contains(PushHandleTag))
+		{
+			continue;
+		}
+
+		const float DistanceSquared = FVector::DistSquared2D(
+			Interactor->GetActorLocation(),
+			SceneComponent->GetComponentLocation());
+		if (DistanceSquared < NearestDistanceSquared)
+		{
+			NearestDistanceSquared = DistanceSquared;
+			NearestHandle = SceneComponent;
+		}
+	}
+
+	return NearestHandle;
+}
+
+bool UUOURotatableMirrorComponent::UpdateAttachedPlayerTransform(bool bSweepMovement)
+{
+	if (CurrentPusher == nullptr || RotatingComponent == nullptr)
+	{
+		return false;
+	}
+
+	const FVector DesiredLocation =
+		RotatingComponent->GetComponentTransform().TransformPosition(AttachedPlayerLocalLocation);
+	FHitResult MoveHit;
+	CurrentPusher->SetActorLocation(
+		DesiredLocation,
+		bSweepMovement,
+		&MoveHit,
+		ETeleportType::None);
+	const bool bReachedDesiredLocation = FVector::DistSquared(
+		CurrentPusher->GetActorLocation(),
+		DesiredLocation) <= FMath::Square(2.0f);
+	if (bReachedDesiredLocation)
+	{
+		ApplyPusherFacing();
+	}
+	return bReachedDesiredLocation;
+}
+
+void UUOURotatableMirrorComponent::ApplyPusherFacing() const
+{
+	if (!bFacePushHandle || CurrentPusher == nullptr || ActivePushHandle == nullptr)
+	{
+		return;
+	}
+
+	FVector ToHandle = ActivePushHandle->GetComponentLocation() - CurrentPusher->GetActorLocation();
+	ToHandle.Z = 0.0f;
+	if (!ToHandle.IsNearlyZero())
+	{
+		CurrentPusher->SetActorRotation(FRotator(0.0f, ToHandle.Rotation().Yaw, 0.0f));
+	}
 }
 
 void UUOURotatableMirrorComponent::DrawDebugState(const TArray<AActor*>& OverlappingPushers) const

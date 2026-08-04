@@ -52,6 +52,16 @@ AUOURotatableMirrorActor::AUOURotatableMirrorActor()
 	PushVolume->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
 	PushVolume->SetGenerateOverlapEvents(true);
 
+	PushHandleLeft = CreateDefaultSubobject<USceneComponent>(TEXT("PushHandleLeft"));
+	PushHandleLeft->SetupAttachment(MirrorPivot);
+	PushHandleLeft->SetRelativeLocation(FVector(12.0f, -80.0f, 0.0f));
+	PushHandleLeft->ComponentTags.Add(TEXT("MirrorPushHandle"));
+
+	PushHandleRight = CreateDefaultSubobject<USceneComponent>(TEXT("PushHandleRight"));
+	PushHandleRight->SetupAttachment(MirrorPivot);
+	PushHandleRight->SetRelativeLocation(FVector(12.0f, 80.0f, 0.0f));
+	PushHandleRight->ComponentTags.Add(TEXT("MirrorPushHandle"));
+
 	RotatableMirror =
 		CreateDefaultSubobject<UUOURotatableMirrorComponent>(TEXT("RotatableMirror"));
 	RotatableMirror->bAutoFindPushVolume = true;
