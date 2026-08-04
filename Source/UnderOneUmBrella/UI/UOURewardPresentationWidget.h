@@ -4,7 +4,6 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
-#include "TimerManager.h"
 #include "World/Rewards/UOURewardPresentationTypes.h"
 #include "UOURewardPresentationWidget.generated.h"
 
@@ -33,8 +32,6 @@ class UNDERONEUMBRELLA_API UUOURewardPresentationWidget : public UUserWidget
 	GENERATED_BODY()
 
 public:
-	virtual void NativeDestruct() override;
-
 	// 새 결과 데이터를 한 번 전달하고 Widget을 시작 가능한 상태로 만듭니다.
 	bool InitializePresentation(const FUOURewardPresentationData& InPresentationData);
 
@@ -63,7 +60,7 @@ protected:
 		class IWidgetCompilerLog& CompileLog) const override;
 #endif
 
-	// WBP가 가진 애니메이션 중 Presentation 시작에 사용할 항목입니다. None이면 즉시 Hold로 진입합니다.
+	// WBP가 가진 애니메이션 중 Presentation 시작에 사용할 항목입니다. None이어도 Close 요청까지 표시를 유지합니다.
 	UPROPERTY(
 		EditDefaultsOnly,
 		Category = "Reward Presentation|Animation",
@@ -89,9 +86,6 @@ protected:
 		EUOURewardPresentationWidgetState::Uninitialized;
 
 private:
-	// Intro 종료 뒤 결과 표시 유지 구간을 시작합니다. DisplayDuration이 0이면 자동 종료하지 않습니다.
-	bool BeginPresentationHold();
-
 	// Outro가 없거나 종료된 시점에 Presentation 완료를 보고합니다.
 	bool FinishPresentation();
 
@@ -101,13 +95,7 @@ private:
 	UWidgetAnimation* FindAnimationByName(FName AnimationName) const;
 
 	UFUNCTION()
-	void HandleIntroAnimationFinished();
-
-	UFUNCTION()
 	void HandleOutroAnimationFinished();
-
-	void ClearAutoCloseTimer();
-	void HandleAutoCloseTimerElapsed();
 
 	UPROPERTY(Transient)
 	TObjectPtr<UWidgetAnimation> ResolvedIntroAnimation = nullptr;
@@ -115,6 +103,4 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UWidgetAnimation> ResolvedOutroAnimation = nullptr;
 
-	FTimerHandle AutoCloseTimerHandle;
-	bool bPresentationHoldStarted = false;
 };

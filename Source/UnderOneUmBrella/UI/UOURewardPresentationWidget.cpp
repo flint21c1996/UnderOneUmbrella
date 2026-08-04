@@ -4,7 +4,6 @@
 
 #include "Animation/WidgetAnimation.h"
 #include "Blueprint/WidgetBlueprintGeneratedClass.h"
-#include "Engine/World.h"
 #include "MovieScene.h"
 
 #if WITH_EDITOR
@@ -46,15 +45,6 @@ void UUOURewardPresentationWidget::NativeOnInitialized()
 			TEXT("Reward Presentation Widget '%s'에서 선택한 Outro 애니메이션 '%s'을 찾을 수 없습니다."),
 			*GetName(),
 			*OutroAnimationName.ToString());
-	}
-
-	if (ResolvedIntroAnimation != nullptr)
-	{
-		FWidgetAnimationDynamicEvent IntroFinishedEvent;
-		IntroFinishedEvent.BindDynamic(
-			this,
-			&UUOURewardPresentationWidget::HandleIntroAnimationFinished);
-		BindToAnimationFinished(ResolvedIntroAnimation, IntroFinishedEvent);
 	}
 
 	if (ResolvedOutroAnimation != nullptr)
@@ -113,12 +103,6 @@ void UUOURewardPresentationWidget::ValidateCompiledDefaults(
 }
 #endif
 
-void UUOURewardPresentationWidget::NativeDestruct()
-{
-	ClearAutoCloseTimer();
-	Super::NativeDestruct();
-}
-
 bool UUOURewardPresentationWidget::InitializePresentation(
 	const FUOURewardPresentationData& InPresentationData)
 {
@@ -129,7 +113,6 @@ bool UUOURewardPresentationWidget::InitializePresentation(
 
 	PresentationData = InPresentationData;
 	PresentationState = EUOURewardPresentationWidgetState::Ready;
-	bPresentationHoldStarted = false;
 	return true;
 }
 
@@ -145,45 +128,7 @@ bool UUOURewardPresentationWidget::StartPresentation()
 	{
 		PlayAnimation(ResolvedIntroAnimation);
 	}
-	else
-	{
-		BeginPresentationHold();
-	}
 
-	return true;
-}
-
-bool UUOURewardPresentationWidget::BeginPresentationHold()
-{
-	if (PresentationState != EUOURewardPresentationWidgetState::Presenting
-		|| bPresentationHoldStarted)
-	{
-		return false;
-	}
-
-	ClearAutoCloseTimer();
-
-	const float SafeDisplayDuration =
-		FMath::Max(0.0f, PresentationData.DisplayDuration);
-	if (SafeDisplayDuration <= KINDA_SMALL_NUMBER)
-	{
-		bPresentationHoldStarted = true;
-		return true;
-	}
-
-	UWorld* World = GetWorld();
-	if (World == nullptr)
-	{
-		return false;
-	}
-
-	bPresentationHoldStarted = true;
-	World->GetTimerManager().SetTimer(
-		AutoCloseTimerHandle,
-		this,
-		&UUOURewardPresentationWidget::HandleAutoCloseTimerElapsed,
-		SafeDisplayDuration,
-		false);
 	return true;
 }
 
@@ -194,7 +139,6 @@ bool UUOURewardPresentationWidget::RequestClose()
 		return false;
 	}
 
-	ClearAutoCloseTimer();
 	PresentationState = EUOURewardPresentationWidgetState::Closing;
 
 	if (ResolvedIntroAnimation != nullptr
@@ -223,7 +167,6 @@ bool UUOURewardPresentationWidget::FinishPresentation()
 		return false;
 	}
 
-	ClearAutoCloseTimer();
 	PresentationState = EUOURewardPresentationWidgetState::Finished;
 	OnPresentationFinished.Broadcast(this);
 	return true;
@@ -236,11 +179,9 @@ bool UUOURewardPresentationWidget::ResetPresentation()
 		return false;
 	}
 
-	ClearAutoCloseTimer();
 	StopAllAnimations();
 	PresentationData = FUOURewardPresentationData();
 	PresentationState = EUOURewardPresentationWidgetState::Uninitialized;
-	bPresentationHoldStarted = false;
 	return true;
 }
 
@@ -316,31 +257,10 @@ UWidgetAnimation* UUOURewardPresentationWidget::FindAnimationByName(
 	return nullptr;
 }
 
-void UUOURewardPresentationWidget::HandleIntroAnimationFinished()
-{
-	if (PresentationState == EUOURewardPresentationWidgetState::Presenting)
-	{
-		BeginPresentationHold();
-	}
-}
-
 void UUOURewardPresentationWidget::HandleOutroAnimationFinished()
 {
 	if (PresentationState == EUOURewardPresentationWidgetState::Closing)
 	{
 		FinishPresentation();
 	}
-}
-
-void UUOURewardPresentationWidget::ClearAutoCloseTimer()
-{
-	if (UWorld* World = GetWorld())
-	{
-		World->GetTimerManager().ClearTimer(AutoCloseTimerHandle);
-	}
-}
-
-void UUOURewardPresentationWidget::HandleAutoCloseTimerElapsed()
-{
-	RequestClose();
 }
