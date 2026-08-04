@@ -44,6 +44,8 @@ public:
 		return CueTimeline;
 	}
 	void SetCueTriggerTimeForEditor(const FGuid& RequestId, float TriggerTime);
+	// Presentation 행의 Outro 마커 시간을 Motion 타임라인 데이터에 저장합니다.
+	void SetPresentationCloseTimeForEditor(const FGuid& RequestId, float CloseTime);
 #endif
 
 	UPROPERTY(BlueprintAssignable, Category = "Reward|Motion|Events")

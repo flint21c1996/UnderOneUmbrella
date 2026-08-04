@@ -149,13 +149,34 @@ int32 SUOURewardCueTimeline::OnPaint(
 		const float MarkerX = TimeToLocalX(CueTime, Width);
 		const FUOURewardPresentationCue& Cue =
 			Feedback->GetCueRequests()[CueIndex];
-		FLinearColor MarkerColor =
-			Cue.Channel == EUOURewardMotionCueChannel::Feedback
-				? FLinearColor(0.95f, 0.48f, 0.12f, 1.0f)
-				: FLinearColor(0.12f, 0.58f, 0.95f, 1.0f);
-		if (CueIndex == DraggedCueIndex)
+		const bool bPresentationCue =
+			Cue.Channel == EUOURewardMotionCueChannel::Presentation;
+		const FLinearColor PresentationColor(0.12f, 0.58f, 0.95f, 1.0f);
+		const FLinearColor PresentationCloseColor(0.68f, 0.32f, 0.95f, 1.0f);
+		FLinearColor MarkerColor = bPresentationCue
+			? PresentationColor
+			: FLinearColor(0.95f, 0.48f, 0.12f, 1.0f);
+		if (CueIndex == DraggedCueIndex
+			&& !bDraggingPresentationCloseMarker)
 		{
 			MarkerColor = FLinearColor::White;
+		}
+
+		float CloseTime = CueTime;
+		float CloseMarkerX = MarkerX;
+		if (bPresentationCue)
+		{
+			CloseTime = GetPresentationCloseTime(CueIndex);
+			CloseMarkerX = TimeToLocalX(CloseTime, Width);
+			FSlateDrawElement::MakeBox(
+				OutDrawElements,
+				LayerId + 1,
+				AllottedGeometry.ToPaintGeometry(
+					FVector2f(FMath::Max(1.0f, CloseMarkerX - MarkerX), 5.0f),
+					FSlateLayoutTransform(FVector2f(MarkerX, LaneY - 2.5f))),
+				WhiteBrush,
+				ESlateDrawEffect::None,
+				FLinearColor(0.12f, 0.58f, 0.95f, 0.35f));
 		}
 
 		FSlateDrawElement::MakeBox(
@@ -178,10 +199,47 @@ int32 SUOURewardCueTimeline::OnPaint(
 				FSlateLayoutTransform(FVector2f(
 					FMath::Min(MarkerX + 8.0f, Width - 56.0f),
 					LaneY - 9.0f))),
-			FString::Printf(TEXT("%.2fs"), CueTime),
+			bPresentationCue
+				? FString::Printf(TEXT("S %.2fs"), CueTime)
+				: FString::Printf(TEXT("%.2fs"), CueTime),
 			SmallFont,
 			ESlateDrawEffect::None,
 			MarkerColor);
+
+		if (bPresentationCue)
+		{
+			FLinearColor CloseMarkerColor = PresentationCloseColor;
+			if (CueIndex == DraggedCueIndex
+				&& bDraggingPresentationCloseMarker)
+			{
+				CloseMarkerColor = FLinearColor::White;
+			}
+
+			FSlateDrawElement::MakeBox(
+				OutDrawElements,
+				LayerId + 2,
+				AllottedGeometry.ToPaintGeometry(
+					FVector2f(MarkerWidth, MarkerHeight),
+					FSlateLayoutTransform(FVector2f(
+						CloseMarkerX - MarkerWidth * 0.5f,
+						LaneY - MarkerHeight * 0.5f))),
+				WhiteBrush,
+				ESlateDrawEffect::None,
+				CloseMarkerColor);
+
+			FSlateDrawElement::MakeText(
+				OutDrawElements,
+				LayerId + 3,
+				AllottedGeometry.ToPaintGeometry(
+					FVector2f(64.0f, 18.0f),
+					FSlateLayoutTransform(FVector2f(
+						FMath::Clamp(CloseMarkerX - 64.0f, LabelWidth, Width - 64.0f),
+						LaneY - 9.0f))),
+				FString::Printf(TEXT("O %.2fs"), CloseTime),
+				SmallFont,
+				ESlateDrawEffect::None,
+				CloseMarkerColor);
+		}
 	}
 
 	return LayerId + 4;
@@ -198,8 +256,12 @@ FReply SUOURewardCueTimeline::OnMouseButtonDown(
 
 	const FVector2D LocalPosition =
 		MyGeometry.AbsoluteToLocal(MouseEvent.GetScreenSpacePosition());
-	const int32 CueIndex = FindMarkerAt(LocalPosition, MyGeometry.GetLocalSize().X);
-	if (!BeginMarkerDrag(CueIndex))
+	bool bPresentationCloseMarker = false;
+	const int32 CueIndex = FindMarkerAt(
+		LocalPosition,
+		MyGeometry.GetLocalSize().X,
+		bPresentationCloseMarker);
+	if (!BeginMarkerDrag(CueIndex, bPresentationCloseMarker))
 	{
 		return FReply::Unhandled();
 	}
@@ -284,6 +346,38 @@ float SUOURewardCueTimeline::GetCueTime(int32 CueIndex) const
 	return 0.0f;
 }
 
+float SUOURewardCueTimeline::GetPresentationCloseTime(int32 CueIndex) const
+{
+	const UUOURewardCollectionMotionComponent* Motion = MotionComponent.Get();
+	const UUOURewardFeedbackComponent* Feedback = FeedbackComponent.Get();
+	if (Motion == nullptr
+		|| Feedback == nullptr
+		|| !Feedback->GetCueRequests().IsValidIndex(CueIndex))
+	{
+		return GetMotionDuration();
+	}
+
+	const FUOURewardPresentationCue& Cue = Feedback->GetCueRequests()[CueIndex];
+	if (Cue.RequestId.IsValid())
+	{
+		const FUOURewardMotionCueTiming* Timing =
+			Motion->GetCueTimelineForEditor().FindByPredicate(
+				[&Cue](const FUOURewardMotionCueTiming& Candidate)
+				{
+					return Candidate.RequestId == Cue.RequestId;
+				});
+		if (Timing != nullptr && Timing->PresentationCloseTime >= 0.0f)
+		{
+			return FMath::Clamp(
+				Timing->PresentationCloseTime,
+				GetCueTime(CueIndex),
+				GetMotionDuration());
+		}
+	}
+
+	return GetMotionDuration();
+}
+
 float SUOURewardCueTimeline::TimeToLocalX(float Time, float Width) const
 {
 	using namespace UOURewardCueTimelinePrivate;
@@ -311,8 +405,10 @@ float SUOURewardCueTimeline::GetLaneY(int32 CueIndex) const
 
 int32 SUOURewardCueTimeline::FindMarkerAt(
 	const FVector2D& LocalPosition,
-	float Width) const
+	float Width,
+	bool& bOutPresentationCloseMarker) const
 {
+	bOutPresentationCloseMarker = false;
 	const UUOURewardFeedbackComponent* Feedback = FeedbackComponent.Get();
 	if (Feedback == nullptr)
 	{
@@ -323,6 +419,21 @@ int32 SUOURewardCueTimeline::FindMarkerAt(
 		CueIndex < Feedback->GetCueRequests().Num();
 		++CueIndex)
 	{
+		const FUOURewardPresentationCue& Cue =
+			Feedback->GetCueRequests()[CueIndex];
+		if (Cue.Channel == EUOURewardMotionCueChannel::Presentation)
+		{
+			const float CloseMarkerX = TimeToLocalX(
+				GetPresentationCloseTime(CueIndex),
+				Width);
+			if (FMath::Abs(LocalPosition.X - CloseMarkerX) <= 9.0f
+				&& FMath::Abs(LocalPosition.Y - GetLaneY(CueIndex)) <= 12.0f)
+			{
+				bOutPresentationCloseMarker = true;
+				return CueIndex;
+			}
+		}
+
 		const float MarkerX = TimeToLocalX(GetCueTime(CueIndex), Width);
 		if (FMath::Abs(LocalPosition.X - MarkerX) <= 9.0f
 			&& FMath::Abs(LocalPosition.Y - GetLaneY(CueIndex)) <= 12.0f)
@@ -358,7 +469,9 @@ FText SUOURewardCueTimeline::GetCueLabel(int32 CueIndex) const
 		: FText::FromName(Cue.GetPresentationKey());
 }
 
-bool SUOURewardCueTimeline::BeginMarkerDrag(int32 CueIndex)
+bool SUOURewardCueTimeline::BeginMarkerDrag(
+	int32 CueIndex,
+	bool bPresentationCloseMarker)
 {
 	UUOURewardCollectionMotionComponent* Motion = MotionComponent.Get();
 	UUOURewardFeedbackComponent* Feedback = FeedbackComponent.Get();
@@ -369,9 +482,20 @@ bool SUOURewardCueTimeline::BeginMarkerDrag(int32 CueIndex)
 		return false;
 	}
 
-	const float CurrentTime = GetCueTime(CueIndex);
+	const FUOURewardPresentationCue& SelectedCue =
+		Feedback->GetCueRequests()[CueIndex];
+	const bool bCanDragCloseMarker =
+		bPresentationCloseMarker
+		&& SelectedCue.Channel == EUOURewardMotionCueChannel::Presentation;
+	const float CurrentTime = bCanDragCloseMarker
+		? GetPresentationCloseTime(CueIndex)
+		: GetCueTime(CueIndex);
 	ActiveTransaction = MakeUnique<FScopedTransaction>(
-		LOCTEXT("MoveCueMarkerTransaction", "Move Reward Cue Marker"));
+		bCanDragCloseMarker
+			? LOCTEXT(
+				"MovePresentationCloseMarkerTransaction",
+				"Move Reward Presentation Outro Marker")
+			: LOCTEXT("MoveCueMarkerTransaction", "Move Reward Cue Marker"));
 	Motion->Modify();
 	Feedback->Modify();
 
@@ -396,8 +520,16 @@ bool SUOURewardCueTimeline::BeginMarkerDrag(int32 CueIndex)
 		Cue.RequestId = FGuid::NewGuid();
 	}
 
-	Motion->SetCueTriggerTimeForEditor(Cue.RequestId, CurrentTime);
+	if (bCanDragCloseMarker)
+	{
+		Motion->SetPresentationCloseTimeForEditor(Cue.RequestId, CurrentTime);
+	}
+	else
+	{
+		Motion->SetCueTriggerTimeForEditor(Cue.RequestId, CurrentTime);
+	}
 	DraggedCueIndex = CueIndex;
+	bDraggingPresentationCloseMarker = bCanDragCloseMarker;
 	Invalidate(EInvalidateWidgetReason::Paint);
 	return true;
 }
@@ -415,9 +547,18 @@ void SUOURewardCueTimeline::UpdateDraggedMarker(float LocalX, float Width)
 
 	const FGuid RequestId =
 		Feedback->GetCueRequests()[DraggedCueIndex].RequestId;
-	Motion->SetCueTriggerTimeForEditor(
-		RequestId,
-		LocalXToTime(LocalX, Width));
+	if (bDraggingPresentationCloseMarker)
+	{
+		Motion->SetPresentationCloseTimeForEditor(
+			RequestId,
+			LocalXToTime(LocalX, Width));
+	}
+	else
+	{
+		Motion->SetCueTriggerTimeForEditor(
+			RequestId,
+			LocalXToTime(LocalX, Width));
+	}
 	Invalidate(EInvalidateWidgetReason::Paint);
 }
 
@@ -438,6 +579,7 @@ void SUOURewardCueTimeline::EndMarkerDrag()
 	}
 
 	DraggedCueIndex = INDEX_NONE;
+	bDraggingPresentationCloseMarker = false;
 	ActiveTransaction.Reset();
 	Invalidate(EInvalidateWidgetReason::Paint);
 }

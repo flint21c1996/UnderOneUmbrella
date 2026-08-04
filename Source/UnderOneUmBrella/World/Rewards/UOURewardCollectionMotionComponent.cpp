@@ -131,10 +131,45 @@ void UUOURewardCollectionMotionComponent::SetCueTriggerTimeForEditor(
 		Timing->RequestId = RequestId;
 	}
 
+	const float SafeMotionDuration = FMath::Max(0.0f, MotionDuration);
+	const float MaximumTriggerTime = Timing->PresentationCloseTime >= 0.0f
+		? FMath::Clamp(Timing->PresentationCloseTime, 0.0f, SafeMotionDuration)
+		: SafeMotionDuration;
 	Timing->TriggerTime = FMath::Clamp(
 		TriggerTime,
 		0.0f,
-		FMath::Max(0.0f, MotionDuration));
+		MaximumTriggerTime);
+}
+
+void UUOURewardCollectionMotionComponent::SetPresentationCloseTimeForEditor(
+	const FGuid& RequestId,
+	float CloseTime)
+{
+	if (!RequestId.IsValid())
+	{
+		return;
+	}
+
+	FUOURewardMotionCueTiming* Timing = CueTimeline.FindByPredicate(
+		[&RequestId](const FUOURewardMotionCueTiming& Candidate)
+		{
+			return Candidate.RequestId == RequestId;
+		});
+	if (Timing == nullptr)
+	{
+		Timing = &CueTimeline.AddDefaulted_GetRef();
+		Timing->RequestId = RequestId;
+	}
+
+	const float SafeMotionDuration = FMath::Max(0.0f, MotionDuration);
+	const float MinimumCloseTime = FMath::Clamp(
+		Timing->TriggerTime,
+		0.0f,
+		SafeMotionDuration);
+	Timing->PresentationCloseTime = FMath::Clamp(
+		CloseTime,
+		MinimumCloseTime,
+		SafeMotionDuration);
 }
 #endif
 

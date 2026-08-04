@@ -80,6 +80,10 @@ struct UNDERONEUMBRELLA_API FUOURewardMotionCueTiming
 	// 수집 움직임이 시작된 뒤 CueRequest를 실행할 시간입니다.
 	UPROPERTY()
 	float TriggerTime = 0.0f;
+
+	// Presentation Cue의 Outro 시작 시간입니다. 음수이면 MotionDuration을 기본값으로 사용합니다.
+	UPROPERTY()
+	float PresentationCloseTime = -1.0f;
 };
 
 // 보상 수집 시 HUD가 결과 화면과 애니메이션을 구성하는 데 사용하는 표시 데이터입니다.

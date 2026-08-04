@@ -45,13 +45,18 @@ public:
 private:
 	float GetMotionDuration() const;
 	float GetCueTime(int32 CueIndex) const;
+	// Presentation Cue에만 존재하는 두 번째 Outro 마커 시간을 반환합니다.
+	float GetPresentationCloseTime(int32 CueIndex) const;
 	float TimeToLocalX(float Time, float Width) const;
 	float LocalXToTime(float LocalX, float Width) const;
 	float GetLaneY(int32 CueIndex) const;
-	int32 FindMarkerAt(const FVector2D& LocalPosition, float Width) const;
+	int32 FindMarkerAt(
+		const FVector2D& LocalPosition,
+		float Width,
+		bool& bOutPresentationCloseMarker) const;
 	FText GetCueLabel(int32 CueIndex) const;
 
-	bool BeginMarkerDrag(int32 CueIndex);
+	bool BeginMarkerDrag(int32 CueIndex, bool bPresentationCloseMarker);
 	void UpdateDraggedMarker(float LocalX, float Width);
 	void EndMarkerDrag();
 
@@ -59,4 +64,6 @@ private:
 	TWeakObjectPtr<UUOURewardFeedbackComponent> FeedbackComponent;
 	TUniquePtr<FScopedTransaction> ActiveTransaction;
 	int32 DraggedCueIndex = INDEX_NONE;
+	// 같은 Presentation 행에서 시작 마커와 Outro 마커 중 무엇을 드래그하는지 구분합니다.
+	bool bDraggingPresentationCloseMarker = false;
 };
