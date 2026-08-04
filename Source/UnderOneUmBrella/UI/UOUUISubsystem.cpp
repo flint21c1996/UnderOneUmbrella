@@ -214,6 +214,34 @@ void UUOUUISubsystem::ShowTitle(const FUOUTitleDisplayData& TitleData)
 	}
 }
 
+bool UUOUUISubsystem::ShowRewardPresentationCue(
+	const FUOURewardPresentationData& PresentationData,
+	const FUOURewardPresentationCue& Cue)
+{
+	if (RegisteredHUDWidget.IsValid())
+	{
+		return RegisteredHUDWidget->ProcessRewardPresentationCue(
+			PresentationData,
+			Cue);
+	}
+
+	return false;
+}
+
+void UUOUUISubsystem::NotifyRewardPresentationFinished(FName RewardId)
+{
+	if (RewardId.IsNone())
+	{
+		UE_LOG(
+			LogTemp,
+			Warning,
+			TEXT("Reward Presentation finished without a valid RewardId."));
+		return;
+	}
+
+	OnRewardPresentationFinished.Broadcast(RewardId);
+}
+
 void UUOUUISubsystem::HandleUmbrellaStateChanged(EUOUUmbrellaState NewState, bool bHasUmbrella)
 {
 	BroadcastUmbrellaHUDState();
