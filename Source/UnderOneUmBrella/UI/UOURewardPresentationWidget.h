@@ -11,7 +11,7 @@
 class UUOURewardPresentationWidget;
 class UWidgetAnimation;
 
-UENUM(BlueprintType)
+UENUM()
 enum class EUOURewardPresentationWidgetState : uint8
 {
 	Uninitialized,
@@ -36,41 +36,23 @@ public:
 	virtual void NativeDestruct() override;
 
 	// 새 결과 데이터를 한 번 전달하고 Widget을 시작 가능한 상태로 만듭니다.
-	UFUNCTION(BlueprintCallable, Category = "Reward Presentation")
 	bool InitializePresentation(const FUOURewardPresentationData& InPresentationData);
 
-	// 파생 Widget이 자신의 Intro 또는 전체 결과 애니메이션을 시작하도록 요청합니다.
-	UFUNCTION(BlueprintCallable, Category = "Reward Presentation")
+	// 선택된 Intro 애니메이션으로 Presentation을 시작합니다.
 	bool StartPresentation();
 
-	// 현재 활성 Widget에 의미 기반 Cue를 전달합니다.
-	UFUNCTION(BlueprintCallable, Category = "Reward Presentation")
-	bool HandlePresentationCue(const FUOURewardPresentationCue& Cue);
-
-	// Intro가 끝난 뒤 결과를 읽거나 입력을 기다리는 구간을 시작합니다. DisplayDuration이 0이면 자동 종료하지 않습니다.
-	UFUNCTION(BlueprintCallable, Category = "Reward Presentation")
-	bool BeginPresentationHold();
-
-	// 파생 Widget이 자신의 Outro 애니메이션을 시작하도록 요청합니다.
+	// 버튼 입력이나 자동 종료 시 선택된 Outro 애니메이션을 시작합니다.
 	UFUNCTION(BlueprintCallable, Category = "Reward Presentation")
 	bool RequestClose();
 
-	// 파생 Widget이 모든 애니메이션을 끝낸 뒤 호출하는 완료 보고 함수입니다.
-	UFUNCTION(BlueprintCallable, Category = "Reward Presentation")
-	bool FinishPresentation();
-
 	// 미리 생성된 Widget을 다음 Reward Presentation에 재사용할 수 있도록 초기 상태로 되돌립니다.
-	UFUNCTION(BlueprintCallable, Category = "Reward Presentation")
 	bool ResetPresentation();
 
-	UFUNCTION(BlueprintPure, Category = "Reward Presentation")
 	EUOURewardPresentationWidgetState GetPresentationState() const;
 
 	// 현재 Presentation을 요청한 RewardActor를 식별할 ID입니다.
-	UFUNCTION(BlueprintPure, Category = "Reward Presentation")
 	FName GetPresentationRewardId() const { return PresentationData.RewardId; }
 
-	UPROPERTY(BlueprintAssignable, Category = "Reward Presentation|Events")
 	FUOURewardPresentationWidgetFinishedSignature OnPresentationFinished;
 
 protected:
@@ -84,7 +66,6 @@ protected:
 	// WBP가 가진 애니메이션 중 Presentation 시작에 사용할 항목입니다. None이면 즉시 Hold로 진입합니다.
 	UPROPERTY(
 		EditDefaultsOnly,
-		BlueprintReadOnly,
 		Category = "Reward Presentation|Animation",
 		meta = (
 			DisplayName = "Intro Animation",
@@ -94,30 +75,26 @@ protected:
 	// WBP가 가진 애니메이션 중 Presentation 종료에 사용할 항목입니다. None이면 즉시 종료합니다.
 	UPROPERTY(
 		EditDefaultsOnly,
-		BlueprintReadOnly,
 		Category = "Reward Presentation|Animation",
 		meta = (
 			DisplayName = "Outro Animation",
 			GetOptions = "GetAvailableAnimationNames"))
 	FName OutroAnimationName = NAME_None;
 
-	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "Reward Presentation|Runtime")
+	UPROPERTY(VisibleInstanceOnly, Transient, Category = "Reward Presentation|Runtime")
 	FUOURewardPresentationData PresentationData;
 
-	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "Reward Presentation|Runtime")
+	UPROPERTY(VisibleInstanceOnly, Transient, Category = "Reward Presentation|Runtime")
 	EUOURewardPresentationWidgetState PresentationState =
 		EUOURewardPresentationWidgetState::Uninitialized;
 
-	UFUNCTION(BlueprintImplementableEvent, BlueprintCosmetic, Category = "Reward Presentation|Events")
-	void ReceivePresentationInitialized(const FUOURewardPresentationData& InPresentationData);
-
-	UFUNCTION(BlueprintImplementableEvent, BlueprintCosmetic, Category = "Reward Presentation|Events")
-	void ReceivePresentationCue(const FUOURewardPresentationCue& Cue);
-
-	UFUNCTION(BlueprintImplementableEvent, BlueprintCosmetic, Category = "Reward Presentation|Events")
-	void ReceivePresentationReset();
-
 private:
+	// Intro 종료 뒤 결과 표시 유지 구간을 시작합니다. DisplayDuration이 0이면 자동 종료하지 않습니다.
+	bool BeginPresentationHold();
+
+	// Outro가 없거나 종료된 시점에 Presentation 완료를 보고합니다.
+	bool FinishPresentation();
+
 	UFUNCTION()
 	TArray<FName> GetAvailableAnimationNames() const;
 

@@ -130,7 +130,6 @@ bool UUOURewardPresentationWidget::InitializePresentation(
 	PresentationData = InPresentationData;
 	PresentationState = EUOURewardPresentationWidgetState::Ready;
 	bPresentationHoldStarted = false;
-	ReceivePresentationInitialized(PresentationData);
 	return true;
 }
 
@@ -151,18 +150,6 @@ bool UUOURewardPresentationWidget::StartPresentation()
 		BeginPresentationHold();
 	}
 
-	return true;
-}
-
-bool UUOURewardPresentationWidget::HandlePresentationCue(
-	const FUOURewardPresentationCue& Cue)
-{
-	if (PresentationState != EUOURewardPresentationWidgetState::Presenting)
-	{
-		return false;
-	}
-
-	ReceivePresentationCue(Cue);
 	return true;
 }
 
@@ -254,7 +241,6 @@ bool UUOURewardPresentationWidget::ResetPresentation()
 	PresentationData = FUOURewardPresentationData();
 	PresentationState = EUOURewardPresentationWidgetState::Uninitialized;
 	bPresentationHoldStarted = false;
-	ReceivePresentationReset();
 	return true;
 }
 

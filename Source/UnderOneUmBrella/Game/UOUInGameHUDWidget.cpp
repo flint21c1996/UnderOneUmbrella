@@ -324,7 +324,7 @@ bool UUOUInGameHUDWidget::ProcessRewardPresentationCue(
 
 	if (CurrentState == EUOURewardPresentationWidgetState::Presenting)
 	{
-		return PresentationWidget->HandlePresentationCue(Cue);
+		return true;
 	}
 
 	if (CurrentState == EUOURewardPresentationWidgetState::Closing)
@@ -357,7 +357,7 @@ bool UUOUInGameHUDWidget::ProcessRewardPresentationCue(
 		return false;
 	}
 
-	return PresentationWidget->HandlePresentationCue(Cue);
+	return true;
 }
 
 void UUOUInGameHUDWidget::BeginDialoguePresentation_Implementation(AActor* SpeakerActor, UUOUDialogueSourceComponent* DialogueSource)
