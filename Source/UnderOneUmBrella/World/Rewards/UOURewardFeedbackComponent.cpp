@@ -9,7 +9,6 @@
 #include "Player/UOUCameraControllerComponent.h"
 #include "Player/UOUCharacter.h"
 #include "Player/UOUPlayerInteractionExecutorComponent.h"
-#include "TimerManager.h"
 
 UUOURewardFeedbackComponent::UUOURewardFeedbackComponent()
 {
@@ -50,14 +49,12 @@ bool UUOURewardFeedbackComponent::BeginFeedback(
 	}
 
 	bFeedbackPlaying = true;
-	bFeedbackDurationElapsed = false;
 	bFeedbackSequenceCompleted = false;
 	bCollectionMontagePlaying = false;
 	ActiveCollector = Collector;
 	ActiveRewardWorldLocation = RewardWorldLocation;
 
 	ApplyPlayerInputBlock(Collector);
-	BeginFeedbackDurationTimer();
 	return true;
 }
 
@@ -157,25 +154,6 @@ void UUOURewardFeedbackComponent::CompleteFeedbackSequence()
 
 	bFeedbackSequenceCompleted = true;
 	TryFinishFeedback();
-}
-
-void UUOURewardFeedbackComponent::BeginFeedbackDurationTimer()
-{
-	const float SafeDuration = FMath::Max(0.0f, FeedbackDuration);
-	UWorld* World = GetWorld();
-	if (SafeDuration <= KINDA_SMALL_NUMBER || World == nullptr)
-	{
-		bFeedbackDurationElapsed = true;
-		TryFinishFeedback();
-		return;
-	}
-
-	World->GetTimerManager().SetTimer(
-		FeedbackTimerHandle,
-		this,
-		&UUOURewardFeedbackComponent::HandleFeedbackTimerFinished,
-		SafeDuration,
-		false);
 }
 
 void UUOURewardFeedbackComponent::FinishFeedback()
@@ -310,11 +288,6 @@ void UUOURewardFeedbackComponent::FinishFeedbackInternal(bool bBroadcastFinished
 		return;
 	}
 
-	if (UWorld* World = GetWorld())
-	{
-		World->GetTimerManager().ClearTimer(FeedbackTimerHandle);
-	}
-
 	bFeedbackPlaying = false;
 	bFeedbackSequenceCompleted = false;
 	ActiveRewardWorldLocation = FVector::ZeroVector;
@@ -330,20 +303,12 @@ void UUOURewardFeedbackComponent::TryFinishFeedback()
 {
 	if (!bFeedbackPlaying
 		|| !bFeedbackSequenceCompleted
-		|| bPresentationCameraHoldActive
-		|| !bFeedbackDurationElapsed
-		|| bCollectionMontagePlaying)
+		|| bPresentationCameraHoldActive)
 	{
 		return;
 	}
 
 	FinishFeedbackInternal(true);
-}
-
-void UUOURewardFeedbackComponent::HandleFeedbackTimerFinished()
-{
-	bFeedbackDurationElapsed = true;
-	TryFinishFeedback();
 }
 
 void UUOURewardFeedbackComponent::HandlePlayerInteractionFinished(

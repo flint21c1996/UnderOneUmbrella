@@ -29,9 +29,6 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Feedback")
 	bool bFeedbackEnabled = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Feedback", meta = (ClampMin = "0.0"))
-	float FeedbackDuration = 1.5f;
-
 	// 하나의 Motion 시간축에서 실행할 Feedback 및 Presentation 요청 목록입니다.
 	UPROPERTY(
 		EditAnywhere,
@@ -190,15 +187,11 @@ private:
 	void ReleaseCameraFeedback();
 	void FinishFeedbackInternal(bool bBroadcastFinished);
 	void TryFinishFeedback();
-	void BeginFeedbackDurationTimer();
-	void HandleFeedbackTimerFinished();
 
 	UFUNCTION()
 	void HandlePlayerInteractionFinished(UObject* InteractionSource, bool bInterrupted);
 
-	FTimerHandle FeedbackTimerHandle;
-	bool bFeedbackDurationElapsed = false;
-	// true가 되기 전에는 Duration이 지나도 예약된 개별 피드백을 위해 세션을 유지합니다.
+	// Motion 타임라인이 종료되어 예약된 Cue가 모두 전달되었는지 나타냅니다.
 	bool bFeedbackSequenceCompleted = false;
 	bool bCollectionMontagePlaying = false;
 	// Niagara를 Reward 위치에 생성할 때 사용하는 수집 시작 시점의 위치입니다.
