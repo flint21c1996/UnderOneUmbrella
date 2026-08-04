@@ -94,7 +94,7 @@ struct UNDERONEUMBRELLA_API FUOURewardMotionCueTiming
 	UPROPERTY()
 	float TriggerTime = 0.0f;
 
-	// Presentation Cue의 Outro 시작 시간입니다. 음수이면 MotionDuration을 기본값으로 사용합니다.
+	// 재생 중인 Intro를 중지하고 Outro를 시작하는 시점입니다. Outro가 없으면 즉시 종료하며, 음수이면 MotionDuration을 사용합니다.
 	UPROPERTY()
 	float PresentationCloseTime = -1.0f;
 };

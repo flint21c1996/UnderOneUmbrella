@@ -44,7 +44,7 @@ public:
 		return CueTimeline;
 	}
 	void SetCueTriggerTimeForEditor(const FGuid& RequestId, float TriggerTime);
-	// Presentation 행의 Outro 마커 시간을 Motion 타임라인 데이터에 저장합니다.
+	// Intro 중지와 Outro 시작을 요청하는 O 마커 시간을 Motion 타임라인 데이터에 저장합니다.
 	void SetPresentationCloseTimeForEditor(const FGuid& RequestId, float CloseTime);
 #endif
 
@@ -85,7 +85,7 @@ private:
 	{
 		int32 CueIndex = INDEX_NONE;
 		float TriggerTime = 0.0f;
-		// true이면 Presentation 행의 두 번째 Outro 마커 이벤트입니다.
+		// true이면 재생 중인 Intro를 중지하고 Outro를 시작하는 Presentation O 마커 이벤트입니다.
 		bool bPresentationClose = false;
 	};
 

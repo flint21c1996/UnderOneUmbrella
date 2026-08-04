@@ -64,6 +64,18 @@ void FUOURewardCollectionMotionComponentDetails::CustomizeDetails(
 		ECategoryPriority::Important);
 
 	TimelineCategory
+		.AddCustomRow(LOCTEXT("TimelineMarkerGuideSearchText", "Presentation S O Intro Outro"))
+		.WholeRowContent()
+		[
+			SNew(STextBlock)
+			.Text(LOCTEXT(
+				"TimelineMarkerGuideText",
+				"Presentation 행의 S 마커는 Intro 시작 시점입니다. O 마커는 재생 중인 Intro를 중지하고 Outro를 시작하는 시점이며, Outro가 없으면 즉시 종료합니다."))
+			.AutoWrapText(true)
+			.ColorAndOpacity(FSlateColor::UseSubduedForeground())
+		];
+
+	TimelineCategory
 		.AddCustomRow(LOCTEXT("TimelineSearchText", "Reward Timeline"))
 		.WholeRowContent()
 		[
