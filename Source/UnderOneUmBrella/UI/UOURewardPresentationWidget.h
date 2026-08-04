@@ -66,9 +66,6 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Reward Presentation")
 	EUOURewardPresentationWidgetState GetPresentationState() const;
 
-	UFUNCTION(BlueprintPure, Category = "Reward Presentation")
-	bool IsPresentationActive() const;
-
 	// 현재 Presentation을 요청한 RewardActor를 식별할 ID입니다.
 	UFUNCTION(BlueprintPure, Category = "Reward Presentation")
 	FName GetPresentationRewardId() const { return PresentationData.RewardId; }

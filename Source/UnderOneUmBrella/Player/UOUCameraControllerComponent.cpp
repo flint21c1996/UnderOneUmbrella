@@ -167,19 +167,6 @@ void UUOUCameraControllerComponent::EndDialogueFocus()
 	TargetCameraOffset = RegularCameraTargetOffset;
 }
 
-void UUOUCameraControllerComponent::RequestTemporaryZoom(
-	UObject* RequestSource,
-	float TargetDistance,
-	float TargetOrthoWidth)
-{
-	RequestTemporaryFocusZoom(
-		RequestSource,
-		TargetDistance,
-		TargetOrthoWidth,
-		FVector::ZeroVector,
-		false);
-}
-
 void UUOUCameraControllerComponent::RequestTemporaryFocusZoom(
 	UObject* RequestSource,
 	float TargetDistance,

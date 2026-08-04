@@ -360,7 +360,6 @@ void AUOURewardActor::CompleteCollection()
 	PendingCollector = nullptr;
 
 	OnRewardCollected.Broadcast(this, RewardId, Collector);
-	ReceiveRewardCollected(RewardId, Collector);
 }
 
 bool AUOURewardActor::IsValidCollector(const AActor* Candidate) const
@@ -402,9 +401,6 @@ void AUOURewardActor::HandleCollectionMotionCue(const FUOURewardPresentationCue&
 
 	case EUOURewardMotionCueChannel::Presentation:
 		{
-			AActor* Collector = PendingCollector.Get();
-			OnRewardPresentationCue.Broadcast(this, RewardId, Cue, Collector);
-			ReceiveRewardPresentationCue(RewardId, Cue, Collector);
 			RoutePresentationCueToUI(Cue);
 			break;
 		}

@@ -90,10 +90,6 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Camera|Dialogue")
 	bool IsDialogueFocusActive() const { return bDialogueFocusActive; }
 
-	// 짧은 게임플레이 연출이 기존 카메라 설정을 훼손하지 않고 임시 줌을 요청하는 진입점입니다.
-	UFUNCTION(BlueprintCallable, Category = "Camera|Temporary Zoom")
-	void RequestTemporaryZoom(UObject* RequestSource, float TargetDistance, float TargetOrthoWidth);
-
 	// 임시 줌과 함께 평상시 주시점으로부터 포커스 위치를 이동해 대상이 화면에서 부각되도록 합니다.
 	UFUNCTION(BlueprintCallable, Category = "Camera|Temporary Zoom")
 	void RequestTemporaryFocusZoom(

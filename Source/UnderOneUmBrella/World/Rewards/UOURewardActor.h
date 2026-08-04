@@ -24,12 +24,6 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(
 	AUOURewardActor*, RewardActor,
 	FName, RewardId,
 	AActor*, Collector);
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_FourParams(
-	FUOURewardActorPresentationCueSignature,
-	AUOURewardActor*, RewardActor,
-	FName, RewardId,
-	const FUOURewardPresentationCue&, Cue,
-	AActor*, Collector);
 
 // 월드에 배치되어 회전·부유하다가 플레이어 접촉 시 한 번만 수집되는 보상 액터입니다.
 UCLASS(meta=(DisplayName="UOU Reward"))
@@ -53,26 +47,12 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Reward|Events")
 	FUOURewardCollectedSignature OnRewardCollected;
 
-	// 수집 움직임에서 Cue가 발생할 때 월드 연출 시스템과 Blueprint에 전달합니다.
-	UPROPERTY(BlueprintAssignable, Category = "Reward|Events")
-	FUOURewardActorPresentationCueSignature OnRewardPresentationCue;
-
 	// 오버랩 외의 연출이나 Blueprint에서도 동일한 중복 방지 경로로 수집을 요청할 수 있습니다.
 	UFUNCTION(BlueprintCallable, Category = "Reward")
 	bool TryCollectReward(AActor* Collector);
 
 	UFUNCTION(BlueprintPure, Category = "Reward")
 	bool IsCollected() const;
-
-	// Blueprint 전용 피드백을 액터 내부에 추가할 수 있는 확장 지점입니다.
-	UFUNCTION(BlueprintImplementableEvent, Category = "Reward|Events")
-	void ReceiveRewardCollected(FName CollectedRewardId, AActor* Collector);
-
-	UFUNCTION(BlueprintImplementableEvent, Category = "Reward|Events")
-	void ReceiveRewardPresentationCue(
-		FName CollectedRewardId,
-		const FUOURewardPresentationCue& Cue,
-		AActor* Collector);
 
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Reward|Components")

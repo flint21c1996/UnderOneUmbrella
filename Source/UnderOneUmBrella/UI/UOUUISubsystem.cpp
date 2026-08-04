@@ -218,7 +218,6 @@ bool UUOUUISubsystem::ShowRewardPresentationCue(
 	const FUOURewardPresentationData& PresentationData,
 	const FUOURewardPresentationCue& Cue)
 {
-	OnRewardPresentationCueRequested.Broadcast(PresentationData, Cue);
 	if (RegisteredHUDWidget.IsValid())
 	{
 		return RegisteredHUDWidget->ProcessRewardPresentationCue(

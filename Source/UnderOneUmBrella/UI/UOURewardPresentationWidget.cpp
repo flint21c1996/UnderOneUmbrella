@@ -264,12 +264,6 @@ UUOURewardPresentationWidget::GetPresentationState() const
 	return PresentationState;
 }
 
-bool UUOURewardPresentationWidget::IsPresentationActive() const
-{
-	return PresentationState == EUOURewardPresentationWidgetState::Presenting
-		|| PresentationState == EUOURewardPresentationWidgetState::Closing;
-}
-
 TArray<FName> UUOURewardPresentationWidget::GetAvailableAnimationNames() const
 {
 	TArray<FName> AnimationNames;
