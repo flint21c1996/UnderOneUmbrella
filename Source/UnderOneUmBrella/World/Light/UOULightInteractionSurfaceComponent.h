@@ -76,8 +76,8 @@ public:
 	EUOULightReflectionFrontNormalMode ReflectionFrontNormalMode =
 		EUOULightReflectionFrontNormalMode::ComponentUp;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection|Facing", meta = (ClampMin = "0.0", ClampMax = "89.0", Units = "deg", ToolTip = "앞면 법선과 입사광 사이에 허용할 최대 각도입니다."))
-	float MaximumReflectionIncidenceAngle = 85.0f;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection|Facing", meta = (ClampMin = "0.0", ClampMax = "89.9", Units = "deg", ToolTip = "앞면 법선과 입사광 사이에 허용할 최대 각도입니다. 90도에 가까울수록 비스듬히 들어오는 빛도 반사합니다."))
+	float MaximumReflectionIncidenceAngle = 89.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection", meta = (ClampMin = "0.0", ToolTip = "반사된 게임플레이 빛이 도달할 수 있는 최대 거리입니다."))
 	float ReflectionRange = 600.0f;
@@ -100,6 +100,12 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection|Aperture", meta = (ClampMin = "0.0", ToolTip = "Box 크기에서 계산한 반사 유효 반지름에 곱할 값입니다."))
 	float ReflectionApertureScale = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection|Sampling", meta = (ToolTip = "중심점 하나가 아니라 반사면의 중앙과 상하좌우를 빛 적중 후보로 사용합니다."))
+	bool bUseSurfaceAreaSampling = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection|Sampling", meta = (ClampMin = "0.0", ClampMax = "1.0", EditCondition = "bUseSurfaceAreaSampling", ToolTip = "반사면 중심에서 가장자리 방향으로 샘플을 배치하는 비율입니다."))
+	float SurfaceSampleInset = 0.7f;
 
 	UFUNCTION(BlueprintCallable, Category = "Light|Interaction", meta = (ToolTip = "이 표면이 게임플레이 빛을 차단하거나 반사하는 방식을 변경합니다."))
 	void SetLightInteractionMode(EUOULightInteractionMode NewMode);
@@ -124,6 +130,8 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Light|Reflection", meta = (ToolTip = "입사 확산각과 반사면 설정을 바탕으로 실제 반사 확산각을 반환합니다."))
 	float ResolveReflectionConeAngle(float IncomingConeAngle) const;
+
+	void GetReflectionSamplePositions(TArray<FVector>& OutSamplePositions) const;
 
 protected:
 	void ValidateSettings();

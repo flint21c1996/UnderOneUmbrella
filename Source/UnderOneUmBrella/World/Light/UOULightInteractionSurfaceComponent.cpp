@@ -124,6 +124,42 @@ float UUOULightInteractionSurfaceComponent::ResolveReflectionConeAngle(float Inc
 	return FMath::Clamp(ConeAngle, 0.0f, 89.0f);
 }
 
+void UUOULightInteractionSurfaceComponent::GetReflectionSamplePositions(
+	TArray<FVector>& OutSamplePositions) const
+{
+	OutSamplePositions.Reset();
+	OutSamplePositions.Add(GetComponentLocation());
+	if (!bUseSurfaceAreaSampling)
+	{
+		return;
+	}
+
+	const FVector Extent = GetScaledBoxExtent().GetAbs();
+	TArray<TPair<float, FVector>, TInlineAllocator<3>> LocalAxes;
+	LocalAxes.Emplace(Extent.X, FVector::ForwardVector);
+	LocalAxes.Emplace(Extent.Y, FVector::RightVector);
+	LocalAxes.Emplace(Extent.Z, FVector::UpVector);
+	LocalAxes.Sort([](const TPair<float, FVector>& A, const TPair<float, FVector>& B)
+	{
+		return A.Key > B.Key;
+	});
+
+	const float SafeInset = FMath::Clamp(SurfaceSampleInset, 0.0f, 1.0f);
+	for (int32 AxisIndex = 0; AxisIndex < 2; ++AxisIndex)
+	{
+		const float SampleDistance = LocalAxes[AxisIndex].Key * SafeInset;
+		if (SampleDistance <= KINDA_SMALL_NUMBER)
+		{
+			continue;
+		}
+
+		const FVector WorldOffset = GetComponentTransform().TransformVectorNoScale(
+			LocalAxes[AxisIndex].Value * SampleDistance);
+		OutSamplePositions.Add(GetComponentLocation() + WorldOffset);
+		OutSamplePositions.Add(GetComponentLocation() - WorldOffset);
+	}
+}
+
 FVector UUOULightInteractionSurfaceComponent::GetReflectionDirection(
 	const FVector& IncomingDirection,
 	const FVector& HitNormal) const
@@ -162,8 +198,9 @@ void UUOULightInteractionSurfaceComponent::ValidateSettings()
 	ReflectionConeAngle = FMath::Clamp(ReflectionConeAngle, 0.0f, 89.0f);
 	ReflectionIntensityMultiplier = FMath::Max(0.0f, ReflectionIntensityMultiplier);
 	ReflectionStartPadding = FMath::Max(0.0f, ReflectionStartPadding);
-	MaximumReflectionIncidenceAngle = FMath::Clamp(MaximumReflectionIncidenceAngle, 0.0f, 89.0f);
+	MaximumReflectionIncidenceAngle = FMath::Clamp(MaximumReflectionIncidenceAngle, 0.0f, 89.9f);
 	ReflectionApertureScale = FMath::Max(0.0f, ReflectionApertureScale);
+	SurfaceSampleInset = FMath::Clamp(SurfaceSampleInset, 0.0f, 1.0f);
 }
 
 void UUOULightInteractionSurfaceComponent::ApplyCollisionSettings()

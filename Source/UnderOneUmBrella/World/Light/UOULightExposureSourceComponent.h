@@ -120,6 +120,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Debug", meta = (ToolTip = "광원 원뿔, 히트 라인, 반사 디버그 도형을 그립니다."))
 	bool bDrawDebug = false;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Debug", meta = (EditCondition = "bDrawDebug", ToolTip = "거울과 대상의 개별 판정 샘플을 색상으로 표시합니다. 초록/청록은 적중, 빨강은 차단, 노랑은 빛 범위 밖입니다."))
+	bool bDrawSampleDebug = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Debug", meta = (ClampMin = "1.0", EditCondition = "bDrawDebug && bDrawSampleDebug", ToolTip = "판정 샘플 점의 화면 표시 크기입니다."))
+	float DebugSamplePointSize = 10.0f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Debug", meta = (ClampMin = "0.0", ToolTip = "디버그 드로우 유지 시간입니다. 0이면 한 프레임만 표시합니다."))
 	float DebugDrawTime = 0.06f;
 
@@ -205,6 +211,17 @@ protected:
 	void AppendReceivableObjects(AActor* TargetActor, UPrimitiveComponent* TargetComponent, TArray<UObject*>& OutReceivers) const;
 	void AppendLightInteractionSurfaces(AActor* TargetActor, UPrimitiveComponent* TargetComponent, TArray<UUOULightInteractionSurfaceComponent*>& OutSurfaces) const;
 	bool TryBuildExposureData(UObject* ReceiverObject, float DeltaTime, FUOULightExposureData& OutExposureData, FHitResult& OutBlockingHit) const;
+	bool TryBuildExposureDataAtPosition(
+		UObject* ReceiverObject,
+		const FVector& ReceiverPosition,
+		float DeltaTime,
+		FUOULightExposureData& OutExposureData,
+		FHitResult& OutBlockingHit) const;
+	void GetReceiverSamplePositions(
+		UObject* ReceiverObject,
+		const FVector& BeamDirection,
+		TArray<FVector>& OutSamplePositions,
+		int32& OutRequiredHits) const;
 	bool HasLineOfSight(UObject* ReceiverObject, const FVector& SourcePosition, const FVector& ReceiverPosition, FHitResult& OutBlockingHit) const;
 	bool HasLineOfSightFrom(
 		UObject* ReceiverObject,
@@ -258,12 +275,31 @@ protected:
 		float DeltaTime,
 		FUOULightExposureData& OutExposureData,
 		FHitResult& OutBlockingHit) const;
+	bool TryBuildReflectedExposureDataAtPosition(
+		UObject* ReceiverObject,
+		const FVector& ReceiverPosition,
+		const UUOULightInteractionSurfaceComponent* SurfaceComponent,
+		const FVector& ReflectionOrigin,
+		const FVector& ReflectedDirection,
+		float BeamStartRadius,
+		float BeamConeAngle,
+		float SurfaceIntensity,
+		float DeltaTime,
+		FUOULightExposureData& OutExposureData,
+		FHitResult& OutBlockingHit) const;
 	float CalculateIntensity(float Distance, float Angle, float& OutDistanceFactor, float& OutAngleFactor) const;
 	float CalculateConeFactor(float Angle, float ConeAngle) const;
 	float CalculateCylinderFactor(float RadialDistance) const;
 	void DrawDebugSource() const;
 	void DrawDebugResult(const FUOULightExposureData& ExposureData, bool bLit) const;
 	void DrawDebugBlockedHit(const FVector& SourcePosition, const FHitResult& BlockingHit) const;
+	void DrawDebugSamplePoint(const FVector& Position, const FColor& Color) const;
+	void DrawDebugSampleSummary(
+		const FVector& Position,
+		const TCHAR* SampleType,
+		int32 HitCount,
+		int32 RequiredHits,
+		bool bAccepted) const;
 	void DrawDebugReflectionFrustum(
 		const FVector& Start,
 		const FVector& Direction,

@@ -11,6 +11,7 @@
 #include "UOULightExposureReceiverComponent.generated.h"
 
 class AActor;
+class UPrimitiveComponent;
 class USceneComponent;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnUOULightExposureReceivedSignature, const FUOULightExposureData&, ExposureData);
@@ -51,6 +52,18 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Receiver", meta = (ToolTip = "Receiver Transform이 비어 있으면 Primitive Component 또는 Root Component를 자동으로 사용합니다."))
 	bool bAutoFindReceiverTransform = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Receiver|Sampling", meta = (ToolTip = "한 점 대신 대상 볼륨의 중앙과 가장자리 샘플을 이용해 빛 수신 여부를 판정합니다."))
+	bool bUseReceiverVolumeSampling = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Receiver|Sampling", meta = (UseComponentPicker, AllowedClasses = "/Script/Engine.PrimitiveComponent", EditCondition = "bUseReceiverVolumeSampling", ToolTip = "빛 판정 샘플을 배치할 대상 볼륨입니다. 비워두면 Receiver Transform 또는 첫 Primitive Component를 사용합니다."))
+	FComponentReference ReceiverVolumeReference;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Receiver|Sampling", meta = (ClampMin = "0.0", ClampMax = "1.0", EditCondition = "bUseReceiverVolumeSampling", ToolTip = "판정 샘플을 볼륨 중심에서 가장자리 쪽으로 배치하는 비율입니다."))
+	float ReceiverSampleInset = 0.65f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Receiver|Sampling", meta = (ClampMin = "1", ClampMax = "5", EditCondition = "bUseReceiverVolumeSampling", ToolTip = "중앙과 상하좌우 5개 샘플 중 빛에 닿아야 하는 최소 개수입니다."))
+	int32 RequiredReceiverSampleHits = 2;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Temperature", meta = (ToolTip = "BeginPlay 시 Current Temperature를 Ambient Temperature 값으로 초기화합니다."))
 	bool bStartAtAmbientTemperature = true;
@@ -118,12 +131,18 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Light|Exposure", meta = (ToolTip = "현재 게임플레이용 빛에 노출되어 있으면 true를 반환합니다."))
 	bool IsReceivingLight() const;
 
+	void GetLightReceiverSamplePositions(
+		const FVector& BeamDirection,
+		TArray<FVector>& OutSamplePositions) const;
+	int32 GetRequiredLightSampleHits(int32 AvailableSampleCount) const;
+
 protected:
 	float LastExposureWorldTime = -BIG_NUMBER;
 
 	void ValidateTemperatureSettings();
 	USceneComponent* GetReferencedReceiverTransform() const;
 	USceneComponent* FindAutoReceiverTransform() const;
+	UPrimitiveComponent* GetReceiverVolume() const;
 	void SetReceivingLight(bool bNewReceivingLight);
 	void RecoverTemperature(float DeltaTime);
 	void DrawTemperatureDebug() const;

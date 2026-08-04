@@ -82,6 +82,68 @@ FVector UUOULightExposureReceiverComponent::GetLightReceiverPosition_Implementat
 	return FVector::ZeroVector;
 }
 
+void UUOULightExposureReceiverComponent::GetLightReceiverSamplePositions(
+	const FVector& BeamDirection,
+	TArray<FVector>& OutSamplePositions) const
+{
+	OutSamplePositions.Reset();
+
+	const UPrimitiveComponent* ReceiverVolume = GetReceiverVolume();
+	const FVector SafeBeamDirection = BeamDirection.GetSafeNormal();
+	if (!bUseReceiverVolumeSampling || ReceiverVolume == nullptr || SafeBeamDirection.IsNearlyZero())
+	{
+		OutSamplePositions.Add(GetLightReceiverPosition_Implementation());
+		return;
+	}
+
+	const FBoxSphereBounds ReceiverBounds = ReceiverVolume->Bounds;
+	const FVector Center = ReceiverBounds.Origin;
+	const FVector Extent = ReceiverBounds.BoxExtent;
+	OutSamplePositions.Add(Center);
+
+	FVector SampleAxisA = FVector::ZeroVector;
+	FVector SampleAxisB = FVector::ZeroVector;
+	SafeBeamDirection.FindBestAxisVectors(SampleAxisA, SampleAxisB);
+
+	const auto CalculateAxisDistance = [&Extent](const FVector& Axis)
+	{
+		float Distance = TNumericLimits<float>::Max();
+		for (int32 AxisIndex = 0; AxisIndex < 3; ++AxisIndex)
+		{
+			const float AxisAmount = FMath::Abs(Axis[AxisIndex]);
+			if (AxisAmount > KINDA_SMALL_NUMBER)
+			{
+				Distance = FMath::Min(Distance, Extent[AxisIndex] / AxisAmount);
+			}
+		}
+		return Distance == TNumericLimits<float>::Max() ? 0.0f : Distance;
+	};
+
+	const float SafeInset = FMath::Clamp(ReceiverSampleInset, 0.0f, 1.0f);
+	const float AxisDistanceA = CalculateAxisDistance(SampleAxisA) * SafeInset;
+	const float AxisDistanceB = CalculateAxisDistance(SampleAxisB) * SafeInset;
+	if (AxisDistanceA > KINDA_SMALL_NUMBER)
+	{
+		OutSamplePositions.Add(Center + SampleAxisA * AxisDistanceA);
+		OutSamplePositions.Add(Center - SampleAxisA * AxisDistanceA);
+	}
+	if (AxisDistanceB > KINDA_SMALL_NUMBER)
+	{
+		OutSamplePositions.Add(Center + SampleAxisB * AxisDistanceB);
+		OutSamplePositions.Add(Center - SampleAxisB * AxisDistanceB);
+	}
+}
+
+int32 UUOULightExposureReceiverComponent::GetRequiredLightSampleHits(int32 AvailableSampleCount) const
+{
+	if (!bUseReceiverVolumeSampling || AvailableSampleCount <= 1)
+	{
+		return AvailableSampleCount > 0 ? 1 : 0;
+	}
+
+	return FMath::Clamp(RequiredReceiverSampleHits, 1, AvailableSampleCount);
+}
+
 void UUOULightExposureReceiverComponent::ReceiveLightExposure_Implementation(const FUOULightExposureData& ExposureData)
 {
 	if (ExposureData.Intensity <= 0.0f || ExposureData.DeltaTime <= 0.0f)
@@ -141,6 +203,9 @@ bool UUOULightExposureReceiverComponent::IsReceivingLight() const
 
 void UUOULightExposureReceiverComponent::ValidateTemperatureSettings()
 {
+	ReceiverSampleInset = FMath::Clamp(ReceiverSampleInset, 0.0f, 1.0f);
+	RequiredReceiverSampleHits = FMath::Clamp(RequiredReceiverSampleHits, 1, 5);
+
 	if (MinTemperature > MaxTemperature)
 	{
 		Swap(MinTemperature, MaxTemperature);
@@ -205,6 +270,37 @@ USceneComponent* UUOULightExposureReceiverComponent::FindAutoReceiverTransform()
 	}
 
 	return nullptr;
+}
+
+UPrimitiveComponent* UUOULightExposureReceiverComponent::GetReceiverVolume() const
+{
+	AActor* Owner = GetOwner();
+	if (Owner == nullptr)
+	{
+		return nullptr;
+	}
+
+	if (UPrimitiveComponent* ReferencedVolume =
+		Cast<UPrimitiveComponent>(ReceiverVolumeReference.GetComponent(Owner)))
+	{
+		return ReferencedVolume;
+	}
+
+	if (UPrimitiveComponent* ReceiverTransform = Cast<UPrimitiveComponent>(GetReferencedReceiverTransform()))
+	{
+		return ReceiverTransform;
+	}
+
+	TInlineComponentArray<UPrimitiveComponent*> PrimitiveComponents(Owner);
+	for (UPrimitiveComponent* PrimitiveComponent : PrimitiveComponents)
+	{
+		if (PrimitiveComponent != nullptr && PrimitiveComponent != Owner->GetRootComponent())
+		{
+			return PrimitiveComponent;
+		}
+	}
+
+	return Cast<UPrimitiveComponent>(Owner->GetRootComponent());
 }
 
 void UUOULightExposureReceiverComponent::SetReceivingLight(bool bNewReceivingLight)

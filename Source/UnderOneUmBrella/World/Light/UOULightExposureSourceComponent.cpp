@@ -297,6 +297,7 @@ void UUOULightExposureSourceComponent::ValidateSettings()
 		180.0f);
 	ReflectionPathIntensityTolerance = FMath::Max(0.0f, ReflectionPathIntensityTolerance);
 	ReflectionPathLossGraceTime = FMath::Max(0.0f, ReflectionPathLossGraceTime);
+	DebugSamplePointSize = FMath::Max(1.0f, DebugSamplePointSize);
 	DebugDrawTime = FMath::Max(0.0f, DebugDrawTime);
 }
 
@@ -737,8 +738,79 @@ bool UUOULightExposureSourceComponent::TryBuildExposureData(
 		return false;
 	}
 
+	TArray<FVector> SamplePositions;
+	int32 RequiredHits = 1;
+	GetReceiverSamplePositions(
+		ReceiverObject,
+		GetSourceForwardVector(),
+		SamplePositions,
+		RequiredHits);
+
+	int32 HitCount = 0;
+	float BestIntensity = -1.0f;
+	FHitResult FirstBlockingHit;
+	for (const FVector& SamplePosition : SamplePositions)
+	{
+		FUOULightExposureData SampleExposureData;
+		FHitResult SampleBlockingHit;
+		if (TryBuildExposureDataAtPosition(
+			ReceiverObject,
+			SamplePosition,
+			DeltaTime,
+			SampleExposureData,
+			SampleBlockingHit))
+		{
+			++HitCount;
+			DrawDebugSamplePoint(SamplePosition, FColor::Green);
+			if (SampleExposureData.Intensity > BestIntensity)
+			{
+				BestIntensity = SampleExposureData.Intensity;
+				OutExposureData = SampleExposureData;
+			}
+		}
+		else
+		{
+			DrawDebugSamplePoint(
+				SamplePosition,
+				SampleBlockingHit.bBlockingHit ? FColor::Red : FColor::Yellow);
+			if (!FirstBlockingHit.bBlockingHit && SampleBlockingHit.bBlockingHit)
+			{
+				FirstBlockingHit = SampleBlockingHit;
+			}
+		}
+	}
+
+	const bool bAccepted = HitCount >= RequiredHits;
+	const FVector SummaryPosition = SamplePositions.IsEmpty()
+		? IUOULightReceivableInterface::Execute_GetLightReceiverPosition(ReceiverObject)
+		: SamplePositions[0];
+	DrawDebugSampleSummary(
+		SummaryPosition,
+		TEXT("Receiver"),
+		HitCount,
+		RequiredHits,
+		bAccepted);
+	if (!bAccepted)
+	{
+		OutExposureData = FUOULightExposureData();
+		OutBlockingHit = FirstBlockingHit;
+		return false;
+	}
+
+	return true;
+}
+
+bool UUOULightExposureSourceComponent::TryBuildExposureDataAtPosition(
+	UObject* ReceiverObject,
+	const FVector& ReceiverPosition,
+	float DeltaTime,
+	FUOULightExposureData& OutExposureData,
+	FHitResult& OutBlockingHit) const
+{
+	OutExposureData = FUOULightExposureData();
+	OutBlockingHit = FHitResult();
+
 	const FVector SourcePosition = GetSourceLocation();
-	const FVector ReceiverPosition = IUOULightReceivableInterface::Execute_GetLightReceiverPosition(ReceiverObject);
 	float Distance = 0.0f;
 	FVector Direction = FVector::ZeroVector;
 	float DistanceFactor = 0.0f;
@@ -793,6 +865,31 @@ bool UUOULightExposureSourceComponent::TryBuildExposureData(
 		DeltaTime);
 
 	return true;
+}
+
+void UUOULightExposureSourceComponent::GetReceiverSamplePositions(
+	UObject* ReceiverObject,
+	const FVector& BeamDirection,
+	TArray<FVector>& OutSamplePositions,
+	int32& OutRequiredHits) const
+{
+	OutSamplePositions.Reset();
+	OutRequiredHits = 1;
+
+	if (const UUOULightExposureReceiverComponent* ReceiverComponent =
+		Cast<UUOULightExposureReceiverComponent>(ReceiverObject))
+	{
+		ReceiverComponent->GetLightReceiverSamplePositions(BeamDirection, OutSamplePositions);
+		OutRequiredHits = ReceiverComponent->GetRequiredLightSampleHits(OutSamplePositions.Num());
+		return;
+	}
+
+	if (ReceiverObject != nullptr &&
+		ReceiverObject->GetClass()->ImplementsInterface(UUOULightReceivableInterface::StaticClass()))
+	{
+		OutSamplePositions.Add(
+			IUOULightReceivableInterface::Execute_GetLightReceiverPosition(ReceiverObject));
+	}
 }
 
 bool UUOULightExposureSourceComponent::HasLineOfSight(
@@ -897,32 +994,6 @@ bool UUOULightExposureSourceComponent::TryBuildLightInteractionSurfaceHit(
 		return false;
 	}
 
-	const FVector SourcePosition = GetSourceLocation();
-	const FVector SurfacePosition = SurfaceComponent->GetComponentLocation();
-	float SurfaceDistance = 0.0f;
-	FVector DirectionToSurface = FVector::ZeroVector;
-	float DistanceFactor = 0.0f;
-	float ShapeFactor = 0.0f;
-	if (!TryEvaluateSourceBeamPoint(
-		SurfacePosition,
-		SurfaceDistance,
-		DirectionToSurface,
-		DistanceFactor,
-		ShapeFactor))
-	{
-		return false;
-	}
-
-	FVector TraceStart = SourcePosition;
-	if (BeamShape == EUOULightBeamShape::Cylinder)
-	{
-		const FVector SourceForward = GetSourceForwardVector().GetSafeNormal();
-		const float AxialDistance = FVector::DotProduct(
-			SurfacePosition - SourcePosition,
-			SourceForward);
-		TraceStart = SurfacePosition - SourceForward * AxialDistance;
-	}
-
 	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(UOULightInteractionSurfaceTrace), false, GetOwner());
 	if (bIgnoreOwner && GetOwner() != nullptr)
 	{
@@ -936,14 +1007,115 @@ bool UUOULightExposureSourceComponent::TryBuildLightInteractionSurfaceHit(
 			SurfaceComponent);
 	}
 
-	const FVector TraceEnd = SurfacePosition + DirectionToSurface * SurfaceComponent->ReflectionStartPadding;
-	if (!World->LineTraceSingleByChannel(OutSurfaceHit, TraceStart, TraceEnd, OcclusionTraceChannel, QueryParams))
+	const FVector SourcePosition = GetSourceLocation();
+	const FVector SourceForward = GetSourceForwardVector().GetSafeNormal();
+	TArray<FVector> SamplePositions;
+	SurfaceComponent->GetReflectionSamplePositions(SamplePositions);
+
+	int32 HitCount = 0;
+	float BestScore = -1.0f;
+
+	// 고정 표면 샘플 사이로 빛 중심축이 지나가는 경우도 놓치지 않도록
+	// 실제 빔 중심축과 반사면의 교차점을 가장 먼저 검사합니다.
+	const float BeamRange = GetExposureRange();
+	if (!SourceForward.IsNearlyZero() && BeamRange > KINDA_SMALL_NUMBER)
 	{
-		return false;
+		FHitResult AxisHit;
+		const bool bAxisHitSurface = World->LineTraceSingleByChannel(
+			AxisHit,
+			SourcePosition,
+			SourcePosition + SourceForward * BeamRange,
+			OcclusionTraceChannel,
+			QueryParams) &&
+			AxisHit.GetComponent() == SurfaceComponent &&
+			SurfaceComponent->CanReflectIncomingLight(
+				SourceForward,
+				AxisHit.ImpactNormal);
+		if (bAxisHitSurface)
+		{
+			float AxisDistance = 0.0f;
+			FVector AxisDirection = FVector::ZeroVector;
+			float AxisDistanceFactor = 0.0f;
+			float AxisShapeFactor = 0.0f;
+			if (TryEvaluateSourceBeamPoint(
+				AxisHit.ImpactPoint,
+				AxisDistance,
+				AxisDirection,
+				AxisDistanceFactor,
+				AxisShapeFactor))
+			{
+				++HitCount;
+				BestScore = AxisDistanceFactor * AxisShapeFactor;
+				OutSurfaceHit = AxisHit;
+				DrawDebugSamplePoint(AxisHit.ImpactPoint, FColor::Cyan);
+			}
+		}
 	}
 
-	return OutSurfaceHit.GetComponent() == SurfaceComponent &&
-		SurfaceComponent->CanReflectIncomingLight(DirectionToSurface, OutSurfaceHit.ImpactNormal);
+	for (const FVector& SamplePosition : SamplePositions)
+	{
+		float SurfaceDistance = 0.0f;
+		FVector DirectionToSurface = FVector::ZeroVector;
+		float DistanceFactor = 0.0f;
+		float ShapeFactor = 0.0f;
+		if (!TryEvaluateSourceBeamPoint(
+			SamplePosition,
+			SurfaceDistance,
+			DirectionToSurface,
+			DistanceFactor,
+			ShapeFactor))
+		{
+			DrawDebugSamplePoint(SamplePosition, FColor::Yellow);
+			continue;
+		}
+
+		FVector TraceStart = SourcePosition;
+		if (BeamShape == EUOULightBeamShape::Cylinder)
+		{
+			const float AxialDistance = FVector::DotProduct(
+				SamplePosition - SourcePosition,
+				SourceForward);
+			TraceStart = SamplePosition - SourceForward * AxialDistance;
+		}
+
+		FHitResult SampleHit;
+		const FVector TraceEnd =
+			SamplePosition + DirectionToSurface * SurfaceComponent->ReflectionStartPadding;
+		const bool bHitSurface = World->LineTraceSingleByChannel(
+			SampleHit,
+			TraceStart,
+			TraceEnd,
+			OcclusionTraceChannel,
+			QueryParams) &&
+			SampleHit.GetComponent() == SurfaceComponent &&
+			SurfaceComponent->CanReflectIncomingLight(
+				DirectionToSurface,
+				SampleHit.ImpactNormal);
+		if (!bHitSurface)
+		{
+			DrawDebugSamplePoint(
+				SamplePosition,
+				SampleHit.bBlockingHit ? FColor::Red : FColor::Yellow);
+			continue;
+		}
+
+		++HitCount;
+		DrawDebugSamplePoint(SampleHit.ImpactPoint, FColor::Cyan);
+		const float SampleScore = DistanceFactor * ShapeFactor;
+		if (SampleScore > BestScore)
+		{
+			BestScore = SampleScore;
+			OutSurfaceHit = SampleHit;
+		}
+	}
+
+	DrawDebugSampleSummary(
+		SurfaceComponent->GetComponentLocation(),
+		TEXT("Mirror"),
+		HitCount,
+		1,
+		OutSurfaceHit.bBlockingHit);
+	return OutSurfaceHit.bBlockingHit;
 }
 
 void UUOULightExposureSourceComponent::EmitReflectedLightFromSurface(
@@ -1396,36 +1568,6 @@ bool UUOULightExposureSourceComponent::TryFindNextReflectionSurface(
 
 			ProcessedSurfaces.Add(CandidateSurface);
 
-			const FVector ToCandidate = CandidateSurface->GetComponentLocation() - ReflectionOrigin;
-			const float CandidateDistance = ToCandidate.Size();
-			if (CandidateDistance <= KINDA_SMALL_NUMBER ||
-				CandidateDistance > CurrentSurface->ReflectionRange ||
-				CandidateDistance >= ClosestHitDistance)
-			{
-				continue;
-			}
-
-			const FVector DirectionToCandidate = ToCandidate / CandidateDistance;
-			const float AxialDistance = FVector::DotProduct(ToCandidate, SafeReflectedDirection);
-			if (AxialDistance <= KINDA_SMALL_NUMBER)
-			{
-				continue;
-			}
-			const float RadialDistance =
-				(ToCandidate - SafeReflectedDirection * AxialDistance).Size();
-			const float ConeAngleRadians = FMath::DegreesToRadians(
-				FMath::Clamp(BeamConeAngle, 0.0f, 89.0f));
-			const float SafeBeamStartRadius = FMath::Max(0.0f, BeamStartRadius);
-			const float MaximumBeamRadius =
-				SafeBeamStartRadius + AxialDistance * FMath::Tan(ConeAngleRadians);
-			if (RadialDistance > MaximumBeamRadius)
-			{
-				continue;
-			}
-			const float CandidateAngle = FMath::RadiansToDegrees(FMath::Atan2(
-				FMath::Max(0.0f, RadialDistance - SafeBeamStartRadius),
-				AxialDistance));
-
 			FCollisionQueryParams TraceQueryParams(
 				SCENE_QUERY_STAT(UOULightChainedReflectionSurfaceTrace),
 				false,
@@ -1446,37 +1588,107 @@ bool UUOULightExposureSourceComponent::TryFindNextReflectionSurface(
 					CandidateSurface);
 			}
 
-			FHitResult CandidateHit;
-			const FVector TraceEnd = CandidateSurface->GetComponentLocation() +
-				DirectionToCandidate * CandidateSurface->ReflectionStartPadding;
-			if (!World->LineTraceSingleByChannel(
-				CandidateHit,
+			TArray<FVector> CandidateSamplePositions;
+			CandidateSurface->GetReflectionSamplePositions(CandidateSamplePositions);
+			int32 CandidateHitCount = 0;
+
+			// 반사 빔의 중심축이 표면 샘플 사이를 통과해도 다음 거울을 검출합니다.
+			FHitResult AxisHit;
+			const bool bAxisHitCandidate = World->LineTraceSingleByChannel(
+				AxisHit,
 				ReflectionOrigin,
-				TraceEnd,
+				ReflectionOrigin + SafeReflectedDirection * CurrentSurface->ReflectionRange,
 				OcclusionTraceChannel,
-				TraceQueryParams) ||
-				CandidateHit.GetComponent() != CandidateSurface)
+				TraceQueryParams) &&
+				AxisHit.GetComponent() == CandidateSurface &&
+				CandidateSurface->CanReflectIncomingLight(
+					SafeReflectedDirection,
+					AxisHit.ImpactNormal);
+			if (bAxisHitCandidate)
 			{
-				continue;
-			}
-			if (!CandidateSurface->CanReflectIncomingLight(
-				SafeReflectedDirection,
-				CandidateHit.ImpactNormal))
-			{
-				continue;
+				++CandidateHitCount;
+				DrawDebugSamplePoint(AxisHit.ImpactPoint, FColor::Cyan);
+				const float AxisHitDistance = FVector::Dist(ReflectionOrigin, AxisHit.ImpactPoint);
+				if (AxisHitDistance < ClosestHitDistance)
+				{
+					ClosestHitDistance = AxisHitDistance;
+					OutSurface = CandidateSurface;
+					OutSurfaceHit = AxisHit;
+					OutDistance = AxisHitDistance;
+					OutAngle = 0.0f;
+				}
 			}
 
-			const float HitDistance = FVector::Dist(ReflectionOrigin, CandidateHit.ImpactPoint);
-			if (HitDistance >= ClosestHitDistance)
+			for (const FVector& CandidateSamplePosition : CandidateSamplePositions)
 			{
-				continue;
+				const FVector ToCandidate = CandidateSamplePosition - ReflectionOrigin;
+				const float CandidateDistance = ToCandidate.Size();
+				if (CandidateDistance <= KINDA_SMALL_NUMBER ||
+					CandidateDistance > CurrentSurface->ReflectionRange)
+				{
+					DrawDebugSamplePoint(CandidateSamplePosition, FColor::Yellow);
+					continue;
+				}
+
+				const FVector DirectionToCandidate = ToCandidate / CandidateDistance;
+				const float AxialDistance = FVector::DotProduct(ToCandidate, SafeReflectedDirection);
+				const float RadialDistance =
+					(ToCandidate - SafeReflectedDirection * AxialDistance).Size();
+				const float ConeAngleRadians = FMath::DegreesToRadians(
+					FMath::Clamp(BeamConeAngle, 0.0f, 89.0f));
+				const float SafeBeamStartRadius = FMath::Max(0.0f, BeamStartRadius);
+				const float MaximumBeamRadius = AxialDistance > 0.0f
+					? SafeBeamStartRadius + AxialDistance * FMath::Tan(ConeAngleRadians)
+					: 0.0f;
+				if (AxialDistance <= KINDA_SMALL_NUMBER || RadialDistance > MaximumBeamRadius)
+				{
+					DrawDebugSamplePoint(CandidateSamplePosition, FColor::Yellow);
+					continue;
+				}
+
+				const float CandidateAngle = FMath::RadiansToDegrees(FMath::Atan2(
+					FMath::Max(0.0f, RadialDistance - SafeBeamStartRadius),
+					AxialDistance));
+				FHitResult CandidateHit;
+				const FVector TraceEnd = CandidateSamplePosition +
+					DirectionToCandidate * CandidateSurface->ReflectionStartPadding;
+				const bool bHitCandidate = World->LineTraceSingleByChannel(
+					CandidateHit,
+					ReflectionOrigin,
+					TraceEnd,
+					OcclusionTraceChannel,
+					TraceQueryParams) &&
+					CandidateHit.GetComponent() == CandidateSurface &&
+					CandidateSurface->CanReflectIncomingLight(
+						SafeReflectedDirection,
+						CandidateHit.ImpactNormal);
+				if (!bHitCandidate)
+				{
+					DrawDebugSamplePoint(
+						CandidateSamplePosition,
+						CandidateHit.bBlockingHit ? FColor::Red : FColor::Yellow);
+					continue;
+				}
+
+				++CandidateHitCount;
+				DrawDebugSamplePoint(CandidateHit.ImpactPoint, FColor::Cyan);
+				const float HitDistance = FVector::Dist(ReflectionOrigin, CandidateHit.ImpactPoint);
+				if (HitDistance < ClosestHitDistance)
+				{
+					ClosestHitDistance = HitDistance;
+					OutSurface = CandidateSurface;
+					OutSurfaceHit = CandidateHit;
+					OutDistance = HitDistance;
+					OutAngle = CandidateAngle;
+				}
 			}
 
-			ClosestHitDistance = HitDistance;
-			OutSurface = CandidateSurface;
-			OutSurfaceHit = CandidateHit;
-			OutDistance = HitDistance;
-			OutAngle = CandidateAngle;
+			DrawDebugSampleSummary(
+				CandidateSurface->GetComponentLocation(),
+				TEXT("Mirror"),
+				CandidateHitCount,
+				1,
+				CandidateHitCount > 0);
 		}
 	}
 
@@ -1530,7 +1742,90 @@ bool UUOULightExposureSourceComponent::TryBuildReflectedExposureData(
 		return false;
 	}
 
-	const FVector ReceiverPosition = IUOULightReceivableInterface::Execute_GetLightReceiverPosition(ReceiverObject);
+	TArray<FVector> SamplePositions;
+	int32 RequiredHits = 1;
+	GetReceiverSamplePositions(
+		ReceiverObject,
+		ReflectedDirection,
+		SamplePositions,
+		RequiredHits);
+
+	int32 HitCount = 0;
+	float BestIntensity = -1.0f;
+	FHitResult FirstBlockingHit;
+	for (const FVector& SamplePosition : SamplePositions)
+	{
+		FUOULightExposureData SampleExposureData;
+		FHitResult SampleBlockingHit;
+		if (TryBuildReflectedExposureDataAtPosition(
+			ReceiverObject,
+			SamplePosition,
+			SurfaceComponent,
+			ReflectionOrigin,
+			ReflectedDirection,
+			BeamStartRadius,
+			BeamConeAngle,
+			SurfaceIntensity,
+			DeltaTime,
+			SampleExposureData,
+			SampleBlockingHit))
+		{
+			++HitCount;
+			DrawDebugSamplePoint(SamplePosition, FColor::Green);
+			if (SampleExposureData.Intensity > BestIntensity)
+			{
+				BestIntensity = SampleExposureData.Intensity;
+				OutExposureData = SampleExposureData;
+			}
+		}
+		else
+		{
+			DrawDebugSamplePoint(
+				SamplePosition,
+				SampleBlockingHit.bBlockingHit ? FColor::Red : FColor::Yellow);
+			if (!FirstBlockingHit.bBlockingHit && SampleBlockingHit.bBlockingHit)
+			{
+				FirstBlockingHit = SampleBlockingHit;
+			}
+		}
+	}
+
+	const bool bAccepted = HitCount >= RequiredHits;
+	const FVector SummaryPosition = SamplePositions.IsEmpty()
+		? IUOULightReceivableInterface::Execute_GetLightReceiverPosition(ReceiverObject)
+		: SamplePositions[0];
+	DrawDebugSampleSummary(
+		SummaryPosition,
+		TEXT("Reflected Receiver"),
+		HitCount,
+		RequiredHits,
+		bAccepted);
+	if (!bAccepted)
+	{
+		OutExposureData = FUOULightExposureData();
+		OutBlockingHit = FirstBlockingHit;
+		return false;
+	}
+
+	return true;
+}
+
+bool UUOULightExposureSourceComponent::TryBuildReflectedExposureDataAtPosition(
+	UObject* ReceiverObject,
+	const FVector& ReceiverPosition,
+	const UUOULightInteractionSurfaceComponent* SurfaceComponent,
+	const FVector& ReflectionOrigin,
+	const FVector& ReflectedDirection,
+	float BeamStartRadius,
+	float BeamConeAngle,
+	float SurfaceIntensity,
+	float DeltaTime,
+	FUOULightExposureData& OutExposureData,
+	FHitResult& OutBlockingHit) const
+{
+	OutExposureData = FUOULightExposureData();
+	OutBlockingHit = FHitResult();
+
 	const FVector ToReceiver = ReceiverPosition - ReflectionOrigin;
 	const float Distance = ToReceiver.Size();
 	if (Distance <= KINDA_SMALL_NUMBER || Distance > SurfaceComponent->ReflectionRange)
@@ -1844,6 +2139,61 @@ void UUOULightExposureSourceComponent::DrawDebugBlockedHit(const FVector& Source
 		const FColor BlockedColor = UUOUDebugSubsystem::GetDebugCategoryColor(this, EUOUDebugCategory::Puzzle, FColor::Red);
 		DrawDebugLine(World, SourcePosition, BlockingHit.ImpactPoint, BlockedColor, false, DebugDrawTime, 0, 2.0f);
 		DrawDebugPoint(World, BlockingHit.ImpactPoint, 8.0f, BlockedColor, false, DebugDrawTime);
+	}
+}
+
+void UUOULightExposureSourceComponent::DrawDebugSamplePoint(
+	const FVector& Position,
+	const FColor& Color) const
+{
+	if (!bDrawDebug ||
+		!bDrawSampleDebug ||
+		!UUOUDebugSubsystem::IsDebugWorldDrawEnabled(this, EUOUDebugCategory::Puzzle))
+	{
+		return;
+	}
+
+	if (UWorld* World = GetWorld())
+	{
+		DrawDebugPoint(
+			World,
+			Position,
+			DebugSamplePointSize,
+			Color,
+			false,
+			DebugDrawTime);
+	}
+}
+
+void UUOULightExposureSourceComponent::DrawDebugSampleSummary(
+	const FVector& Position,
+	const TCHAR* SampleType,
+	int32 HitCount,
+	int32 RequiredHits,
+	bool bAccepted) const
+{
+	if (!bDrawDebug ||
+		!bDrawSampleDebug ||
+		!UUOUDebugSubsystem::IsDebugWorldDrawEnabled(this, EUOUDebugCategory::Puzzle))
+	{
+		return;
+	}
+
+	if (UWorld* World = GetWorld())
+	{
+		DrawDebugString(
+			World,
+			Position + FVector(0.0f, 0.0f, 20.0f),
+			FString::Printf(
+				TEXT("%s %d/%d %s"),
+				SampleType,
+				HitCount,
+				RequiredHits,
+				bAccepted ? TEXT("ON") : TEXT("OFF")),
+			nullptr,
+			bAccepted ? FColor::Green : FColor::Red,
+			DebugDrawTime,
+			false);
 	}
 }
 
