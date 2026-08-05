@@ -5,6 +5,7 @@
 #include "Components/SceneComponent.h"
 #include "Engine/World.h"
 #include "Game/UOUMapSelectPlayerController.h"
+#include "World/Stage/UOUStageSelectAreaComponent.h"
 
 AUOUStageSelectNodeActor::AUOUStageSelectNodeActor()
 {
@@ -12,6 +13,9 @@ AUOUStageSelectNodeActor::AUOUStageSelectNodeActor()
 
 	RootScene = CreateDefaultSubobject<USceneComponent>(TEXT("RootScene"));
 	SetRootComponent(RootScene);
+
+	StageSelectArea = CreateDefaultSubobject<UUOUStageSelectAreaComponent>(TEXT("StageSelectArea"));
+	StageSelectArea->SetupAttachment(RootScene);
 }
 
 bool AUOUStageSelectNodeActor::ActivateStage()

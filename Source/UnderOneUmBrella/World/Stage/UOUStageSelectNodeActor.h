@@ -7,6 +7,7 @@
 #include "UOUStageSelectNodeActor.generated.h"
 
 class USceneComponent;
+class UUOUStageSelectAreaComponent;
 
 UCLASS(meta = (DisplayName = "UOU Stage Select Node"))
 class UNDERONEUMBRELLA_API AUOUStageSelectNodeActor : public AActor
@@ -21,6 +22,9 @@ public:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Stage Select")
 	TObjectPtr<USceneComponent> RootScene = nullptr;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Stage Select")
+	TObjectPtr<UUOUStageSelectAreaComponent> StageSelectArea = nullptr;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Stage Select", meta = (ClampMin = "0"))
 	int32 StageIndex = 0;
