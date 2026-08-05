@@ -3,17 +3,15 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Engine/DataTable.h"
 #include "Engine/Texture2D.h"
 #include "Engine/World.h"
 #include "UOUStageSelectTypes.generated.h"
 
 USTRUCT(BlueprintType)
-struct FUOUStageDefinition
+struct FUOUStageDefinition : public FTableRowBase
 {
 	GENERATED_BODY()
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stage Select")
-	FName StageId = NAME_None;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stage Select")
 	FText DisplayName;
@@ -27,6 +25,11 @@ struct FUOUStageDefinition
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stage Select", meta = (AllowedClasses = "/Script/Engine.World"))
 	TSoftObjectPtr<UWorld> Level;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stage Select")
-	bool bUnlocked = true;
+	// Each entry identifies one Reward Actor in the stage. The array length is the maximum star count.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stage Select|Rewards")
+	TArray<FName> RewardIds;
+
+	// Initial catalog state only. The player's actual unlock state belongs in progress save data.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stage Select|Progress")
+	bool bInitiallyUnlocked = false;
 };
