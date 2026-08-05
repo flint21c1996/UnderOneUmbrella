@@ -13,12 +13,12 @@ namespace
 {
 constexpr TCHAR DefaultStageSelectWidgetClassPath[] = TEXT("/Game/UOU/UI/WBP_MapSelect.WBP_MapSelect_C");
 
-FUOUStageDefinition MakeStage(const FName StageId, const TCHAR* DisplayName, const TCHAR* LevelPath)
+FUOUStageDefinition MakeStage(const TCHAR* DisplayName, const TCHAR* LevelPath)
 {
 	FUOUStageDefinition Stage;
-	Stage.StageId = StageId;
 	Stage.DisplayName = FText::FromString(DisplayName);
 	Stage.Level = TSoftObjectPtr<UWorld>(FSoftObjectPath(LevelPath));
+	Stage.bInitiallyUnlocked = true;
 	return Stage;
 }
 }
@@ -29,12 +29,12 @@ AUOUMapSelectPlayerController::AUOUMapSelectPlayerController()
 	SetCanRestartCurrentStage(false);
 
 	Stages.Reserve(6);
-	Stages.Add(MakeStage(TEXT("Tutorial"), TEXT("Tutorial"), TEXT("/Game/UOU/Maps/L_Tutorial.L_Tutorial")));
-	Stages.Add(MakeStage(TEXT("MS_1"), TEXT("Stage 1"), TEXT("/Game/UOU/Maps/L_MS_1.L_MS_1")));
-	Stages.Add(MakeStage(TEXT("MS_2"), TEXT("Stage 2"), TEXT("/Game/UOU/Maps/L_MS_2.L_MS_2")));
-	Stages.Add(MakeStage(TEXT("MS_3"), TEXT("Stage 3"), TEXT("/Game/UOU/Maps/L_MS_3.L_MS_3")));
-	Stages.Add(MakeStage(TEXT("MS_4"), TEXT("Stage 4"), TEXT("/Game/UOU/Maps/L_MS_4.L_MS_4")));
-	Stages.Add(MakeStage(TEXT("MS_5"), TEXT("Stage 5"), TEXT("/Game/UOU/Maps/L_MS_5.L_MS_5")));
+	Stages.Add(MakeStage(TEXT("Tutorial"), TEXT("/Game/UOU/Maps/L_Tutorial.L_Tutorial")));
+	Stages.Add(MakeStage(TEXT("Stage 1"), TEXT("/Game/UOU/Maps/L_MS_1.L_MS_1")));
+	Stages.Add(MakeStage(TEXT("Stage 2"), TEXT("/Game/UOU/Maps/L_MS_2.L_MS_2")));
+	Stages.Add(MakeStage(TEXT("Stage 3"), TEXT("/Game/UOU/Maps/L_MS_3.L_MS_3")));
+	Stages.Add(MakeStage(TEXT("Stage 4"), TEXT("/Game/UOU/Maps/L_MS_4.L_MS_4")));
+	Stages.Add(MakeStage(TEXT("Stage 5"), TEXT("/Game/UOU/Maps/L_MS_5.L_MS_5")));
 }
 
 void AUOUMapSelectPlayerController::BeginPlay()
@@ -85,7 +85,7 @@ bool AUOUMapSelectPlayerController::EnterStageByIndex(const int32 StageIndex)
 
 bool AUOUMapSelectPlayerController::EnterStage(const FUOUStageDefinition& Stage)
 {
-	if (bIsOpeningStage || !Stage.bUnlocked || Stage.Level.IsNull())
+	if (bIsOpeningStage || !Stage.bInitiallyUnlocked || Stage.Level.IsNull())
 	{
 		return false;
 	}
