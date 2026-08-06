@@ -28,6 +28,22 @@ struct FUOUStageDefinition
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stage Select", meta = (AllowedClasses = "/Script/Engine.World"))
 	TSoftObjectPtr<UWorld> Level;
 
+	/** Reward IDs authored for this stage. Each ID represents one collectible reward. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Stage Select|Rewards")
+	TArray<FName> RewardIds;
+
+	/** Total rewards available in this stage. Derived from RewardIds. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Stage Select|Rewards")
+	int32 TotalRewardCount = 0;
+
+	/** Rewards permanently collected by the player. A future progress system will populate this value. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Stage Select|Rewards")
+	int32 CollectedRewardCount = 0;
+
+	/** Rewards the player still needs. A future progress system will populate this value. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Stage Select|Rewards")
+	int32 MissingRewardCount = 0;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stage Select")
 	bool bUnlocked = true;
 };
@@ -49,6 +65,10 @@ struct FUOUStageDefinitionRow : public FTableRowBase
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stage Select", meta = (AllowedClasses = "/Script/Engine.World"))
 	TSoftObjectPtr<UWorld> Level;
+
+	/** One entry per Reward Actor placed in the stage. IDs must be unique within the stage. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stage Select|Rewards")
+	TArray<FName> RewardIds;
 
 	/** Initial authoring value. A future save/progression system can override it at runtime. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stage Select")
