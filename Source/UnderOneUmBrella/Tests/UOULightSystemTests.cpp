@@ -431,6 +431,15 @@ bool FUOULazyGodrayFrustumProfileTest::RunTest(const FString& Parameters)
 		}
 	}
 
+	if (!NiagaraComponents.IsEmpty() && NiagaraComponents[0] != nullptr)
+	{
+		const FVector ExpectedDustMidpoint = SpawnedGodray->GetActorLocation() +
+			Segment.Direction * (1250.0f / 9.0f);
+		TestTrue(
+			TEXT("Dust 중심이 잘린 빛 구간의 중앙에 배치된다"),
+			NiagaraComponents[0]->GetComponentLocation().Equals(ExpectedDustMidpoint, 1.0f));
+	}
+
 	SourceActor->ExposureSource->LightPaths.Reset();
 	SourceActor->BeamVisual->RefreshVisuals();
 	TestTrue(TEXT("반사 경로가 사라지면 기존 VFX 액터를 즉시 숨긴다"), SpawnedGodray->IsHidden());
@@ -581,7 +590,9 @@ bool FUOUUmbrellaShadePathOcclusionTest::RunTest(const FString& Parameters)
 	MirrorSurface->ReflectionDirectionMode = EUOULightReflectionDirectionMode::MirrorByNormal;
 	MirrorSurface->ReflectionRange = 500.0f;
 	MirrorSurface->RegisterComponent();
-	MirrorActor->SetActorLocation(FVector(400.0f, 0.0f, 0.0f));
+	// 중심은 원뿔 밖에 있지만 넓은 면이 광원 중심축을 가로지르는 배치입니다.
+	// 우산이 중심축을 막을 때 가장자리 샘플만으로 반사되지 않아야 합니다.
+	MirrorActor->SetActorLocation(FVector(400.0f, 100.0f, 0.0f));
 	MirrorSurface->SetLightInteractionMode(EUOULightInteractionMode::Reflecting);
 
 	SourceActor->ExposureSource->EmitLight(0.1f);

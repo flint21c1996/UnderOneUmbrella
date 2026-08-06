@@ -1506,6 +1506,41 @@ bool UUOULightExposureSourceComponent::TryBuildLightInteractionSurfaceHit(
 		}
 	}
 
+	// 반사면 중심이 광원 원뿔 밖에 있더라도 넓은 반사면이 중심축을 가로지를 수 있습니다.
+	// 이때 중심축이 우산에 막혔다면 가장자리 샘플만으로 뒤쪽 반사광을 만들지 않습니다.
+	if (!SourceForward.IsNearlyZero())
+	{
+		FHitResult AxisSurfaceHit;
+		const FVector AxisTraceEnd = SourcePosition + SourceForward * GetExposureRange();
+		if (SurfaceComponent->LineTraceComponent(
+			AxisSurfaceHit,
+			SourcePosition,
+			AxisTraceEnd,
+			QueryParams))
+		{
+			FHitResult AxisOcclusionHit;
+			const FVector AxisOcclusionEnd = AxisSurfaceHit.ImpactPoint +
+				SourceForward * SurfaceComponent->ReflectionStartPadding;
+			TraceLightPathSingle(
+				AxisOcclusionHit,
+				SourcePosition,
+				AxisOcclusionEnd,
+				QueryParams,
+				SurfaceComponent->GetOwner());
+			if (IsBlockedByActiveUmbrellaShade(AxisOcclusionHit, SurfaceComponent->GetOwner()))
+			{
+				DrawDebugSamplePoint(AxisOcclusionHit.ImpactPoint, FColor::Red);
+				DrawDebugSampleSummary(
+					SurfaceCenter,
+					TEXT("Mirror Axis"),
+					0,
+					1,
+					false);
+				return false;
+			}
+		}
+	}
+
 	int32 HitCount = 0;
 	float BestScore = -1.0f;
 

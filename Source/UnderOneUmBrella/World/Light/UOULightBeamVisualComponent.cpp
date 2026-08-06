@@ -175,6 +175,13 @@ namespace
 			{
 				NiagaraComponent->SetVariableFloat(TEXT("User.CylinderRadius"), MaxRadius);
 			}
+
+			// LazyGodray Dust 원기둥은 Niagara 원점을 중심으로 양쪽에 생성됩니다.
+			// VFX 액터는 구간 시작점에 있으므로 원점을 중앙으로 옮겨 차단물 뒤로
+			// 먼지가 절반만큼 넘어가거나 시작점 뒤에 남는 현상을 방지합니다.
+			const FVector WorldMidpoint = VFXActor->GetActorTransform().TransformPosition(
+				SafeLocalAxis * HalfLength);
+			NiagaraComponent->SetWorldLocation(WorldMidpoint);
 		}
 	}
 
