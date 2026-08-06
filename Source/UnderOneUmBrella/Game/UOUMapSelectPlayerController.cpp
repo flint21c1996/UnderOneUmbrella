@@ -2,62 +2,23 @@
 
 #include "Game/UOUMapSelectPlayerController.h"
 
-#include "Blueprint/UserWidget.h"
 #include "Engine/GameInstance.h"
 #include "Game/UOULevelTransitionSubsystem.h"
+#include "Game/UOUPlayerProgressSubsystem.h"
 #include "InputCoreTypes.h"
 #include "Misc/PackageName.h"
 #include "UObject/SoftObjectPath.h"
-
-namespace
-{
-constexpr TCHAR DefaultStageSelectWidgetClassPath[] = TEXT("/Game/UOU/UI/WBP_MapSelect.WBP_MapSelect_C");
-
-FUOUStageDefinition MakeStage(const FName StageId, const TCHAR* DisplayName, const TCHAR* LevelPath)
-{
-	FUOUStageDefinition Stage;
-	Stage.StageId = StageId;
-	Stage.DisplayName = FText::FromString(DisplayName);
-	Stage.Level = TSoftObjectPtr<UWorld>(FSoftObjectPath(LevelPath));
-	return Stage;
-}
-}
+#include "World/Stage/UOUStageSelectNodeActor.h"
 
 AUOUMapSelectPlayerController::AUOUMapSelectPlayerController()
 {
 	SetCanReturnToTitle(true);
 	SetCanRestartCurrentStage(false);
-
-	Stages.Reserve(6);
-	Stages.Add(MakeStage(TEXT("Tutorial"), TEXT("Tutorial"), TEXT("/Game/UOU/Maps/L_Tutorial.L_Tutorial")));
-	Stages.Add(MakeStage(TEXT("MS_1"), TEXT("Stage 1"), TEXT("/Game/UOU/Maps/L_MS_1.L_MS_1")));
-	Stages.Add(MakeStage(TEXT("MS_2"), TEXT("Stage 2"), TEXT("/Game/UOU/Maps/L_MS_2.L_MS_2")));
-	Stages.Add(MakeStage(TEXT("MS_3"), TEXT("Stage 3"), TEXT("/Game/UOU/Maps/L_MS_3.L_MS_3")));
-	Stages.Add(MakeStage(TEXT("MS_4"), TEXT("Stage 4"), TEXT("/Game/UOU/Maps/L_MS_4.L_MS_4")));
-	Stages.Add(MakeStage(TEXT("MS_5"), TEXT("Stage 5"), TEXT("/Game/UOU/Maps/L_MS_5.L_MS_5")));
 }
 
 void AUOUMapSelectPlayerController::BeginPlay()
 {
 	Super::BeginPlay();
-
-	if (StageSelectWidgetClass.IsNull())
-	{
-		StageSelectWidgetClass = TSoftClassPtr<UUserWidget>(FSoftClassPath(DefaultStageSelectWidgetClassPath));
-	}
-
-	if (TSubclassOf<UUserWidget> LoadedWidgetClass = StageSelectWidgetClass.LoadSynchronous())
-	{
-		StageSelectWidget = CreateWidget<UUserWidget>(this, LoadedWidgetClass);
-		if (StageSelectWidget != nullptr)
-		{
-			StageSelectWidget->AddToViewport();
-		}
-	}
-	else
-	{
-		UE_LOG(LogTemp, Warning, TEXT("Map select widget was not found. Create %s or configure StageSelectWidgetClass."), DefaultStageSelectWidgetClassPath);
-	}
 
 	ApplyMapSelectInputMode();
 }
@@ -69,6 +30,14 @@ void AUOUMapSelectPlayerController::SetupInputComponent()
 	if (InputComponent != nullptr)
 	{
 		InputComponent->BindKey(EKeys::Escape, IE_Pressed, this, &AUOUMapSelectPlayerController::ToggleSettingsMenu);
+
+		FInputKeyBinding& ConfirmBinding = InputComponent->BindKey(
+			EKeys::LeftMouseButton,
+			IE_Pressed,
+			this,
+			&AUOUMapSelectPlayerController::HandleStageConfirmInput);
+		// Keep the project's existing umbrella click input available when no stage transition occurs.
+		ConfirmBinding.bConsumeInput = false;
 	}
 }
 
@@ -107,7 +76,60 @@ bool AUOUMapSelectPlayerController::EnterStage(const FUOUStageDefinition& Stage)
 	}
 
 	bIsOpeningStage = TransitionSubsystem->RequestLevelTransition(Stage.Level, FUOULevelTransitionSettings());
+	if (bIsOpeningStage)
+	{
+		if (UUOUPlayerProgressSubsystem* ProgressSubsystem =
+			GameInstance->GetSubsystem<UUOUPlayerProgressSubsystem>())
+		{
+			ProgressSubsystem->BeginStageAttempt(Stage.StageId, Stage.Level, Stage.RewardIds);
+		}
+	}
 	return bIsOpeningStage;
+}
+
+void AUOUMapSelectPlayerController::RegisterStageSelectNode(AUOUStageSelectNodeActor* StageNode)
+{
+	if (!IsValid(StageNode))
+	{
+		return;
+	}
+
+	OverlappingStageNodes.Remove(StageNode);
+	OverlappingStageNodes.Add(StageNode);
+}
+
+void AUOUMapSelectPlayerController::UnregisterStageSelectNode(AUOUStageSelectNodeActor* StageNode)
+{
+	OverlappingStageNodes.Remove(StageNode);
+}
+
+AUOUStageSelectNodeActor* AUOUMapSelectPlayerController::GetFocusedStageSelectNode() const
+{
+	for (int32 Index = OverlappingStageNodes.Num() - 1; Index >= 0; --Index)
+	{
+		if (IsValid(OverlappingStageNodes[Index]))
+		{
+			return OverlappingStageNodes[Index];
+		}
+	}
+
+	return nullptr;
+}
+
+bool AUOUMapSelectPlayerController::ConfirmFocusedStage()
+{
+	if (bIsOpeningStage)
+	{
+		return false;
+	}
+
+	AUOUStageSelectNodeActor* FocusedStageNode = GetFocusedStageSelectNode();
+	return FocusedStageNode != nullptr && FocusedStageNode->ActivateStage();
+}
+
+void AUOUMapSelectPlayerController::HandleStageConfirmInput()
+{
+	ConfirmFocusedStage();
 }
 
 void AUOUMapSelectPlayerController::RestoreInputModeAfterSettingsMenu()
@@ -118,10 +140,6 @@ void AUOUMapSelectPlayerController::RestoreInputModeAfterSettingsMenu()
 void AUOUMapSelectPlayerController::ApplyMapSelectInputMode()
 {
 	FInputModeGameAndUI InputMode;
-	if (StageSelectWidget != nullptr)
-	{
-		InputMode.SetWidgetToFocus(StageSelectWidget->TakeWidget());
-	}
 	InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
 	InputMode.SetHideCursorDuringCapture(false);
 	SetInputMode(InputMode);

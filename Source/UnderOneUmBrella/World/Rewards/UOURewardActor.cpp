@@ -7,7 +7,9 @@
 #include "Components/SplineComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/CollisionProfile.h"
+#include "Engine/GameInstance.h"
 #include "Engine/LocalPlayer.h"
+#include "Game/UOUPlayerProgressSubsystem.h"
 #include "GameFramework/PlayerController.h"
 #include "NiagaraComponent.h"
 #include "Player/UOUCharacter.h"
@@ -313,6 +315,17 @@ void AUOURewardActor::CompleteCollection()
 	bCollectionCompleted = true;
 	AActor* Collector = PendingCollector.Get();
 	PendingCollector = nullptr;
+	if (UWorld* World = GetWorld())
+	{
+		if (UGameInstance* GameInstance = World->GetGameInstance())
+		{
+			if (UUOUPlayerProgressSubsystem* ProgressSubsystem =
+				GameInstance->GetSubsystem<UUOUPlayerProgressSubsystem>())
+			{
+				ProgressSubsystem->RecordRewardCollected(RewardId);
+			}
+		}
+	}
 
 	OnRewardCollected.Broadcast(this, RewardId, Collector);
 }
