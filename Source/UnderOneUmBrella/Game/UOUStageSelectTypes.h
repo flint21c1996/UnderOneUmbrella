@@ -33,3 +33,26 @@ struct FUOUStageDefinition : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stage Select|Progress")
 	bool bInitiallyUnlocked = false;
 };
+
+/** Authoring row stored in the stage-definition DataTable. The DataTable row name is the stage ID. */
+USTRUCT(BlueprintType)
+struct FUOUStageDefinitionRow : public FTableRowBase
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stage Select")
+	FText DisplayName;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stage Select", meta = (MultiLine = true))
+	FText Description;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stage Select")
+	TSoftObjectPtr<UTexture2D> Thumbnail;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stage Select", meta = (AllowedClasses = "/Script/Engine.World"))
+	TSoftObjectPtr<UWorld> Level;
+
+	/** Initial authoring value. A future save/progression system can override it at runtime. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stage Select")
+	bool bUnlocked = true;
+};
