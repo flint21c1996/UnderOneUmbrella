@@ -784,11 +784,11 @@ void UUOULevelTransitionSubsystem::StartPostLoadFadeIn()
 		return;
 	}
 
-	const bool bHasLoadedMapSettings = ActiveSettings.bUseLoadedMapEnterSettings
-		&& ApplyLoadedMapEnterSettings(World, ActiveSettings);
-	if (!bHasLoadedMapSettings)
+	if (ActiveSettings.bUseLoadedMapEnterSettings)
 	{
-		ActiveSettings.FadeInMessageSettings = FUOUTransitionMessageSettings();
+		// 도착 맵에 설정 액터가 없으면 전환 요청에 담긴 Fade In 설정을 fallback으로 유지합니다.
+		// 기존에는 이 경우 메시지 설정을 비워 문구와 이미지가 Fade In 단계에서 사라졌습니다.
+		ApplyLoadedMapEnterSettings(World, ActiveSettings);
 	}
 	ActiveSettings = SanitizeTransitionSettings(ActiveSettings);
 
