@@ -53,6 +53,10 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Player Progress|Stage Attempt")
 	int32 GetPendingRewardCount() const { return PendingRewardIds.Num(); }
 
+	/** 이번 도전의 임시 Reward를 현재 스테이지의 영구 진행도에 합치고 SaveGame에 기록합니다. */
+	UFUNCTION(BlueprintCallable, Category = "Player Progress|Stage Attempt")
+	bool CommitCurrentStage();
+
 	/** 현재 메모리에 로드된 진행도 객체를 설정된 SaveGame 슬롯에 기록합니다. */
 	UFUNCTION(BlueprintCallable, Category = "Player Progress|Save")
 	bool SaveProgress();

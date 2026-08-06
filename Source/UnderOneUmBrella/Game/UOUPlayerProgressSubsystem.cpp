@@ -133,6 +133,70 @@ bool UUOUPlayerProgressSubsystem::RecordRewardCollected(const FName RewardId)
 	return true;
 }
 
+bool UUOUPlayerProgressSubsystem::CommitCurrentStage()
+{
+	if (ActiveStageId.IsNone())
+	{
+		UE_LOG(LogUOUPlayerProgress, Warning, TEXT("Cannot commit progress without an active stage."));
+		return false;
+	}
+
+	if (ProgressSave == nullptr)
+	{
+		ProgressSave = CreateDefaultProgress();
+	}
+
+	if (ProgressSave == nullptr)
+	{
+		return false;
+	}
+
+	const bool bHadExistingProgress = ProgressSave->StageProgress.Contains(ActiveStageId);
+	FUOUStageProgressRecord PreviousProgress;
+	if (bHadExistingProgress)
+	{
+		PreviousProgress = ProgressSave->StageProgress.FindChecked(ActiveStageId);
+	}
+
+	FUOUStageProgressRecord& StageProgress = ProgressSave->StageProgress.FindOrAdd(ActiveStageId);
+	TArray<FName> MergedRewardIds;
+	MergedRewardIds.Reserve(StageProgress.CollectedRewardIds.Num() + PendingRewardIds.Num());
+	for (const FName CollectedRewardId : StageProgress.CollectedRewardIds)
+	{
+		if (!CollectedRewardId.IsNone())
+		{
+			MergedRewardIds.AddUnique(CollectedRewardId);
+		}
+	}
+
+	for (const FName PendingRewardId : PendingRewardIds)
+	{
+		if (!PendingRewardId.IsNone() && ExpectedRewardIds.Contains(PendingRewardId))
+		{
+			MergedRewardIds.AddUnique(PendingRewardId);
+		}
+	}
+
+	StageProgress.CollectedRewardIds = MoveTemp(MergedRewardIds);
+	StageProgress.bCompleted = true;
+
+	if (!SaveProgress())
+	{
+		if (bHadExistingProgress)
+		{
+			ProgressSave->StageProgress.FindOrAdd(ActiveStageId) = MoveTemp(PreviousProgress);
+		}
+		else
+		{
+			ProgressSave->StageProgress.Remove(ActiveStageId);
+		}
+		return false;
+	}
+
+	PendingRewardIds.Reset();
+	return true;
+}
+
 bool UUOUPlayerProgressSubsystem::SaveProgress()
 {
 	if (ProgressSave == nullptr)
