@@ -7,7 +7,7 @@
 #include "Game/UOUStageSelectTypes.h"
 #include "UOUMapSelectPlayerController.generated.h"
 
-class UUserWidget;
+class AUOUStageSelectNodeActor;
 
 UCLASS(Config=Game)
 class UNDERONEUMBRELLA_API AUOUMapSelectPlayerController : public AUOUMenuPlayerController
@@ -17,14 +17,27 @@ class UNDERONEUMBRELLA_API AUOUMapSelectPlayerController : public AUOUMenuPlayer
 public:
 	AUOUMapSelectPlayerController();
 
-	UFUNCTION(BlueprintPure, Category = "Stage Select")
+	/** Deprecated migration path. Stage definitions now belong to a DataTable referenced by each node. */
+	UFUNCTION(BlueprintPure, Category = "Stage Select", meta = (DeprecatedFunction, DeprecationMessage = "Use the StageRow on UOUStageSelectNodeActor."))
 	TArray<FUOUStageDefinition> GetStages() const { return Stages; }
 
-	UFUNCTION(BlueprintCallable, Category = "Stage Select")
+	UFUNCTION(BlueprintCallable, Category = "Stage Select", meta = (DeprecatedFunction, DeprecationMessage = "Call ActivateStage on UOUStageSelectNodeActor."))
 	bool EnterStageByIndex(int32 StageIndex);
 
 	UFUNCTION(BlueprintCallable, Category = "Stage Select")
 	bool EnterStage(const FUOUStageDefinition& Stage);
+
+	/** Adds an overlapped node as an entry candidate. The most recently entered node has focus. */
+	void RegisterStageSelectNode(AUOUStageSelectNodeActor* StageNode);
+
+	/** Removes a node when the local player leaves its selection area. */
+	void UnregisterStageSelectNode(AUOUStageSelectNodeActor* StageNode);
+
+	UFUNCTION(BlueprintPure, Category = "Stage Select")
+	AUOUStageSelectNodeActor* GetFocusedStageSelectNode() const;
+
+	UFUNCTION(BlueprintCallable, Category = "Stage Select")
+	bool ConfirmFocusedStage();
 
 	UFUNCTION(BlueprintPure, Category = "Stage Select")
 	bool IsOpeningStage() const { return bIsOpeningStage; }
@@ -34,17 +47,16 @@ protected:
 	virtual void SetupInputComponent() override;
 	virtual void RestoreInputModeAfterSettingsMenu() override;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Stage Select")
+	/** Deprecated migration data. New stage definitions are authored in a DataTable. */
+	UPROPERTY(meta = (DeprecatedProperty, DeprecationMessage = "Use the StageRow on UOUStageSelectNodeActor."))
 	TArray<FUOUStageDefinition> Stages;
 
 private:
 	void ApplyMapSelectInputMode();
-
-	UPROPERTY(EditDefaultsOnly, Config, Category = "Stage Select")
-	TSoftClassPtr<UUserWidget> StageSelectWidgetClass;
+	void HandleStageConfirmInput();
 
 	UPROPERTY(Transient)
-	TObjectPtr<UUserWidget> StageSelectWidget = nullptr;
+	TArray<TObjectPtr<AUOUStageSelectNodeActor>> OverlappingStageNodes;
 
 	bool bIsOpeningStage = false;
 };

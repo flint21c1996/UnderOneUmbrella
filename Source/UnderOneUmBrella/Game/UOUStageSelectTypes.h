@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Engine/DataTable.h"
 #include "Engine/Texture2D.h"
 #include "Engine/World.h"
 #include "UOUStageSelectTypes.generated.h"
@@ -27,6 +28,29 @@ struct FUOUStageDefinition
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stage Select", meta = (AllowedClasses = "/Script/Engine.World"))
 	TSoftObjectPtr<UWorld> Level;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stage Select")
+	bool bUnlocked = true;
+};
+
+/** Authoring row stored in the stage-definition DataTable. The DataTable row name is the stage ID. */
+USTRUCT(BlueprintType)
+struct FUOUStageDefinitionRow : public FTableRowBase
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stage Select")
+	FText DisplayName;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stage Select", meta = (MultiLine = true))
+	FText Description;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stage Select")
+	TSoftObjectPtr<UTexture2D> Thumbnail;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stage Select", meta = (AllowedClasses = "/Script/Engine.World"))
+	TSoftObjectPtr<UWorld> Level;
+
+	/** Initial authoring value. A future save/progression system can override it at runtime. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stage Select")
 	bool bUnlocked = true;
 };
