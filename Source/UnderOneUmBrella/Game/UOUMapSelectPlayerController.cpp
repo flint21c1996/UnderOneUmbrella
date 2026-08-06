@@ -4,6 +4,7 @@
 
 #include "Engine/GameInstance.h"
 #include "Game/UOULevelTransitionSubsystem.h"
+#include "Game/UOUPlayerProgressSubsystem.h"
 #include "InputCoreTypes.h"
 #include "Misc/PackageName.h"
 #include "UObject/SoftObjectPath.h"
@@ -75,6 +76,14 @@ bool AUOUMapSelectPlayerController::EnterStage(const FUOUStageDefinition& Stage)
 	}
 
 	bIsOpeningStage = TransitionSubsystem->RequestLevelTransition(Stage.Level, FUOULevelTransitionSettings());
+	if (bIsOpeningStage)
+	{
+		if (UUOUPlayerProgressSubsystem* ProgressSubsystem =
+			GameInstance->GetSubsystem<UUOUPlayerProgressSubsystem>())
+		{
+			ProgressSubsystem->BeginStageAttempt(Stage.StageId, Stage.Level, Stage.RewardIds);
+		}
+	}
 	return bIsOpeningStage;
 }
 

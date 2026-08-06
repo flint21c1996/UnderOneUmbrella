@@ -3,8 +3,10 @@
 #include "World/Stage/UOUStageSelectNodeActor.h"
 
 #include "Components/SceneComponent.h"
+#include "Engine/GameInstance.h"
 #include "Engine/World.h"
 #include "Game/UOUMapSelectPlayerController.h"
+#include "Game/UOUPlayerProgressSubsystem.h"
 #include "Game/UOUStageSelectTypes.h"
 #include "GameFramework/Pawn.h"
 #include "World/Stage/UOUStageSelectAreaComponent.h"
@@ -61,6 +63,26 @@ bool AUOUStageSelectNodeActor::GetStageDefinition(FUOUStageDefinition& OutStageD
 	OutStageDefinition.Description = Row->Description;
 	OutStageDefinition.Thumbnail = Row->Thumbnail;
 	OutStageDefinition.Level = Row->Level;
+	OutStageDefinition.RewardIds = Row->RewardIds;
+	OutStageDefinition.TotalRewardCount = Row->RewardIds.Num();
+	OutStageDefinition.CollectedRewardCount = 0;
+	OutStageDefinition.MissingRewardCount = OutStageDefinition.TotalRewardCount;
+	if (const UWorld* World = GetWorld())
+	{
+		if (UGameInstance* GameInstance = World->GetGameInstance())
+		{
+			if (const UUOUPlayerProgressSubsystem* ProgressSubsystem =
+				GameInstance->GetSubsystem<UUOUPlayerProgressSubsystem>())
+			{
+				ProgressSubsystem->GetStageRewardCounts(
+					OutStageDefinition.StageId,
+					OutStageDefinition.RewardIds,
+					OutStageDefinition.CollectedRewardCount,
+					OutStageDefinition.TotalRewardCount,
+					OutStageDefinition.MissingRewardCount);
+			}
+		}
+	}
 	OutStageDefinition.bUnlocked = Row->bUnlocked;
 	return true;
 }
