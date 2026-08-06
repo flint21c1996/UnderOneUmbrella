@@ -61,6 +61,10 @@ bool AUOUStageSelectNodeActor::GetStageDefinition(FUOUStageDefinition& OutStageD
 	OutStageDefinition.Description = Row->Description;
 	OutStageDefinition.Thumbnail = Row->Thumbnail;
 	OutStageDefinition.Level = Row->Level;
+	OutStageDefinition.RewardIds = Row->RewardIds;
+	OutStageDefinition.TotalRewardCount = Row->RewardIds.Num();
+	OutStageDefinition.CollectedRewardCount = 0;
+	OutStageDefinition.MissingRewardCount = OutStageDefinition.TotalRewardCount;
 	OutStageDefinition.bUnlocked = Row->bUnlocked;
 	return true;
 }
