@@ -4,6 +4,8 @@
 
 #include "Game/UOUPlayerProgressSaveGame.h"
 #include "Kismet/GameplayStatics.h"
+#include "Misc/PackageName.h"
+#include "UObject/UObjectGlobals.h"
 
 DEFINE_LOG_CATEGORY(LogUOUPlayerProgress);
 
@@ -17,10 +19,15 @@ void UUOUPlayerProgressSubsystem::Initialize(FSubsystemCollectionBase& Collectio
 	Super::Initialize(Collection);
 
 	LoadProgress();
+	FCoreUObjectDelegates::PostLoadMapWithWorld.AddUObject(
+		this,
+		&UUOUPlayerProgressSubsystem::HandlePostLoadMapWithWorld);
 }
 
 void UUOUPlayerProgressSubsystem::Deinitialize()
 {
+	FCoreUObjectDelegates::PostLoadMapWithWorld.RemoveAll(this);
+	ClearStageAttempt();
 	ProgressSave = nullptr;
 
 	Super::Deinitialize();
@@ -60,6 +67,70 @@ bool UUOUPlayerProgressSubsystem::IsStageCompleted(const FName StageId) const
 {
 	const FUOUStageProgressRecord* StageProgress = FindStageProgress(StageId);
 	return StageProgress != nullptr && StageProgress->bCompleted;
+}
+
+bool UUOUPlayerProgressSubsystem::BeginStageAttempt(
+	const FName StageId,
+	const TSoftObjectPtr<UWorld> StageLevel,
+	const TArray<FName>& ValidRewardIds)
+{
+	if (StageId.IsNone() || StageLevel.IsNull())
+	{
+		UE_LOG(
+			LogUOUPlayerProgress,
+			Warning,
+			TEXT("Cannot begin a stage attempt without a valid StageId and level."));
+		return false;
+	}
+
+	const FString StagePackageName = StageLevel.ToSoftObjectPath().GetLongPackageName();
+	const FName StageLevelName(*FPackageName::GetShortName(StagePackageName));
+	if (StageLevelName.IsNone())
+	{
+		return false;
+	}
+
+	TSet<FName> ValidRewardIdSet;
+	for (const FName RewardId : ValidRewardIds)
+	{
+		if (!RewardId.IsNone())
+		{
+			ValidRewardIdSet.Add(RewardId);
+		}
+	}
+
+	ActiveStageId = StageId;
+	ActiveStageLevelName = StageLevelName;
+	ExpectedRewardIds = MoveTemp(ValidRewardIdSet);
+	PendingRewardIds.Reset();
+	return true;
+}
+
+bool UUOUPlayerProgressSubsystem::RecordRewardCollected(const FName RewardId)
+{
+	if (ActiveStageId.IsNone() || RewardId.IsNone())
+	{
+		return false;
+	}
+
+	if (!ExpectedRewardIds.Contains(RewardId))
+	{
+		UE_LOG(
+			LogUOUPlayerProgress,
+			Warning,
+			TEXT("RewardId '%s' is not registered for active stage '%s'."),
+			*RewardId.ToString(),
+			*ActiveStageId.ToString());
+		return false;
+	}
+
+	if (PendingRewardIds.Contains(RewardId))
+	{
+		return false;
+	}
+
+	PendingRewardIds.Add(RewardId);
+	return true;
 }
 
 bool UUOUPlayerProgressSubsystem::SaveProgress()
@@ -140,4 +211,33 @@ const FUOUStageProgressRecord* UUOUPlayerProgressSubsystem::FindStageProgress(co
 	}
 
 	return ProgressSave->StageProgress.Find(StageId);
+}
+
+void UUOUPlayerProgressSubsystem::HandlePostLoadMapWithWorld(UWorld* LoadedWorld)
+{
+	if (LoadedWorld == nullptr || !LoadedWorld->IsGameWorld())
+	{
+		return;
+	}
+
+	PendingRewardIds.Reset();
+	if (ActiveStageId.IsNone())
+	{
+		return;
+	}
+
+	const FString LoadedMapName = UWorld::RemovePIEPrefix(LoadedWorld->GetMapName());
+	const FName LoadedLevelName(*FPackageName::GetShortName(LoadedMapName));
+	if (LoadedLevelName != ActiveStageLevelName)
+	{
+		ClearStageAttempt();
+	}
+}
+
+void UUOUPlayerProgressSubsystem::ClearStageAttempt()
+{
+	ActiveStageId = NAME_None;
+	ActiveStageLevelName = NAME_None;
+	ExpectedRewardIds.Reset();
+	PendingRewardIds.Reset();
 }
