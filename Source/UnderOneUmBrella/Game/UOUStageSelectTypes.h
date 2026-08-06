@@ -9,9 +9,12 @@
 #include "UOUStageSelectTypes.generated.h"
 
 USTRUCT(BlueprintType)
-struct FUOUStageDefinition : public FTableRowBase
+struct FUOUStageDefinition
 {
 	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stage Select")
+	FName StageId = NAME_None;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stage Select")
 	FText DisplayName;
@@ -25,13 +28,8 @@ struct FUOUStageDefinition : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stage Select", meta = (AllowedClasses = "/Script/Engine.World"))
 	TSoftObjectPtr<UWorld> Level;
 
-	// Each entry identifies one Reward Actor in the stage. The array length is the maximum star count.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stage Select|Rewards")
-	TArray<FName> RewardIds;
-
-	// Initial catalog state only. The player's actual unlock state belongs in progress save data.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stage Select|Progress")
-	bool bInitiallyUnlocked = false;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stage Select")
+	bool bUnlocked = true;
 };
 
 /** Authoring row stored in the stage-definition DataTable. The DataTable row name is the stage ID. */
