@@ -45,7 +45,7 @@ public:
 	bool bEnabled = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light|Reflection Visual", meta = (ClampMin = "0", ClampMax = "32", ToolTip = "동시에 사용할 수 있는 보조 SpotLight의 최대 개수입니다."))
-	int32 MaxSpotLightCount = 8;
+	int32 MaxSpotLightCount = 16;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light|Reflection Visual", meta = (ClampMin = "0.0", ToolTip = "게임플레이 반사 광량을 Unreal SpotLight Intensity로 변환하는 배율입니다."))
 	float IntensityScale = 5000.0f;
@@ -78,14 +78,16 @@ protected:
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<USpotLightComponent>> SpotLightPool;
 
+	bool bHasWarnedSpotLightLimit = false;
+
 	UFUNCTION()
-	void HandleReflectionPathsUpdated(const TArray<FUOULightReflectionPathData>& ReflectionPaths);
+	void HandleLightPathsUpdated(const TArray<FUOULightPathData>& LightPaths);
 
 	UUOULightExposureSourceComponent* ResolveSourceComponent() const;
 	USpotLightComponent* AcquireSpotLight(int32 PoolIndex);
 	void UpdateSpotLight(
 		USpotLightComponent* SpotLight,
-		const FUOULightReflectionSegmentData& SegmentData,
+		const FUOULightPathSegmentData& SegmentData,
 		const FLinearColor& LightColor) const;
 	void HideUnusedSpotLights(int32 FirstUnusedIndex);
 	FLinearColor ResolveLightColor() const;

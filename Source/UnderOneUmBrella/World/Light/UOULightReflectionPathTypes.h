@@ -9,6 +9,15 @@ class UPrimitiveComponent;
 class UUOULightInteractionSurfaceComponent;
 
 UENUM(BlueprintType)
+enum class EUOULightPathHitType : uint8
+{
+	None UMETA(DisplayName = "없음"),
+	Receiver UMETA(DisplayName = "빛 수신 대상"),
+	BlockingSurface UMETA(DisplayName = "차단 표면"),
+	ReflectingSurface UMETA(DisplayName = "반사 표면")
+};
+
+UENUM(BlueprintType)
 enum class EUOULightReflectionPathEndReason : uint8
 {
 	None UMETA(DisplayName = "진행 중"),
@@ -96,5 +105,79 @@ struct FUOULightReflectionPathData
 	EUOULightReflectionPathEndReason EndReason = EUOULightReflectionPathEndReason::None;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Reflection Path")
+	float FinalIntensity = 0.0f;
+};
+
+// 직접광과 반사광을 동일한 소비자가 사용할 수 있도록 정규화한 빛 구간 데이터입니다.
+USTRUCT(BlueprintType)
+struct FUOULightPathSegmentData
+{
+	GENERATED_BODY()
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Path")
+	int32 SegmentIndex = 0;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Path")
+	bool bReflected = false;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Path")
+	FVector Start = FVector::ZeroVector;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Path")
+	FVector End = FVector::ZeroVector;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Path")
+	FVector Direction = FVector::ForwardVector;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Path", meta = (ToolTip = "반사 구간에 들어온 입사광 방향입니다. 직접광 구간에서는 0 벡터입니다."))
+	FVector IncomingDirection = FVector::ZeroVector;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Path")
+	float Length = 0.0f;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Path")
+	float StartRadius = 0.0f;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Path")
+	float EndRadius = 0.0f;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Path", meta = (Units = "deg"))
+	float ConeAngle = 0.0f;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Path")
+	float Intensity = 0.0f;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Path")
+	EUOULightPathHitType HitType = EUOULightPathHitType::None;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Path")
+	TObjectPtr<UPrimitiveComponent> HitComponent = nullptr;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Path")
+	TObjectPtr<UUOULightInteractionSurfaceComponent> InteractionSurface = nullptr;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Path")
+	TArray<TObjectPtr<UObject>> ReachedReceivers;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Path")
+	EUOULightReflectionPathEndReason EndReason = EUOULightReflectionPathEndReason::None;
+};
+
+// 광원에서 시작해 차단되거나 범위가 끝날 때까지 이어지는 하나의 빛 경로입니다.
+USTRUCT(BlueprintType)
+struct FUOULightPathData
+{
+	GENERATED_BODY()
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Path")
+	int32 PathIndex = 0;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Path")
+	TArray<FUOULightPathSegmentData> Segments;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Path")
+	EUOULightReflectionPathEndReason EndReason = EUOULightReflectionPathEndReason::None;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Path")
 	float FinalIntensity = 0.0f;
 };

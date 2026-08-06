@@ -6,6 +6,8 @@
 #include "GameFramework/Actor.h"
 #include "World/Light/UOULightExposureSourceComponent.h"
 
+DEFINE_LOG_CATEGORY_STATIC(LogUOULightReflectionSpotLight, Log, All);
+
 UUOULightReflectionSpotLightComponent::UUOULightReflectionSpotLightComponent()
 {
 	PrimaryComponentTick.bCanEverTick = false;
@@ -22,9 +24,9 @@ void UUOULightReflectionSpotLightComponent::BeginPlay()
 		return;
 	}
 
-	BoundSourceComponent->OnReflectionPathsUpdated.AddDynamic(
+	BoundSourceComponent->OnLightPathsUpdated.AddDynamic(
 		this,
-		&UUOULightReflectionSpotLightComponent::HandleReflectionPathsUpdated);
+		&UUOULightReflectionSpotLightComponent::HandleLightPathsUpdated);
 	RefreshSpotLights();
 }
 
@@ -32,9 +34,9 @@ void UUOULightReflectionSpotLightComponent::EndPlay(const EEndPlayReason::Type E
 {
 	if (BoundSourceComponent != nullptr)
 	{
-		BoundSourceComponent->OnReflectionPathsUpdated.RemoveDynamic(
+		BoundSourceComponent->OnLightPathsUpdated.RemoveDynamic(
 			this,
-			&UUOULightReflectionSpotLightComponent::HandleReflectionPathsUpdated);
+			&UUOULightReflectionSpotLightComponent::HandleLightPathsUpdated);
 	}
 
 	for (USpotLightComponent* SpotLight : SpotLightPool)
@@ -46,6 +48,7 @@ void UUOULightReflectionSpotLightComponent::EndPlay(const EEndPlayReason::Type E
 	}
 	SpotLightPool.Reset();
 	ActiveSpotLightCount = 0;
+	bHasWarnedSpotLightLimit = false;
 	BoundSourceComponent = nullptr;
 
 	Super::EndPlay(EndPlayReason);
@@ -64,11 +67,11 @@ void UUOULightReflectionSpotLightComponent::RefreshSpotLights()
 		return;
 	}
 
-	HandleReflectionPathsUpdated(BoundSourceComponent->GetReflectionPaths());
+	HandleLightPathsUpdated(BoundSourceComponent->GetLightPaths());
 }
 
-void UUOULightReflectionSpotLightComponent::HandleReflectionPathsUpdated(
-	const TArray<FUOULightReflectionPathData>& ReflectionPaths)
+void UUOULightReflectionSpotLightComponent::HandleLightPathsUpdated(
+	const TArray<FUOULightPathData>& LightPaths)
 {
 	if (!bEnabled)
 	{
@@ -76,19 +79,54 @@ void UUOULightReflectionSpotLightComponent::HandleReflectionPathsUpdated(
 		return;
 	}
 
+	int32 EligibleSegmentCount = 0;
+	for (const FUOULightPathData& PathData : LightPaths)
+	{
+		for (const FUOULightPathSegmentData& SegmentData : PathData.Segments)
+		{
+			if (SegmentData.bReflected &&
+				SegmentData.Length >= MinimumSegmentLength &&
+				SegmentData.Intensity > 0.0f &&
+				!SegmentData.Direction.IsNearlyZero())
+			{
+				++EligibleSegmentCount;
+			}
+		}
+	}
+
+	if (EligibleSegmentCount > MaxSpotLightCount)
+	{
+		if (!bHasWarnedSpotLightLimit)
+		{
+			UE_LOG(
+				LogUOULightReflectionSpotLight,
+				Warning,
+				TEXT("%s: 반사 보조 SpotLight 구간 %d개 중 최대 %d개만 표시합니다."),
+				*GetNameSafe(GetOwner()),
+				EligibleSegmentCount,
+				MaxSpotLightCount);
+			bHasWarnedSpotLightLimit = true;
+		}
+	}
+	else
+	{
+		bHasWarnedSpotLightLimit = false;
+	}
+
 	const FLinearColor LightColor = ResolveLightColor();
 	int32 SpotLightIndex = 0;
-	for (const FUOULightReflectionPathData& PathData : ReflectionPaths)
+	for (const FUOULightPathData& PathData : LightPaths)
 	{
-		for (const FUOULightReflectionSegmentData& SegmentData : PathData.Segments)
+		for (const FUOULightPathSegmentData& SegmentData : PathData.Segments)
 		{
 			if (SpotLightIndex >= MaxSpotLightCount)
 			{
 				break;
 			}
-			if (SegmentData.SegmentLength < MinimumSegmentLength ||
-				SegmentData.ReflectedIntensity <= 0.0f ||
-				SegmentData.ReflectedDirection.IsNearlyZero())
+			if (!SegmentData.bReflected ||
+				SegmentData.Length < MinimumSegmentLength ||
+				SegmentData.Intensity <= 0.0f ||
+				SegmentData.Direction.IsNearlyZero())
 			{
 				continue;
 			}
@@ -168,7 +206,7 @@ USpotLightComponent* UUOULightReflectionSpotLightComponent::AcquireSpotLight(int
 
 void UUOULightReflectionSpotLightComponent::UpdateSpotLight(
 	USpotLightComponent* SpotLight,
-	const FUOULightReflectionSegmentData& SegmentData,
+	const FUOULightPathSegmentData& SegmentData,
 	const FLinearColor& LightColor) const
 {
 	if (SpotLight == nullptr)
@@ -176,17 +214,17 @@ void UUOULightReflectionSpotLightComponent::UpdateSpotLight(
 		return;
 	}
 
-	const FVector Direction = SegmentData.ReflectedDirection.GetSafeNormal();
-	const float SegmentLength = FMath::Max(MinimumSegmentLength, SegmentData.SegmentLength);
-	const float OuterConeAngle = FMath::Clamp(SegmentData.BeamConeAngle, 1.0f, 89.0f);
+	const FVector Direction = SegmentData.Direction.GetSafeNormal();
+	const float SegmentLength = FMath::Max(MinimumSegmentLength, SegmentData.Length);
+	const float OuterConeAngle = FMath::Clamp(SegmentData.ConeAngle, 1.0f, 89.0f);
 
 	SpotLight->SetWorldLocationAndRotation(
-		SegmentData.ReflectionStart,
+		SegmentData.Start,
 		Direction.Rotation());
 	SpotLight->SetAttenuationRadius(SegmentLength);
 	SpotLight->SetOuterConeAngle(OuterConeAngle);
 	SpotLight->SetInnerConeAngle(OuterConeAngle * FMath::Clamp(InnerConeRatio, 0.0f, 1.0f));
-	SpotLight->SetIntensity(FMath::Max(0.0f, SegmentData.ReflectedIntensity * IntensityScale));
+	SpotLight->SetIntensity(FMath::Max(0.0f, SegmentData.Intensity * IntensityScale));
 	SpotLight->SetLightColor(LightColor);
 	SpotLight->SetCastShadows(bCastShadows);
 	SpotLight->SetVisibility(true);

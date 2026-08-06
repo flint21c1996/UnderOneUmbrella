@@ -22,6 +22,11 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
 	const TArray<FUOULightReflectionPathData>&,
 	ReflectionPaths);
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
+	FUOULightPathsUpdatedSignature,
+	const TArray<FUOULightPathData>&,
+	LightPaths);
+
 UENUM(BlueprintType)
 enum class EUOULightBeamShape : uint8
 {
@@ -59,6 +64,9 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Shape|Cone", meta = (ClampMin = "0.0", ClampMax = "1.0", EditCondition = "BeamShape == EUOULightBeamShape::Cone", EditConditionHides, ToolTip = "SpotLight 컴포넌트를 찾지 못했을 때 사용할 내부 원뿔 비율입니다."))
 	float FallbackInnerConeRatio = 0.55f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Shape|Cone", meta = (ClampMin = "0.0", Units = "cm", EditCondition = "BeamShape == EUOULightBeamShape::Cone", EditConditionHides, DisplayName = "Fallback Range", ToolTip = "LocalLight 컴포넌트를 찾지 못했을 때 원뿔형 게임플레이 빛에 사용할 사거리입니다."))
+	float FallbackRange = 1000.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Shape|Cylinder", meta = (ClampMin = "0.0", Units = "cm", EditCondition = "BeamShape == EUOULightBeamShape::Cylinder", EditConditionHides, ToolTip = "원기둥형 빛의 반지름입니다."))
 	float CylinderRadius = 100.0f;
@@ -162,6 +170,12 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Light|Reflection", meta = (ToolTip = "계산된 반사 경로가 이전 결과와 달라졌을 때 호출됩니다."))
 	FUOULightReflectionPathsUpdatedSignature OnReflectionPathsUpdated;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Runtime", meta = (DisplayName = "Light Paths", ToolTip = "직접광과 반사광을 모두 포함한 최종 빛 경로 데이터입니다."))
+	TArray<FUOULightPathData> LightPaths;
+
+	UPROPERTY(BlueprintAssignable, Category = "Light|Path", meta = (ToolTip = "최종 빛 경로가 변경됐을 때 호출됩니다. VFX와 보조 조명은 이 이벤트를 사용합니다."))
+	FUOULightPathsUpdatedSignature OnLightPathsUpdated;
+
 	UFUNCTION(BlueprintCallable, Category = "Light", meta = (ToolTip = "입력된 DeltaTime으로 게임플레이 빛 샘플링을 한 번 실행합니다."))
 	void EmitLight(float DeltaTime);
 
@@ -171,20 +185,51 @@ public:
 		return ReflectionPaths;
 	}
 
+	UFUNCTION(BlueprintPure, Category = "Light|Path", meta = (ToolTip = "직접광과 반사광을 포함한 최종 빛 경로를 반환합니다."))
+	TArray<FUOULightPathData> GetLightPaths() const
+	{
+		return LightPaths;
+	}
+
 	UFUNCTION(BlueprintCallable, Category = "Light", meta = (ToolTip = "Fallback 원뿔 각도와 게임플레이 빛 세기를 한 번에 설정합니다."))
 	void Configure(float NewConeAngle, float NewIntensity);
 
 protected:
+	struct FPendingExposureCandidate
+	{
+		FUOULightExposureData ExposureData;
+		FString StablePathKey;
+		bool bReflected = false;
+	};
+
+	using FPendingExposureMap = TMap<UObject*, FPendingExposureCandidate>;
+
 	float PendingDeltaTime = 0.0f;
 
 	UPROPERTY(Transient)
 	TArray<FUOULightReflectionPathData> LastPublishedReflectionPaths;
 
+	UPROPERTY(Transient)
+	TArray<FUOULightPathData> LastPublishedLightPaths;
+
 	bool bHasPublishedReflectionPaths = false;
+	bool bHasPublishedLightPaths = false;
 	float ReflectionPathLossStartWorldTime = -1.0f;
 
 	void ValidateSettings();
+	void PublishComputedPaths(bool bAllowLossGrace = true);
 	void NotifyReflectionPathsUpdatedIfChanged(bool bAllowLossGrace = true);
+	void RebuildLightPaths();
+	void NotifyLightPathsUpdatedIfChanged();
+	FUOULightPathSegmentData BuildDirectLightPathSegment(
+		const FUOULightReflectionSegmentData* FirstReflectionSegment) const;
+	EUOULightPathHitType ClassifyLightPathHit(
+		const FHitResult& Hit,
+		UUOULightInteractionSurfaceComponent*& OutInteractionSurface,
+		TArray<TObjectPtr<UObject>>& OutReachedReceivers) const;
+	bool AreLightPathsEquivalent(
+		const TArray<FUOULightPathData>& A,
+		const TArray<FUOULightPathData>& B) const;
 	void NormalizeReflectionPathOrder();
 	bool AreReflectionPathsEquivalent(
 		const TArray<FUOULightReflectionPathData>& A,
@@ -231,12 +276,30 @@ protected:
 		const AActor* IgnoredActor,
 		const UPrimitiveComponent* IgnoredComponent) const;
 	bool IsWorldPositionInsideUmbrellaLightShade(const FVector& WorldPosition) const;
+	bool TraceLightPathSingle(
+		FHitResult& OutHit,
+		const FVector& TraceStart,
+		const FVector& TraceEnd,
+		const FCollisionQueryParams& QueryParams,
+		const AActor* IgnoredShadeOwner = nullptr) const;
+	bool FindNearestUmbrellaLightShadeHit(
+		const FVector& TraceStart,
+		const FVector& TraceEnd,
+		FHitResult& OutHit,
+		const AActor* IgnoredShadeOwner = nullptr) const;
 	bool TryBuildLightInteractionSurfaceHit(UUOULightInteractionSurfaceComponent* SurfaceComponent, FHitResult& OutSurfaceHit) const;
+	void RecordExposureCandidate(
+		UObject* ReceiverObject,
+		const FUOULightExposureData& ExposureData,
+		bool bReflected,
+		const FString& StablePathKey,
+		FPendingExposureMap& PendingExposures) const;
+	void DeliverPendingExposures(const FPendingExposureMap& PendingExposures);
 	void EmitReflectedLightFromSurface(
 		UUOULightInteractionSurfaceComponent* SurfaceComponent,
 		const FHitResult& SurfaceHit,
 		float DeltaTime,
-		TSet<UObject*>& LitReceivers);
+		FPendingExposureMap& PendingExposures);
 	void EmitReflectedLightToReceivers(
 		UUOULightInteractionSurfaceComponent* SurfaceComponent,
 		const FVector& ReflectionOrigin,
@@ -245,7 +308,8 @@ protected:
 		float BeamConeAngle,
 		float SurfaceIntensity,
 		float DeltaTime,
-		TSet<UObject*>& LitReceivers,
+		const FString& StablePathKey,
+		FPendingExposureMap& PendingExposures,
 		TArray<TObjectPtr<UObject>>& OutReachedReceivers);
 	bool TryFindNextReflectionSurface(
 		const UUOULightInteractionSurfaceComponent* CurrentSurface,

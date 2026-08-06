@@ -15,6 +15,7 @@
 #include "World/Light/UOULightExposureReceiverComponent.h"
 #include "World/Light/UOULightInteractionSurfaceComponent.h"
 #include "Player/UOUUmbrellaLightShadeVolumeComponent.h"
+#include "UObject/UObjectIterator.h"
 #include "World/Light/UOULightReceivableInterface.h"
 
 namespace
@@ -68,6 +69,28 @@ namespace
 
 		return true;
 	}
+
+	bool IsBlockedByActiveUmbrellaShade(
+		const FHitResult& Hit,
+		const AActor* CandidateOwner)
+	{
+		if (!Hit.bBlockingHit || Hit.GetActor() == CandidateOwner)
+		{
+			return false;
+		}
+
+		if (const UUOUUmbrellaLightShadeVolumeComponent* HitShade =
+			Cast<UUOUUmbrellaLightShadeVolumeComponent>(Hit.GetComponent()))
+		{
+			return HitShade->CanShadeLight();
+		}
+
+		const AActor* HitActor = Hit.GetActor();
+		const UUOUUmbrellaLightShadeVolumeComponent* ActorShade = HitActor != nullptr
+			? HitActor->FindComponentByClass<UUOUUmbrellaLightShadeVolumeComponent>()
+			: nullptr;
+		return ActorShade != nullptr && ActorShade->CanShadeLight();
+	}
 }
 
 UUOULightExposureSourceComponent::UUOULightExposureSourceComponent()
@@ -95,10 +118,11 @@ void UUOULightExposureSourceComponent::TickComponent(
 	if (!bEmitLight)
 	{
 		PendingDeltaTime = 0.0f;
-		if (!ReflectionPaths.IsEmpty() || !LastPublishedReflectionPaths.IsEmpty())
+		if (!ReflectionPaths.IsEmpty() || !LastPublishedReflectionPaths.IsEmpty() ||
+			!LightPaths.IsEmpty() || !LastPublishedLightPaths.IsEmpty())
 		{
 			ReflectionPaths.Reset();
-			NotifyReflectionPathsUpdatedIfChanged(false);
+			PublishComputedPaths(false);
 		}
 		return;
 	}
@@ -157,7 +181,7 @@ void UUOULightExposureSourceComponent::EmitLight(float DeltaTime)
 	const float ReceiverSearchRadius = GetReceiverSearchRadius();
 	if (World == nullptr || DeltaTime <= 0.0f || ExposureRange <= 0.0f || Intensity <= 0.0f)
 	{
-		NotifyReflectionPathsUpdatedIfChanged();
+		PublishComputedPaths();
 		return;
 	}
 
@@ -180,12 +204,12 @@ void UUOULightExposureSourceComponent::EmitLight(float DeltaTime)
 
 	if (!bHasOverlaps)
 	{
-		NotifyReflectionPathsUpdatedIfChanged();
+		PublishComputedPaths();
 		return;
 	}
 
 	TSet<UObject*> ProcessedReceivers;
-	TSet<UObject*> LitReceivers;
+	FPendingExposureMap PendingExposures;
 	for (const FOverlapResult& OverlapResult : OverlapResults)
 	{
 		AActor* OverlapActor = OverlapResult.GetActor();
@@ -211,11 +235,12 @@ void UUOULightExposureSourceComponent::EmitLight(float DeltaTime)
 			FHitResult BlockingHit;
 			if (TryBuildExposureData(ReceiverObject, DeltaTime, ExposureData, BlockingHit))
 			{
-				IUOULightReceivableInterface::Execute_ReceiveLightExposure(ReceiverObject, ExposureData);
-				LitReceivers.Add(ReceiverObject);
-				++LastLitCount;
-				LastLitTargetName = GetReceivableDebugName(ReceiverObject);
-				DrawDebugResult(ExposureData, true);
+				RecordExposureCandidate(
+					ReceiverObject,
+					ExposureData,
+					false,
+					TEXT("Direct"),
+					PendingExposures);
 				continue;
 			}
 
@@ -230,45 +255,71 @@ void UUOULightExposureSourceComponent::EmitLight(float DeltaTime)
 
 	if (!bEnableReflectedLight || MaxReflectionSurfacesPerTick <= 0)
 	{
-		NotifyReflectionPathsUpdatedIfChanged();
+		DeliverPendingExposures(PendingExposures);
+		PublishComputedPaths();
 		return;
 	}
 
-	TSet<UUOULightInteractionSurfaceComponent*> ProcessedSurfaces;
-	int32 ReflectedSurfaceCount = 0;
+	TArray<UUOULightInteractionSurfaceComponent*> CandidateSurfaces;
 	for (const FOverlapResult& OverlapResult : OverlapResults)
+	{
+		TArray<UUOULightInteractionSurfaceComponent*> InteractionSurfaces;
+		AppendLightInteractionSurfaces(
+			OverlapResult.GetActor(),
+			OverlapResult.GetComponent(),
+			InteractionSurfaces);
+		for (UUOULightInteractionSurfaceComponent* InteractionSurface : InteractionSurfaces)
+		{
+			CandidateSurfaces.AddUnique(InteractionSurface);
+		}
+	}
+
+	const FVector SourceLocation = GetSourceLocation();
+	CandidateSurfaces.Sort(
+		[&SourceLocation](
+			const UUOULightInteractionSurfaceComponent& A,
+			const UUOULightInteractionSurfaceComponent& B)
+		{
+			const float DistanceA = FVector::DistSquared(SourceLocation, A.GetComponentLocation());
+			const float DistanceB = FVector::DistSquared(SourceLocation, B.GetComponentLocation());
+			if (!FMath::IsNearlyEqual(DistanceA, DistanceB, 1.0f))
+			{
+				return DistanceA < DistanceB;
+			}
+
+			return GetPathNameSafe(&A) < GetPathNameSafe(&B);
+		});
+
+	int32 ReflectedSurfaceCount = 0;
+	for (UUOULightInteractionSurfaceComponent* InteractionSurface : CandidateSurfaces)
 	{
 		if (ReflectedSurfaceCount >= MaxReflectionSurfacesPerTick)
 		{
 			break;
 		}
 
-		TArray<UUOULightInteractionSurfaceComponent*> InteractionSurfaces;
-		AppendLightInteractionSurfaces(OverlapResult.GetActor(), OverlapResult.GetComponent(), InteractionSurfaces);
-		for (UUOULightInteractionSurfaceComponent* InteractionSurface : InteractionSurfaces)
+		if (InteractionSurface == nullptr)
 		{
-			if (InteractionSurface == nullptr ||
-				ProcessedSurfaces.Contains(InteractionSurface) ||
-				ReflectedSurfaceCount >= MaxReflectionSurfacesPerTick)
-			{
-				continue;
-			}
-
-			ProcessedSurfaces.Add(InteractionSurface);
-
-			FHitResult SurfaceHit;
-			if (!TryBuildLightInteractionSurfaceHit(InteractionSurface, SurfaceHit))
-			{
-				continue;
-			}
-
-			++ReflectedSurfaceCount;
-			LastReflectorName = GetNameSafe(InteractionSurface);
-			EmitReflectedLightFromSurface(InteractionSurface, SurfaceHit, DeltaTime, LitReceivers);
+			continue;
 		}
+
+		FHitResult SurfaceHit;
+		if (!TryBuildLightInteractionSurfaceHit(InteractionSurface, SurfaceHit))
+		{
+			continue;
+		}
+
+		++ReflectedSurfaceCount;
+		LastReflectorName = GetNameSafe(InteractionSurface);
+		EmitReflectedLightFromSurface(
+			InteractionSurface,
+			SurfaceHit,
+			DeltaTime,
+			PendingExposures);
 	}
 
-	NotifyReflectionPathsUpdatedIfChanged();
+	DeliverPendingExposures(PendingExposures);
+	PublishComputedPaths();
 }
 
 void UUOULightExposureSourceComponent::Configure(float NewConeAngle, float NewIntensity)
@@ -282,6 +333,7 @@ void UUOULightExposureSourceComponent::ValidateSettings()
 {
 	FallbackOuterConeAngle = FMath::Clamp(FallbackOuterConeAngle, 1.0f, 89.0f);
 	FallbackInnerConeRatio = FMath::Clamp(FallbackInnerConeRatio, 0.0f, 1.0f);
+	FallbackRange = FMath::Max(0.0f, FallbackRange);
 	CylinderRadius = FMath::Max(0.0f, CylinderRadius);
 	CylinderLength = FMath::Max(0.0f, CylinderLength);
 	CylinderInnerRadiusRatio = FMath::Clamp(CylinderInnerRadiusRatio, 0.0f, 1.0f);
@@ -301,6 +353,274 @@ void UUOULightExposureSourceComponent::ValidateSettings()
 	DebugDrawTime = FMath::Max(0.0f, DebugDrawTime);
 }
 
+void UUOULightExposureSourceComponent::PublishComputedPaths(bool bAllowLossGrace)
+{
+	NotifyReflectionPathsUpdatedIfChanged(bAllowLossGrace);
+	RebuildLightPaths();
+	NotifyLightPathsUpdatedIfChanged();
+}
+
+void UUOULightExposureSourceComponent::RebuildLightPaths()
+{
+	LightPaths.Reset();
+	if (!bEmitLight || GetWorld() == nullptr || GetExposureRange() <= 0.0f || Intensity <= 0.0f)
+	{
+		return;
+	}
+
+	if (ReflectionPaths.IsEmpty())
+	{
+		FUOULightPathData DirectPath;
+		DirectPath.PathIndex = 0;
+		DirectPath.Segments.Add(BuildDirectLightPathSegment(nullptr));
+		DirectPath.EndReason = DirectPath.Segments[0].EndReason;
+		DirectPath.FinalIntensity = DirectPath.Segments[0].Intensity;
+		LightPaths.Add(MoveTemp(DirectPath));
+		return;
+	}
+
+	for (int32 ReflectionPathIndex = 0; ReflectionPathIndex < ReflectionPaths.Num(); ++ReflectionPathIndex)
+	{
+		const FUOULightReflectionPathData& ReflectionPath = ReflectionPaths[ReflectionPathIndex];
+		if (ReflectionPath.Segments.IsEmpty())
+		{
+			continue;
+		}
+
+		FUOULightPathData LightPath;
+		LightPath.PathIndex = LightPaths.Num();
+		LightPath.EndReason = ReflectionPath.EndReason;
+		LightPath.FinalIntensity = ReflectionPath.FinalIntensity;
+		LightPath.Segments.Add(BuildDirectLightPathSegment(&ReflectionPath.Segments[0]));
+
+		for (int32 SegmentIndex = 0; SegmentIndex < ReflectionPath.Segments.Num(); ++SegmentIndex)
+		{
+			const FUOULightReflectionSegmentData& ReflectionSegment = ReflectionPath.Segments[SegmentIndex];
+			FUOULightPathSegmentData Segment;
+			Segment.SegmentIndex = SegmentIndex + 1;
+			Segment.bReflected = true;
+			Segment.Start = ReflectionSegment.ReflectionStart;
+			Segment.End = ReflectionSegment.SegmentEnd;
+			Segment.Direction = ReflectionSegment.ReflectedDirection.GetSafeNormal();
+			Segment.IncomingDirection = ReflectionSegment.IncomingDirection.GetSafeNormal();
+			Segment.Length = ReflectionSegment.SegmentLength;
+			Segment.StartRadius = ReflectionSegment.BeamStartRadius;
+			Segment.EndRadius = ReflectionSegment.BeamEndRadius;
+			Segment.ConeAngle = ReflectionSegment.BeamConeAngle;
+			Segment.Intensity = ReflectionSegment.ReflectedIntensity;
+			Segment.HitComponent = ReflectionSegment.BlockingComponent;
+			Segment.InteractionSurface = ReflectionSegment.NextReflector;
+			Segment.ReachedReceivers = ReflectionSegment.ReachedReceivers;
+
+			if (ReflectionSegment.NextReflector != nullptr)
+			{
+				Segment.HitType = EUOULightPathHitType::ReflectingSurface;
+				Segment.HitComponent = ReflectionSegment.NextReflector;
+			}
+			else if (ReflectionSegment.BlockingComponent != nullptr)
+			{
+				TArray<UObject*> HitReceivers;
+				AppendReceivableObjects(
+					ReflectionSegment.BlockingComponent->GetOwner(),
+					ReflectionSegment.BlockingComponent,
+					HitReceivers);
+				for (UObject* Receiver : HitReceivers)
+				{
+					Segment.ReachedReceivers.AddUnique(Receiver);
+				}
+				Segment.HitType = HitReceivers.IsEmpty()
+					? EUOULightPathHitType::BlockingSurface
+					: EUOULightPathHitType::Receiver;
+			}
+
+			const bool bIsLastSegment = SegmentIndex == ReflectionPath.Segments.Num() - 1;
+			Segment.EndReason = bIsLastSegment
+				? ReflectionPath.EndReason
+				: EUOULightReflectionPathEndReason::None;
+			LightPath.Segments.Add(MoveTemp(Segment));
+		}
+
+		LightPaths.Add(MoveTemp(LightPath));
+	}
+}
+
+FUOULightPathSegmentData UUOULightExposureSourceComponent::BuildDirectLightPathSegment(
+	const FUOULightReflectionSegmentData* FirstReflectionSegment) const
+{
+	FUOULightPathSegmentData Segment;
+	Segment.SegmentIndex = 0;
+	Segment.bReflected = false;
+	Segment.Start = GetSourceLocation();
+	Segment.Direction = GetSourceForwardVector().GetSafeNormal();
+	Segment.Intensity = Intensity;
+	Segment.EndReason = EUOULightReflectionPathEndReason::RangeEnded;
+
+	if (FirstReflectionSegment != nullptr)
+	{
+		Segment.End = FirstReflectionSegment->ImpactPoint;
+		Segment.Direction = (Segment.End - Segment.Start).GetSafeNormal();
+		Segment.Length = FVector::Distance(Segment.Start, Segment.End);
+		Segment.Intensity = FirstReflectionSegment->IncomingIntensity;
+		Segment.HitType = EUOULightPathHitType::ReflectingSurface;
+		Segment.HitComponent = FirstReflectionSegment->Reflector;
+		Segment.InteractionSurface = FirstReflectionSegment->Reflector;
+		Segment.EndReason = EUOULightReflectionPathEndReason::None;
+	}
+	else
+	{
+		const float MaximumLength = GetExposureRange();
+		Segment.End = Segment.Start + Segment.Direction * MaximumLength;
+		Segment.Length = MaximumLength;
+
+		if (UWorld* World = GetWorld())
+		{
+			FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(UOULightDirectPath), false, GetOwner());
+			if (bIgnoreOwner && GetOwner() != nullptr)
+			{
+				QueryParams.AddIgnoredActor(GetOwner());
+			}
+
+			FHitResult Hit;
+			if (TraceLightPathSingle(
+				Hit,
+				Segment.Start,
+				Segment.End,
+				QueryParams))
+			{
+				Segment.End = Hit.ImpactPoint;
+				Segment.Length = Hit.Distance;
+				Segment.HitComponent = Hit.GetComponent();
+				UUOULightInteractionSurfaceComponent* HitInteractionSurface = nullptr;
+				Segment.HitType = ClassifyLightPathHit(
+					Hit,
+					HitInteractionSurface,
+					Segment.ReachedReceivers);
+				Segment.InteractionSurface = HitInteractionSurface;
+				Segment.EndReason = Segment.HitType == EUOULightPathHitType::ReflectingSurface
+					? EUOULightReflectionPathEndReason::None
+					: EUOULightReflectionPathEndReason::Blocked;
+			}
+		}
+	}
+
+	if (BeamShape == EUOULightBeamShape::Cylinder)
+	{
+		Segment.StartRadius = CylinderRadius;
+		Segment.EndRadius = CylinderRadius;
+		Segment.ConeAngle = 0.0f;
+	}
+	else
+	{
+		Segment.StartRadius = 0.0f;
+		Segment.ConeAngle = GetEffectiveOuterConeAngle();
+		Segment.EndRadius = Segment.Length * FMath::Tan(FMath::DegreesToRadians(Segment.ConeAngle));
+	}
+
+	return Segment;
+}
+
+EUOULightPathHitType UUOULightExposureSourceComponent::ClassifyLightPathHit(
+	const FHitResult& Hit,
+	UUOULightInteractionSurfaceComponent*& OutInteractionSurface,
+	TArray<TObjectPtr<UObject>>& OutReachedReceivers) const
+{
+	OutInteractionSurface = Cast<UUOULightInteractionSurfaceComponent>(Hit.GetComponent());
+	if (OutInteractionSurface == nullptr && Hit.GetActor() != nullptr)
+	{
+		OutInteractionSurface = Hit.GetActor()->FindComponentByClass<UUOULightInteractionSurfaceComponent>();
+	}
+
+	if (OutInteractionSurface != nullptr)
+	{
+		return OutInteractionSurface->CanReflectLight() &&
+			OutInteractionSurface->CanReflectIncomingLight(
+				GetSourceForwardVector(),
+				Hit.ImpactNormal)
+			? EUOULightPathHitType::ReflectingSurface
+			: EUOULightPathHitType::BlockingSurface;
+	}
+
+	TArray<UObject*> Receivers;
+	AppendReceivableObjects(Hit.GetActor(), Hit.GetComponent(), Receivers);
+	for (UObject* Receiver : Receivers)
+	{
+		OutReachedReceivers.AddUnique(Receiver);
+	}
+
+	return Receivers.IsEmpty()
+		? EUOULightPathHitType::BlockingSurface
+		: EUOULightPathHitType::Receiver;
+}
+
+void UUOULightExposureSourceComponent::NotifyLightPathsUpdatedIfChanged()
+{
+	if (bHasPublishedLightPaths && AreLightPathsEquivalent(LastPublishedLightPaths, LightPaths))
+	{
+		LightPaths = LastPublishedLightPaths;
+		return;
+	}
+
+	LastPublishedLightPaths = LightPaths;
+	bHasPublishedLightPaths = true;
+	OnLightPathsUpdated.Broadcast(LightPaths);
+}
+
+bool UUOULightExposureSourceComponent::AreLightPathsEquivalent(
+	const TArray<FUOULightPathData>& A,
+	const TArray<FUOULightPathData>& B) const
+{
+	if (A.Num() != B.Num())
+	{
+		return false;
+	}
+
+	for (int32 PathIndex = 0; PathIndex < A.Num(); ++PathIndex)
+	{
+		const FUOULightPathData& LeftPath = A[PathIndex];
+		const FUOULightPathData& RightPath = B[PathIndex];
+		if (LeftPath.PathIndex != RightPath.PathIndex ||
+			LeftPath.EndReason != RightPath.EndReason ||
+			!FMath::IsNearlyEqual(LeftPath.FinalIntensity, RightPath.FinalIntensity, ReflectionPathIntensityTolerance) ||
+			LeftPath.Segments.Num() != RightPath.Segments.Num())
+		{
+			return false;
+		}
+
+		for (int32 SegmentIndex = 0; SegmentIndex < LeftPath.Segments.Num(); ++SegmentIndex)
+		{
+			const FUOULightPathSegmentData& LeftSegment = LeftPath.Segments[SegmentIndex];
+			const FUOULightPathSegmentData& RightSegment = RightPath.Segments[SegmentIndex];
+			if (LeftSegment.SegmentIndex != RightSegment.SegmentIndex ||
+				LeftSegment.bReflected != RightSegment.bReflected ||
+				!LeftSegment.Start.Equals(RightSegment.Start, ReflectionPathPositionTolerance) ||
+				!LeftSegment.End.Equals(RightSegment.End, ReflectionPathPositionTolerance) ||
+				!AreDirectionsNearlyEqual(
+					LeftSegment.Direction,
+					RightSegment.Direction,
+					ReflectionPathDirectionToleranceDegrees) ||
+				!AreDirectionsNearlyEqual(
+					LeftSegment.IncomingDirection,
+					RightSegment.IncomingDirection,
+					ReflectionPathDirectionToleranceDegrees) ||
+				!FMath::IsNearlyEqual(LeftSegment.Length, RightSegment.Length, ReflectionPathPositionTolerance) ||
+				!FMath::IsNearlyEqual(LeftSegment.StartRadius, RightSegment.StartRadius, ReflectionPathPositionTolerance) ||
+				!FMath::IsNearlyEqual(LeftSegment.EndRadius, RightSegment.EndRadius, ReflectionPathPositionTolerance) ||
+				!FMath::IsNearlyEqual(LeftSegment.ConeAngle, RightSegment.ConeAngle, ReflectionPathDirectionToleranceDegrees) ||
+				!FMath::IsNearlyEqual(LeftSegment.Intensity, RightSegment.Intensity, ReflectionPathIntensityTolerance) ||
+				LeftSegment.HitType != RightSegment.HitType ||
+				LeftSegment.HitComponent != RightSegment.HitComponent ||
+				LeftSegment.InteractionSurface != RightSegment.InteractionSurface ||
+				LeftSegment.EndReason != RightSegment.EndReason ||
+				!HaveSameReceivers(LeftSegment.ReachedReceivers, RightSegment.ReachedReceivers))
+			{
+				return false;
+			}
+		}
+	}
+
+	return true;
+}
+
 void UUOULightExposureSourceComponent::NotifyReflectionPathsUpdatedIfChanged(bool bAllowLossGrace)
 {
 	NormalizeReflectionPathOrder();
@@ -316,8 +636,23 @@ void UUOULightExposureSourceComponent::NotifyReflectionPathsUpdatedIfChanged(boo
 	UWorld* World = GetWorld();
 	const bool bHasTopologyLoss = bHasPublishedReflectionPaths &&
 		HasReflectionPathTopologyLoss(LastPublishedReflectionPaths, ReflectionPaths);
+	bool bOnlyLostExistingTopology = bHasTopologyLoss && !ReflectionPaths.IsEmpty();
+	for (const FUOULightReflectionPathData& CurrentPath : ReflectionPaths)
+	{
+		const FString CurrentKey = BuildReflectionPathTopologyKey(CurrentPath);
+		if (!LastPublishedReflectionPaths.ContainsByPredicate(
+			[&CurrentKey](const FUOULightReflectionPathData& PreviousPath)
+			{
+				return BuildReflectionPathTopologyKey(PreviousPath) == CurrentKey;
+			}))
+		{
+			bOnlyLostExistingTopology = false;
+			break;
+		}
+	}
 	if (bAllowLossGrace &&
-		bHasTopologyLoss &&
+		bOnlyLostExistingTopology &&
+		!ReflectionPaths.IsEmpty() &&
 		ReflectionPathLossGraceTime > 0.0f &&
 		World != nullptr)
 	{
@@ -522,7 +857,7 @@ float UUOULightExposureSourceComponent::GetExposureRange() const
 		return FMath::Max(0.0f, SourceLight->AttenuationRadius);
 	}
 
-	return 0.0f;
+	return FMath::Max(0.0f, FallbackRange);
 }
 
 float UUOULightExposureSourceComponent::GetReceiverSearchRadius() const
@@ -941,7 +1276,7 @@ bool UUOULightExposureSourceComponent::HasLineOfSightFrom(
 	}
 
 	const FVector TraceEnd = TraceStart + ToReceiver.GetSafeNormal() * TraceDistance;
-	return !World->LineTraceSingleByChannel(OutBlockingHit, TraceStart, TraceEnd, OcclusionTraceChannel, QueryParams);
+	return !TraceLightPathSingle(OutBlockingHit, TraceStart, TraceEnd, QueryParams, IgnoredActor);
 }
 
 bool UUOULightExposureSourceComponent::IsWorldPositionInsideUmbrellaLightShade(const FVector& WorldPosition) const
@@ -982,6 +1317,120 @@ bool UUOULightExposureSourceComponent::IsWorldPositionInsideUmbrellaLightShade(c
 	return false;
 }
 
+bool UUOULightExposureSourceComponent::TraceLightPathSingle(
+	FHitResult& OutHit,
+	const FVector& TraceStart,
+	const FVector& TraceEnd,
+	const FCollisionQueryParams& QueryParams,
+	const AActor* IgnoredShadeOwner) const
+{
+	OutHit = FHitResult();
+	UWorld* World = GetWorld();
+	if (World == nullptr)
+	{
+		return false;
+	}
+
+	FHitResult CollisionHit;
+	const bool bHasCollisionHit = World->LineTraceSingleByChannel(
+		CollisionHit,
+		TraceStart,
+		TraceEnd,
+		OcclusionTraceChannel,
+		QueryParams);
+
+	FHitResult ShadeHit;
+	const bool bHasShadeHit = FindNearestUmbrellaLightShadeHit(
+		TraceStart,
+		TraceEnd,
+		ShadeHit,
+		IgnoredShadeOwner);
+	if (!bHasCollisionHit && !bHasShadeHit)
+	{
+		return false;
+	}
+
+	// 우산 반사판과 그늘 볼륨이 거의 같은 위치일 때는 실제 반사판 Hit를 우선한다.
+	// 그늘이 명확히 앞에 있을 때만 뒤쪽 거울/수신 대상을 차단한다.
+	constexpr float CoincidentHitTolerance = 1.0f;
+	if (bHasShadeHit &&
+		(!bHasCollisionHit || ShadeHit.Distance + CoincidentHitTolerance < CollisionHit.Distance))
+	{
+		OutHit = ShadeHit;
+		return true;
+	}
+
+	OutHit = CollisionHit;
+	return bHasCollisionHit;
+}
+
+bool UUOULightExposureSourceComponent::FindNearestUmbrellaLightShadeHit(
+	const FVector& TraceStart,
+	const FVector& TraceEnd,
+	FHitResult& OutHit,
+	const AActor* IgnoredShadeOwner) const
+{
+	OutHit = FHitResult();
+	UWorld* World = GetWorld();
+	const FVector TraceDelta = TraceEnd - TraceStart;
+	const float TraceLength = TraceDelta.Size();
+	if (World == nullptr || TraceLength <= KINDA_SMALL_NUMBER)
+	{
+		return false;
+	}
+
+	float BestHitTime = TNumericLimits<float>::Max();
+	for (TObjectIterator<UUOUUmbrellaLightShadeVolumeComponent> ShadeIt; ShadeIt; ++ShadeIt)
+	{
+		UUOUUmbrellaLightShadeVolumeComponent* ShadeVolume = *ShadeIt;
+		if (!IsValid(ShadeVolume) ||
+			ShadeVolume->GetWorld() != World ||
+			ShadeVolume->GetOwner() == IgnoredShadeOwner ||
+			!ShadeVolume->IsRegistered() ||
+			!ShadeVolume->CanShadeLight() ||
+			ShadeVolume->ContainsWorldPosition(TraceStart))
+		{
+			continue;
+		}
+
+		const FTransform ShadeTransform = ShadeVolume->GetComponentTransform();
+		const FVector LocalStart = ShadeTransform.InverseTransformPosition(TraceStart);
+		const FVector LocalEnd = ShadeTransform.InverseTransformPosition(TraceEnd);
+		const FVector Extent = ShadeVolume->GetUnscaledBoxExtent();
+		const FBox LocalBox(-Extent, Extent);
+
+		FVector LocalHitLocation = FVector::ZeroVector;
+		FVector LocalHitNormal = FVector::ZeroVector;
+		float HitTime = 0.0f;
+		if (!FMath::LineExtentBoxIntersection(
+			LocalBox,
+			LocalStart,
+			LocalEnd,
+			FVector::ZeroVector,
+			LocalHitLocation,
+			LocalHitNormal,
+			HitTime) ||
+			HitTime < 0.0f ||
+			HitTime > 1.0f ||
+			HitTime >= BestHitTime)
+		{
+			continue;
+		}
+
+		BestHitTime = HitTime;
+		const FVector HitLocation = ShadeTransform.TransformPosition(LocalHitLocation);
+		const FVector HitNormal = ShadeTransform.TransformVectorNoScale(LocalHitNormal).GetSafeNormal();
+		OutHit = FHitResult(ShadeVolume->GetOwner(), ShadeVolume, HitLocation, HitNormal);
+		OutHit.bBlockingHit = true;
+		OutHit.Time = HitTime;
+		OutHit.Distance = TraceLength * HitTime;
+		OutHit.TraceStart = TraceStart;
+		OutHit.TraceEnd = TraceEnd;
+	}
+
+	return OutHit.bBlockingHit;
+}
+
 bool UUOULightExposureSourceComponent::TryBuildLightInteractionSurfaceHit(
 	UUOULightInteractionSurfaceComponent* SurfaceComponent,
 	FHitResult& OutSurfaceHit) const
@@ -1012,6 +1461,51 @@ bool UUOULightExposureSourceComponent::TryBuildLightInteractionSurfaceHit(
 	TArray<FVector> SamplePositions;
 	SurfaceComponent->GetReflectionSamplePositions(SamplePositions);
 
+	// 우산이 반사면 중심으로 향하는 광선을 막았다면, 가장자리 샘플만 우산 옆으로
+	// 빠져나갔다는 이유로 뒤쪽 거울에서 고립된 반사광을 만들지 않습니다.
+	float CenterDistance = 0.0f;
+	FVector CenterDirection = FVector::ZeroVector;
+	float CenterDistanceFactor = 0.0f;
+	float CenterShapeFactor = 0.0f;
+	const FVector SurfaceCenter = SurfaceComponent->GetComponentLocation();
+	if (TryEvaluateSourceBeamPoint(
+		SurfaceCenter,
+		CenterDistance,
+		CenterDirection,
+		CenterDistanceFactor,
+		CenterShapeFactor))
+	{
+		FVector CenterTraceStart = SourcePosition;
+		if (BeamShape == EUOULightBeamShape::Cylinder)
+		{
+			const float AxialDistance = FVector::DotProduct(
+				SurfaceCenter - SourcePosition,
+				SourceForward);
+			CenterTraceStart = SurfaceCenter - SourceForward * AxialDistance;
+		}
+
+		FHitResult CenterHit;
+		const FVector CenterTraceEnd = SurfaceCenter +
+			CenterDirection * SurfaceComponent->ReflectionStartPadding;
+		TraceLightPathSingle(
+			CenterHit,
+			CenterTraceStart,
+			CenterTraceEnd,
+			QueryParams,
+			SurfaceComponent->GetOwner());
+		if (IsBlockedByActiveUmbrellaShade(CenterHit, SurfaceComponent->GetOwner()))
+		{
+			DrawDebugSamplePoint(CenterHit.ImpactPoint, FColor::Red);
+			DrawDebugSampleSummary(
+				SurfaceCenter,
+				TEXT("Mirror"),
+				0,
+				1,
+				false);
+			return false;
+		}
+	}
+
 	int32 HitCount = 0;
 	float BestScore = -1.0f;
 
@@ -1021,12 +1515,12 @@ bool UUOULightExposureSourceComponent::TryBuildLightInteractionSurfaceHit(
 	if (!SourceForward.IsNearlyZero() && BeamRange > KINDA_SMALL_NUMBER)
 	{
 		FHitResult AxisHit;
-		const bool bAxisHitSurface = World->LineTraceSingleByChannel(
+		const bool bAxisHitSurface = TraceLightPathSingle(
 			AxisHit,
 			SourcePosition,
 			SourcePosition + SourceForward * BeamRange,
-			OcclusionTraceChannel,
-			QueryParams) &&
+			QueryParams,
+			SurfaceComponent->GetOwner()) &&
 			AxisHit.GetComponent() == SurfaceComponent &&
 			SurfaceComponent->CanReflectIncomingLight(
 				SourceForward,
@@ -1081,12 +1575,12 @@ bool UUOULightExposureSourceComponent::TryBuildLightInteractionSurfaceHit(
 		FHitResult SampleHit;
 		const FVector TraceEnd =
 			SamplePosition + DirectionToSurface * SurfaceComponent->ReflectionStartPadding;
-		const bool bHitSurface = World->LineTraceSingleByChannel(
+		const bool bHitSurface = TraceLightPathSingle(
 			SampleHit,
 			TraceStart,
 			TraceEnd,
-			OcclusionTraceChannel,
-			QueryParams) &&
+			QueryParams,
+			SurfaceComponent->GetOwner()) &&
 			SampleHit.GetComponent() == SurfaceComponent &&
 			SurfaceComponent->CanReflectIncomingLight(
 				DirectionToSurface,
@@ -1118,11 +1612,80 @@ bool UUOULightExposureSourceComponent::TryBuildLightInteractionSurfaceHit(
 	return OutSurfaceHit.bBlockingHit;
 }
 
+void UUOULightExposureSourceComponent::RecordExposureCandidate(
+	UObject* ReceiverObject,
+	const FUOULightExposureData& ExposureData,
+	bool bReflected,
+	const FString& StablePathKey,
+	FPendingExposureMap& PendingExposures) const
+{
+	if (ReceiverObject == nullptr || ExposureData.Intensity <= 0.0f)
+	{
+		return;
+	}
+
+	FPendingExposureCandidate* ExistingCandidate = PendingExposures.Find(ReceiverObject);
+	const bool bHasStrongerIntensity = ExistingCandidate == nullptr ||
+		ExposureData.Intensity > ExistingCandidate->ExposureData.Intensity + KINDA_SMALL_NUMBER;
+	const bool bHasEqualIntensity = ExistingCandidate != nullptr &&
+		FMath::IsNearlyEqual(
+			ExposureData.Intensity,
+			ExistingCandidate->ExposureData.Intensity,
+			KINDA_SMALL_NUMBER);
+	const bool bPreferDirectPath = bHasEqualIntensity &&
+		ExistingCandidate->bReflected &&
+		!bReflected;
+	const bool bHasStableTieBreak = bHasEqualIntensity &&
+		ExistingCandidate->bReflected == bReflected &&
+		StablePathKey < ExistingCandidate->StablePathKey;
+	if (!bHasStrongerIntensity && !bPreferDirectPath && !bHasStableTieBreak)
+	{
+		return;
+	}
+
+	FPendingExposureCandidate& Candidate = PendingExposures.FindOrAdd(ReceiverObject);
+	Candidate.ExposureData = ExposureData;
+	Candidate.StablePathKey = StablePathKey;
+	Candidate.bReflected = bReflected;
+}
+
+void UUOULightExposureSourceComponent::DeliverPendingExposures(
+	const FPendingExposureMap& PendingExposures)
+{
+	TArray<UObject*> Receivers;
+	PendingExposures.GenerateKeyArray(Receivers);
+	Receivers.Sort(
+		[](const UObject& A, const UObject& B)
+		{
+			return GetPathNameSafe(&A) < GetPathNameSafe(&B);
+		});
+
+	for (UObject* ReceiverObject : Receivers)
+	{
+		const FPendingExposureCandidate* Candidate = PendingExposures.Find(ReceiverObject);
+		if (!IsValid(ReceiverObject) || Candidate == nullptr)
+		{
+			continue;
+		}
+
+		IUOULightReceivableInterface::Execute_ReceiveLightExposure(
+			ReceiverObject,
+			Candidate->ExposureData);
+		++LastLitCount;
+		if (Candidate->bReflected)
+		{
+			++LastReflectedCount;
+		}
+		LastLitTargetName = GetReceivableDebugName(ReceiverObject);
+		DrawDebugResult(Candidate->ExposureData, true);
+	}
+}
+
 void UUOULightExposureSourceComponent::EmitReflectedLightFromSurface(
 	UUOULightInteractionSurfaceComponent* SurfaceComponent,
 	const FHitResult& SurfaceHit,
 	float DeltaTime,
-	TSet<UObject*>& LitReceivers)
+	FPendingExposureMap& PendingExposures)
 {
 	UWorld* World = GetWorld();
 	if (World == nullptr || SurfaceComponent == nullptr || DeltaTime <= 0.0f)
@@ -1264,12 +1827,12 @@ void UUOULightExposureSourceComponent::EmitReflectedLightFromSurface(
 
 			const FVector SegmentTraceEnd =
 				ReflectionOrigin + ReflectedDirection * CurrentSurface->ReflectionRange;
-			if (World->LineTraceSingleByChannel(
+			if (TraceLightPathSingle(
 				SegmentBlockingHit,
 				ReflectionOrigin,
 				SegmentTraceEnd,
-				OcclusionTraceChannel,
-				SegmentTraceQueryParams))
+				SegmentTraceQueryParams,
+				CurrentSurface->GetOwner()))
 			{
 				SegmentEnd = SegmentBlockingHit.ImpactPoint;
 			}
@@ -1328,7 +1891,8 @@ void UUOULightExposureSourceComponent::EmitReflectedLightFromSurface(
 			OutgoingBeamConeAngle,
 			IncomingSurfaceIntensity,
 			DeltaTime,
-			LitReceivers,
+			FString::Join(ReflectionPath, TEXT(" -> ")),
+			PendingExposures,
 			ReachedReceivers);
 
 		FUOULightReflectionSegmentData& SegmentData = PathData.Segments.AddDefaulted_GetRef();
@@ -1403,7 +1967,8 @@ void UUOULightExposureSourceComponent::EmitReflectedLightToReceivers(
 	float BeamConeAngle,
 	float SurfaceIntensity,
 	float DeltaTime,
-	TSet<UObject*>& LitReceivers,
+	const FString& StablePathKey,
+	FPendingExposureMap& PendingExposures,
 	TArray<TObjectPtr<UObject>>& OutReachedReceivers)
 {
 	UWorld* World = GetWorld();
@@ -1450,7 +2015,6 @@ void UUOULightExposureSourceComponent::EmitReflectedLightToReceivers(
 		for (UObject* ReceiverObject : Receivers)
 		{
 			if (ReceiverObject == nullptr ||
-				LitReceivers.Contains(ReceiverObject) ||
 				ProcessedReflectionReceivers.Contains(ReceiverObject))
 			{
 				continue;
@@ -1472,13 +2036,13 @@ void UUOULightExposureSourceComponent::EmitReflectedLightToReceivers(
 				ExposureData,
 				BlockingHit))
 			{
-				IUOULightReceivableInterface::Execute_ReceiveLightExposure(ReceiverObject, ExposureData);
-				LitReceivers.Add(ReceiverObject);
-				OutReachedReceivers.Add(ReceiverObject);
-				++LastLitCount;
-				++LastReflectedCount;
-				LastLitTargetName = GetReceivableDebugName(ReceiverObject);
-				DrawDebugResult(ExposureData, true);
+				RecordExposureCandidate(
+					ReceiverObject,
+					ExposureData,
+					true,
+					StablePathKey,
+					PendingExposures);
+				OutReachedReceivers.AddUnique(ReceiverObject);
 				continue;
 			}
 
@@ -1594,12 +2158,12 @@ bool UUOULightExposureSourceComponent::TryFindNextReflectionSurface(
 
 			// 반사 빔의 중심축이 표면 샘플 사이를 통과해도 다음 거울을 검출합니다.
 			FHitResult AxisHit;
-			const bool bAxisHitCandidate = World->LineTraceSingleByChannel(
+			const bool bAxisHitCandidate = TraceLightPathSingle(
 				AxisHit,
 				ReflectionOrigin,
 				ReflectionOrigin + SafeReflectedDirection * CurrentSurface->ReflectionRange,
-				OcclusionTraceChannel,
-				TraceQueryParams) &&
+				TraceQueryParams,
+				CurrentSurface->GetOwner()) &&
 				AxisHit.GetComponent() == CandidateSurface &&
 				CandidateSurface->CanReflectIncomingLight(
 					SafeReflectedDirection,
@@ -1652,12 +2216,12 @@ bool UUOULightExposureSourceComponent::TryFindNextReflectionSurface(
 				FHitResult CandidateHit;
 				const FVector TraceEnd = CandidateSamplePosition +
 					DirectionToCandidate * CandidateSurface->ReflectionStartPadding;
-				const bool bHitCandidate = World->LineTraceSingleByChannel(
+				const bool bHitCandidate = TraceLightPathSingle(
 					CandidateHit,
 					ReflectionOrigin,
 					TraceEnd,
-					OcclusionTraceChannel,
-					TraceQueryParams) &&
+					TraceQueryParams,
+					CurrentSurface->GetOwner()) &&
 					CandidateHit.GetComponent() == CandidateSurface &&
 					CandidateSurface->CanReflectIncomingLight(
 						SafeReflectedDirection,
@@ -2003,11 +2567,10 @@ void UUOULightExposureSourceComponent::DrawDebugSource() const
 			const FVector RayStart = SourcePosition + RadiusDirection * SafeRadius;
 			const FVector TraceEnd = RayStart + SourceForward * ExposureRange;
 			FHitResult BlockingHit;
-			const FVector RayEnd = World->LineTraceSingleByChannel(
+			const FVector RayEnd = TraceLightPathSingle(
 				BlockingHit,
 				RayStart,
 				TraceEnd,
-				OcclusionTraceChannel,
 				QueryParams)
 				? BlockingHit.ImpactPoint
 				: TraceEnd;
@@ -2056,11 +2619,10 @@ void UUOULightExposureSourceComponent::DrawDebugSource() const
 		{
 			const FVector TraceEnd = SourcePosition + RayDirection * ExposureRange;
 			FHitResult BlockingHit;
-			return World->LineTraceSingleByChannel(
+			return TraceLightPathSingle(
 				BlockingHit,
 				SourcePosition,
 				TraceEnd,
-				OcclusionTraceChannel,
 				QueryParams)
 				? BlockingHit.ImpactPoint
 				: TraceEnd;
