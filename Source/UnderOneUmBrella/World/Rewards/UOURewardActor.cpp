@@ -7,15 +7,23 @@
 #include "Components/SplineComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/CollisionProfile.h"
+#include "Engine/DataTable.h"
 #include "Engine/GameInstance.h"
 #include "Engine/LocalPlayer.h"
+#include "EngineUtils.h"
 #include "Game/UOUPlayerProgressSubsystem.h"
+#include "Game/UOUStageDefinitionRegistry.h"
+#include "Game/UOUStageSelectTypes.h"
 #include "GameFramework/PlayerController.h"
 #include "NiagaraComponent.h"
 #include "Player/UOUCharacter.h"
 #include "UI/UOUUISubsystem.h"
 #include "World/Rewards/UOURewardCollectionMotionComponent.h"
 #include "World/Rewards/UOURewardFeedbackComponent.h"
+
+#if WITH_EDITOR
+#include "Misc/DataValidation.h"
+#endif
 
 AUOURewardActor::AUOURewardActor()
 {
@@ -54,6 +62,110 @@ AUOURewardActor::AUOURewardActor()
 	RewardCollectionMotionComponent =
 		CreateDefaultSubobject<UUOURewardCollectionMotionComponent>(TEXT("RewardCollectionMotionComponent"));
 }
+
+TArray<FName> AUOURewardActor::GetAvailableRewardIds() const
+{
+	TArray<FName> AvailableRewardIds;
+	AvailableRewardIds.Add(NAME_None);
+
+	int32 MatchingStageCount = 0;
+	const FUOUStageDefinitionRow* StageDefinition =
+		FUOUStageDefinitionRegistry::FindStageByLevel(GetWorld(), MatchingStageCount);
+	if (StageDefinition == nullptr)
+	{
+		return AvailableRewardIds;
+	}
+
+	for (const FName AvailableRewardId : StageDefinition->RewardIds)
+	{
+		if (!AvailableRewardId.IsNone())
+		{
+			AvailableRewardIds.AddUnique(AvailableRewardId);
+		}
+	}
+
+	return AvailableRewardIds;
+}
+
+#if WITH_EDITOR
+EDataValidationResult AUOURewardActor::IsDataValid(FDataValidationContext& Context) const
+{
+	const EDataValidationResult ParentResult = Super::IsDataValid(Context);
+	bool bIsValid = ParentResult != EDataValidationResult::Invalid;
+	auto AddValidationError = [&Context, &bIsValid](const FText& ErrorMessage)
+	{
+		Context.AddError(ErrorMessage);
+		bIsValid = false;
+	};
+
+	if (HasAnyFlags(RF_ClassDefaultObject))
+	{
+		return ParentResult;
+	}
+
+	UDataTable* StageDefinitionTable =
+		FUOUStageDefinitionRegistry::LoadStageDefinitionTable();
+	if (StageDefinitionTable == nullptr)
+	{
+		AddValidationError(FText::FromString(
+			TEXT("Project Settings에 Stage Definition DataTable이 설정되지 않았습니다.")));
+		return EDataValidationResult::Invalid;
+	}
+
+	if (!FUOUStageDefinitionRegistry::HasValidRowStruct(StageDefinitionTable))
+	{
+		AddValidationError(FText::FromString(
+			TEXT("Stage Definition DataTable의 RowStruct가 FUOUStageDefinitionRow가 아닙니다.")));
+		return EDataValidationResult::Invalid;
+	}
+
+	int32 MatchingStageCount = 0;
+	const FUOUStageDefinitionRow* StageDefinition =
+		FUOUStageDefinitionRegistry::FindStageByLevel(GetWorld(), MatchingStageCount);
+	if (MatchingStageCount == 0)
+	{
+		AddValidationError(FText::FromString(
+			TEXT("현재 레벨을 Level로 지정한 Stage Definition 행이 없습니다.")));
+	}
+	else if (MatchingStageCount > 1)
+	{
+		AddValidationError(FText::FromString(
+			TEXT("현재 레벨을 참조하는 Stage Definition 행이 두 개 이상입니다.")));
+	}
+	else if (RewardId.IsNone())
+	{
+		AddValidationError(FText::FromString(TEXT("RewardId가 선택되지 않았습니다.")));
+	}
+	else if (StageDefinition == nullptr || !StageDefinition->RewardIds.Contains(RewardId))
+	{
+		AddValidationError(FText::Format(
+			FText::FromString(TEXT("RewardId '{0}'가 현재 스테이지의 RewardIds에 없습니다.")),
+			FText::FromName(RewardId)));
+	}
+
+	if (!RewardId.IsNone())
+	{
+		const UWorld* OwningWorld = GetWorld();
+		if (OwningWorld != nullptr)
+		{
+			for (TActorIterator<AUOURewardActor> RewardIterator(OwningWorld); RewardIterator; ++RewardIterator)
+			{
+				const AUOURewardActor* OtherReward = *RewardIterator;
+				if (OtherReward != this && OtherReward->RewardId == RewardId)
+				{
+					AddValidationError(FText::Format(
+						FText::FromString(TEXT("RewardId '{0}'를 Actor '{1}'도 사용하고 있습니다.")),
+						FText::FromName(RewardId),
+						FText::FromString(OtherReward->GetActorLabel())));
+					break;
+				}
+			}
+		}
+	}
+
+	return bIsValid ? EDataValidationResult::Valid : EDataValidationResult::Invalid;
+}
+#endif
 
 void AUOURewardActor::OnConstruction(const FTransform& Transform)
 {
