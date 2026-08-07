@@ -254,6 +254,8 @@ void UUOUUmbrellaLightInteractionComponent::ApplyRuntimeLightSurfacePlacement() 
 	LightSurfaceComponent->SetBoxExtent(RuntimeSurfaceBoxExtent);
 	LightSurfaceComponent->ReflectionDirectionMode = EUOULightReflectionDirectionMode::OwnerForward;
 	LightSurfaceComponent->ReflectionFrontNormalMode = EUOULightReflectionFrontNormalMode::OwnerForward;
+	LightSurfaceComponent->bPassThroughWhenReflectionRejected =
+		bPassLightThroughOutsideReflectionAngle;
 	LightSurfaceComponent->SetRelativeLocation(RuntimeSurfaceRelativeLocation);
 	LightSurfaceComponent->SetRelativeRotation(RuntimeSurfaceRelativeRotation);
 }

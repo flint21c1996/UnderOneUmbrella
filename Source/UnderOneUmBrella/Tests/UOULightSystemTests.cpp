@@ -636,7 +636,9 @@ bool FUOUUmbrellaShadePathOcclusionTest::RunTest(const FString& Parameters)
 		UmbrellaSurface->SetupAttachment(ShadeVolume);
 		UmbrellaSurface->SetBoxExtent(FVector(5.0f, 30.0f, 100.0f));
 		UmbrellaSurface->bUseSurfaceAreaSampling = false;
-		UmbrellaSurface->bReflectFrontFaceOnly = false;
+		UmbrellaSurface->bReflectFrontFaceOnly = true;
+		UmbrellaSurface->MaximumReflectionIncidenceAngle = 30.0f;
+		UmbrellaSurface->bPassThroughWhenReflectionRejected = true;
 		UmbrellaSurface->ReflectionFrontNormalMode =
 			EUOULightReflectionFrontNormalMode::OwnerForward;
 		UmbrellaSurface->ReflectionDirectionMode = EUOULightReflectionDirectionMode::OwnerForward;
@@ -644,6 +646,33 @@ bool FUOUUmbrellaShadePathOcclusionTest::RunTest(const FString& Parameters)
 		UmbrellaSurface->RegisterComponent();
 		UmbrellaSurface->SetLightInteractionMode(EUOULightInteractionMode::Reflecting);
 		ShadeVolume->SetShadeEnabled(true);
+		SourceActor->ExposureSource->ReflectionPathLossGraceTime = 0.0f;
+
+		SourceActor->ExposureSource->EmitLight(0.1f);
+		const TArray<FUOULightReflectionPathData> RejectedUmbrellaReflectionPaths =
+			SourceActor->ExposureSource->GetReflectionPaths();
+		bool bFoundMirrorBehindRejectedUmbrella = false;
+		bool bFoundRejectedUmbrellaReflector = false;
+		for (const FUOULightReflectionPathData& ReflectionPath : RejectedUmbrellaReflectionPaths)
+		{
+			if (ReflectionPath.Segments.IsEmpty())
+			{
+				continue;
+			}
+
+			bFoundMirrorBehindRejectedUmbrella |=
+				ReflectionPath.Segments[0].Reflector == MirrorSurface;
+			bFoundRejectedUmbrellaReflector |=
+				ReflectionPath.Segments[0].Reflector == UmbrellaSurface;
+		}
+		TestTrue(
+			TEXT("반사 허용 각도 밖의 우산과 그늘 뒤에 있는 거울까지 광선이 도달한다"),
+			bFoundMirrorBehindRejectedUmbrella);
+		TestFalse(
+			TEXT("반사 허용 각도 밖의 우산에서는 반사 경로를 만들지 않는다"),
+			bFoundRejectedUmbrellaReflector);
+
+		UmbrellaSurface->bReflectFrontFaceOnly = false;
 
 		SourceActor->ExposureSource->EmitLight(0.1f);
 		const TArray<FUOULightReflectionPathData> UmbrellaReflectionPaths =

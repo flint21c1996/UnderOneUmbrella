@@ -79,6 +79,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection|Facing", meta = (ClampMin = "0.0", ClampMax = "89.9", Units = "deg", ToolTip = "앞면 법선과 입사광 사이에 허용할 최대 각도입니다. 90도에 가까울수록 비스듬히 들어오는 빛도 반사합니다."))
 	float MaximumReflectionIncidenceAngle = 89.0f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection|Facing", meta = (ToolTip = "반사 각도 조건을 만족하지 못한 빛을 막지 않고 통과시킵니다. 우산처럼 유효한 각도에서만 빛과 상호작용해야 하는 표면에 사용합니다."))
+	bool bPassThroughWhenReflectionRejected = false;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection", meta = (ClampMin = "0.0", ToolTip = "반사된 게임플레이 빛이 도달할 수 있는 최대 거리입니다."))
 	float ReflectionRange = 600.0f;
 
@@ -121,6 +124,9 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Light|Reflection", meta = (ToolTip = "입사 방향이 앞면과 최대 입사각 조건을 만족하면 true를 반환합니다."))
 	bool CanReflectIncomingLight(const FVector& IncomingDirection, const FVector& HitNormal) const;
+
+	UFUNCTION(BlueprintPure, Category = "Light|Reflection", meta = (ToolTip = "반사 각도 조건을 만족하지 못해 입사광을 통과시켜야 하면 true를 반환합니다."))
+	bool ShouldPassThroughIncomingLight(const FVector& IncomingDirection, const FVector& HitNormal) const;
 
 	UFUNCTION(BlueprintPure, Category = "Light|Reflection", meta = (ToolTip = "입사 빛 반지름을 반사면 크기와 입사각에 맞게 잘라 반환합니다."))
 	float ClampReflectionBeamRadius(

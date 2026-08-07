@@ -1332,12 +1332,59 @@ bool UUOULightExposureSourceComponent::TraceLightPathSingle(
 	}
 
 	FHitResult CollisionHit;
-	const bool bHasCollisionHit = World->LineTraceSingleByChannel(
-		CollisionHit,
-		TraceStart,
-		TraceEnd,
-		OcclusionTraceChannel,
-		QueryParams);
+	bool bHasCollisionHit = false;
+	FCollisionQueryParams PassthroughQueryParams = QueryParams;
+	constexpr int32 MaxPassthroughSurfaceCount = 16;
+	const FVector TraceDirection = (TraceEnd - TraceStart).GetSafeNormal();
+	for (int32 PassthroughIndex = 0;
+		PassthroughIndex <= MaxPassthroughSurfaceCount;
+		++PassthroughIndex)
+	{
+		FHitResult CandidateHit;
+		if (!World->LineTraceSingleByChannel(
+			CandidateHit,
+			TraceStart,
+			TraceEnd,
+			OcclusionTraceChannel,
+			PassthroughQueryParams))
+		{
+			break;
+		}
+
+		AActor* HitActor = CandidateHit.GetActor();
+		UUOULightInteractionSurfaceComponent* SurfaceComponent =
+			Cast<UUOULightInteractionSurfaceComponent>(CandidateHit.GetComponent());
+		if (SurfaceComponent == nullptr && HitActor != nullptr)
+		{
+			SurfaceComponent = HitActor->FindComponentByClass<
+				UUOULightInteractionSurfaceComponent>();
+		}
+
+		if (SurfaceComponent == nullptr ||
+			!SurfaceComponent->ShouldPassThroughIncomingLight(
+				TraceDirection,
+				CandidateHit.ImpactNormal))
+		{
+			CollisionHit = CandidateHit;
+			bHasCollisionHit = true;
+			break;
+		}
+
+		// 반사 허용 각도 밖의 우산은 플레이어의 다른 충돌체까지 함께 건너뛴 뒤
+		// 같은 광선에서 다음 벽이나 거울을 계속 찾습니다.
+		if (HitActor != nullptr)
+		{
+			PassthroughQueryParams.AddIgnoredActor(HitActor);
+		}
+		else if (UPrimitiveComponent* HitComponent = CandidateHit.GetComponent())
+		{
+			PassthroughQueryParams.AddIgnoredComponent(HitComponent);
+		}
+		else
+		{
+			break;
+		}
+	}
 
 	FHitResult ShadeHit;
 	const bool bHasShadeHit = FindNearestUmbrellaLightShadeHit(
@@ -1417,9 +1464,22 @@ bool UUOULightExposureSourceComponent::FindNearestUmbrellaLightShadeHit(
 			continue;
 		}
 
-		BestHitTime = HitTime;
 		const FVector HitLocation = ShadeTransform.TransformPosition(LocalHitLocation);
 		const FVector HitNormal = ShadeTransform.TransformVectorNoScale(LocalHitNormal).GetSafeNormal();
+		if (AActor* ShadeOwner = ShadeVolume->GetOwner())
+		{
+			if (const UUOULightInteractionSurfaceComponent* SurfaceComponent =
+				ShadeOwner->FindComponentByClass<UUOULightInteractionSurfaceComponent>();
+				SurfaceComponent != nullptr &&
+				SurfaceComponent->ShouldPassThroughIncomingLight(
+					TraceDelta / TraceLength,
+					HitNormal))
+			{
+				continue;
+			}
+		}
+
+		BestHitTime = HitTime;
 		OutHit = FHitResult(ShadeVolume->GetOwner(), ShadeVolume, HitLocation, HitNormal);
 		OutHit.bBlockingHit = true;
 		OutHit.Time = HitTime;

@@ -116,7 +116,8 @@ protected:
 	void SetVFXActive(AActor* VFXActor, bool bActive) const;
 	FUOULightBeamVisualSegmentData BuildVisualSegment(
 		const FUOULightPathSegmentData& SegmentData,
-		int32 VisualSegmentIndex) const;
+		int32 VisualSegmentIndex,
+		float AdditionalEndPadding = 0.0f) const;
 	FLinearColor ResolveLightColor() const;
 	void DestroyVFXActors();
 };

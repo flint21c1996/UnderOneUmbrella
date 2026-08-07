@@ -91,6 +91,16 @@ bool UUOULightInteractionSurfaceComponent::CanReflectIncomingLight(
 	return IncidenceAngle <= MaximumReflectionIncidenceAngle;
 }
 
+bool UUOULightInteractionSurfaceComponent::ShouldPassThroughIncomingLight(
+	const FVector& IncomingDirection,
+	const FVector& HitNormal) const
+{
+	return LightInteractionMode == EUOULightInteractionMode::Reflecting &&
+		bPassThroughWhenReflectionRejected &&
+		CanReflectLight() &&
+		!CanReflectIncomingLight(IncomingDirection, HitNormal);
+}
+
 float UUOULightInteractionSurfaceComponent::ClampReflectionBeamRadius(
 	float IncomingBeamRadius,
 	const FVector& IncomingDirection,
