@@ -47,6 +47,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Light", meta = (ToolTip = "빛 반사 상태에서도 반사 허용 각도를 벗어난 입사광은 우산과 그늘 범위를 통과시킵니다."))
 	bool bPassLightThroughOutsideReflectionAngle = true;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Light", meta = (ClampMin = "0.0", ClampMax = "89.9", Units = "deg", ToolTip = "우산 정면과 입사광 사이의 최대 반사 허용각입니다. 이 각도를 벗어난 빛은 반사 상태에서도 우산을 통과합니다."))
+	float MaximumUmbrellaReflectionIncidenceAngle = 60.0f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Light")
 	bool bCreateRuntimeLightSurfaceWhenMissing = true;
 

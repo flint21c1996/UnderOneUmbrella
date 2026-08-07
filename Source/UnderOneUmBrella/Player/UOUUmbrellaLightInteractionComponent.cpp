@@ -256,6 +256,10 @@ void UUOUUmbrellaLightInteractionComponent::ApplyRuntimeLightSurfacePlacement() 
 	LightSurfaceComponent->ReflectionFrontNormalMode = EUOULightReflectionFrontNormalMode::OwnerForward;
 	LightSurfaceComponent->bPassThroughWhenReflectionRejected =
 		bPassLightThroughOutsideReflectionAngle;
+	LightSurfaceComponent->MaximumReflectionIncidenceAngle = FMath::Clamp(
+		MaximumUmbrellaReflectionIncidenceAngle,
+		0.0f,
+		89.9f);
 	LightSurfaceComponent->SetRelativeLocation(RuntimeSurfaceRelativeLocation);
 	LightSurfaceComponent->SetRelativeRotation(RuntimeSurfaceRelativeRotation);
 }

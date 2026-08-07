@@ -12,6 +12,7 @@
 #include "GameFramework/Actor.h"
 #include "Misc/AutomationTest.h"
 #include "NiagaraComponent.h"
+#include "Player/UOUUmbrellaLightInteractionComponent.h"
 #include "Player/UOUUmbrellaLightShadeVolumeComponent.h"
 #include "UObject/FieldIterator.h"
 #include "UObject/UnrealType.h"
@@ -700,6 +701,51 @@ bool FUOUUmbrellaShadePathOcclusionTest::RunTest(const FString& Parameters)
 			bFoundBlockedMirrorFirstReflector);
 	}
 
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FUOUUmbrellaReflectionAngleBoundaryTest,
+	"UnderOneUmbrella.Light.Reflection.UmbrellaAngleBoundary",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUOUUmbrellaReflectionAngleBoundaryTest::RunTest(const FString& Parameters)
+{
+	const UUOUUmbrellaLightInteractionComponent* UmbrellaSettings =
+		GetDefault<UUOUUmbrellaLightInteractionComponent>();
+	TestNotNull(TEXT("우산 빛 상호작용 기본 설정이 존재한다"), UmbrellaSettings);
+	if (UmbrellaSettings == nullptr)
+	{
+		return false;
+	}
+
+	UUOULightInteractionSurfaceComponent* Surface =
+		NewObject<UUOULightInteractionSurfaceComponent>();
+	TestNotNull(TEXT("우산 반사 각도 테스트 표면을 생성한다"), Surface);
+	if (Surface == nullptr)
+	{
+		return false;
+	}
+
+	Surface->SetLightInteractionMode(EUOULightInteractionMode::Reflecting);
+	Surface->ReflectionFrontNormalMode = EUOULightReflectionFrontNormalMode::ComponentForward;
+	Surface->bReflectFrontFaceOnly = true;
+	Surface->bPassThroughWhenReflectionRejected = true;
+	Surface->MaximumReflectionIncidenceAngle =
+		UmbrellaSettings->MaximumUmbrellaReflectionIncidenceAngle;
+
+	const FVector FrontNormal = FVector::ForwardVector;
+	const FVector ValidIncomingDirection =
+		-FRotator(0.0f, 45.0f, 0.0f).RotateVector(FrontNormal);
+	const FVector GrazingIncomingDirection =
+		-FRotator(0.0f, 80.0f, 0.0f).RotateVector(FrontNormal);
+
+	TestFalse(
+		TEXT("우산 정면에서 45도인 빛은 반사하므로 통과하지 않는다"),
+		Surface->ShouldPassThroughIncomingLight(ValidIncomingDirection, FrontNormal));
+	TestTrue(
+		TEXT("우산 정면에서 80도인 비스듬한 빛은 반사하지 않고 통과한다"),
+		Surface->ShouldPassThroughIncomingLight(GrazingIncomingDirection, FrontNormal));
 	return true;
 }
 
