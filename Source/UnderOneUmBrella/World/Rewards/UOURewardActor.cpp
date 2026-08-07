@@ -12,7 +12,7 @@
 #include "Engine/LocalPlayer.h"
 #include "EngineUtils.h"
 #include "Game/UOUPlayerProgressSubsystem.h"
-#include "Game/UOUStageDefinitionSettings.h"
+#include "Game/UOUStageDefinitionRegistry.h"
 #include "Game/UOUStageSelectTypes.h"
 #include "GameFramework/PlayerController.h"
 #include "NiagaraComponent.h"
@@ -24,58 +24,6 @@
 #if WITH_EDITOR
 #include "Misc/DataValidation.h"
 #endif
-
-namespace
-{
-	const FUOUStageDefinitionRow* FindStageDefinitionForRewardActor(
-		const AUOURewardActor* RewardActor,
-		int32& OutMatchCount)
-	{
-		OutMatchCount = 0;
-		if (RewardActor == nullptr)
-		{
-			return nullptr;
-		}
-
-		const UUOUStageDefinitionSettings* Settings = GetDefault<UUOUStageDefinitionSettings>();
-		UDataTable* StageDefinitionTable = Settings != nullptr
-			? Settings->StageDefinitionTable.LoadSynchronous()
-			: nullptr;
-		if (StageDefinitionTable == nullptr
-			|| StageDefinitionTable->GetRowStruct() != FUOUStageDefinitionRow::StaticStruct())
-		{
-			return nullptr;
-		}
-
-		const UWorld* OwningWorld = RewardActor->GetWorld();
-		const FString OwningLevelPackageName = OwningWorld != nullptr
-			? OwningWorld->GetOutermost()->GetName()
-			: FString();
-		if (OwningLevelPackageName.IsEmpty())
-		{
-			return nullptr;
-		}
-
-		const FUOUStageDefinitionRow* MatchedRow = nullptr;
-		for (const TPair<FName, uint8*>& RowPair : StageDefinitionTable->GetRowMap())
-		{
-			const FUOUStageDefinitionRow* Row =
-				reinterpret_cast<const FUOUStageDefinitionRow*>(RowPair.Value);
-			if (Row == nullptr || Row->Level.IsNull())
-			{
-				continue;
-			}
-
-			if (Row->Level.ToSoftObjectPath().GetLongPackageName() == OwningLevelPackageName)
-			{
-				MatchedRow = Row;
-				++OutMatchCount;
-			}
-		}
-
-		return OutMatchCount == 1 ? MatchedRow : nullptr;
-	}
-}
 
 AUOURewardActor::AUOURewardActor()
 {
@@ -122,7 +70,7 @@ TArray<FName> AUOURewardActor::GetAvailableRewardIds() const
 
 	int32 MatchingStageCount = 0;
 	const FUOUStageDefinitionRow* StageDefinition =
-		FindStageDefinitionForRewardActor(this, MatchingStageCount);
+		FUOUStageDefinitionRegistry::FindStageByLevel(GetWorld(), MatchingStageCount);
 	if (StageDefinition == nullptr)
 	{
 		return AvailableRewardIds;
@@ -155,10 +103,8 @@ EDataValidationResult AUOURewardActor::IsDataValid(FDataValidationContext& Conte
 		return ParentResult;
 	}
 
-	const UUOUStageDefinitionSettings* Settings = GetDefault<UUOUStageDefinitionSettings>();
-	UDataTable* StageDefinitionTable = Settings != nullptr
-		? Settings->StageDefinitionTable.LoadSynchronous()
-		: nullptr;
+	UDataTable* StageDefinitionTable =
+		FUOUStageDefinitionRegistry::LoadStageDefinitionTable();
 	if (StageDefinitionTable == nullptr)
 	{
 		AddValidationError(FText::FromString(
@@ -166,7 +112,7 @@ EDataValidationResult AUOURewardActor::IsDataValid(FDataValidationContext& Conte
 		return EDataValidationResult::Invalid;
 	}
 
-	if (StageDefinitionTable->GetRowStruct() != FUOUStageDefinitionRow::StaticStruct())
+	if (!FUOUStageDefinitionRegistry::HasValidRowStruct(StageDefinitionTable))
 	{
 		AddValidationError(FText::FromString(
 			TEXT("Stage Definition DataTable의 RowStruct가 FUOUStageDefinitionRow가 아닙니다.")));
@@ -175,7 +121,7 @@ EDataValidationResult AUOURewardActor::IsDataValid(FDataValidationContext& Conte
 
 	int32 MatchingStageCount = 0;
 	const FUOUStageDefinitionRow* StageDefinition =
-		FindStageDefinitionForRewardActor(this, MatchingStageCount);
+		FUOUStageDefinitionRegistry::FindStageByLevel(GetWorld(), MatchingStageCount);
 	if (MatchingStageCount == 0)
 	{
 		AddValidationError(FText::FromString(
