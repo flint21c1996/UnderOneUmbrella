@@ -7,9 +7,14 @@
 #include "Engine/World.h"
 #include "Game/UOUMapSelectPlayerController.h"
 #include "Game/UOUPlayerProgressSubsystem.h"
+#include "Game/UOUStageDefinitionRegistry.h"
 #include "Game/UOUStageSelectTypes.h"
 #include "GameFramework/Pawn.h"
 #include "World/Stage/UOUStageSelectAreaComponent.h"
+
+#if WITH_EDITOR
+#include "Misc/DataValidation.h"
+#endif
 
 AUOUStageSelectNodeActor::AUOUStageSelectNodeActor()
 {
@@ -41,24 +46,26 @@ bool AUOUStageSelectNodeActor::GetStageDefinition(FUOUStageDefinition& OutStageD
 {
 	OutStageDefinition = FUOUStageDefinition();
 
-	if (StageRow.DataTable == nullptr || StageRow.RowName.IsNone())
+	const FName ResolvedStageId = ResolveStageId();
+	if (ResolvedStageId.IsNone())
 	{
 		UE_LOG(
 			LogTemp,
 			Warning,
-			TEXT("Stage select node '%s' has no DataTable row configured."),
+			TEXT("Stage select node '%s' has no StageId configured."),
 			*GetName());
 		return false;
 	}
 
 	const FString Context = FString::Printf(TEXT("StageSelectNode:%s"), *GetName());
-	const FUOUStageDefinitionRow* Row = StageRow.GetRow<FUOUStageDefinitionRow>(Context);
+	const FUOUStageDefinitionRow* Row =
+		FUOUStageDefinitionRegistry::FindStageById(ResolvedStageId, Context);
 	if (Row == nullptr)
 	{
 		return false;
 	}
 
-	OutStageDefinition.StageId = StageRow.RowName;
+	OutStageDefinition.StageId = ResolvedStageId;
 	OutStageDefinition.DisplayName = Row->DisplayName;
 	OutStageDefinition.Description = Row->Description;
 	OutStageDefinition.Thumbnail = Row->Thumbnail;
@@ -87,6 +94,72 @@ bool AUOUStageSelectNodeActor::GetStageDefinition(FUOUStageDefinition& OutStageD
 	return true;
 }
 
+TArray<FName> AUOUStageSelectNodeActor::GetAvailableStageIds() const
+{
+	return FUOUStageDefinitionRegistry::GetStageIds();
+}
+
+#if WITH_EDITOR
+EDataValidationResult AUOUStageSelectNodeActor::IsDataValid(FDataValidationContext& Context) const
+{
+	const EDataValidationResult ParentResult = Super::IsDataValid(Context);
+	bool bIsValid = ParentResult != EDataValidationResult::Invalid;
+	auto AddValidationError = [&Context, &bIsValid](const FText& ErrorMessage)
+	{
+		Context.AddError(ErrorMessage);
+		bIsValid = false;
+	};
+
+	if (HasAnyFlags(RF_ClassDefaultObject))
+	{
+		return ParentResult;
+	}
+
+	UDataTable* StageDefinitionTable =
+		FUOUStageDefinitionRegistry::LoadStageDefinitionTable();
+	if (StageDefinitionTable == nullptr)
+	{
+		AddValidationError(FText::FromString(
+			TEXT("Project Settings에 Stage Definition DataTable이 설정되지 않았습니다.")));
+		return EDataValidationResult::Invalid;
+	}
+
+	if (!FUOUStageDefinitionRegistry::HasValidRowStruct(StageDefinitionTable))
+	{
+		AddValidationError(FText::FromString(
+			TEXT("Stage Definition DataTable의 RowStruct가 FUOUStageDefinitionRow가 아닙니다.")));
+		return EDataValidationResult::Invalid;
+	}
+
+	const FName ResolvedStageId = ResolveStageId();
+	if (ResolvedStageId.IsNone())
+	{
+		AddValidationError(FText::FromString(TEXT("StageId가 선택되지 않았습니다.")));
+	}
+	else
+	{
+		const FString ValidationContext =
+			FString::Printf(TEXT("StageSelectNodeValidation:%s"), *GetName());
+		if (FUOUStageDefinitionRegistry::FindStageById(ResolvedStageId, ValidationContext) == nullptr)
+		{
+			AddValidationError(FText::Format(
+				FText::FromString(TEXT("StageId '{0}'에 해당하는 DataTable 행이 없습니다.")),
+				FText::FromName(ResolvedStageId)));
+		}
+	}
+
+	if (StageId.IsNone() && !StageRow.RowName.IsNone())
+	{
+		Context.AddWarning(FText::Format(
+			FText::FromString(
+				TEXT("기존 StageRow의 '{0}'를 사용 중입니다. StageId로 이전해야 합니다.")),
+			FText::FromName(StageRow.RowName)));
+	}
+
+	return bIsValid ? EDataValidationResult::Valid : EDataValidationResult::Invalid;
+}
+#endif
+
 bool AUOUStageSelectNodeActor::ActivateStage()
 {
 	FUOUStageDefinition StageDefinition;
@@ -100,6 +173,11 @@ bool AUOUStageSelectNodeActor::ActivateStage()
 		? Cast<AUOUMapSelectPlayerController>(World->GetFirstPlayerController())
 		: nullptr;
 	return MapSelectController != nullptr && MapSelectController->EnterStage(StageDefinition);
+}
+
+FName AUOUStageSelectNodeActor::ResolveStageId() const
+{
+	return !StageId.IsNone() ? StageId : StageRow.RowName;
 }
 
 void AUOUStageSelectNodeActor::HandlePlayerEnteredStageArea(APawn* PlayerPawn)
