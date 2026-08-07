@@ -17,6 +17,7 @@
 #include "Player/UOUUmbrellaComponent.h"
 #include "Puzzle/Crank/UOUCrankComponent.h"
 #include "Puzzle/PushPull/UOUPushPullObjectComponent.h"
+#include "World/Light/UOURotatableMirrorComponent.h"
 
 namespace UOUPushPullInteractorPrivate
 {
@@ -76,6 +77,18 @@ void UUOUPushPullInteractorComponent::TickComponent(float DeltaTime, ELevelTick 
 			ApplyGrabbedRotation();
 		}
 	}
+	else if (GrabbedMirror != nullptr)
+	{
+		if (!bGrabInputHeld || !CanUseHands() || IsGrabbedObjectTooFar())
+		{
+			EndGrab();
+		}
+		else
+		{
+			GrabbedMirror->ApplyMirrorPushInput(CurrentAxisInput, DeltaTime);
+			GrabbedMoveAxis = GrabbedMirror->GetWorldInputAxisForInteractor(OwnerCharacter);
+		}
+	}
 
 	UpdateScreenDebug();
 	DrawWorldDebug();
@@ -85,7 +98,7 @@ void UUOUPushPullInteractorComponent::HandleGrabPressed()
 {
 	bGrabInputHeld = true;
 	LastFailureReason = TEXT("Grab Pressed");
-	if (GrabbedObject == nullptr && GrabbedCrank == nullptr)
+	if (GrabbedObject == nullptr && GrabbedCrank == nullptr && GrabbedMirror == nullptr)
 	{
 		TryBeginGrab();
 	}
@@ -99,7 +112,7 @@ void UUOUPushPullInteractorComponent::HandleGrabReleased()
 
 bool UUOUPushPullInteractorComponent::HandleMoveInput(const FVector2D& MovementVector, float MovementYaw)
 {
-	if ((GrabbedObject == nullptr && GrabbedCrank == nullptr) || OwnerCharacter == nullptr)
+	if ((GrabbedObject == nullptr && GrabbedCrank == nullptr && GrabbedMirror == nullptr) || OwnerCharacter == nullptr)
 	{
 		return false;
 	}
@@ -126,6 +139,7 @@ void UUOUPushPullInteractorComponent::RefreshCandidate()
 {
 	CurrentCandidateObject = nullptr;
 	CurrentCandidateCrank = nullptr;
+	CurrentCandidateMirror = nullptr;
 
 	if (GrabbedObject != nullptr)
 	{
@@ -137,11 +151,20 @@ void UUOUPushPullInteractorComponent::RefreshCandidate()
 		CurrentCandidateCrank = GrabbedCrank;
 		return;
 	}
+	if (GrabbedMirror != nullptr)
+	{
+		CurrentCandidateMirror = GrabbedMirror;
+		return;
+	}
 
 	CurrentCandidateObject = FindBestCandidate();
 	if (CurrentCandidateObject == nullptr)
 	{
 		CurrentCandidateCrank = FindBestCrankCandidate();
+	}
+	if (CurrentCandidateObject == nullptr && CurrentCandidateCrank == nullptr)
+	{
+		CurrentCandidateMirror = FindBestMirrorCandidate();
 	}
 }
 
@@ -167,7 +190,8 @@ bool UUOUPushPullInteractorComponent::CanUseHands() const
 
 bool UUOUPushPullInteractorComponent::IsGrabbedObjectTooFar() const
 {
-	if ((GrabbedObject == nullptr && GrabbedCrank == nullptr) || InteractionComponent == nullptr || OwnerCharacter == nullptr)
+	if ((GrabbedObject == nullptr && GrabbedCrank == nullptr && GrabbedMirror == nullptr) ||
+		InteractionComponent == nullptr || OwnerCharacter == nullptr)
 	{
 		return false;
 	}
@@ -184,7 +208,7 @@ void UUOUPushPullInteractorComponent::TryBeginGrab()
 		return;
 	}
 
-	if (CurrentCandidateObject == nullptr && CurrentCandidateCrank == nullptr)
+	if (CurrentCandidateObject == nullptr && CurrentCandidateCrank == nullptr && CurrentCandidateMirror == nullptr)
 	{
 		LastFailureReason = TEXT("No Candidate");
 		return;
@@ -193,6 +217,32 @@ void UUOUPushPullInteractorComponent::TryBeginGrab()
 	if (!CanUseHands())
 	{
 		LastFailureReason = TEXT("Hands Blocked");
+		return;
+	}
+
+	if (CurrentCandidateMirror != nullptr &&
+		CurrentCandidateObject == nullptr && CurrentCandidateCrank == nullptr)
+	{
+		const FVector MoveAxis =
+			CurrentCandidateMirror->GetWorldInputAxisForInteractor(OwnerCharacter);
+		if (MoveAxis.IsNearlyZero())
+		{
+			LastFailureReason = TEXT("Invalid Mirror Axis");
+			return;
+		}
+
+		if (!CurrentCandidateMirror->TryBeginMirrorPush(OwnerCharacter))
+		{
+			LastFailureReason = TEXT("Mirror Rejected Grab");
+			return;
+		}
+
+		GrabbedMirror = CurrentCandidateMirror;
+		GrabbedMoveAxis = GrabbedMirror->GetWorldInputAxisForInteractor(OwnerCharacter);
+		CurrentAxisInput = 0.0f;
+		LastFailureReason = TEXT("Mirror Grabbed");
+		ClearGrabbedReferenceDistance();
+		ApplyGrabbedCharacterMovementSettings(false);
 		return;
 	}
 
@@ -259,9 +309,14 @@ void UUOUPushPullInteractorComponent::EndGrab()
 	{
 		GrabbedCrank->EndGrab(OwnerCharacter);
 	}
+	if (GrabbedMirror != nullptr)
+	{
+		GrabbedMirror->EndMirrorPush(OwnerCharacter);
+	}
 
 	GrabbedObject = nullptr;
 	GrabbedCrank = nullptr;
+	GrabbedMirror = nullptr;
 	GrabbedMoveAxis = FVector::ZeroVector;
 	CurrentAxisInput = 0.0f;
 	ClearGrabbedReferenceDistance();
@@ -412,7 +467,8 @@ void UUOUPushPullInteractorComponent::ResolveOwnerReferences()
 
 void UUOUPushPullInteractorComponent::UpdateMovementInputFallback()
 {
-	if ((GrabbedObject == nullptr && GrabbedCrank == nullptr) || OwnerCharacter == nullptr || !OwnerCharacter->IsLocallyControlled())
+	if ((GrabbedObject == nullptr && GrabbedCrank == nullptr && GrabbedMirror == nullptr) ||
+		OwnerCharacter == nullptr || !OwnerCharacter->IsLocallyControlled())
 	{
 		return;
 	}
@@ -494,7 +550,9 @@ void UUOUPushPullInteractorComponent::DrawWorldDebug() const
 	const FColor SearchColor = UUOUDebugSubsystem::GetDebugCategoryColor(
 		this,
 		EUOUDebugCategory::Interaction,
-		CurrentCandidateObject != nullptr || CurrentCandidateCrank != nullptr ? FColor::Green : FColor::Cyan);
+		CurrentCandidateObject != nullptr || CurrentCandidateCrank != nullptr || CurrentCandidateMirror != nullptr
+			? FColor::Green
+			: FColor::Cyan);
 	if (bShowTrace)
 	{
 		DrawDebugSphere(World, DetectionOrigin, CandidateSearchRadius, 24, SearchColor, false, 0.0f, 0, 1.5f);
@@ -512,8 +570,14 @@ void UUOUPushPullInteractorComponent::DrawWorldDebug() const
 		DrawDebugLine(World, DetectionOrigin, CandidateLocation, InteractionDebugColor, false, 0.0f, 0, 2.0f);
 		DrawDebugSphere(World, CandidateLocation, 14.0f, 12, InteractionDebugColor, false, 0.0f, 0, 1.5f);
 	}
+	else if (bShowCandidate && CurrentCandidateMirror != nullptr)
+	{
+		const FVector CandidateLocation = CurrentCandidateMirror->GetGrabReferenceLocation();
+		DrawDebugLine(World, DetectionOrigin, CandidateLocation, InteractionDebugColor, false, 0.0f, 0, 2.0f);
+		DrawDebugSphere(World, CandidateLocation, 14.0f, 12, InteractionDebugColor, false, 0.0f, 0, 1.5f);
+	}
 
-	if (bShowCandidate && (GrabbedObject != nullptr || GrabbedCrank != nullptr))
+	if (bShowCandidate && (GrabbedObject != nullptr || GrabbedCrank != nullptr || GrabbedMirror != nullptr))
 	{
 		const FVector GrabbedLocation = GetGrabbedReferenceLocation();
 		DrawDebugDirectionalArrow(
@@ -735,6 +799,71 @@ UUOUCrankComponent* UUOUPushPullInteractorComponent::FindBestCrankCandidate() co
 	return BestCandidate;
 }
 
+UUOURotatableMirrorComponent* UUOUPushPullInteractorComponent::FindBestMirrorCandidate() const
+{
+	if (OwnerCharacter == nullptr)
+	{
+		return nullptr;
+	}
+
+	UWorld* World = GetWorld();
+	if (World == nullptr)
+	{
+		return nullptr;
+	}
+
+	FCollisionObjectQueryParams ObjectQueryParams;
+	ObjectQueryParams.AddObjectTypesToQuery(ECC_WorldDynamic);
+	ObjectQueryParams.AddObjectTypesToQuery(ECC_PhysicsBody);
+
+	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(RotatableMirrorCandidateOverlap), false, OwnerCharacter);
+	QueryParams.AddIgnoredActor(OwnerCharacter);
+
+	TArray<FOverlapResult> OverlapResults;
+	const FVector DetectionOrigin = GetDetectionOriginLocation();
+	if (!World->OverlapMultiByObjectType(
+		OverlapResults,
+		DetectionOrigin,
+		FQuat::Identity,
+		ObjectQueryParams,
+		FCollisionShape::MakeSphere(CandidateSearchRadius),
+		QueryParams))
+	{
+		return nullptr;
+	}
+
+	UUOURotatableMirrorComponent* BestCandidate = nullptr;
+	float BestDistanceSquared = TNumericLimits<float>::Max();
+	TSet<AActor*> ProcessedActors;
+	for (const FOverlapResult& OverlapResult : OverlapResults)
+	{
+		AActor* CandidateOwner = OverlapResult.GetActor();
+		if (CandidateOwner == nullptr || ProcessedActors.Contains(CandidateOwner))
+		{
+			continue;
+		}
+		ProcessedActors.Add(CandidateOwner);
+
+		UUOURotatableMirrorComponent* CandidateMirror =
+			CandidateOwner->FindComponentByClass<UUOURotatableMirrorComponent>();
+		if (CandidateMirror == nullptr || !CandidateMirror->CanBeginMirrorPush(OwnerCharacter))
+		{
+			continue;
+		}
+
+		const float DistanceSquared = FVector::DistSquared2D(
+			DetectionOrigin,
+			CandidateMirror->GetGrabReferenceLocation());
+		if (DistanceSquared < BestDistanceSquared)
+		{
+			BestDistanceSquared = DistanceSquared;
+			BestCandidate = CandidateMirror;
+		}
+	}
+
+	return BestCandidate;
+}
+
 FVector UUOUPushPullInteractorComponent::GetDetectionOriginLocation() const
 {
 	if (InteractionComponent != nullptr)
@@ -768,6 +897,11 @@ FVector UUOUPushPullInteractorComponent::GetGrabbedReferenceLocation() const
 	if (GrabbedCrank != nullptr)
 	{
 		return GrabbedCrank->GetGrabReferenceLocation();
+	}
+
+	if (GrabbedMirror != nullptr)
+	{
+		return GrabbedMirror->GetGrabReferenceLocation();
 	}
 
 	return FVector::ZeroVector;
