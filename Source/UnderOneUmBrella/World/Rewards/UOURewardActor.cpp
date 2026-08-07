@@ -7,15 +7,75 @@
 #include "Components/SplineComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/CollisionProfile.h"
+#include "Engine/DataTable.h"
 #include "Engine/GameInstance.h"
 #include "Engine/LocalPlayer.h"
+#include "EngineUtils.h"
 #include "Game/UOUPlayerProgressSubsystem.h"
+#include "Game/UOUStageDefinitionSettings.h"
+#include "Game/UOUStageSelectTypes.h"
 #include "GameFramework/PlayerController.h"
 #include "NiagaraComponent.h"
 #include "Player/UOUCharacter.h"
 #include "UI/UOUUISubsystem.h"
 #include "World/Rewards/UOURewardCollectionMotionComponent.h"
 #include "World/Rewards/UOURewardFeedbackComponent.h"
+
+#if WITH_EDITOR
+#include "Misc/DataValidation.h"
+#endif
+
+namespace
+{
+	const FUOUStageDefinitionRow* FindStageDefinitionForRewardActor(
+		const AUOURewardActor* RewardActor,
+		int32& OutMatchCount)
+	{
+		OutMatchCount = 0;
+		if (RewardActor == nullptr)
+		{
+			return nullptr;
+		}
+
+		const UUOUStageDefinitionSettings* Settings = GetDefault<UUOUStageDefinitionSettings>();
+		UDataTable* StageDefinitionTable = Settings != nullptr
+			? Settings->StageDefinitionTable.LoadSynchronous()
+			: nullptr;
+		if (StageDefinitionTable == nullptr
+			|| StageDefinitionTable->GetRowStruct() != FUOUStageDefinitionRow::StaticStruct())
+		{
+			return nullptr;
+		}
+
+		const UWorld* OwningWorld = RewardActor->GetWorld();
+		const FString OwningLevelPackageName = OwningWorld != nullptr
+			? OwningWorld->GetOutermost()->GetName()
+			: FString();
+		if (OwningLevelPackageName.IsEmpty())
+		{
+			return nullptr;
+		}
+
+		const FUOUStageDefinitionRow* MatchedRow = nullptr;
+		for (const TPair<FName, uint8*>& RowPair : StageDefinitionTable->GetRowMap())
+		{
+			const FUOUStageDefinitionRow* Row =
+				reinterpret_cast<const FUOUStageDefinitionRow*>(RowPair.Value);
+			if (Row == nullptr || Row->Level.IsNull())
+			{
+				continue;
+			}
+
+			if (Row->Level.ToSoftObjectPath().GetLongPackageName() == OwningLevelPackageName)
+			{
+				MatchedRow = Row;
+				++OutMatchCount;
+			}
+		}
+
+		return OutMatchCount == 1 ? MatchedRow : nullptr;
+	}
+}
 
 AUOURewardActor::AUOURewardActor()
 {
@@ -54,6 +114,112 @@ AUOURewardActor::AUOURewardActor()
 	RewardCollectionMotionComponent =
 		CreateDefaultSubobject<UUOURewardCollectionMotionComponent>(TEXT("RewardCollectionMotionComponent"));
 }
+
+TArray<FName> AUOURewardActor::GetAvailableRewardIds() const
+{
+	TArray<FName> AvailableRewardIds;
+	AvailableRewardIds.Add(NAME_None);
+
+	int32 MatchingStageCount = 0;
+	const FUOUStageDefinitionRow* StageDefinition =
+		FindStageDefinitionForRewardActor(this, MatchingStageCount);
+	if (StageDefinition == nullptr)
+	{
+		return AvailableRewardIds;
+	}
+
+	for (const FName AvailableRewardId : StageDefinition->RewardIds)
+	{
+		if (!AvailableRewardId.IsNone())
+		{
+			AvailableRewardIds.AddUnique(AvailableRewardId);
+		}
+	}
+
+	return AvailableRewardIds;
+}
+
+#if WITH_EDITOR
+EDataValidationResult AUOURewardActor::IsDataValid(FDataValidationContext& Context) const
+{
+	const EDataValidationResult ParentResult = Super::IsDataValid(Context);
+	bool bIsValid = ParentResult != EDataValidationResult::Invalid;
+	auto AddValidationError = [&Context, &bIsValid](const FText& ErrorMessage)
+	{
+		Context.AddError(ErrorMessage);
+		bIsValid = false;
+	};
+
+	if (HasAnyFlags(RF_ClassDefaultObject))
+	{
+		return ParentResult;
+	}
+
+	const UUOUStageDefinitionSettings* Settings = GetDefault<UUOUStageDefinitionSettings>();
+	UDataTable* StageDefinitionTable = Settings != nullptr
+		? Settings->StageDefinitionTable.LoadSynchronous()
+		: nullptr;
+	if (StageDefinitionTable == nullptr)
+	{
+		AddValidationError(FText::FromString(
+			TEXT("Project Settings에 Stage Definition DataTable이 설정되지 않았습니다.")));
+		return EDataValidationResult::Invalid;
+	}
+
+	if (StageDefinitionTable->GetRowStruct() != FUOUStageDefinitionRow::StaticStruct())
+	{
+		AddValidationError(FText::FromString(
+			TEXT("Stage Definition DataTable의 RowStruct가 FUOUStageDefinitionRow가 아닙니다.")));
+		return EDataValidationResult::Invalid;
+	}
+
+	int32 MatchingStageCount = 0;
+	const FUOUStageDefinitionRow* StageDefinition =
+		FindStageDefinitionForRewardActor(this, MatchingStageCount);
+	if (MatchingStageCount == 0)
+	{
+		AddValidationError(FText::FromString(
+			TEXT("현재 레벨을 Level로 지정한 Stage Definition 행이 없습니다.")));
+	}
+	else if (MatchingStageCount > 1)
+	{
+		AddValidationError(FText::FromString(
+			TEXT("현재 레벨을 참조하는 Stage Definition 행이 두 개 이상입니다.")));
+	}
+	else if (RewardId.IsNone())
+	{
+		AddValidationError(FText::FromString(TEXT("RewardId가 선택되지 않았습니다.")));
+	}
+	else if (StageDefinition == nullptr || !StageDefinition->RewardIds.Contains(RewardId))
+	{
+		AddValidationError(FText::Format(
+			FText::FromString(TEXT("RewardId '{0}'가 현재 스테이지의 RewardIds에 없습니다.")),
+			FText::FromName(RewardId)));
+	}
+
+	if (!RewardId.IsNone())
+	{
+		const UWorld* OwningWorld = GetWorld();
+		if (OwningWorld != nullptr)
+		{
+			for (TActorIterator<AUOURewardActor> RewardIterator(OwningWorld); RewardIterator; ++RewardIterator)
+			{
+				const AUOURewardActor* OtherReward = *RewardIterator;
+				if (OtherReward != this && OtherReward->RewardId == RewardId)
+				{
+					AddValidationError(FText::Format(
+						FText::FromString(TEXT("RewardId '{0}'를 Actor '{1}'도 사용하고 있습니다.")),
+						FText::FromName(RewardId),
+						FText::FromString(OtherReward->GetActorLabel())));
+					break;
+				}
+			}
+		}
+	}
+
+	return bIsValid ? EDataValidationResult::Valid : EDataValidationResult::Invalid;
+}
+#endif
 
 void AUOURewardActor::OnConstruction(const FTransform& Transform)
 {
