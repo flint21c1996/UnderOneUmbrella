@@ -175,6 +175,9 @@ protected:
 	// 우산 붓기 종료 입력을 처리한다.
 	void HandleUmbrellaPourReleased();
 
+	// 우산 빛 반사 시작 입력을 처리한다.
+	void HandleUmbrellaLightReflectingPressed();
+
 	// 우산 테스트용 물 채우기 입력을 처리한다.
 	void HandleUmbrellaDebugFillPressed();
 

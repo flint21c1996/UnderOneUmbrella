@@ -22,6 +22,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Title")
 	void StartGame();
 
+	UFUNCTION(BlueprintCallable, Category = "Title", meta = (DisplayName = "맵 선택 화면 열기"))
+	void OpenMapSelect();
+
 	UFUNCTION(BlueprintCallable, Category = "Title")
 	void QuitGame();
 

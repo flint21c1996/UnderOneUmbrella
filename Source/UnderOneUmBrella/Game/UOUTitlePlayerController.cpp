@@ -81,6 +81,11 @@ void AUOUTitlePlayerController::SetupInputComponent()
 
 void AUOUTitlePlayerController::StartGame()
 {
+	OpenMapSelect();
+}
+
+void AUOUTitlePlayerController::OpenMapSelect()
+{
 	// 맵 전환 중에 버튼이 다시 눌려도 OpenLevel을 한 번만 요청합니다.
 	if (bIsOpeningLevel || MapSelectLevel.IsNull())
 	{

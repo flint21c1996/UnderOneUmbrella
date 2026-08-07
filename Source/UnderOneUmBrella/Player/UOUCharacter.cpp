@@ -258,6 +258,8 @@ void AUOUCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompon
 
 	if (UUOUUmbrellaComponent* UmbrellaComponent = FindUmbrellaComponent())
 	{
+		PlayerInputComponent->BindKey(UmbrellaComponent->GetLightReflectingKey(), IE_Pressed, this, &AUOUCharacter::HandleUmbrellaLightReflectingPressed);
+
 		if (UmbrellaToggleAction == nullptr)
 		{
 			PlayerInputComponent->BindKey(UmbrellaComponent->GetToggleUmbrellaKey(), IE_Pressed, this, &AUOUCharacter::HandleUmbrellaTogglePressed);
@@ -305,7 +307,7 @@ void AUOUCharacter::Move(const FInputActionValue& Value)
 
 	if (UUOUUmbrellaComponent* UmbrellaComponent = FindUmbrellaComponent())
 	{
-		if (UmbrellaComponent->IsPouring())
+		if (UmbrellaComponent->IsPouring() || UmbrellaComponent->IsLightReflecting())
 		{
 			UmbrellaComponent->SetPourAimMovementInput(MovementVector, MovementYaw);
 			GetCharacterMovement()->StopMovementImmediately();
@@ -526,6 +528,19 @@ void AUOUCharacter::HandleUmbrellaPourReleased()
 	if (UUOUUmbrellaComponent* UmbrellaComponent = FindUmbrellaComponent())
 	{
 		UmbrellaComponent->HandleInputReleased(UmbrellaComponent->GetPourKey());
+	}
+}
+
+void AUOUCharacter::HandleUmbrellaLightReflectingPressed()
+{
+	if (IsPlayerInteractionInputBlocked())
+	{
+		return;
+	}
+
+	if (UUOUUmbrellaComponent* UmbrellaComponent = FindUmbrellaComponent())
+	{
+		UmbrellaComponent->HandleInputPressed(UmbrellaComponent->GetLightReflectingKey());
 	}
 }
 

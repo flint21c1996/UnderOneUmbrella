@@ -235,6 +235,9 @@ bool UUOUPlayerUmbrellaStateConditionComponent::DoesCurrentUmbrellaStateMatch() 
 	case EUOUUmbrellaState::Pouring:
 		return CachedUmbrellaComponent->IsPouring();
 
+	case EUOUUmbrellaState::LightReflecting:
+		return CachedUmbrellaComponent->IsLightReflecting();
+
 	default:
 		return false;
 	}
