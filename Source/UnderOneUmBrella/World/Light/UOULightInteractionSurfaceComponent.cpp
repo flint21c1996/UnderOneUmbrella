@@ -33,11 +33,6 @@ void UUOULightInteractionSurfaceComponent::PostEditChangeProperty(FPropertyChang
 
 void UUOULightInteractionSurfaceComponent::SetLightInteractionMode(EUOULightInteractionMode NewMode)
 {
-	if (LightInteractionMode == NewMode)
-	{
-		return;
-	}
-
 	LightInteractionMode = NewMode;
 	ApplyCollisionSettings();
 }
@@ -52,8 +47,127 @@ bool UUOULightInteractionSurfaceComponent::CanReflectLight() const
 {
 	return LightInteractionMode == EUOULightInteractionMode::Reflecting &&
 		ReflectionRange > 0.0f &&
-		ReflectionConeAngle > 0.0f &&
-		ReflectionIntensityMultiplier > 0.0f;
+		ReflectionIntensityMultiplier > 0.0f &&
+		(!bLimitReflectionBySurfaceAperture || GetReflectionApertureRadius() > KINDA_SMALL_NUMBER);
+}
+
+bool UUOULightInteractionSurfaceComponent::CanReflectIncomingLight(
+	const FVector& IncomingDirection,
+	const FVector& HitNormal) const
+{
+	if (!CanReflectLight())
+	{
+		return false;
+	}
+
+	const FVector SafeIncomingDirection = IncomingDirection.GetSafeNormal();
+	if (SafeIncomingDirection.IsNearlyZero())
+	{
+		return false;
+	}
+
+	FVector FrontNormal = GetReflectionFrontNormal();
+	if (FrontNormal.IsNearlyZero())
+	{
+		FrontNormal = HitNormal.GetSafeNormal();
+	}
+	if (FrontNormal.IsNearlyZero())
+	{
+		return false;
+	}
+
+	float FrontDot = FVector::DotProduct(-SafeIncomingDirection, FrontNormal);
+	if (bReflectFrontFaceOnly && FrontDot <= 0.0f)
+	{
+		return false;
+	}
+	if (!bReflectFrontFaceOnly)
+	{
+		FrontDot = FMath::Abs(FrontDot);
+	}
+
+	const float IncidenceAngle = FMath::RadiansToDegrees(
+		FMath::Acos(FMath::Clamp(FrontDot, 0.0f, 1.0f)));
+	return IncidenceAngle <= MaximumReflectionIncidenceAngle;
+}
+
+bool UUOULightInteractionSurfaceComponent::ShouldPassThroughIncomingLight(
+	const FVector& IncomingDirection,
+	const FVector& HitNormal) const
+{
+	return LightInteractionMode == EUOULightInteractionMode::Reflecting &&
+		bPassThroughWhenReflectionRejected &&
+		CanReflectLight() &&
+		!CanReflectIncomingLight(IncomingDirection, HitNormal);
+}
+
+float UUOULightInteractionSurfaceComponent::ClampReflectionBeamRadius(
+	float IncomingBeamRadius,
+	const FVector& IncomingDirection,
+	const FVector& HitNormal) const
+{
+	const float SafeIncomingRadius = FMath::Max(0.0f, IncomingBeamRadius);
+	if (!bLimitReflectionBySurfaceAperture)
+	{
+		return SafeIncomingRadius;
+	}
+
+	FVector FrontNormal = GetReflectionFrontNormal();
+	if (FrontNormal.IsNearlyZero())
+	{
+		FrontNormal = HitNormal.GetSafeNormal();
+	}
+	const FVector SafeIncomingDirection = IncomingDirection.GetSafeNormal();
+	const float IncidenceProjection = FrontNormal.IsNearlyZero() || SafeIncomingDirection.IsNearlyZero()
+		? 1.0f
+		: FMath::Abs(FVector::DotProduct(-SafeIncomingDirection, FrontNormal));
+	const float EffectiveApertureRadius =
+		GetReflectionApertureRadius() * FMath::Clamp(IncidenceProjection, 0.0f, 1.0f);
+	return FMath::Min(SafeIncomingRadius, EffectiveApertureRadius);
+}
+
+float UUOULightInteractionSurfaceComponent::ResolveReflectionConeAngle(float IncomingConeAngle) const
+{
+	const float ConeAngle = ReflectionConeAngleMode == EUOULightReflectionConeAngleMode::PreserveIncoming
+		? IncomingConeAngle
+		: ReflectionConeAngle;
+	return FMath::Clamp(ConeAngle, 0.0f, 89.0f);
+}
+
+void UUOULightInteractionSurfaceComponent::GetReflectionSamplePositions(
+	TArray<FVector>& OutSamplePositions) const
+{
+	OutSamplePositions.Reset();
+	OutSamplePositions.Add(GetComponentLocation());
+	if (!bUseSurfaceAreaSampling)
+	{
+		return;
+	}
+
+	const FVector Extent = GetScaledBoxExtent().GetAbs();
+	TArray<TPair<float, FVector>, TInlineAllocator<3>> LocalAxes;
+	LocalAxes.Emplace(Extent.X, FVector::ForwardVector);
+	LocalAxes.Emplace(Extent.Y, FVector::RightVector);
+	LocalAxes.Emplace(Extent.Z, FVector::UpVector);
+	LocalAxes.Sort([](const TPair<float, FVector>& A, const TPair<float, FVector>& B)
+	{
+		return A.Key > B.Key;
+	});
+
+	const float SafeInset = FMath::Clamp(SurfaceSampleInset, 0.0f, 1.0f);
+	for (int32 AxisIndex = 0; AxisIndex < 2; ++AxisIndex)
+	{
+		const float SampleDistance = LocalAxes[AxisIndex].Key * SafeInset;
+		if (SampleDistance <= KINDA_SMALL_NUMBER)
+		{
+			continue;
+		}
+
+		const FVector WorldOffset = GetComponentTransform().TransformVectorNoScale(
+			LocalAxes[AxisIndex].Value * SampleDistance);
+		OutSamplePositions.Add(GetComponentLocation() + WorldOffset);
+		OutSamplePositions.Add(GetComponentLocation() - WorldOffset);
+	}
 }
 
 FVector UUOULightInteractionSurfaceComponent::GetReflectionDirection(
@@ -91,9 +205,12 @@ FVector UUOULightInteractionSurfaceComponent::GetReflectionDirection(
 void UUOULightInteractionSurfaceComponent::ValidateSettings()
 {
 	ReflectionRange = FMath::Max(0.0f, ReflectionRange);
-	ReflectionConeAngle = FMath::Clamp(ReflectionConeAngle, 1.0f, 89.0f);
+	ReflectionConeAngle = FMath::Clamp(ReflectionConeAngle, 0.0f, 89.0f);
 	ReflectionIntensityMultiplier = FMath::Max(0.0f, ReflectionIntensityMultiplier);
 	ReflectionStartPadding = FMath::Max(0.0f, ReflectionStartPadding);
+	MaximumReflectionIncidenceAngle = FMath::Clamp(MaximumReflectionIncidenceAngle, 0.0f, 89.9f);
+	ReflectionApertureScale = FMath::Max(0.0f, ReflectionApertureScale);
+	SurfaceSampleInset = FMath::Clamp(SurfaceSampleInset, 0.0f, 1.0f);
 }
 
 void UUOULightInteractionSurfaceComponent::ApplyCollisionSettings()
@@ -119,4 +236,31 @@ FVector UUOULightInteractionSurfaceComponent::GetReflectionNormal(const FVector&
 	default:
 		return HitNormal.GetSafeNormal();
 	}
+}
+
+FVector UUOULightInteractionSurfaceComponent::GetReflectionFrontNormal() const
+{
+	switch (ReflectionFrontNormalMode)
+	{
+	case EUOULightReflectionFrontNormalMode::ComponentUp:
+		return GetUpVector().GetSafeNormal();
+	case EUOULightReflectionFrontNormalMode::OwnerForward:
+		if (const AActor* OwnerActor = GetOwner())
+		{
+			return OwnerActor->GetActorForwardVector().GetSafeNormal();
+		}
+		return GetForwardVector().GetSafeNormal();
+	case EUOULightReflectionFrontNormalMode::ComponentForward:
+	default:
+		return GetForwardVector().GetSafeNormal();
+	}
+}
+
+float UUOULightInteractionSurfaceComponent::GetReflectionApertureRadius() const
+{
+	const FVector Extent = GetScaledBoxExtent().GetAbs();
+	const float SmallestExtent = FMath::Min3(Extent.X, Extent.Y, Extent.Z);
+	const float LargestExtent = FMath::Max3(Extent.X, Extent.Y, Extent.Z);
+	const float MiddleExtent = Extent.X + Extent.Y + Extent.Z - SmallestExtent - LargestExtent;
+	return FMath::Max(0.0f, MiddleExtent * ReflectionApertureScale);
 }
