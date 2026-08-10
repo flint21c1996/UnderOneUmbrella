@@ -1427,6 +1427,7 @@ bool UUOULightExposureSourceComponent::FindNearestUmbrellaLightShadeHit(
 	}
 
 	float BestHitTime = TNumericLimits<float>::Max();
+	const FVector IncomingDirection = TraceDelta / TraceLength;
 	for (TObjectIterator<UUOUUmbrellaLightShadeVolumeComponent> ShadeIt; ShadeIt; ++ShadeIt)
 	{
 		UUOUUmbrellaLightShadeVolumeComponent* ShadeVolume = *ShadeIt;
@@ -1435,6 +1436,7 @@ bool UUOULightExposureSourceComponent::FindNearestUmbrellaLightShadeHit(
 			ShadeVolume->GetOwner() == IgnoredShadeOwner ||
 			!ShadeVolume->IsRegistered() ||
 			!ShadeVolume->CanShadeLight() ||
+			!ShadeVolume->CanShadeIncomingLight(IncomingDirection) ||
 			ShadeVolume->ContainsWorldPosition(TraceStart))
 		{
 			continue;
@@ -1472,7 +1474,7 @@ bool UUOULightExposureSourceComponent::FindNearestUmbrellaLightShadeHit(
 				ShadeOwner->FindComponentByClass<UUOULightInteractionSurfaceComponent>();
 				SurfaceComponent != nullptr &&
 				SurfaceComponent->ShouldPassThroughIncomingLight(
-					TraceDelta / TraceLength,
+					IncomingDirection,
 					HitNormal))
 			{
 				continue;
