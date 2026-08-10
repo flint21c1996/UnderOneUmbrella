@@ -60,6 +60,8 @@ void UUOUUmbrellaLightInteractionComponent::TickComponent(
 	FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+	ApplyRuntimeLightSurfacePlacement();
+	ApplyRuntimeLightShadeVolumePlacement();
 	DrawReflectorDebug();
 }
 
@@ -251,17 +253,33 @@ void UUOUUmbrellaLightInteractionComponent::ApplyRuntimeLightSurfacePlacement() 
 		return;
 	}
 
-	LightSurfaceComponent->SetBoxExtent(RuntimeSurfaceBoxExtent);
+	FVector WorldCenter = FVector::ZeroVector;
+	FRotator WorldRotation = FRotator::ZeroRotator;
+	FVector HalfExtent = FVector::ZeroVector;
+	const bool bUseRainBlockerPlacement = TryResolveRainBlockerAlignedTransform(
+		WorldCenter,
+		WorldRotation,
+		HalfExtent);
+	LightSurfaceComponent->SetBoxExtent(
+		bUseRainBlockerPlacement ? HalfExtent : RuntimeSurfaceBoxExtent);
 	LightSurfaceComponent->ReflectionDirectionMode = EUOULightReflectionDirectionMode::OwnerForward;
-	LightSurfaceComponent->ReflectionFrontNormalMode = EUOULightReflectionFrontNormalMode::OwnerForward;
+	// 차단 박스와 동일한 회전을 사용하므로 로컬 Up이 실제 우산 면의 앞면입니다.
+	LightSurfaceComponent->ReflectionFrontNormalMode = EUOULightReflectionFrontNormalMode::ComponentUp;
 	LightSurfaceComponent->bPassThroughWhenReflectionRejected =
 		bPassLightThroughOutsideReflectionAngle;
 	LightSurfaceComponent->MaximumReflectionIncidenceAngle = FMath::Clamp(
 		MaximumUmbrellaReflectionIncidenceAngle,
 		0.0f,
 		89.9f);
-	LightSurfaceComponent->SetRelativeLocation(RuntimeSurfaceRelativeLocation);
-	LightSurfaceComponent->SetRelativeRotation(RuntimeSurfaceRelativeRotation);
+	if (bUseRainBlockerPlacement)
+	{
+		LightSurfaceComponent->SetWorldLocationAndRotation(WorldCenter, WorldRotation);
+	}
+	else
+	{
+		LightSurfaceComponent->SetRelativeLocation(RuntimeSurfaceRelativeLocation);
+		LightSurfaceComponent->SetRelativeRotation(RuntimeSurfaceRelativeRotation);
+	}
 }
 
 void UUOUUmbrellaLightInteractionComponent::ApplyRuntimeLightShadeVolumePlacement() const
@@ -271,13 +289,83 @@ void UUOUUmbrellaLightInteractionComponent::ApplyRuntimeLightShadeVolumePlacemen
 		return;
 	}
 
+	FVector WorldCenter = FVector::ZeroVector;
+	FRotator WorldRotation = FRotator::ZeroRotator;
+	FVector RainBlockerHalfExtent = FVector::ZeroVector;
+	const bool bUseRainBlockerPlacement = TryResolveRainBlockerAlignedTransform(
+		WorldCenter,
+		WorldRotation,
+		RainBlockerHalfExtent);
+	const FVector SourceExtent = bUseRainBlockerPlacement
+		? RainBlockerHalfExtent
+		: RuntimeShadeVolumeBoxExtent;
 	const FVector SafeBoxExtent(
-		FMath::Max(0.0f, RuntimeShadeVolumeBoxExtent.X),
-		FMath::Max(0.0f, RuntimeShadeVolumeBoxExtent.Y),
-		FMath::Max(0.0f, RuntimeShadeVolumeBoxExtent.Z));
+		FMath::Max(0.0f, SourceExtent.X),
+		FMath::Max(0.0f, SourceExtent.Y),
+		FMath::Max(0.0f, SourceExtent.Z));
 	LightShadeVolumeComponent->SetBoxExtent(SafeBoxExtent);
-	LightShadeVolumeComponent->SetRelativeLocation(RuntimeShadeVolumeRelativeLocation);
-	LightShadeVolumeComponent->SetRelativeRotation(RuntimeShadeVolumeRelativeRotation);
+	const bool bUseReflectionAngle = UmbrellaComponent != nullptr &&
+		UmbrellaComponent->CurrentState == EUOUUmbrellaState::LightReflecting &&
+		bPassLightThroughOutsideReflectionAngle;
+	LightShadeVolumeComponent->MaximumBlockingIncidenceAngle = FMath::Clamp(
+		bUseReflectionAngle
+			? MaximumUmbrellaReflectionIncidenceAngle
+			: MaximumUmbrellaBlockingIncidenceAngle,
+		0.0f,
+		89.9f);
+	LightShadeVolumeComponent->bBlockFrontFaceOnly = true;
+	if (bUseRainBlockerPlacement)
+	{
+		LightShadeVolumeComponent->SetWorldLocationAndRotation(WorldCenter, WorldRotation);
+	}
+	else
+	{
+		LightShadeVolumeComponent->SetRelativeLocation(RuntimeShadeVolumeRelativeLocation);
+		LightShadeVolumeComponent->SetRelativeRotation(RuntimeShadeVolumeRelativeRotation);
+	}
+}
+
+bool UUOUUmbrellaLightInteractionComponent::TryResolveRainBlockerAlignedTransform(
+	FVector& OutWorldCenter,
+	FRotator& OutWorldRotation,
+	FVector& OutHalfExtent) const
+{
+	OutWorldCenter = FVector::ZeroVector;
+	OutWorldRotation = FRotator::ZeroRotator;
+	OutHalfExtent = FVector::ZeroVector;
+	if (!bAlignLightInteractionToRainBlocker || UmbrellaComponent == nullptr ||
+		!UmbrellaComponent->TryGetGameplayRainBlockerVolumeData(
+			OutWorldCenter,
+			OutWorldRotation,
+			OutHalfExtent))
+	{
+		return false;
+	}
+
+	if (UmbrellaComponent->CurrentState != EUOUUmbrellaState::LightReflecting)
+	{
+		return true;
+	}
+
+	const AActor* Owner = GetOwner();
+	if (Owner == nullptr)
+	{
+		return true;
+	}
+
+	// 머리 위 비 차단 박스를 플레이어 로컬 공간에서 회전시켜 같은 크기의 판정면을 전방으로 옮깁니다.
+	const FTransform OwnerTransform = Owner->GetActorTransform();
+	const FQuat StateRotation = LightReflectingBlockerRotationOffset.Quaternion();
+	const FVector LocalCenter = OwnerTransform.InverseTransformPosition(OutWorldCenter);
+	const FVector ReflectedLocalCenter =
+		StateRotation.RotateVector(LocalCenter) + LightReflectingBlockerAdditionalLocalOffset;
+	OutWorldCenter = OwnerTransform.TransformPosition(ReflectedLocalCenter);
+
+	const FQuat RainBlockerLocalRotation =
+		OwnerTransform.GetRotation().Inverse() * OutWorldRotation.Quaternion();
+	OutWorldRotation = (
+		OwnerTransform.GetRotation() * StateRotation * RainBlockerLocalRotation).Rotator();
+	return true;
 }
 
 void UUOUUmbrellaLightInteractionComponent::DrawReflectorDebug() const
@@ -296,9 +384,13 @@ void UUOUUmbrellaLightInteractionComponent::DrawReflectorDebug() const
 	}
 
 	const EUOULightInteractionMode InteractionMode = LightSurfaceComponent->LightInteractionMode;
+	const bool bShadeActive = LightShadeVolumeComponent != nullptr &&
+		LightShadeVolumeComponent->CanShadeLight();
+	const bool bDebugBlocking = InteractionMode == EUOULightInteractionMode::Blocking ||
+		(InteractionMode == EUOULightInteractionMode::Disabled && bShadeActive);
 	const FColor SurfaceColor = InteractionMode == EUOULightInteractionMode::Reflecting
 		? FColor::Magenta
-		: (InteractionMode == EUOULightInteractionMode::Blocking ? FColor::Yellow : FColor::Silver);
+		: (bDebugBlocking ? FColor::Yellow : FColor::Silver);
 	const FVector SurfaceLocation = LightSurfaceComponent->GetComponentLocation();
 	const float SafeThickness = FMath::Max(0.0f, ReflectorDebugThickness);
 
@@ -337,7 +429,7 @@ void UUOUUmbrellaLightInteractionComponent::DrawReflectorDebug() const
 	{
 		const TCHAR* ModeText = InteractionMode == EUOULightInteractionMode::Reflecting
 			? TEXT("Reflecting")
-			: (InteractionMode == EUOULightInteractionMode::Blocking ? TEXT("Blocking") : TEXT("Disabled"));
+			: (bDebugBlocking ? TEXT("Blocking") : TEXT("Disabled"));
 		DrawDebugString(
 			World,
 			SurfaceLocation + FVector(0.0f, 0.0f, LightSurfaceComponent->GetScaledBoxExtent().Z + 20.0f),

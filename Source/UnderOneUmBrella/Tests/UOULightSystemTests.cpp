@@ -750,6 +750,40 @@ bool FUOUUmbrellaReflectionAngleBoundaryTest::RunTest(const FString& Parameters)
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FUOUUmbrellaShadeDirectionTest,
+	"UnderOneUmbrella.Light.Shade.UmbrellaDirection",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUOUUmbrellaShadeDirectionTest::RunTest(const FString& Parameters)
+{
+	UUOUUmbrellaLightShadeVolumeComponent* ShadeVolume =
+		NewObject<UUOUUmbrellaLightShadeVolumeComponent>();
+	TestNotNull(TEXT("우산 빛 차단 방향 테스트 컴포넌트를 생성한다"), ShadeVolume);
+	if (ShadeVolume == nullptr)
+	{
+		return false;
+	}
+
+	ShadeVolume->SetShadeEnabled(true);
+	ShadeVolume->MaximumBlockingIncidenceAngle = 75.0f;
+	ShadeVolume->bBlockFrontFaceOnly = true;
+
+	TestTrue(
+		TEXT("위에서 내려오는 빛은 펼친 우산이 차단한다"),
+		ShadeVolume->CanShadeIncomingLight(FVector::DownVector));
+	TestTrue(
+		TEXT("대각선 상단에서 들어오는 빛은 펼친 우산이 차단한다"),
+		ShadeVolume->CanShadeIncomingLight(FVector(1.0f, 0.0f, -1.0f)));
+	TestFalse(
+		TEXT("수평 측면에서 들어오는 빛은 펼친 우산을 통과한다"),
+		ShadeVolume->CanShadeIncomingLight(FVector::ForwardVector));
+	TestFalse(
+		TEXT("우산 뒷면에서 들어오는 빛은 차단하지 않는다"),
+		ShadeVolume->CanShadeIncomingLight(FVector::UpVector));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FUOULightWorldPathIntegrationTest,
 	"UnderOneUmbrella.Light.Path.WorldCollisionIntegration",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
