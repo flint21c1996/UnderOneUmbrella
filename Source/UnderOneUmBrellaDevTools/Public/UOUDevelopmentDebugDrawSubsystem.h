@@ -29,7 +29,11 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Development Debug|Puzzle")
 	int32 GetPuzzleDebugProviderCount() const;
 
+	// 이 Subsystem의 Tick에서 갱신한 최신 플레이어 정보를 HUD에 제공합니다.
+	const FString& GetPlayerDebugText() const { return PlayerDebugText; }
+
 private:
+	void RefreshPlayerDebugText();
 	void TryAddPuzzleDebugProvider(UObject* ProviderObject);
 	void DrawPuzzleProviderConnections() const;
 	void DrawPuzzleProviderLabels() const;
@@ -42,4 +46,7 @@ private:
 
 	// 다음 Puzzle Provider 월드 스캔까지 남은 시간입니다.
 	float PuzzleProviderRefreshTimeRemaining = 0.0f;
+
+	// 개발 HUD가 읽는 현재 월드 플레이어 정보의 런타임 캐시입니다.
+	FString PlayerDebugText;
 };

@@ -13,11 +13,13 @@
 
 #include "Puzzle/Core/UOUPuzzleConditionGroupActor.h"
 #include "UOUDevelopmentDebugControlSubsystem.h"
+#include "UOUDevelopmentDebugDrawSubsystem.h"
 #include "UOUDevelopmentPuzzleCheatSubsystem.h"
 
 void SUOUDevelopmentPuzzleCheatHUD::Construct(const FArguments& InArgs)
 {
 	DebugControlSubsystem = InArgs._DebugControlSubsystem;
+	DebugDrawSubsystem = InArgs._DebugDrawSubsystem;
 	PuzzleCheatSubsystem = InArgs._PuzzleCheatSubsystem;
 
 	ChildSlot
@@ -280,6 +282,20 @@ void SUOUDevelopmentPuzzleCheatHUD::Construct(const FArguments& InArgs)
 									]
 								]
 							]
+							+ SVerticalBox::Slot()
+							.AutoHeight()
+							.Padding(0.0f, 10.0f, 0.0f, 0.0f)
+							[
+								SNew(SBorder)
+								.BorderImage(FCoreStyle::Get().GetBrush(TEXT("GenericWhiteBox")))
+								.BorderBackgroundColor(FLinearColor(0.08f, 0.08f, 0.08f, 0.9f))
+								.Padding(8.0f)
+								[
+									SNew(STextBlock)
+									.Text(this, &SUOUDevelopmentPuzzleCheatHUD::GetPlayerDebugInfoText)
+									.AutoWrapText(true)
+								]
+							]
 						]
 					]
 				]
@@ -517,6 +533,27 @@ FText SUOUDevelopmentPuzzleCheatHUD::GetDebugCategoryToggleText(EUOUDebugCategor
 		TEXT("%s: %s"),
 		CategoryName,
 		Subsystem->IsDebugCategoryEnabled(Category) ? TEXT("ON") : TEXT("OFF")));
+}
+
+FText SUOUDevelopmentPuzzleCheatHUD::GetPlayerDebugInfoText() const
+{
+	const UUOUDevelopmentDebugControlSubsystem* ControlSubsystem = DebugControlSubsystem.Get();
+	const UUOUDevelopmentDebugDrawSubsystem* DrawSubsystem = DebugDrawSubsystem.Get();
+	if (ControlSubsystem == nullptr || DrawSubsystem == nullptr)
+	{
+		return FText::FromString(TEXT("Player debug information is unavailable."));
+	}
+
+	if (!ControlSubsystem->IsDebugToolsEnabled()
+		|| !ControlSubsystem->IsDebugCategoryEnabled(EUOUDebugCategory::Player))
+	{
+		return FText::FromString(TEXT("Player debug information is disabled."));
+	}
+
+	const FString& DebugText = DrawSubsystem->GetPlayerDebugText();
+	return FText::FromString(DebugText.IsEmpty()
+		? TEXT("Waiting for player debug information...")
+		: DebugText);
 }
 
 FText SUOUDevelopmentPuzzleCheatHUD::GetStatusText() const

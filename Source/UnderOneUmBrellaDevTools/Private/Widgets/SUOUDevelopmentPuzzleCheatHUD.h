@@ -8,6 +8,7 @@
 class AUOUPuzzleConditionGroupActor;
 class SVerticalBox;
 class UUOUDevelopmentDebugControlSubsystem;
+class UUOUDevelopmentDebugDrawSubsystem;
 class UUOUDevelopmentPuzzleCheatSubsystem;
 enum class EUOUDebugCategory : uint8;
 
@@ -19,6 +20,7 @@ public:
 	{
 	}
 		SLATE_ARGUMENT(TWeakObjectPtr<UUOUDevelopmentDebugControlSubsystem>, DebugControlSubsystem)
+		SLATE_ARGUMENT(TWeakObjectPtr<UUOUDevelopmentDebugDrawSubsystem>, DebugDrawSubsystem)
 		SLATE_ARGUMENT(TWeakObjectPtr<UUOUDevelopmentPuzzleCheatSubsystem>, PuzzleCheatSubsystem)
 	SLATE_END_ARGS()
 
@@ -52,6 +54,7 @@ private:
 	EVisibility GetDebugPageVisibility() const;
 	FText GetDebugToolsToggleText() const;
 	FText GetDebugCategoryToggleText(EUOUDebugCategory Category) const;
+	FText GetPlayerDebugInfoText() const;
 	FText GetStatusText() const;
 	FSlateColor GetStatusColor() const;
 	bool IsPuzzleActionEnabled() const;
@@ -60,6 +63,9 @@ private:
 
 	// 전체 및 Puzzle 카테고리 디버그 상태를 제어할 현재 월드 Subsystem의 약한 참조입니다.
 	TWeakObjectPtr<UUOUDevelopmentDebugControlSubsystem> DebugControlSubsystem;
+
+	// HUD에 표시할 런타임 디버그 정보를 생성하는 현재 월드 Subsystem의 약한 참조입니다.
+	TWeakObjectPtr<UUOUDevelopmentDebugDrawSubsystem> DebugDrawSubsystem;
 
 	// HUD를 소유한 현재 월드 Subsystem의 약한 참조입니다.
 	TWeakObjectPtr<UUOUDevelopmentPuzzleCheatSubsystem> PuzzleCheatSubsystem;
