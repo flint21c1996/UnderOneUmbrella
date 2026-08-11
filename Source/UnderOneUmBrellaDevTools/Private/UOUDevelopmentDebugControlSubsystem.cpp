@@ -17,22 +17,33 @@ bool UUOUDevelopmentDebugControlSubsystem::ShouldCreateSubsystem(UObject* Outer)
 	return World != nullptr && World->IsGameWorld();
 }
 
-bool UUOUDevelopmentDebugControlSubsystem::IsDebugToolsEnabled() const
+void UUOUDevelopmentDebugControlSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 {
-	const AUOUDebugController* DebugController = ResolveDebugController();
-	return DebugController != nullptr && DebugController->bEnableDebugTools;
+	Super::OnWorldBeginPlay(InWorld);
+
+	if (const AUOUDebugController* DebugController = ResolveDebugController())
+	{
+		bDebugToolsEnabled = DebugController->bEnableDebugTools;
+	}
 }
 
-bool UUOUDevelopmentDebugControlSubsystem::SetDebugToolsEnabled(bool bNewEnabled)
+bool UUOUDevelopmentDebugControlSubsystem::IsDebugToolsEnabled() const
 {
-	AUOUDebugController* DebugController = ResolveDebugController();
-	if (DebugController == nullptr)
-	{
-		return false;
-	}
+	return bDebugToolsEnabled;
+}
 
-	DebugController->bEnableDebugTools = bNewEnabled;
-	return true;
+void UUOUDevelopmentDebugControlSubsystem::SetDebugToolsEnabled(bool bNewEnabled)
+{
+	bDebugToolsEnabled = bNewEnabled;
+	ApplyMasterStateToLegacyController();
+}
+
+void UUOUDevelopmentDebugControlSubsystem::ApplyMasterStateToLegacyController() const
+{
+	if (AUOUDebugController* DebugController = ResolveDebugController())
+	{
+		DebugController->bEnableDebugTools = bDebugToolsEnabled;
+	}
 }
 
 AUOUDebugController* UUOUDevelopmentDebugControlSubsystem::ResolveDebugController() const

@@ -16,15 +16,21 @@ class UNDERONEUMBRELLADEVTOOLS_API UUOUDevelopmentDebugControlSubsystem : public
 
 public:
 	virtual bool ShouldCreateSubsystem(UObject* Outer) const override;
+	virtual void OnWorldBeginPlay(UWorld& InWorld) override;
 
-	// 기존 활성 디버그 컨트롤러의 전체 활성 상태를 반환합니다.
+	// 개발 도구가 소유한 전체 디버그 활성 상태를 반환합니다.
 	UFUNCTION(BlueprintPure, Category = "Development Debug")
 	bool IsDebugToolsEnabled() const;
 
-	// 기존 활성 디버그 컨트롤러의 전체 활성 상태를 변경합니다.
+	// 개발 도구가 소유한 전체 디버그 활성 상태를 변경합니다.
 	UFUNCTION(BlueprintCallable, Category = "Development Debug")
-	bool SetDebugToolsEnabled(bool bNewEnabled);
+	void SetDebugToolsEnabled(bool bNewEnabled);
 
 private:
+	void ApplyMasterStateToLegacyController() const;
 	AUOUDebugController* ResolveDebugController() const;
+
+	// 현재 월드의 전체 디버그 표시 여부를 저장하는 개발 도구 런타임 상태입니다.
+	UPROPERTY(Transient)
+	bool bDebugToolsEnabled = true;
 };
