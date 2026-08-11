@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "Debug/UOUDevelopmentCheatBuild.h"
 #include "Engine/EngineTypes.h"
 #include "UOUPuzzleConditionGroupComponent.generated.h"
 
@@ -77,6 +78,12 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Puzzle|Conditions")
 	int32 GetSatisfiedCount() const;
 
+#if UOU_WITH_PUZZLE_CHEATS
+	// 실제 조건 소스를 변경하지 않고 기존 상태 변경 이벤트 경로를 통해 그룹을 만족시킵니다.
+	// 개발 도구 모듈에서만 호출하는 일반 C++ 진입점입니다.
+	bool ForceSatisfiedForCheat();
+#endif
+
 	// 외부에서 수집한 조건 소스 목록을 교체합니다.
 	void SetExternalConditionSources(const TArray<UUOUPuzzleConditionSourceComponent*>& NewConditionSources);
 
@@ -84,6 +91,11 @@ public:
 	void ClearExternalConditionSources();
 
 protected:
+#if UOU_WITH_PUZZLE_CHEATS
+	// 개발 치트가 실제 조건 계산을 대신해 그룹을 만족 상태로 유지하는 비직렬화 런타임 값입니다.
+	bool bHasCheatSatisfiedOverride = false;
+#endif
+
 	// 개별 조건 소스 상태 변화에 반응해서 그룹 상태를 다시 계산합니다.
 	UFUNCTION()
 	void HandleConditionChanged(bool bNewSatisfied);
@@ -99,6 +111,11 @@ protected:
 
 	// 전체 만족 상태를 계산하고 필요하면 이벤트를 방송합니다.
 	void RefreshSatisfiedState(bool bBroadcastEvents);
+
+#if UOU_WITH_PUZZLE_CHEATS
+	// 치트 오버라이드와 실제 조건 상태를 합쳐 이번 갱신의 최종 만족 상태를 반환합니다.
+	bool ResolveSatisfiedState() const;
+#endif
 
 	// 모든 조건이 만족되었는지 검사합니다.
 	bool AreAllConditionsSatisfied() const;
