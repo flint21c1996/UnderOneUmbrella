@@ -6,6 +6,8 @@
 #include "Debug/UOUDebugSubsystem.h"
 #include "DrawDebugHelpers.h"
 #include "GameFramework/Actor.h"
+#include "GameFramework/HUD.h"
+#include "GameFramework/PlayerController.h"
 #include "Engine/World.h"
 #include "TimerManager.h"
 #include "Player/UOUUmbrellaLightShadeVolumeComponent.h"
@@ -430,20 +432,41 @@ void UUOUUmbrellaLightInteractionComponent::DrawReflectorDebug() const
 		const TCHAR* ModeText = InteractionMode == EUOULightInteractionMode::Reflecting
 			? TEXT("Reflecting")
 			: (bDebugBlocking ? TEXT("Blocking") : TEXT("Disabled"));
-		DrawDebugString(
-			World,
-			SurfaceLocation + FVector(0.0f, 0.0f, LightSurfaceComponent->GetScaledBoxExtent().Z + 20.0f),
-			FString::Printf(
-				TEXT("Umbrella Reflector: %s\nExtent: %.1f %.1f %.1f"),
-				ModeText,
-				LightSurfaceComponent->GetScaledBoxExtent().X,
-				LightSurfaceComponent->GetScaledBoxExtent().Y,
-				LightSurfaceComponent->GetScaledBoxExtent().Z),
-			nullptr,
-			SurfaceColor,
-			0.0f,
-			false,
-			1.0f);
+		const FVector DebugTextLocation =
+			SurfaceLocation + FVector(0.0f, 0.0f, LightSurfaceComponent->GetScaledBoxExtent().Z + 20.0f);
+		const FString DebugText = FString::Printf(
+			TEXT("Umbrella Reflector: %s\nExtent: %.1f %.1f %.1f"),
+			ModeText,
+			LightSurfaceComponent->GetScaledBoxExtent().X,
+			LightSurfaceComponent->GetScaledBoxExtent().Y,
+			LightSurfaceComponent->GetScaledBoxExtent().Z);
+		AActor* DebugOwner = GetOwner();
+		if (DebugOwner != nullptr)
+		{
+			for (FConstPlayerControllerIterator Iterator = World->GetPlayerControllerIterator(); Iterator; ++Iterator)
+			{
+				APlayerController* PlayerController = Iterator->Get();
+				AHUD* HUD = PlayerController != nullptr ? PlayerController->GetHUD() : nullptr;
+				if (HUD == nullptr)
+				{
+					continue;
+				}
+
+				HUD->AddDebugText(
+					DebugText,
+					DebugOwner,
+					0.15f,
+					DebugTextLocation,
+					DebugTextLocation,
+					SurfaceColor,
+					false,
+					true,
+					false,
+					nullptr,
+					1.0f,
+					true);
+			}
+		}
 	}
 }
 
