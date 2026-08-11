@@ -1,6 +1,7 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "UnderOneUmBrella.h"
+#include "Debug/UOUDevelopmentCheatBuild.h"
 #include "Modules/ModuleManager.h"
 
 #if WITH_EDITOR
@@ -16,6 +17,10 @@ public:
 	virtual void StartupModule() override
 	{
 		FDefaultGameModuleImpl::StartupModule();
+
+#if UOU_WITH_PUZZLE_CHEATS
+		FModuleManager::Get().LoadModuleChecked(TEXT("UnderOneUmBrellaDevTools"));
+#endif
 
 #if WITH_EDITOR
 		MapOpenedHandle = FEditorDelegates::OnMapOpened.AddRaw(this, &FUnderOneUmBrellaModule::HandleMapOpened);
