@@ -2,13 +2,22 @@
 
 #include "UOUDevelopmentDebugDrawSubsystem.h"
 
+#include "Components/ActorComponent.h"
+#include "Debug/UOUDebugProvider.h"
 #include "Debug/UOUDevelopmentToolsBuild.h"
 #include "Engine/World.h"
+#include "EngineUtils.h"
+#include "GameFramework/Actor.h"
 #include "UOUDevelopmentDebugControlSubsystem.h"
 
 #if !UOU_WITH_DEVELOPMENT_TOOLS
 #error UOUDevelopmentDebugDrawSubsystem must only be compiled when development tools are enabled.
 #endif
+
+namespace UOUDevelopmentDebugDrawPrivate
+{
+	constexpr float PuzzleProviderRefreshIntervalSeconds = 1.0f;
+}
 
 bool UUOUDevelopmentDebugDrawSubsystem::ShouldCreateSubsystem(UObject* Outer) const
 {
@@ -27,28 +36,94 @@ void UUOUDevelopmentDebugDrawSubsystem::Initialize(FSubsystemCollectionBase& Col
 	{
 		DebugControlSubsystem = World->GetSubsystem<UUOUDevelopmentDebugControlSubsystem>();
 	}
+	PuzzleProviderRefreshTimeRemaining = 0.0f;
 }
 
 void UUOUDevelopmentDebugDrawSubsystem::Deinitialize()
 {
+	PuzzleDebugProviders.Reset();
+	PuzzleProviderRefreshTimeRemaining = 0.0f;
 	DebugControlSubsystem.Reset();
 	Super::Deinitialize();
 }
 
 void UUOUDevelopmentDebugDrawSubsystem::Tick(float DeltaTime)
 {
-	UE_UNUSED(DeltaTime);
-
 	const UUOUDevelopmentDebugControlSubsystem* ControlSubsystem = DebugControlSubsystem.Get();
 	if (ControlSubsystem == nullptr || !ControlSubsystem->IsDebugToolsEnabled())
 	{
 		return;
 	}
 
-	// 기존 디버그 렌더링은 이후 단계에서 카테고리별로 이관합니다.
+	if (!ControlSubsystem->IsDebugCategoryEnabled(EUOUDebugCategory::Puzzle))
+	{
+		return;
+	}
+
+	PuzzleProviderRefreshTimeRemaining -= DeltaTime;
+	if (PuzzleProviderRefreshTimeRemaining <= 0.0f)
+	{
+		RefreshPuzzleDebugProviders();
+		PuzzleProviderRefreshTimeRemaining =
+			UOUDevelopmentDebugDrawPrivate::PuzzleProviderRefreshIntervalSeconds;
+	}
 }
 
 TStatId UUOUDevelopmentDebugDrawSubsystem::GetStatId() const
 {
 	RETURN_QUICK_DECLARE_CYCLE_STAT(UUOUDevelopmentDebugDrawSubsystem, STATGROUP_Tickables);
+}
+
+void UUOUDevelopmentDebugDrawSubsystem::RefreshPuzzleDebugProviders()
+{
+	PuzzleDebugProviders.Reset();
+
+	UWorld* World = GetWorld();
+	if (World == nullptr)
+	{
+		return;
+	}
+
+	for (TActorIterator<AActor> It(World); It; ++It)
+	{
+		AActor* Actor = *It;
+		if (!IsValid(Actor))
+		{
+			continue;
+		}
+
+		TryAddPuzzleDebugProvider(Actor);
+
+		TInlineComponentArray<UActorComponent*> Components(Actor);
+		for (UActorComponent* Component : Components)
+		{
+			TryAddPuzzleDebugProvider(Component);
+		}
+	}
+}
+
+int32 UUOUDevelopmentDebugDrawSubsystem::GetPuzzleDebugProviderCount() const
+{
+	int32 ValidProviderCount = 0;
+	for (const TWeakObjectPtr<UObject>& ProviderObject : PuzzleDebugProviders)
+	{
+		if (ProviderObject.IsValid())
+		{
+			++ValidProviderCount;
+		}
+	}
+
+	return ValidProviderCount;
+}
+
+void UUOUDevelopmentDebugDrawSubsystem::TryAddPuzzleDebugProvider(UObject* ProviderObject)
+{
+	if (!IsValid(ProviderObject)
+		|| !ProviderObject->GetClass()->ImplementsInterface(UUOUDebugProvider::StaticClass())
+		|| IUOUDebugProvider::Execute_GetDebugCategory(ProviderObject) != EUOUDebugCategory::Puzzle)
+	{
+		return;
+	}
+
+	PuzzleDebugProviders.AddUnique(TWeakObjectPtr<UObject>(ProviderObject));
 }

@@ -21,7 +21,23 @@ public:
 	virtual void Tick(float DeltaTime) override;
 	virtual TStatId GetStatId() const override;
 
+	// 현재 월드의 액터와 컴포넌트에서 Puzzle 카테고리 Provider를 다시 수집합니다.
+	UFUNCTION(BlueprintCallable, Category = "Development Debug|Puzzle")
+	void RefreshPuzzleDebugProviders();
+
+	// 현재 캐시에 남아 있는 유효한 Puzzle Provider 개수를 반환합니다.
+	UFUNCTION(BlueprintPure, Category = "Development Debug|Puzzle")
+	int32 GetPuzzleDebugProviderCount() const;
+
 private:
+	void TryAddPuzzleDebugProvider(UObject* ProviderObject);
+
 	// 같은 월드의 전체 및 카테고리 디버그 설정을 읽기 위한 약한 참조입니다.
 	TWeakObjectPtr<UUOUDevelopmentDebugControlSubsystem> DebugControlSubsystem;
+
+	// 현재 월드에서 발견한 Puzzle 카테고리 Provider의 약한 참조 캐시입니다.
+	TArray<TWeakObjectPtr<UObject>> PuzzleDebugProviders;
+
+	// 다음 Puzzle Provider 월드 스캔까지 남은 시간입니다.
+	float PuzzleProviderRefreshTimeRemaining = 0.0f;
 };
