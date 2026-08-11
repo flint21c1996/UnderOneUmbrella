@@ -37,7 +37,7 @@ void SUOUDevelopmentPuzzleCheatHUD::Construct(const FArguments& InArgs)
 				.ContentPadding(FMargin(10.0f, 5.0f))
 				[
 					SNew(STextBlock)
-					.Text(FText::FromString(TEXT("PUZZLE CHEAT")))
+					.Text(FText::FromString(TEXT("퍼즐 치트")))
 				]
 			]
 			+ SVerticalBox::Slot()
@@ -58,7 +58,7 @@ void SUOUDevelopmentPuzzleCheatHUD::Construct(const FArguments& InArgs)
 						.AutoHeight()
 						[
 							SNew(STextBlock)
-							.Text(FText::FromString(TEXT("Puzzle Cheat Tool")))
+							.Text(FText::FromString(TEXT("퍼즐 치트 도구")))
 						]
 						+ SVerticalBox::Slot()
 						.AutoHeight()
@@ -66,6 +66,7 @@ void SUOUDevelopmentPuzzleCheatHUD::Construct(const FArguments& InArgs)
 						[
 							SNew(STextBlock)
 							.Text(this, &SUOUDevelopmentPuzzleCheatHUD::GetStatusText)
+							.ColorAndOpacity(this, &SUOUDevelopmentPuzzleCheatHUD::GetStatusColor)
 							.AutoWrapText(true)
 						]
 						+ SVerticalBox::Slot()
@@ -86,7 +87,7 @@ void SUOUDevelopmentPuzzleCheatHUD::Construct(const FArguments& InArgs)
 								})
 								[
 									SNew(STextBlock)
-									.Text(FText::FromString(TEXT("Refresh")))
+									.Text(FText::FromString(TEXT("새로고침")))
 								]
 							]
 							+ SHorizontalBox::Slot()
@@ -98,7 +99,7 @@ void SUOUDevelopmentPuzzleCheatHUD::Construct(const FArguments& InArgs)
 								.IsEnabled(this, &SUOUDevelopmentPuzzleCheatHUD::IsPuzzleActionEnabled)
 								[
 									SNew(STextBlock)
-									.Text(FText::FromString(TEXT("Next")))
+									.Text(FText::FromString(TEXT("다음 퍼즐")))
 								]
 							]
 							+ SHorizontalBox::Slot()
@@ -110,7 +111,7 @@ void SUOUDevelopmentPuzzleCheatHUD::Construct(const FArguments& InArgs)
 								.IsEnabled(this, &SUOUDevelopmentPuzzleCheatHUD::IsCancelEnabled)
 								[
 									SNew(STextBlock)
-									.Text(FText::FromString(TEXT("Cancel")))
+									.Text(FText::FromString(TEXT("취소")))
 								]
 							]
 						]
@@ -161,7 +162,7 @@ void SUOUDevelopmentPuzzleCheatHUD::RebuildStepRows()
 		.AutoHeight()
 		[
 			SNew(STextBlock)
-			.Text(FText::FromString(TEXT("Puzzle cheat subsystem is unavailable.")))
+			.Text(FText::FromString(TEXT("퍼즐 치트 Subsystem을 사용할 수 없습니다.")))
 		];
 		return;
 	}
@@ -173,7 +174,7 @@ void SUOUDevelopmentPuzzleCheatHUD::RebuildStepRows()
 		.AutoHeight()
 		[
 			SNew(STextBlock)
-			.Text(FText::FromString(TEXT("No tagged puzzle steps were found.")))
+			.Text(FText::FromString(TEXT("태그가 설정된 퍼즐 Step을 찾지 못했습니다.")))
 		];
 		return;
 	}
@@ -195,6 +196,13 @@ void SUOUDevelopmentPuzzleCheatHUD::RebuildStepRows()
 			.ContentPadding(FMargin(8.0f, 5.0f))
 			[
 				SNew(STextBlock)
+				.ColorAndOpacity_Lambda([PuzzleGroup]()
+				{
+					const bool bSatisfied = PuzzleGroup.IsValid() && PuzzleGroup->IsSatisfied();
+					return FSlateColor(bSatisfied
+						? FLinearColor(0.25f, 1.0f, 0.35f, 1.0f)
+						: FLinearColor::White);
+				})
 				.Text_Lambda([StepOrder, DisplayName, DelaySeconds, PuzzleGroup]()
 				{
 					const bool bSatisfied = PuzzleGroup.IsValid() && PuzzleGroup->IsSatisfied();
@@ -202,7 +210,7 @@ void SUOUDevelopmentPuzzleCheatHUD::RebuildStepRows()
 						TEXT("[%03d] %s  |  %s  |  %.2fs"),
 						StepOrder,
 						*DisplayName.ToString(),
-						bSatisfied ? TEXT("Satisfied") : TEXT("Pending"),
+						bSatisfied ? TEXT("완료") : TEXT("대기"),
 						DelaySeconds));
 				})
 			]
@@ -212,7 +220,14 @@ void SUOUDevelopmentPuzzleCheatHUD::RebuildStepRows()
 
 FReply SUOUDevelopmentPuzzleCheatHUD::HandleToggleClicked()
 {
-	TogglePanel();
+	if (UUOUDevelopmentPuzzleCheatSubsystem* Subsystem = PuzzleCheatSubsystem.Get())
+	{
+		Subsystem->ToggleCheatHUD();
+	}
+	else
+	{
+		TogglePanel();
+	}
 	return FReply::Handled();
 }
 
@@ -263,14 +278,30 @@ FText SUOUDevelopmentPuzzleCheatHUD::GetStatusText() const
 	const UUOUDevelopmentPuzzleCheatSubsystem* Subsystem = PuzzleCheatSubsystem.Get();
 	if (Subsystem == nullptr)
 	{
-		return FText::FromString(TEXT("Subsystem unavailable"));
+		return FText::FromString(TEXT("Subsystem 사용 불가"));
 	}
 
-	const FString StatePrefix = Subsystem->IsSequenceRunning() ? TEXT("Running") : TEXT("Ready");
+	const FString StatePrefix = Subsystem->IsSequenceRunning() ? TEXT("실행 중") : TEXT("준비");
 	return FText::FromString(FString::Printf(
 		TEXT("%s | %s"),
 		*StatePrefix,
 		*Subsystem->LastStatusMessage));
+}
+
+FSlateColor SUOUDevelopmentPuzzleCheatHUD::GetStatusColor() const
+{
+	const UUOUDevelopmentPuzzleCheatSubsystem* Subsystem = PuzzleCheatSubsystem.Get();
+	if (Subsystem == nullptr || !Subsystem->IsPuzzleSequenceValid())
+	{
+		return FSlateColor(FLinearColor(1.0f, 0.25f, 0.2f, 1.0f));
+	}
+
+	if (Subsystem->IsSequenceRunning())
+	{
+		return FSlateColor(FLinearColor(1.0f, 0.8f, 0.2f, 1.0f));
+	}
+
+	return FSlateColor(FLinearColor(0.25f, 1.0f, 0.35f, 1.0f));
 }
 
 bool SUOUDevelopmentPuzzleCheatHUD::IsPuzzleActionEnabled() const

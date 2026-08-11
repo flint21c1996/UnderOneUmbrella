@@ -36,6 +36,7 @@ private:
 	FReply HandleStepClicked(int32 TargetStepOrder);
 	EVisibility GetPanelVisibility() const;
 	FText GetStatusText() const;
+	FSlateColor GetStatusColor() const;
 	bool IsPuzzleActionEnabled() const;
 	bool IsCancelEnabled() const;
 

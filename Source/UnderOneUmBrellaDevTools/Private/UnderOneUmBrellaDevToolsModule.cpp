@@ -148,6 +148,22 @@ namespace UOUPuzzleCheatConsolePrivate
 		}
 	}
 
+	void ExecuteToggleHUD(const TArray<FString>& Args, UWorld* CommandWorld)
+	{
+		UUOUDevelopmentPuzzleCheatSubsystem* Subsystem = ResolvePuzzleCheatSubsystem(CommandWorld);
+		if (Subsystem == nullptr)
+		{
+			return;
+		}
+
+		Subsystem->ToggleCheatHUD();
+		UE_LOG(
+			LogUOUPuzzleCheatConsole,
+			Display,
+			TEXT("퍼즐 치트 HUD: %s"),
+			Subsystem->IsCheatHUDExpanded() ? TEXT("펼침") : TEXT("접힘"));
+	}
+
 	FAutoConsoleCommandWithWorldAndArgs RefreshCommand(
 		TEXT("uou.PuzzleCheat.Refresh"),
 		TEXT("현재 PIE 또는 게임 월드에서 태그가 설정된 퍼즐 조건 그룹을 다시 수집합니다."),
@@ -172,6 +188,11 @@ namespace UOUPuzzleCheatConsolePrivate
 		TEXT("uou.PuzzleCheat.Status"),
 		TEXT("수집된 퍼즐 치트 단계와 각 단계의 현재 런타임 상태를 로그에 출력합니다."),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&ExecuteStatus));
+
+	FAutoConsoleCommandWithWorldAndArgs ToggleHUDCommand(
+		TEXT("uou.PuzzleCheat.HUD.Toggle"),
+		TEXT("퍼즐 치트 HUD 패널을 펼치거나 접습니다."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&ExecuteToggleHUD));
 }
 
 class FUnderOneUmBrellaDevToolsModule final : public IModuleInterface
