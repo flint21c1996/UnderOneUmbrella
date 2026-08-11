@@ -3,8 +3,11 @@
 #include "UOUDevelopmentDebugDrawSubsystem.h"
 
 #include "Components/ActorComponent.h"
+#include "Components/SceneComponent.h"
+#include "Debug/UOUPuzzleDebugProviderComponent.h"
 #include "Debug/UOUDebugProvider.h"
 #include "Debug/UOUDevelopmentToolsBuild.h"
+#include "DrawDebugHelpers.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "GameFramework/Actor.h"
@@ -17,6 +20,39 @@
 namespace UOUDevelopmentDebugDrawPrivate
 {
 	constexpr float PuzzleProviderRefreshIntervalSeconds = 1.0f;
+
+	bool TryGetDebugObjectLocation(const UObject* Object, FVector& OutLocation)
+	{
+		if (const AActor* Actor = Cast<AActor>(Object))
+		{
+			OutLocation = Actor->GetActorLocation();
+			return true;
+		}
+
+		if (const USceneComponent* SceneComponent = Cast<USceneComponent>(Object))
+		{
+			OutLocation = SceneComponent->GetComponentLocation();
+			return true;
+		}
+
+		if (const UUOUPuzzleDebugProviderComponent* PuzzleDebugProvider =
+			Cast<UUOUPuzzleDebugProviderComponent>(Object))
+		{
+			OutLocation = PuzzleDebugProvider->GetConditionGroupNodeWorldLocation();
+			return true;
+		}
+
+		if (const UActorComponent* ActorComponent = Cast<UActorComponent>(Object))
+		{
+			if (const AActor* Owner = ActorComponent->GetOwner())
+			{
+				OutLocation = Owner->GetActorLocation();
+				return true;
+			}
+		}
+
+		return false;
+	}
 }
 
 bool UUOUDevelopmentDebugDrawSubsystem::ShouldCreateSubsystem(UObject* Outer) const
@@ -67,6 +103,8 @@ void UUOUDevelopmentDebugDrawSubsystem::Tick(float DeltaTime)
 		PuzzleProviderRefreshTimeRemaining =
 			UOUDevelopmentDebugDrawPrivate::PuzzleProviderRefreshIntervalSeconds;
 	}
+
+	DrawPuzzleProviderConnections();
 }
 
 TStatId UUOUDevelopmentDebugDrawSubsystem::GetStatId() const
@@ -126,4 +164,53 @@ void UUOUDevelopmentDebugDrawSubsystem::TryAddPuzzleDebugProvider(UObject* Provi
 	}
 
 	PuzzleDebugProviders.AddUnique(TWeakObjectPtr<UObject>(ProviderObject));
+}
+
+void UUOUDevelopmentDebugDrawSubsystem::DrawPuzzleProviderConnections() const
+{
+	UWorld* World = GetWorld();
+	if (World == nullptr)
+	{
+		return;
+	}
+
+	for (const TWeakObjectPtr<UObject>& WeakProviderObject : PuzzleDebugProviders)
+	{
+		UObject* ProviderObject = WeakProviderObject.Get();
+		if (!IsValid(ProviderObject)
+			|| !ProviderObject->GetClass()->ImplementsInterface(UUOUDebugProvider::StaticClass())
+			|| !IUOUDebugProvider::Execute_IsDebugProviderEnabled(ProviderObject))
+		{
+			continue;
+		}
+
+		TArray<FUOUDebugConnection> Connections;
+		IUOUDebugProvider::Execute_GetDebugConnections(ProviderObject, Connections);
+		for (const FUOUDebugConnection& Connection : Connections)
+		{
+			FVector SourceLocation = FVector::ZeroVector;
+			FVector TargetLocation = FVector::ZeroVector;
+			if (!UOUDevelopmentDebugDrawPrivate::TryGetDebugObjectLocation(
+					Connection.SourceObject.Get(),
+					SourceLocation)
+				|| !UOUDevelopmentDebugDrawPrivate::TryGetDebugObjectLocation(
+					Connection.TargetObject.Get(),
+					TargetLocation)
+				|| SourceLocation.Equals(TargetLocation))
+			{
+				continue;
+			}
+
+			DrawDebugDirectionalArrow(
+				World,
+				SourceLocation,
+				TargetLocation,
+				80.0f,
+				Connection.Color,
+				false,
+				0.0f,
+				0,
+				FMath::Max(0.0f, Connection.Thickness));
+		}
+	}
 }

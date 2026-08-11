@@ -567,7 +567,6 @@ void UUOUDebugSubsystem::Tick(float DeltaTime)
 	DrawPlayerDebug();
 	DrawPerformanceStats(DeltaTime);
 	DrawVFXDebug();
-	DrawRegisteredProviderConnections();
 	DrawRegisteredProviderLabelBoards();
 }
 
