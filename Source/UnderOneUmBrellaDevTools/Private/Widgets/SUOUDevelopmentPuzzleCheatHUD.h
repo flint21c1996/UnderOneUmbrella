@@ -30,8 +30,16 @@ public:
 	bool IsPanelExpanded() const { return bPanelExpanded; }
 
 private:
+	enum class EActivePage : uint8
+	{
+		Condition,
+		Debug
+	};
+
 	void RebuildStepRows();
 	FReply HandleToggleClicked();
+	FReply HandleConditionTabClicked();
+	FReply HandleDebugTabClicked();
 	FReply HandleDebugToolsToggleClicked();
 	FReply HandlePuzzleDebugToggleClicked();
 	FReply HandleRefreshClicked();
@@ -39,6 +47,8 @@ private:
 	FReply HandleCancelClicked();
 	FReply HandleStepClicked(int32 TargetStepOrder);
 	EVisibility GetPanelVisibility() const;
+	EVisibility GetConditionPageVisibility() const;
+	EVisibility GetDebugPageVisibility() const;
 	FText GetDebugToolsToggleText() const;
 	FText GetPuzzleDebugToggleText() const;
 	FText GetStatusText() const;
@@ -55,6 +65,9 @@ private:
 
 	// 현재 수집된 퍼즐 Step 버튼을 동적으로 담는 Slate 컨테이너입니다.
 	TSharedPtr<SVerticalBox> StepListBox;
+
+	// 확장 패널에서 현재 표시 중인 최상위 페이지입니다.
+	EActivePage ActivePage = EActivePage::Condition;
 
 	// 토글 버튼을 제외한 메인 패널의 현재 표시 상태입니다.
 	bool bPanelExpanded = false;

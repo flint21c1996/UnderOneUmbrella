@@ -39,7 +39,7 @@ void SUOUDevelopmentPuzzleCheatHUD::Construct(const FArguments& InArgs)
 				.ContentPadding(FMargin(10.0f, 5.0f))
 				[
 					SNew(STextBlock)
-					.Text(FText::FromString(TEXT("퍼즐 치트")))
+					.Text(FText::FromString(TEXT("개발 도구")))
 				]
 			]
 			+ SVerticalBox::Slot()
@@ -60,13 +60,125 @@ void SUOUDevelopmentPuzzleCheatHUD::Construct(const FArguments& InArgs)
 						.AutoHeight()
 						[
 							SNew(STextBlock)
-							.Text(FText::FromString(TEXT("퍼즐 치트 도구")))
+							.Text(FText::FromString(TEXT("개발 도구")))
 						]
 						+ SVerticalBox::Slot()
 						.AutoHeight()
 						.Padding(0.0f, 8.0f, 0.0f, 0.0f)
 						[
 							SNew(SHorizontalBox)
+							+ SHorizontalBox::Slot()
+							.FillWidth(1.0f)
+							.Padding(0.0f, 0.0f, 3.0f, 0.0f)
+							[
+								SNew(SButton)
+								.OnClicked(this, &SUOUDevelopmentPuzzleCheatHUD::HandleConditionTabClicked)
+								.IsEnabled_Lambda([this]()
+								{
+									return ActivePage != EActivePage::Condition;
+								})
+								[
+									SNew(STextBlock)
+									.Text(FText::FromString(TEXT("Condition")))
+								]
+							]
+							+ SHorizontalBox::Slot()
+							.FillWidth(1.0f)
+							.Padding(3.0f, 0.0f, 0.0f, 0.0f)
+							[
+								SNew(SButton)
+								.OnClicked(this, &SUOUDevelopmentPuzzleCheatHUD::HandleDebugTabClicked)
+								.IsEnabled_Lambda([this]()
+								{
+									return ActivePage != EActivePage::Debug;
+								})
+								[
+									SNew(STextBlock)
+									.Text(FText::FromString(TEXT("Debug")))
+								]
+							]
+						]
+						+ SVerticalBox::Slot()
+						.AutoHeight()
+						.Padding(0.0f, 8.0f, 0.0f, 0.0f)
+						[
+							SNew(SVerticalBox)
+							.Visibility(this, &SUOUDevelopmentPuzzleCheatHUD::GetConditionPageVisibility)
+							+ SVerticalBox::Slot()
+							.AutoHeight()
+							[
+								SNew(STextBlock)
+								.Text(this, &SUOUDevelopmentPuzzleCheatHUD::GetStatusText)
+								.ColorAndOpacity(this, &SUOUDevelopmentPuzzleCheatHUD::GetStatusColor)
+								.AutoWrapText(true)
+							]
+							+ SVerticalBox::Slot()
+							.AutoHeight()
+							.Padding(0.0f, 10.0f, 0.0f, 0.0f)
+							[
+								SNew(SHorizontalBox)
+								+ SHorizontalBox::Slot()
+								.FillWidth(1.0f)
+								.Padding(0.0f, 0.0f, 3.0f, 0.0f)
+								[
+									SNew(SButton)
+									.OnClicked(this, &SUOUDevelopmentPuzzleCheatHUD::HandleRefreshClicked)
+									.IsEnabled_Lambda([this]()
+									{
+										return PuzzleCheatSubsystem.IsValid()
+											&& !PuzzleCheatSubsystem->IsSequenceRunning();
+									})
+									[
+										SNew(STextBlock)
+										.Text(FText::FromString(TEXT("새로고침")))
+									]
+								]
+								+ SHorizontalBox::Slot()
+								.FillWidth(1.0f)
+								.Padding(3.0f, 0.0f)
+								[
+									SNew(SButton)
+									.OnClicked(this, &SUOUDevelopmentPuzzleCheatHUD::HandleNextClicked)
+									.IsEnabled(this, &SUOUDevelopmentPuzzleCheatHUD::IsPuzzleActionEnabled)
+									[
+										SNew(STextBlock)
+										.Text(FText::FromString(TEXT("다음 퍼즐")))
+									]
+								]
+								+ SHorizontalBox::Slot()
+								.FillWidth(1.0f)
+								.Padding(3.0f, 0.0f, 0.0f, 0.0f)
+								[
+									SNew(SButton)
+									.OnClicked(this, &SUOUDevelopmentPuzzleCheatHUD::HandleCancelClicked)
+									.IsEnabled(this, &SUOUDevelopmentPuzzleCheatHUD::IsCancelEnabled)
+									[
+										SNew(STextBlock)
+										.Text(FText::FromString(TEXT("취소")))
+									]
+								]
+							]
+							+ SVerticalBox::Slot()
+							.AutoHeight()
+							.Padding(0.0f, 10.0f, 0.0f, 0.0f)
+							[
+								SNew(SBox)
+								.MaxDesiredHeight(320.0f)
+								[
+									SNew(SScrollBox)
+									+ SScrollBox::Slot()
+									[
+										SAssignNew(StepListBox, SVerticalBox)
+									]
+								]
+							]
+						]
+						+ SVerticalBox::Slot()
+						.AutoHeight()
+						.Padding(0.0f, 8.0f, 0.0f, 0.0f)
+						[
+							SNew(SHorizontalBox)
+							.Visibility(this, &SUOUDevelopmentPuzzleCheatHUD::GetDebugPageVisibility)
 							+ SHorizontalBox::Slot()
 							.FillWidth(1.0f)
 							.Padding(0.0f, 0.0f, 3.0f, 0.0f)
@@ -89,75 +201,6 @@ void SUOUDevelopmentPuzzleCheatHUD::Construct(const FArguments& InArgs)
 								[
 									SNew(STextBlock)
 									.Text(this, &SUOUDevelopmentPuzzleCheatHUD::GetPuzzleDebugToggleText)
-								]
-							]
-						]
-						+ SVerticalBox::Slot()
-						.AutoHeight()
-						.Padding(0.0f, 8.0f, 0.0f, 0.0f)
-						[
-							SNew(STextBlock)
-							.Text(this, &SUOUDevelopmentPuzzleCheatHUD::GetStatusText)
-							.ColorAndOpacity(this, &SUOUDevelopmentPuzzleCheatHUD::GetStatusColor)
-							.AutoWrapText(true)
-						]
-						+ SVerticalBox::Slot()
-						.AutoHeight()
-						.Padding(0.0f, 10.0f, 0.0f, 0.0f)
-						[
-							SNew(SHorizontalBox)
-							+ SHorizontalBox::Slot()
-							.FillWidth(1.0f)
-							.Padding(0.0f, 0.0f, 3.0f, 0.0f)
-							[
-								SNew(SButton)
-								.OnClicked(this, &SUOUDevelopmentPuzzleCheatHUD::HandleRefreshClicked)
-								.IsEnabled_Lambda([this]()
-								{
-									return PuzzleCheatSubsystem.IsValid()
-										&& !PuzzleCheatSubsystem->IsSequenceRunning();
-								})
-								[
-									SNew(STextBlock)
-									.Text(FText::FromString(TEXT("새로고침")))
-								]
-							]
-							+ SHorizontalBox::Slot()
-							.FillWidth(1.0f)
-							.Padding(3.0f, 0.0f)
-							[
-								SNew(SButton)
-								.OnClicked(this, &SUOUDevelopmentPuzzleCheatHUD::HandleNextClicked)
-								.IsEnabled(this, &SUOUDevelopmentPuzzleCheatHUD::IsPuzzleActionEnabled)
-								[
-									SNew(STextBlock)
-									.Text(FText::FromString(TEXT("다음 퍼즐")))
-								]
-							]
-							+ SHorizontalBox::Slot()
-							.FillWidth(1.0f)
-							.Padding(3.0f, 0.0f, 0.0f, 0.0f)
-							[
-								SNew(SButton)
-								.OnClicked(this, &SUOUDevelopmentPuzzleCheatHUD::HandleCancelClicked)
-								.IsEnabled(this, &SUOUDevelopmentPuzzleCheatHUD::IsCancelEnabled)
-								[
-									SNew(STextBlock)
-									.Text(FText::FromString(TEXT("취소")))
-								]
-							]
-						]
-						+ SVerticalBox::Slot()
-						.AutoHeight()
-						.Padding(0.0f, 10.0f, 0.0f, 0.0f)
-						[
-							SNew(SBox)
-							.MaxDesiredHeight(320.0f)
-							[
-								SNew(SScrollBox)
-								+ SScrollBox::Slot()
-								[
-									SAssignNew(StepListBox, SVerticalBox)
 								]
 							]
 						]
@@ -263,6 +306,18 @@ FReply SUOUDevelopmentPuzzleCheatHUD::HandleToggleClicked()
 	return FReply::Handled();
 }
 
+FReply SUOUDevelopmentPuzzleCheatHUD::HandleConditionTabClicked()
+{
+	ActivePage = EActivePage::Condition;
+	return FReply::Handled();
+}
+
+FReply SUOUDevelopmentPuzzleCheatHUD::HandleDebugTabClicked()
+{
+	ActivePage = EActivePage::Debug;
+	return FReply::Handled();
+}
+
 FReply SUOUDevelopmentPuzzleCheatHUD::HandleDebugToolsToggleClicked()
 {
 	if (UUOUDevelopmentDebugControlSubsystem* Subsystem = DebugControlSubsystem.Get())
@@ -322,6 +377,16 @@ FReply SUOUDevelopmentPuzzleCheatHUD::HandleStepClicked(int32 TargetStepOrder)
 EVisibility SUOUDevelopmentPuzzleCheatHUD::GetPanelVisibility() const
 {
 	return bPanelExpanded ? EVisibility::Visible : EVisibility::Collapsed;
+}
+
+EVisibility SUOUDevelopmentPuzzleCheatHUD::GetConditionPageVisibility() const
+{
+	return ActivePage == EActivePage::Condition ? EVisibility::Visible : EVisibility::Collapsed;
+}
+
+EVisibility SUOUDevelopmentPuzzleCheatHUD::GetDebugPageVisibility() const
+{
+	return ActivePage == EActivePage::Debug ? EVisibility::Visible : EVisibility::Collapsed;
 }
 
 FText SUOUDevelopmentPuzzleCheatHUD::GetDebugToolsToggleText() const
