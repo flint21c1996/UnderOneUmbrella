@@ -825,27 +825,22 @@ void UUOULightBeamVisualComponent::UpdateCrossedLazyGodrayCard(
 		return;
 	}
 
-	static const FName CrossCardName(TEXT("UOUCrossGodrayCard"));
-	UStaticMeshComponent* CrossCard = FindObjectFast<UStaticMeshComponent>(VFXActor, CrossCardName);
-	if (!bAddCrossedLazyGodrayCard)
-	{
-		if (CrossCard != nullptr)
-		{
-			CrossCard->SetVisibility(false, true);
-		}
-		return;
-	}
-
 	UStaticMeshComponent* SourceCard = nullptr;
 	TInlineComponentArray<UStaticMeshComponent*> MeshComponents(VFXActor);
 	for (UStaticMeshComponent* MeshComponent : MeshComponents)
 	{
-		if (MeshComponent == nullptr || MeshComponent == CrossCard)
+		if (MeshComponent == nullptr)
 		{
 			continue;
 		}
 
 		const FString NormalizedName = NormalizeBlueprintMemberText(MeshComponent->GetName());
+		if (NormalizedName.StartsWith(TEXT("uoucrossgodraycard")))
+		{
+			MeshComponent->SetVisibility(false, true);
+			continue;
+		}
+
 		if (NormalizedName.Contains(TEXT("godraycard")))
 		{
 			SourceCard = MeshComponent;
@@ -858,44 +853,61 @@ void UUOULightBeamVisualComponent::UpdateCrossedLazyGodrayCard(
 		return;
 	}
 
-	if (CrossCard == nullptr)
+	if (!bAddCrossedLazyGodrayCard)
 	{
-		CrossCard = NewObject<UStaticMeshComponent>(VFXActor, CrossCardName);
+		return;
+	}
+
+	const int32 CardPlaneCount = FMath::Clamp(LazyGodrayCardPlaneCount, 1, 8);
+	const FVector SafeBeamDirection = WorldBeamDirection.GetSafeNormal();
+	for (int32 CardIndex = 1; CardIndex < CardPlaneCount; ++CardIndex)
+	{
+		const FName CrossCardName(*FString::Printf(TEXT("UOUCrossGodrayCard_%d"), CardIndex));
+		UStaticMeshComponent* CrossCard = FindObjectFast<UStaticMeshComponent>(VFXActor, CrossCardName);
 		if (CrossCard == nullptr)
 		{
-			return;
+			CrossCard = NewObject<UStaticMeshComponent>(VFXActor, CrossCardName);
 		}
-
-		VFXActor->AddInstanceComponent(CrossCard);
-		USceneComponent* AttachParent = SourceCard->GetAttachParent();
-		if (AttachParent == nullptr)
+		if (CrossCard == nullptr)
 		{
-			AttachParent = VFXActor->GetRootComponent();
+			continue;
 		}
-		if (AttachParent != nullptr)
+
+		if (!CrossCard->IsRegistered())
 		{
-			CrossCard->AttachToComponent(
-				AttachParent,
-				FAttachmentTransformRules::KeepWorldTransform,
-				SourceCard->GetAttachSocketName());
+			VFXActor->AddInstanceComponent(CrossCard);
+			USceneComponent* AttachParent = SourceCard->GetAttachParent();
+			if (AttachParent == nullptr)
+			{
+				AttachParent = VFXActor->GetRootComponent();
+			}
+			if (AttachParent != nullptr)
+			{
+				CrossCard->AttachToComponent(
+					AttachParent,
+					FAttachmentTransformRules::KeepWorldTransform,
+					SourceCard->GetAttachSocketName());
+			}
+			CrossCard->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			CrossCard->RegisterComponent();
 		}
-		CrossCard->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-		CrossCard->RegisterComponent();
-	}
 
-	CrossCard->SetStaticMesh(SourceCard->GetStaticMesh());
-	for (int32 MaterialIndex = 0; MaterialIndex < SourceCard->GetNumMaterials(); ++MaterialIndex)
-	{
-		CrossCard->SetMaterial(MaterialIndex, SourceCard->GetMaterial(MaterialIndex));
-	}
-	CrossCard->SetCastShadow(SourceCard->CastShadow);
-	CrossCard->SetTranslucentSortPriority(SourceCard->TranslucencySortPriority);
+		CrossCard->SetStaticMesh(SourceCard->GetStaticMesh());
+		for (int32 MaterialIndex = 0; MaterialIndex < SourceCard->GetNumMaterials(); ++MaterialIndex)
+		{
+			CrossCard->SetMaterial(MaterialIndex, SourceCard->GetMaterial(MaterialIndex));
+		}
+		CrossCard->SetCastShadow(SourceCard->CastShadow);
+		CrossCard->SetTranslucentSortPriority(SourceCard->TranslucencySortPriority);
 
-	const FVector SafeBeamDirection = WorldBeamDirection.GetSafeNormal();
-	const FQuat CrossRotation = FQuat(SafeBeamDirection, HALF_PI) * SourceCard->GetComponentQuat();
-	CrossCard->SetWorldLocationAndRotation(SourceCard->GetComponentLocation(), CrossRotation);
-	CrossCard->SetWorldScale3D(SourceCard->GetComponentScale());
-	CrossCard->SetVisibility(SourceCard->IsVisible(), true);
+		const float AngleRadians = PI * static_cast<float>(CardIndex) /
+			static_cast<float>(CardPlaneCount);
+		const FQuat CrossRotation = FQuat(SafeBeamDirection, AngleRadians) *
+			SourceCard->GetComponentQuat();
+		CrossCard->SetWorldLocationAndRotation(SourceCard->GetComponentLocation(), CrossRotation);
+		CrossCard->SetWorldScale3D(SourceCard->GetComponentScale());
+		CrossCard->SetVisibility(SourceCard->IsVisible(), true);
+	}
 }
 
 void UUOULightBeamVisualComponent::SetVFXActive(AActor* VFXActor, bool bActive) const
