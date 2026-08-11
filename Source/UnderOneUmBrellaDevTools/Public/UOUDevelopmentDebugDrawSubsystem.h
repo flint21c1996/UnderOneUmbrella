@@ -32,6 +32,7 @@ public:
 private:
 	void TryAddPuzzleDebugProvider(UObject* ProviderObject);
 	void DrawPuzzleProviderConnections() const;
+	void DrawPuzzleProviderLabels() const;
 
 	// 같은 월드의 전체 및 카테고리 디버그 설정을 읽기 위한 약한 참조입니다.
 	TWeakObjectPtr<UUOUDevelopmentDebugControlSubsystem> DebugControlSubsystem;

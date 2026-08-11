@@ -53,6 +53,28 @@ namespace UOUDevelopmentDebugDrawPrivate
 
 		return false;
 	}
+
+	FString BuildPuzzleProviderLabelText(UObject* ProviderObject)
+	{
+		if (!IsValid(ProviderObject))
+		{
+			return FString();
+		}
+
+		const FText DisplayName = IUOUDebugProvider::Execute_GetDebugDisplayName(ProviderObject);
+		const FText SummaryText = IUOUDebugProvider::Execute_GetDebugSummaryText(ProviderObject);
+		FString LabelText = DisplayName.IsEmpty()
+			? ProviderObject->GetName()
+			: DisplayName.ToString();
+
+		if (!SummaryText.IsEmpty())
+		{
+			LabelText += LINE_TERMINATOR;
+			LabelText += SummaryText.ToString();
+		}
+
+		return LabelText;
+	}
 }
 
 bool UUOUDevelopmentDebugDrawSubsystem::ShouldCreateSubsystem(UObject* Outer) const
@@ -105,6 +127,7 @@ void UUOUDevelopmentDebugDrawSubsystem::Tick(float DeltaTime)
 	}
 
 	DrawPuzzleProviderConnections();
+	DrawPuzzleProviderLabels();
 }
 
 TStatId UUOUDevelopmentDebugDrawSubsystem::GetStatId() const
@@ -212,5 +235,42 @@ void UUOUDevelopmentDebugDrawSubsystem::DrawPuzzleProviderConnections() const
 				0,
 				FMath::Max(0.0f, Connection.Thickness));
 		}
+	}
+}
+
+void UUOUDevelopmentDebugDrawSubsystem::DrawPuzzleProviderLabels() const
+{
+	UWorld* World = GetWorld();
+	if (World == nullptr)
+	{
+		return;
+	}
+
+	for (const TWeakObjectPtr<UObject>& WeakProviderObject : PuzzleDebugProviders)
+	{
+		UObject* ProviderObject = WeakProviderObject.Get();
+		if (!IsValid(ProviderObject)
+			|| !ProviderObject->GetClass()->ImplementsInterface(UUOUDebugProvider::StaticClass())
+			|| !IUOUDebugProvider::Execute_IsDebugProviderEnabled(ProviderObject))
+		{
+			continue;
+		}
+
+		const FString LabelText =
+			UOUDevelopmentDebugDrawPrivate::BuildPuzzleProviderLabelText(ProviderObject);
+		if (LabelText.IsEmpty())
+		{
+			continue;
+		}
+
+		DrawDebugString(
+			World,
+			IUOUDebugProvider::Execute_GetDebugWorldLocation(ProviderObject),
+			LabelText,
+			nullptr,
+			FColor::White,
+			0.0f,
+			true,
+			1.0f);
 	}
 }
