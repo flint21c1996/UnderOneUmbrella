@@ -10,10 +10,11 @@ public class UnderOneUmBrella : ModuleRules
 
 		PublicIncludePaths.AddRange(new string[] { ModuleDirectory });
 
-		bool bWithUOUPuzzleCheats =
+		bool bWithUOUDevelopmentTools =
 			Target.Configuration != UnrealTargetConfiguration.Shipping ||
 			Target.Name.Equals("UnderOneUmBrellaInternal", System.StringComparison.OrdinalIgnoreCase);
-		PublicDefinitions.Add($"UOU_WITH_PUZZLE_CHEATS={(bWithUOUPuzzleCheats ? 1 : 0)}");
+		PublicDefinitions.Add($"UOU_WITH_DEVELOPMENT_TOOLS={(bWithUOUDevelopmentTools ? 1 : 0)}");
+		PublicDefinitions.Add($"UOU_WITH_PUZZLE_CHEATS={(bWithUOUDevelopmentTools ? 1 : 0)}");
 
 		PublicDependencyModuleNames.AddRange(new string[]
 		{
