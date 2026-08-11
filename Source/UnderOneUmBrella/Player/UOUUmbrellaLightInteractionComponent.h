@@ -50,11 +50,23 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Light", meta = (ClampMin = "0.0", ClampMax = "89.9", Units = "deg", ToolTip = "우산 정면과 입사광 사이의 최대 반사 허용각입니다. 이 각도를 벗어난 빛은 반사 상태에서도 우산을 통과합니다."))
 	float MaximumUmbrellaReflectionIncidenceAngle = 60.0f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Light", meta = (ClampMin = "0.0", ClampMax = "89.9", Units = "deg", DisplayName = "최대 우산 빛 차단 입사각", ToolTip = "펼친 우산이 차단할 수 있는 최대 입사각입니다. 기본 75도에서는 위와 대각선 상단광을 막고 수평 측면광은 통과시킵니다."))
+	float MaximumUmbrellaBlockingIncidenceAngle = 75.0f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Light")
 	bool bCreateRuntimeLightSurfaceWhenMissing = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Light")
 	bool bCreateRuntimeLightShadeVolumeWhenMissing = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Light|Placement", meta = (DisplayName = "비 차단 박스와 빛 판정 동기화", ToolTip = "일반 펼침 상태에서는 빛 차단/반사 박스를 비 차단 박스와 같은 위치, 회전, 크기로 배치합니다."))
+	bool bAlignLightInteractionToRainBlocker = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Light|Placement", meta = (EditCondition = "bAlignLightInteractionToRainBlocker", DisplayName = "빛 반사 상태 회전 오프셋", ToolTip = "빛 반사 상태에서 비 차단 박스를 플레이어 중심으로 회전시킬 로컬 회전입니다. 기본 -90도 Pitch는 머리 위 박스를 플레이어 앞으로 이동시키고 세웁니다."))
+	FRotator LightReflectingBlockerRotationOffset = FRotator(-90.0f, 0.0f, 0.0f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Light|Placement", meta = (EditCondition = "bAlignLightInteractionToRainBlocker", DisplayName = "빛 반사 상태 추가 위치 오프셋", ToolTip = "회전된 빛 판정 박스에 추가할 플레이어 로컬 위치 오프셋입니다."))
+	FVector LightReflectingBlockerAdditionalLocalOffset = FVector::ZeroVector;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Light|Debug", meta = (DisplayName = "Draw Reflector Debug", ToolTip = "Puzzle 월드 디버그가 켜져 있을 때 우산 반사판 박스와 반사 방향을 표시합니다."))
 	bool bDrawReflectorDebug = true;
@@ -102,6 +114,10 @@ protected:
 	USceneComponent* GetLightInteractionAttachParent() const;
 	void ApplyRuntimeLightSurfacePlacement() const;
 	void ApplyRuntimeLightShadeVolumePlacement() const;
+	bool TryResolveRainBlockerAlignedTransform(
+		FVector& OutWorldCenter,
+		FRotator& OutWorldRotation,
+		FVector& OutHalfExtent) const;
 	void DrawReflectorDebug() const;
 
 	UFUNCTION()

@@ -52,8 +52,11 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light|Visual|LazyGodray", meta = (EditCondition = "bEnableAutomaticLazyGodrayAdapter", DisplayName = "LazyGodray 빛 진행축 자동 감지", ToolTip = "VFX 내부 SpotLight의 방향을 빛줄기 로컬 진행축으로 사용합니다. LazyGodray V2처럼 빛 진행축이 +X가 아닌 에셋을 자동으로 경로 방향에 맞춥니다."))
 	bool bAutoDetectLazyGodrayBeamAxis = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light|Visual|LazyGodray", meta = (EditCondition = "bEnableAutomaticLazyGodrayAdapter", DisplayName = "LazyGodray 교차 카드 추가", ToolTip = "한 장짜리 Godray 카드를 빛 진행축 기준 90도로 복제하여 시점에 따른 평면 느낌을 줄입니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light|Visual|LazyGodray", meta = (EditCondition = "bEnableAutomaticLazyGodrayAdapter", DisplayName = "LazyGodray 교차 카드 추가", ToolTip = "Godray 카드를 빛 진행축을 중심으로 균등하게 복제하여 시점에 따른 평면 느낌을 줄입니다."))
 	bool bAddCrossedLazyGodrayCard = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light|Visual|LazyGodray", meta = (ClampMin = "1", ClampMax = "8", EditCondition = "bEnableAutomaticLazyGodrayAdapter && bAddCrossedLazyGodrayCard", DisplayName = "LazyGodray 카드 면 개수", ToolTip = "빛 진행축을 중심으로 배치할 Godray 카드의 총 개수입니다. 4면이면 0/45/90/135도로 배치됩니다."))
+	int32 LazyGodrayCardPlaneCount = 4;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light|Visual", meta = (ToolTip = "광원에서 최초 충돌 지점까지의 직접광 VFX를 표시합니다."))
 	bool bEnableDirectVFX = true;
