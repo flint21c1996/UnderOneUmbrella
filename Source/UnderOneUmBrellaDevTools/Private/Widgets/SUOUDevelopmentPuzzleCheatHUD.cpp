@@ -12,10 +12,12 @@
 #include "Widgets/Text/STextBlock.h"
 
 #include "Puzzle/Core/UOUPuzzleConditionGroupActor.h"
+#include "UOUDevelopmentDebugControlSubsystem.h"
 #include "UOUDevelopmentPuzzleCheatSubsystem.h"
 
 void SUOUDevelopmentPuzzleCheatHUD::Construct(const FArguments& InArgs)
 {
+	DebugControlSubsystem = InArgs._DebugControlSubsystem;
 	PuzzleCheatSubsystem = InArgs._PuzzleCheatSubsystem;
 
 	ChildSlot
@@ -59,6 +61,36 @@ void SUOUDevelopmentPuzzleCheatHUD::Construct(const FArguments& InArgs)
 						[
 							SNew(STextBlock)
 							.Text(FText::FromString(TEXT("퍼즐 치트 도구")))
+						]
+						+ SVerticalBox::Slot()
+						.AutoHeight()
+						.Padding(0.0f, 8.0f, 0.0f, 0.0f)
+						[
+							SNew(SHorizontalBox)
+							+ SHorizontalBox::Slot()
+							.FillWidth(1.0f)
+							.Padding(0.0f, 0.0f, 3.0f, 0.0f)
+							[
+								SNew(SButton)
+								.OnClicked(this, &SUOUDevelopmentPuzzleCheatHUD::HandleDebugToolsToggleClicked)
+								.IsEnabled(this, &SUOUDevelopmentPuzzleCheatHUD::IsDebugControlAvailable)
+								[
+									SNew(STextBlock)
+									.Text(this, &SUOUDevelopmentPuzzleCheatHUD::GetDebugToolsToggleText)
+								]
+							]
+							+ SHorizontalBox::Slot()
+							.FillWidth(1.0f)
+							.Padding(3.0f, 0.0f, 0.0f, 0.0f)
+							[
+								SNew(SButton)
+								.OnClicked(this, &SUOUDevelopmentPuzzleCheatHUD::HandlePuzzleDebugToggleClicked)
+								.IsEnabled(this, &SUOUDevelopmentPuzzleCheatHUD::IsDebugControlAvailable)
+								[
+									SNew(STextBlock)
+									.Text(this, &SUOUDevelopmentPuzzleCheatHUD::GetPuzzleDebugToggleText)
+								]
+							]
 						]
 						+ SVerticalBox::Slot()
 						.AutoHeight()
@@ -231,6 +263,25 @@ FReply SUOUDevelopmentPuzzleCheatHUD::HandleToggleClicked()
 	return FReply::Handled();
 }
 
+FReply SUOUDevelopmentPuzzleCheatHUD::HandleDebugToolsToggleClicked()
+{
+	if (UUOUDevelopmentDebugControlSubsystem* Subsystem = DebugControlSubsystem.Get())
+	{
+		Subsystem->SetDebugToolsEnabled(!Subsystem->IsDebugToolsEnabled());
+	}
+	return FReply::Handled();
+}
+
+FReply SUOUDevelopmentPuzzleCheatHUD::HandlePuzzleDebugToggleClicked()
+{
+	if (UUOUDevelopmentDebugControlSubsystem* Subsystem = DebugControlSubsystem.Get())
+	{
+		const bool bNewEnabled = !Subsystem->IsDebugCategoryEnabled(EUOUDebugCategory::Puzzle);
+		Subsystem->SetDebugCategoryEnabled(EUOUDebugCategory::Puzzle, bNewEnabled);
+	}
+	return FReply::Handled();
+}
+
 FReply SUOUDevelopmentPuzzleCheatHUD::HandleRefreshClicked()
 {
 	if (UUOUDevelopmentPuzzleCheatSubsystem* Subsystem = PuzzleCheatSubsystem.Get())
@@ -271,6 +322,32 @@ FReply SUOUDevelopmentPuzzleCheatHUD::HandleStepClicked(int32 TargetStepOrder)
 EVisibility SUOUDevelopmentPuzzleCheatHUD::GetPanelVisibility() const
 {
 	return bPanelExpanded ? EVisibility::Visible : EVisibility::Collapsed;
+}
+
+FText SUOUDevelopmentPuzzleCheatHUD::GetDebugToolsToggleText() const
+{
+	const UUOUDevelopmentDebugControlSubsystem* Subsystem = DebugControlSubsystem.Get();
+	if (Subsystem == nullptr)
+	{
+		return FText::FromString(TEXT("전체 디버그: 사용 불가"));
+	}
+
+	return FText::FromString(Subsystem->IsDebugToolsEnabled()
+		? TEXT("전체 디버그: ON")
+		: TEXT("전체 디버그: OFF"));
+}
+
+FText SUOUDevelopmentPuzzleCheatHUD::GetPuzzleDebugToggleText() const
+{
+	const UUOUDevelopmentDebugControlSubsystem* Subsystem = DebugControlSubsystem.Get();
+	if (Subsystem == nullptr)
+	{
+		return FText::FromString(TEXT("퍼즐 카테고리: 사용 불가"));
+	}
+
+	return FText::FromString(Subsystem->IsDebugCategoryEnabled(EUOUDebugCategory::Puzzle)
+		? TEXT("퍼즐 카테고리: ON")
+		: TEXT("퍼즐 카테고리: OFF"));
 }
 
 FText SUOUDevelopmentPuzzleCheatHUD::GetStatusText() const
@@ -316,4 +393,9 @@ bool SUOUDevelopmentPuzzleCheatHUD::IsCancelEnabled() const
 {
 	const UUOUDevelopmentPuzzleCheatSubsystem* Subsystem = PuzzleCheatSubsystem.Get();
 	return Subsystem != nullptr && Subsystem->IsSequenceRunning();
+}
+
+bool SUOUDevelopmentPuzzleCheatHUD::IsDebugControlAvailable() const
+{
+	return DebugControlSubsystem.IsValid();
 }

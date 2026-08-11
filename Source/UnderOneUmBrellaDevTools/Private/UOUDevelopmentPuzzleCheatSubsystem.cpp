@@ -9,6 +9,7 @@
 #include "EngineUtils.h"
 #include "Puzzle/Core/UOUPuzzleConditionGroupActor.h"
 #include "Puzzle/Core/UOUPuzzleResultCompletionState.h"
+#include "UOUDevelopmentDebugControlSubsystem.h"
 #include "Widgets/SUOUDevelopmentPuzzleCheatHUD.h"
 
 #if !UOU_WITH_PUZZLE_CHEATS
@@ -528,7 +529,14 @@ void UUOUDevelopmentPuzzleCheatSubsystem::EnsureCheatHUDCreated()
 		return;
 	}
 
+	TWeakObjectPtr<UUOUDevelopmentDebugControlSubsystem> DebugControlSubsystem;
+	if (World != nullptr)
+	{
+		DebugControlSubsystem = World->GetSubsystem<UUOUDevelopmentDebugControlSubsystem>();
+	}
+
 	SAssignNew(CheatHUDWidget, SUOUDevelopmentPuzzleCheatHUD)
+		.DebugControlSubsystem(DebugControlSubsystem)
 		.PuzzleCheatSubsystem(this);
 	CheatHUDViewport = GameViewport;
 	GameViewport->AddViewportWidgetContent(CheatHUDWidget.ToSharedRef(), 10000);

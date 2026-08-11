@@ -7,6 +7,7 @@
 
 class AUOUPuzzleConditionGroupActor;
 class SVerticalBox;
+class UUOUDevelopmentDebugControlSubsystem;
 class UUOUDevelopmentPuzzleCheatSubsystem;
 
 // 퍼즐 치트 컨트롤을 담을 개발 전용 Viewport 오버레이의 기본 껍데기입니다.
@@ -16,6 +17,7 @@ public:
 	SLATE_BEGIN_ARGS(SUOUDevelopmentPuzzleCheatHUD)
 	{
 	}
+		SLATE_ARGUMENT(TWeakObjectPtr<UUOUDevelopmentDebugControlSubsystem>, DebugControlSubsystem)
 		SLATE_ARGUMENT(TWeakObjectPtr<UUOUDevelopmentPuzzleCheatSubsystem>, PuzzleCheatSubsystem)
 	SLATE_END_ARGS()
 
@@ -30,15 +32,23 @@ public:
 private:
 	void RebuildStepRows();
 	FReply HandleToggleClicked();
+	FReply HandleDebugToolsToggleClicked();
+	FReply HandlePuzzleDebugToggleClicked();
 	FReply HandleRefreshClicked();
 	FReply HandleNextClicked();
 	FReply HandleCancelClicked();
 	FReply HandleStepClicked(int32 TargetStepOrder);
 	EVisibility GetPanelVisibility() const;
+	FText GetDebugToolsToggleText() const;
+	FText GetPuzzleDebugToggleText() const;
 	FText GetStatusText() const;
 	FSlateColor GetStatusColor() const;
 	bool IsPuzzleActionEnabled() const;
 	bool IsCancelEnabled() const;
+	bool IsDebugControlAvailable() const;
+
+	// 전체 및 Puzzle 카테고리 디버그 상태를 제어할 현재 월드 Subsystem의 약한 참조입니다.
+	TWeakObjectPtr<UUOUDevelopmentDebugControlSubsystem> DebugControlSubsystem;
 
 	// HUD를 소유한 현재 월드 Subsystem의 약한 참조입니다.
 	TWeakObjectPtr<UUOUDevelopmentPuzzleCheatSubsystem> PuzzleCheatSubsystem;
