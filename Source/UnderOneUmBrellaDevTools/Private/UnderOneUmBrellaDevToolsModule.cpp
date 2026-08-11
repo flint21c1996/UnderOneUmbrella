@@ -150,27 +150,27 @@ namespace UOUPuzzleCheatConsolePrivate
 
 	FAutoConsoleCommandWithWorldAndArgs RefreshCommand(
 		TEXT("uou.PuzzleCheat.Refresh"),
-		TEXT("Rescans tagged puzzle condition groups in the active PIE or game world."),
+		TEXT("현재 PIE 또는 게임 월드에서 태그가 설정된 퍼즐 조건 그룹을 다시 수집합니다."),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&ExecuteRefresh));
 
 	FAutoConsoleCommandWithWorldAndArgs NextCommand(
 		TEXT("uou.PuzzleCheat.Next"),
-		TEXT("Satisfies the first incomplete tagged puzzle step."),
+		TEXT("태그가 설정된 퍼즐 중 첫 번째 미완료 단계를 만족 상태로 진행합니다."),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&ExecuteNext));
 
 	FAutoConsoleCommandWithWorldAndArgs AdvanceCommand(
 		TEXT("uou.PuzzleCheat.Advance"),
-		TEXT("Satisfies incomplete tagged puzzle steps through the supplied StepOrder."),
+		TEXT("지정한 StepOrder까지 태그가 설정된 미완료 퍼즐을 순서대로 진행합니다. 사용법: uou.PuzzleCheat.Advance <StepOrder>"),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&ExecuteAdvance));
 
 	FAutoConsoleCommandWithWorldAndArgs CancelCommand(
 		TEXT("uou.PuzzleCheat.Cancel"),
-		TEXT("Cancels pending puzzle cheat steps without reverting completed steps."),
+		TEXT("이미 완료한 단계는 유지하고 아직 실행되지 않은 퍼즐 치트 예약을 취소합니다."),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&ExecuteCancel));
 
 	FAutoConsoleCommandWithWorldAndArgs StatusCommand(
 		TEXT("uou.PuzzleCheat.Status"),
-		TEXT("Logs the collected puzzle cheat steps and their runtime state."),
+		TEXT("수집된 퍼즐 치트 단계와 각 단계의 현재 런타임 상태를 로그에 출력합니다."),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&ExecuteStatus));
 }
 
