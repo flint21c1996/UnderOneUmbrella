@@ -177,11 +177,10 @@ void SUOUDevelopmentPuzzleCheatHUD::Construct(const FArguments& InArgs)
 						.AutoHeight()
 						.Padding(0.0f, 8.0f, 0.0f, 0.0f)
 						[
-							SNew(SHorizontalBox)
+							SNew(SVerticalBox)
 							.Visibility(this, &SUOUDevelopmentPuzzleCheatHUD::GetDebugPageVisibility)
-							+ SHorizontalBox::Slot()
-							.FillWidth(1.0f)
-							.Padding(0.0f, 0.0f, 3.0f, 0.0f)
+							+ SVerticalBox::Slot()
+							.AutoHeight()
 							[
 								SNew(SButton)
 								.OnClicked(this, &SUOUDevelopmentPuzzleCheatHUD::HandleDebugToolsToggleClicked)
@@ -191,16 +190,94 @@ void SUOUDevelopmentPuzzleCheatHUD::Construct(const FArguments& InArgs)
 									.Text(this, &SUOUDevelopmentPuzzleCheatHUD::GetDebugToolsToggleText)
 								]
 							]
-							+ SHorizontalBox::Slot()
-							.FillWidth(1.0f)
-							.Padding(3.0f, 0.0f, 0.0f, 0.0f)
+							+ SVerticalBox::Slot()
+							.AutoHeight()
+							.Padding(0.0f, 6.0f, 0.0f, 0.0f)
 							[
-								SNew(SButton)
-								.OnClicked(this, &SUOUDevelopmentPuzzleCheatHUD::HandlePuzzleDebugToggleClicked)
-								.IsEnabled(this, &SUOUDevelopmentPuzzleCheatHUD::IsDebugControlAvailable)
+								SNew(SHorizontalBox)
+								+ SHorizontalBox::Slot()
+								.FillWidth(1.0f)
+								.Padding(0.0f, 0.0f, 3.0f, 0.0f)
 								[
-									SNew(STextBlock)
-									.Text(this, &SUOUDevelopmentPuzzleCheatHUD::GetPuzzleDebugToggleText)
+									SNew(SButton)
+									.OnClicked(this, &SUOUDevelopmentPuzzleCheatHUD::HandleDebugCategoryToggleClicked, EUOUDebugCategory::Player)
+									.IsEnabled(this, &SUOUDevelopmentPuzzleCheatHUD::IsDebugControlAvailable)
+									[
+										SNew(STextBlock)
+										.Text(this, &SUOUDevelopmentPuzzleCheatHUD::GetDebugCategoryToggleText, EUOUDebugCategory::Player)
+									]
+								]
+								+ SHorizontalBox::Slot()
+								.FillWidth(1.0f)
+								.Padding(3.0f, 0.0f, 0.0f, 0.0f)
+								[
+									SNew(SButton)
+									.OnClicked(this, &SUOUDevelopmentPuzzleCheatHUD::HandleDebugCategoryToggleClicked, EUOUDebugCategory::Puzzle)
+									.IsEnabled(this, &SUOUDevelopmentPuzzleCheatHUD::IsDebugControlAvailable)
+									[
+										SNew(STextBlock)
+										.Text(this, &SUOUDevelopmentPuzzleCheatHUD::GetDebugCategoryToggleText, EUOUDebugCategory::Puzzle)
+									]
+								]
+							]
+							+ SVerticalBox::Slot()
+							.AutoHeight()
+							.Padding(0.0f, 6.0f, 0.0f, 0.0f)
+							[
+								SNew(SHorizontalBox)
+								+ SHorizontalBox::Slot()
+								.FillWidth(1.0f)
+								.Padding(0.0f, 0.0f, 3.0f, 0.0f)
+								[
+									SNew(SButton)
+									.OnClicked(this, &SUOUDevelopmentPuzzleCheatHUD::HandleDebugCategoryToggleClicked, EUOUDebugCategory::NPC)
+									.IsEnabled(this, &SUOUDevelopmentPuzzleCheatHUD::IsDebugControlAvailable)
+									[
+										SNew(STextBlock)
+										.Text(this, &SUOUDevelopmentPuzzleCheatHUD::GetDebugCategoryToggleText, EUOUDebugCategory::NPC)
+									]
+								]
+								+ SHorizontalBox::Slot()
+								.FillWidth(1.0f)
+								.Padding(3.0f, 0.0f, 0.0f, 0.0f)
+								[
+									SNew(SButton)
+									.OnClicked(this, &SUOUDevelopmentPuzzleCheatHUD::HandleDebugCategoryToggleClicked, EUOUDebugCategory::Interaction)
+									.IsEnabled(this, &SUOUDevelopmentPuzzleCheatHUD::IsDebugControlAvailable)
+									[
+										SNew(STextBlock)
+										.Text(this, &SUOUDevelopmentPuzzleCheatHUD::GetDebugCategoryToggleText, EUOUDebugCategory::Interaction)
+									]
+								]
+							]
+							+ SVerticalBox::Slot()
+							.AutoHeight()
+							.Padding(0.0f, 6.0f, 0.0f, 0.0f)
+							[
+								SNew(SHorizontalBox)
+								+ SHorizontalBox::Slot()
+								.FillWidth(1.0f)
+								.Padding(0.0f, 0.0f, 3.0f, 0.0f)
+								[
+									SNew(SButton)
+									.OnClicked(this, &SUOUDevelopmentPuzzleCheatHUD::HandleDebugCategoryToggleClicked, EUOUDebugCategory::VFX)
+									.IsEnabled(this, &SUOUDevelopmentPuzzleCheatHUD::IsDebugControlAvailable)
+									[
+										SNew(STextBlock)
+										.Text(this, &SUOUDevelopmentPuzzleCheatHUD::GetDebugCategoryToggleText, EUOUDebugCategory::VFX)
+									]
+								]
+								+ SHorizontalBox::Slot()
+								.FillWidth(1.0f)
+								.Padding(3.0f, 0.0f, 0.0f, 0.0f)
+								[
+									SNew(SButton)
+									.OnClicked(this, &SUOUDevelopmentPuzzleCheatHUD::HandleDebugCategoryToggleClicked, EUOUDebugCategory::Performance)
+									.IsEnabled(this, &SUOUDevelopmentPuzzleCheatHUD::IsDebugControlAvailable)
+									[
+										SNew(STextBlock)
+										.Text(this, &SUOUDevelopmentPuzzleCheatHUD::GetDebugCategoryToggleText, EUOUDebugCategory::Performance)
+									]
 								]
 							]
 						]
@@ -327,12 +404,12 @@ FReply SUOUDevelopmentPuzzleCheatHUD::HandleDebugToolsToggleClicked()
 	return FReply::Handled();
 }
 
-FReply SUOUDevelopmentPuzzleCheatHUD::HandlePuzzleDebugToggleClicked()
+FReply SUOUDevelopmentPuzzleCheatHUD::HandleDebugCategoryToggleClicked(EUOUDebugCategory Category)
 {
 	if (UUOUDevelopmentDebugControlSubsystem* Subsystem = DebugControlSubsystem.Get())
 	{
-		const bool bNewEnabled = !Subsystem->IsDebugCategoryEnabled(EUOUDebugCategory::Puzzle);
-		Subsystem->SetDebugCategoryEnabled(EUOUDebugCategory::Puzzle, bNewEnabled);
+		const bool bNewEnabled = !Subsystem->IsDebugCategoryEnabled(Category);
+		Subsystem->SetDebugCategoryEnabled(Category, bNewEnabled);
 	}
 	return FReply::Handled();
 }
@@ -402,17 +479,44 @@ FText SUOUDevelopmentPuzzleCheatHUD::GetDebugToolsToggleText() const
 		: TEXT("전체 디버그: OFF"));
 }
 
-FText SUOUDevelopmentPuzzleCheatHUD::GetPuzzleDebugToggleText() const
+FText SUOUDevelopmentPuzzleCheatHUD::GetDebugCategoryToggleText(EUOUDebugCategory Category) const
 {
+	const TCHAR* CategoryName = TEXT("Unknown");
+	switch (Category)
+	{
+	case EUOUDebugCategory::Player:
+		CategoryName = TEXT("Player");
+		break;
+	case EUOUDebugCategory::NPC:
+		CategoryName = TEXT("NPC");
+		break;
+	case EUOUDebugCategory::Puzzle:
+		CategoryName = TEXT("Puzzle");
+		break;
+	case EUOUDebugCategory::Interaction:
+		CategoryName = TEXT("Interaction");
+		break;
+	case EUOUDebugCategory::VFX:
+		CategoryName = TEXT("VFX");
+		break;
+	case EUOUDebugCategory::Performance:
+		CategoryName = TEXT("Performance");
+		break;
+	case EUOUDebugCategory::System:
+	default:
+		break;
+	}
+
 	const UUOUDevelopmentDebugControlSubsystem* Subsystem = DebugControlSubsystem.Get();
 	if (Subsystem == nullptr)
 	{
-		return FText::FromString(TEXT("퍼즐 카테고리: 사용 불가"));
+		return FText::FromString(FString::Printf(TEXT("%s: 사용 불가"), CategoryName));
 	}
 
-	return FText::FromString(Subsystem->IsDebugCategoryEnabled(EUOUDebugCategory::Puzzle)
-		? TEXT("퍼즐 카테고리: ON")
-		: TEXT("퍼즐 카테고리: OFF"));
+	return FText::FromString(FString::Printf(
+		TEXT("%s: %s"),
+		CategoryName,
+		Subsystem->IsDebugCategoryEnabled(Category) ? TEXT("ON") : TEXT("OFF")));
 }
 
 FText SUOUDevelopmentPuzzleCheatHUD::GetStatusText() const

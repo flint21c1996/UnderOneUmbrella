@@ -9,6 +9,7 @@ class AUOUPuzzleConditionGroupActor;
 class SVerticalBox;
 class UUOUDevelopmentDebugControlSubsystem;
 class UUOUDevelopmentPuzzleCheatSubsystem;
+enum class EUOUDebugCategory : uint8;
 
 // 퍼즐 치트 컨트롤을 담을 개발 전용 Viewport 오버레이의 기본 껍데기입니다.
 class SUOUDevelopmentPuzzleCheatHUD final : public SCompoundWidget
@@ -41,7 +42,7 @@ private:
 	FReply HandleConditionTabClicked();
 	FReply HandleDebugTabClicked();
 	FReply HandleDebugToolsToggleClicked();
-	FReply HandlePuzzleDebugToggleClicked();
+	FReply HandleDebugCategoryToggleClicked(EUOUDebugCategory Category);
 	FReply HandleRefreshClicked();
 	FReply HandleNextClicked();
 	FReply HandleCancelClicked();
@@ -50,7 +51,7 @@ private:
 	EVisibility GetConditionPageVisibility() const;
 	EVisibility GetDebugPageVisibility() const;
 	FText GetDebugToolsToggleText() const;
-	FText GetPuzzleDebugToggleText() const;
+	FText GetDebugCategoryToggleText(EUOUDebugCategory Category) const;
 	FText GetStatusText() const;
 	FSlateColor GetStatusColor() const;
 	bool IsPuzzleActionEnabled() const;
