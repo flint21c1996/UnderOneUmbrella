@@ -6,9 +6,13 @@
 #include "Widgets/Input/SButton.h"
 #include "Widgets/Layout/SBorder.h"
 #include "Widgets/Layout/SBox.h"
+#include "Widgets/Layout/SScrollBox.h"
 #include "Widgets/SOverlay.h"
 #include "Widgets/SBoxPanel.h"
 #include "Widgets/Text/STextBlock.h"
+
+#include "Puzzle/Core/UOUPuzzleConditionGroupActor.h"
+#include "UOUDevelopmentPuzzleCheatSubsystem.h"
 
 void SUOUDevelopmentPuzzleCheatHUD::Construct(const FArguments& InArgs)
 {
@@ -61,18 +65,149 @@ void SUOUDevelopmentPuzzleCheatHUD::Construct(const FArguments& InArgs)
 						.Padding(0.0f, 8.0f, 0.0f, 0.0f)
 						[
 							SNew(STextBlock)
-							.Text(FText::FromString(TEXT("Puzzle controls will be added in the next HUD stage.")))
+							.Text(this, &SUOUDevelopmentPuzzleCheatHUD::GetStatusText)
+							.AutoWrapText(true)
+						]
+						+ SVerticalBox::Slot()
+						.AutoHeight()
+						.Padding(0.0f, 10.0f, 0.0f, 0.0f)
+						[
+							SNew(SHorizontalBox)
+							+ SHorizontalBox::Slot()
+							.FillWidth(1.0f)
+							.Padding(0.0f, 0.0f, 3.0f, 0.0f)
+							[
+								SNew(SButton)
+								.OnClicked(this, &SUOUDevelopmentPuzzleCheatHUD::HandleRefreshClicked)
+								.IsEnabled_Lambda([this]()
+								{
+									return PuzzleCheatSubsystem.IsValid()
+										&& !PuzzleCheatSubsystem->IsSequenceRunning();
+								})
+								[
+									SNew(STextBlock)
+									.Text(FText::FromString(TEXT("Refresh")))
+								]
+							]
+							+ SHorizontalBox::Slot()
+							.FillWidth(1.0f)
+							.Padding(3.0f, 0.0f)
+							[
+								SNew(SButton)
+								.OnClicked(this, &SUOUDevelopmentPuzzleCheatHUD::HandleNextClicked)
+								.IsEnabled(this, &SUOUDevelopmentPuzzleCheatHUD::IsPuzzleActionEnabled)
+								[
+									SNew(STextBlock)
+									.Text(FText::FromString(TEXT("Next")))
+								]
+							]
+							+ SHorizontalBox::Slot()
+							.FillWidth(1.0f)
+							.Padding(3.0f, 0.0f, 0.0f, 0.0f)
+							[
+								SNew(SButton)
+								.OnClicked(this, &SUOUDevelopmentPuzzleCheatHUD::HandleCancelClicked)
+								.IsEnabled(this, &SUOUDevelopmentPuzzleCheatHUD::IsCancelEnabled)
+								[
+									SNew(STextBlock)
+									.Text(FText::FromString(TEXT("Cancel")))
+								]
+							]
+						]
+						+ SVerticalBox::Slot()
+						.AutoHeight()
+						.Padding(0.0f, 10.0f, 0.0f, 0.0f)
+						[
+							SNew(SBox)
+							.MaxDesiredHeight(320.0f)
+							[
+								SNew(SScrollBox)
+								+ SScrollBox::Slot()
+								[
+									SAssignNew(StepListBox, SVerticalBox)
+								]
+							]
 						]
 					]
 				]
 			]
 		]
 	];
+
+	RebuildStepRows();
 }
 
 void SUOUDevelopmentPuzzleCheatHUD::TogglePanel()
 {
 	bPanelExpanded = !bPanelExpanded;
+	if (bPanelExpanded)
+	{
+		RebuildStepRows();
+	}
+}
+
+void SUOUDevelopmentPuzzleCheatHUD::RebuildStepRows()
+{
+	if (!StepListBox.IsValid())
+	{
+		return;
+	}
+
+	StepListBox->ClearChildren();
+	const UUOUDevelopmentPuzzleCheatSubsystem* Subsystem = PuzzleCheatSubsystem.Get();
+	if (Subsystem == nullptr)
+	{
+		StepListBox->AddSlot()
+		.AutoHeight()
+		[
+			SNew(STextBlock)
+			.Text(FText::FromString(TEXT("Puzzle cheat subsystem is unavailable.")))
+		];
+		return;
+	}
+
+	const TArray<FUOUDevelopmentPuzzleCheatStep> Steps = Subsystem->GetPuzzleSteps();
+	if (Steps.IsEmpty())
+	{
+		StepListBox->AddSlot()
+		.AutoHeight()
+		[
+			SNew(STextBlock)
+			.Text(FText::FromString(TEXT("No tagged puzzle steps were found.")))
+		];
+		return;
+	}
+
+	for (const FUOUDevelopmentPuzzleCheatStep& Step : Steps)
+	{
+		const int32 StepOrder = Step.StepOrder;
+		const FText DisplayName = Step.DisplayName;
+		const float DelaySeconds = Step.DelayAfterActivationSeconds;
+		const TWeakObjectPtr<AUOUPuzzleConditionGroupActor> PuzzleGroup = Step.PuzzleGroup.Get();
+
+		StepListBox->AddSlot()
+		.AutoHeight()
+		.Padding(0.0f, 0.0f, 0.0f, 4.0f)
+		[
+			SNew(SButton)
+			.OnClicked(this, &SUOUDevelopmentPuzzleCheatHUD::HandleStepClicked, StepOrder)
+			.IsEnabled(this, &SUOUDevelopmentPuzzleCheatHUD::IsPuzzleActionEnabled)
+			.ContentPadding(FMargin(8.0f, 5.0f))
+			[
+				SNew(STextBlock)
+				.Text_Lambda([StepOrder, DisplayName, DelaySeconds, PuzzleGroup]()
+				{
+					const bool bSatisfied = PuzzleGroup.IsValid() && PuzzleGroup->IsSatisfied();
+					return FText::FromString(FString::Printf(
+						TEXT("[%03d] %s  |  %s  |  %.2fs"),
+						StepOrder,
+						*DisplayName.ToString(),
+						bSatisfied ? TEXT("Satisfied") : TEXT("Pending"),
+						DelaySeconds));
+				})
+			]
+		];
+	}
 }
 
 FReply SUOUDevelopmentPuzzleCheatHUD::HandleToggleClicked()
@@ -81,7 +216,73 @@ FReply SUOUDevelopmentPuzzleCheatHUD::HandleToggleClicked()
 	return FReply::Handled();
 }
 
+FReply SUOUDevelopmentPuzzleCheatHUD::HandleRefreshClicked()
+{
+	if (UUOUDevelopmentPuzzleCheatSubsystem* Subsystem = PuzzleCheatSubsystem.Get())
+	{
+		Subsystem->RefreshPuzzleSequence();
+		RebuildStepRows();
+	}
+	return FReply::Handled();
+}
+
+FReply SUOUDevelopmentPuzzleCheatHUD::HandleNextClicked()
+{
+	if (UUOUDevelopmentPuzzleCheatSubsystem* Subsystem = PuzzleCheatSubsystem.Get())
+	{
+		Subsystem->AdvanceToNextPuzzle();
+	}
+	return FReply::Handled();
+}
+
+FReply SUOUDevelopmentPuzzleCheatHUD::HandleCancelClicked()
+{
+	if (UUOUDevelopmentPuzzleCheatSubsystem* Subsystem = PuzzleCheatSubsystem.Get())
+	{
+		Subsystem->CancelPendingSequence();
+	}
+	return FReply::Handled();
+}
+
+FReply SUOUDevelopmentPuzzleCheatHUD::HandleStepClicked(int32 TargetStepOrder)
+{
+	if (UUOUDevelopmentPuzzleCheatSubsystem* Subsystem = PuzzleCheatSubsystem.Get())
+	{
+		Subsystem->AdvanceThroughStep(TargetStepOrder);
+	}
+	return FReply::Handled();
+}
+
 EVisibility SUOUDevelopmentPuzzleCheatHUD::GetPanelVisibility() const
 {
 	return bPanelExpanded ? EVisibility::Visible : EVisibility::Collapsed;
+}
+
+FText SUOUDevelopmentPuzzleCheatHUD::GetStatusText() const
+{
+	const UUOUDevelopmentPuzzleCheatSubsystem* Subsystem = PuzzleCheatSubsystem.Get();
+	if (Subsystem == nullptr)
+	{
+		return FText::FromString(TEXT("Subsystem unavailable"));
+	}
+
+	const FString StatePrefix = Subsystem->IsSequenceRunning() ? TEXT("Running") : TEXT("Ready");
+	return FText::FromString(FString::Printf(
+		TEXT("%s | %s"),
+		*StatePrefix,
+		*Subsystem->LastStatusMessage));
+}
+
+bool SUOUDevelopmentPuzzleCheatHUD::IsPuzzleActionEnabled() const
+{
+	const UUOUDevelopmentPuzzleCheatSubsystem* Subsystem = PuzzleCheatSubsystem.Get();
+	return Subsystem != nullptr
+		&& Subsystem->IsPuzzleSequenceValid()
+		&& !Subsystem->IsSequenceRunning();
+}
+
+bool SUOUDevelopmentPuzzleCheatHUD::IsCancelEnabled() const
+{
+	const UUOUDevelopmentPuzzleCheatSubsystem* Subsystem = PuzzleCheatSubsystem.Get();
+	return Subsystem != nullptr && Subsystem->IsSequenceRunning();
 }
