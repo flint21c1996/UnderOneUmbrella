@@ -10,6 +10,12 @@ public class UnderOneUmBrellaTarget : TargetRules
 		Type = TargetType.Game;
 		DefaultBuildSettings = BuildSettingsVersion.V6;
 		IncludeOrderVersion = EngineIncludeOrderVersion.Unreal5_7;
+
+		bool bWithUOUPuzzleCheats = Configuration != UnrealTargetConfiguration.Shipping;
 		ExtraModuleNames.Add("UnderOneUmBrella");
+		if (bWithUOUPuzzleCheats)
+		{
+			ExtraModuleNames.Add("UnderOneUmBrellaDevTools");
+		}
 	}
 }
