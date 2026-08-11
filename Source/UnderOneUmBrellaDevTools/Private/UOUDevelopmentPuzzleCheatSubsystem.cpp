@@ -8,6 +8,7 @@
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "Puzzle/Core/UOUPuzzleConditionGroupActor.h"
+#include "Puzzle/Core/UOUPuzzleResultCompletionState.h"
 #include "Widgets/SUOUDevelopmentPuzzleCheatHUD.h"
 
 #if !UOU_WITH_PUZZLE_CHEATS
@@ -20,6 +21,7 @@ namespace UOUDevelopmentPuzzleCheatPrivate
 	constexpr TCHAR DelayTagPrefix[] = TEXT("UOU.PuzzleCheat.DelayMs.");
 	constexpr TCHAR LabelTagPrefix[] = TEXT("UOU.PuzzleCheat.Label.");
 	constexpr float DefaultDelayAfterActivationSeconds = 0.25f;
+	constexpr float CompletionPollIntervalSeconds = 0.05f;
 
 	bool TryParseIntegerTag(const AActor& Actor, const TCHAR* Prefix, int32& OutValue)
 	{
@@ -94,6 +96,9 @@ void UUOUDevelopmentPuzzleCheatSubsystem::Deinitialize()
 	PuzzleSteps.Reset();
 	PendingStepIndices.Reset();
 	PendingQueuePosition = 0;
+	ActiveStepIndex = INDEX_NONE;
+	ActiveStepStartTimeSeconds = 0.0;
+	ActiveStepMinimumWaitSeconds = 0.0f;
 	bSequenceRunning = false;
 	bPuzzleSequenceValid = false;
 	Super::Deinitialize();
@@ -245,6 +250,9 @@ void UUOUDevelopmentPuzzleCheatSubsystem::CancelPendingSequence()
 	const bool bHadPendingSequence = bSequenceRunning || !PendingStepIndices.IsEmpty();
 	PendingStepIndices.Reset();
 	PendingQueuePosition = 0;
+	ActiveStepIndex = INDEX_NONE;
+	ActiveStepStartTimeSeconds = 0.0;
+	ActiveStepMinimumWaitSeconds = 0.0f;
 	bSequenceRunning = false;
 	LastStatusMessage = bHadPendingSequence
 		? TEXT("Pending puzzle cheat sequence cancelled. Already activated steps were kept.")
@@ -356,14 +364,36 @@ void UUOUDevelopmentPuzzleCheatSubsystem::ExecuteNextQueuedStep()
 	}
 
 	LastStatusMessage = FString::Printf(
-		TEXT("Activated puzzle cheat step %d: %s"),
+		TEXT("Activated puzzle cheat step %d and waiting for result completion: %s"),
 		Step.StepOrder,
 		*Step.DisplayName.ToString());
-	++PendingQueuePosition;
 
-	if (PendingQueuePosition >= PendingStepIndices.Num())
+	UWorld* World = GetWorld();
+	if (World == nullptr)
 	{
-		FinishSequence();
+		CancelPendingSequence();
+		LastStatusMessage = TEXT("Puzzle cheat sequence stopped because its world was unavailable.");
+		return;
+	}
+
+	ActiveStepIndex = StepIndex;
+	ActiveStepStartTimeSeconds = World->GetTimeSeconds();
+	ActiveStepMinimumWaitSeconds = GetDelayBeforeNextStep(Step)
+		+ UOUDevelopmentPuzzleCheatPrivate::CompletionPollIntervalSeconds;
+	ScheduleCompletionCheck();
+}
+
+void UUOUDevelopmentPuzzleCheatSubsystem::CheckCurrentStepCompletion()
+{
+	if (!bSequenceRunning)
+	{
+		return;
+	}
+
+	if (!PuzzleSteps.IsValidIndex(ActiveStepIndex))
+	{
+		CancelPendingSequence();
+		LastStatusMessage = TEXT("Puzzle cheat sequence lost the step waiting for result completion.");
 		return;
 	}
 
@@ -375,12 +405,76 @@ void UUOUDevelopmentPuzzleCheatSubsystem::ExecuteNextQueuedStep()
 		return;
 	}
 
+	const FUOUDevelopmentPuzzleCheatStep& ActiveStep = PuzzleSteps[ActiveStepIndex];
+	const double ElapsedSeconds = World->GetTimeSeconds() - ActiveStepStartTimeSeconds;
+	const bool bMinimumWaitCompleted = ElapsedSeconds >= ActiveStepMinimumWaitSeconds;
+	const bool bResultsCompleted = bMinimumWaitCompleted && AreStepResultsCompleted(ActiveStep);
+	if (!bResultsCompleted)
+	{
+		LastStatusMessage = FString::Printf(
+			TEXT("Waiting for puzzle cheat step %d result completion: %s"),
+			ActiveStep.StepOrder,
+			*ActiveStep.DisplayName.ToString());
+		ScheduleCompletionCheck();
+		return;
+	}
+
+	++PendingQueuePosition;
+	ActiveStepIndex = INDEX_NONE;
+	ActiveStepStartTimeSeconds = 0.0;
+	ActiveStepMinimumWaitSeconds = 0.0f;
+	ExecuteNextQueuedStep();
+}
+
+void UUOUDevelopmentPuzzleCheatSubsystem::ScheduleCompletionCheck()
+{
+	UWorld* World = GetWorld();
+	if (World == nullptr)
+	{
+		CancelPendingSequence();
+		LastStatusMessage = TEXT("Puzzle cheat sequence stopped because its world was unavailable.");
+		return;
+	}
+
 	World->GetTimerManager().SetTimer(
 		SequenceTimerHandle,
 		this,
-		&UUOUDevelopmentPuzzleCheatSubsystem::ExecuteNextQueuedStep,
-		FMath::Max(GetDelayBeforeNextStep(Step), KINDA_SMALL_NUMBER),
+		&UUOUDevelopmentPuzzleCheatSubsystem::CheckCurrentStepCompletion,
+		UOUDevelopmentPuzzleCheatPrivate::CompletionPollIntervalSeconds,
 		false);
+}
+
+bool UUOUDevelopmentPuzzleCheatSubsystem::AreStepResultsCompleted(
+	const FUOUDevelopmentPuzzleCheatStep& Step) const
+{
+	const AUOUPuzzleConditionGroupActor* PuzzleGroup = Step.PuzzleGroup.Get();
+	if (PuzzleGroup == nullptr)
+	{
+		return false;
+	}
+
+	for (const FOUUPuzzleResultBinding& Binding : PuzzleGroup->ResultBindings)
+	{
+		AActor* TargetActor = Binding.TargetActor.Get();
+		if (TargetActor == nullptr || Binding.SatisfiedAction == EOUUPuzzleResultAction::None)
+		{
+			continue;
+		}
+
+		if (!TargetActor->GetClass()->ImplementsInterface(UUOUPuzzleResultCompletionState::StaticClass()))
+		{
+			continue;
+		}
+
+		if (!IUOUPuzzleResultCompletionState::Execute_IsPuzzleResultCompleted(
+				TargetActor,
+				Binding.SatisfiedAction))
+		{
+			return false;
+		}
+	}
+
+	return true;
 }
 
 float UUOUDevelopmentPuzzleCheatSubsystem::GetDelayBeforeNextStep(
@@ -408,6 +502,9 @@ void UUOUDevelopmentPuzzleCheatSubsystem::FinishSequence()
 	const int32 ActivatedStepCount = PendingQueuePosition;
 	PendingStepIndices.Reset();
 	PendingQueuePosition = 0;
+	ActiveStepIndex = INDEX_NONE;
+	ActiveStepStartTimeSeconds = 0.0;
+	ActiveStepMinimumWaitSeconds = 0.0f;
 	bSequenceRunning = false;
 	LastStatusMessage = FString::Printf(
 		TEXT("Puzzle cheat sequence completed. Activated %d step(s)."),

@@ -89,6 +89,9 @@ public:
 private:
 	bool BuildActivationQueue(int32 TargetStepOrder);
 	void ExecuteNextQueuedStep();
+	void CheckCurrentStepCompletion();
+	void ScheduleCompletionCheck();
+	bool AreStepResultsCompleted(const FUOUDevelopmentPuzzleCheatStep& Step) const;
 	float GetDelayBeforeNextStep(const FUOUDevelopmentPuzzleCheatStep& Step) const;
 	void FinishSequence();
 	void EnsureCheatHUDCreated();
@@ -105,6 +108,15 @@ private:
 	// PendingStepIndices에서 다음으로 실행할 위치입니다.
 	UPROPERTY(Transient)
 	int32 PendingQueuePosition = 0;
+
+	// 결과 기믹의 실제 완료를 기다리고 있는 PuzzleSteps 인덱스입니다.
+	int32 ActiveStepIndex = INDEX_NONE;
+
+	// 현재 Step을 강제 만족시킨 월드 시간입니다.
+	double ActiveStepStartTimeSeconds = 0.0;
+
+	// 결과 완료를 검사하기 전에 보장할 최소 대기 시간입니다.
+	float ActiveStepMinimumWaitSeconds = 0.0f;
 
 	// 중복 실행 요청을 차단하고 HUD 버튼 상태를 결정하는 런타임 값입니다.
 	UPROPERTY(Transient)
