@@ -42,6 +42,7 @@ void UUOUCameraControllerComponent::EndPlay(const EEndPlayReason::Type EndPlayRe
 	TemporaryZoomRequestSource.Reset();
 	TemporaryZoomFocusOffset = FVector::ZeroVector;
 	bTemporaryZoomFaceOwnerFromFront = false;
+	AreaCameraOffset = FVector::ZeroVector;
 	RestoreAllOccludedMeshes();
 	Super::EndPlay(EndPlayReason);
 }
@@ -130,7 +131,8 @@ void UUOUCameraControllerComponent::StartDialogueFocus(AActor* SpeakerActor)
 	{
 		SavedTargetCameraYaw = TargetCameraYaw;
 		SavedTargetCameraDistance = TargetCameraDistance;
-		RegularCameraTargetOffset = CameraBoom->TargetOffset;
+		// CameraBoom에는 지역/연출 보정이 이미 반영될 수 있으므로, 기본 목표값 자체를 보존합니다.
+		RegularCameraTargetOffset = TargetCameraOffset;
 		TargetCameraOffset = RegularCameraTargetOffset;
 	}
 
@@ -201,6 +203,16 @@ void UUOUCameraControllerComponent::ReleaseTemporaryZoom(UObject* RequestSource)
 bool UUOUCameraControllerComponent::IsTemporaryZoomRequestedBy(const UObject* RequestSource) const
 {
 	return RequestSource != nullptr && TemporaryZoomRequestSource.Get() == RequestSource;
+}
+
+void UUOUCameraControllerComponent::SetAreaCameraOffset(FVector NewOffset)
+{
+	AreaCameraOffset = NewOffset;
+}
+
+void UUOUCameraControllerComponent::ClearAreaCameraOffset()
+{
+	AreaCameraOffset = FVector::ZeroVector;
 }
 
 void UUOUCameraControllerComponent::CacheCameraComponents()
@@ -341,10 +353,11 @@ FVector UUOUCameraControllerComponent::GetEffectiveTargetCameraOffset() const
 	const FVector WorldFocusOffset = Owner != nullptr
 		? Owner->GetActorTransform().TransformVectorNoScale(TemporaryZoomFocusOffset)
 		: TemporaryZoomFocusOffset;
+	const FVector AreaAdjustedTargetOffset = TargetCameraOffset + AreaCameraOffset;
 
 	return HasTemporaryZoomRequest()
-		? TargetCameraOffset + WorldFocusOffset
-		: TargetCameraOffset;
+		? AreaAdjustedTargetOffset + WorldFocusOffset
+		: AreaAdjustedTargetOffset;
 }
 
 void UUOUCameraControllerComponent::UpdateDialogueCamera(float DeltaSeconds)
