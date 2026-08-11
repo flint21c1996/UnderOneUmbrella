@@ -73,6 +73,9 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Puzzle Cheat")
 	bool IsSequenceRunning() const { return bSequenceRunning; }
 
+	// 마지막 퍼즐 수집 결과가 중복 Step 없이 실행 가능한지 반환합니다.
+	bool IsPuzzleSequenceValid() const { return bPuzzleSequenceValid; }
+
 	// Viewport에 생성된 퍼즐 치트 HUD 패널의 확장 상태를 전환합니다.
 	void ToggleCheatHUD();
 
