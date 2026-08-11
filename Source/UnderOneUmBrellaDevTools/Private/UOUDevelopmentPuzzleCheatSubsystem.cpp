@@ -3,9 +3,12 @@
 #include "UOUDevelopmentPuzzleCheatSubsystem.h"
 
 #include "Debug/UOUDevelopmentCheatBuild.h"
+#include "Engine/GameInstance.h"
+#include "Engine/GameViewportClient.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "Puzzle/Core/UOUPuzzleConditionGroupActor.h"
+#include "Widgets/SUOUDevelopmentPuzzleCheatHUD.h"
 
 #if !UOU_WITH_PUZZLE_CHEATS
 #error UOUDevelopmentPuzzleCheatSubsystem must only be compiled when puzzle cheats are enabled.
@@ -81,6 +84,8 @@ void UUOUDevelopmentPuzzleCheatSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 
 void UUOUDevelopmentPuzzleCheatSubsystem::Deinitialize()
 {
+	RemoveCheatHUD();
+
 	if (UWorld* World = GetWorld())
 	{
 		World->GetTimerManager().ClearTimer(SequenceTimerHandle);
@@ -170,6 +175,10 @@ bool UUOUDevelopmentPuzzleCheatSubsystem::RefreshPuzzleSequence()
 		TEXT("Collected %d puzzle cheat step(s); duplicate step orders: %d."),
 		PuzzleSteps.Num(),
 		DuplicateOrderCount);
+	if (!PuzzleSteps.IsEmpty())
+	{
+		EnsureCheatHUDCreated();
+	}
 	return bPuzzleSequenceValid;
 }
 
@@ -264,6 +273,20 @@ int32 UUOUDevelopmentPuzzleCheatSubsystem::GetFirstIncompleteStepOrder() const
 TArray<FUOUDevelopmentPuzzleCheatStep> UUOUDevelopmentPuzzleCheatSubsystem::GetPuzzleSteps() const
 {
 	return PuzzleSteps;
+}
+
+void UUOUDevelopmentPuzzleCheatSubsystem::ToggleCheatHUD()
+{
+	EnsureCheatHUDCreated();
+	if (CheatHUDWidget.IsValid())
+	{
+		CheatHUDWidget->TogglePanel();
+	}
+}
+
+bool UUOUDevelopmentPuzzleCheatSubsystem::IsCheatHUDExpanded() const
+{
+	return CheatHUDWidget.IsValid() && CheatHUDWidget->IsPanelExpanded();
 }
 
 bool UUOUDevelopmentPuzzleCheatSubsystem::BuildActivationQueue(int32 TargetStepOrder)
@@ -389,4 +412,38 @@ void UUOUDevelopmentPuzzleCheatSubsystem::FinishSequence()
 	LastStatusMessage = FString::Printf(
 		TEXT("Puzzle cheat sequence completed. Activated %d step(s)."),
 		ActivatedStepCount);
+}
+
+void UUOUDevelopmentPuzzleCheatSubsystem::EnsureCheatHUDCreated()
+{
+	if (CheatHUDWidget.IsValid())
+	{
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	UGameInstance* GameInstance = World != nullptr ? World->GetGameInstance() : nullptr;
+	UGameViewportClient* GameViewport = GameInstance != nullptr
+		? GameInstance->GetGameViewportClient()
+		: nullptr;
+	if (GameViewport == nullptr)
+	{
+		return;
+	}
+
+	SAssignNew(CheatHUDWidget, SUOUDevelopmentPuzzleCheatHUD)
+		.PuzzleCheatSubsystem(this);
+	CheatHUDViewport = GameViewport;
+	GameViewport->AddViewportWidgetContent(CheatHUDWidget.ToSharedRef(), 10000);
+}
+
+void UUOUDevelopmentPuzzleCheatSubsystem::RemoveCheatHUD()
+{
+	if (CheatHUDViewport.IsValid() && CheatHUDWidget.IsValid())
+	{
+		CheatHUDViewport->RemoveViewportWidgetContent(CheatHUDWidget.ToSharedRef());
+	}
+
+	CheatHUDWidget.Reset();
+	CheatHUDViewport.Reset();
 }

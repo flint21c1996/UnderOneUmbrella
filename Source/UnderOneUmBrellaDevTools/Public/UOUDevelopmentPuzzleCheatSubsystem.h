@@ -8,6 +8,8 @@
 #include "UOUDevelopmentPuzzleCheatSubsystem.generated.h"
 
 class AUOUPuzzleConditionGroupActor;
+class SUOUDevelopmentPuzzleCheatHUD;
+class UGameViewportClient;
 
 // 현재 월드에서 발견한 퍼즐 치트 진행 단계 하나의 런타임 정보입니다.
 USTRUCT(BlueprintType)
@@ -71,6 +73,12 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Puzzle Cheat")
 	bool IsSequenceRunning() const { return bSequenceRunning; }
 
+	// Viewport에 생성된 퍼즐 치트 HUD 패널의 확장 상태를 전환합니다.
+	void ToggleCheatHUD();
+
+	// 퍼즐 치트 HUD 패널이 현재 확장되어 있는지 반환합니다.
+	bool IsCheatHUDExpanded() const;
+
 	// 가장 최근 수집, 실행, 완료 또는 실패 결과입니다.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Puzzle Cheat|Runtime")
 	FString LastStatusMessage;
@@ -80,6 +88,8 @@ private:
 	void ExecuteNextQueuedStep();
 	float GetDelayBeforeNextStep(const FUOUDevelopmentPuzzleCheatStep& Step) const;
 	void FinishSequence();
+	void EnsureCheatHUDCreated();
+	void RemoveCheatHUD();
 
 	// 현재 월드에서 Step 태그로 발견해 진행 순서대로 정렬한 런타임 캐시입니다.
 	UPROPERTY(Transient)
@@ -103,4 +113,10 @@ private:
 
 	// 다음 단계 예약을 취소하거나 월드 종료 시 정리하기 위한 타이머 핸들입니다.
 	FTimerHandle SequenceTimerHandle;
+
+	// 현재 GameViewport에 추가한 개발 전용 Slate HUD입니다.
+	TSharedPtr<SUOUDevelopmentPuzzleCheatHUD> CheatHUDWidget;
+
+	// HUD를 정확한 Viewport에서 제거하기 위해 생성 시점의 Viewport를 보관합니다.
+	TWeakObjectPtr<UGameViewportClient> CheatHUDViewport;
 };
