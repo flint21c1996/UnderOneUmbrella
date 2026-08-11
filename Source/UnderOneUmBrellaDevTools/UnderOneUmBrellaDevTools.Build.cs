@@ -15,5 +15,11 @@ public class UnderOneUmBrellaDevTools : ModuleRules
 			"Engine",
 			"UnderOneUmBrella"
 		});
+
+		PrivateDependencyModuleNames.AddRange(new string[]
+		{
+			"Slate",
+			"SlateCore"
+		});
 	}
 }
