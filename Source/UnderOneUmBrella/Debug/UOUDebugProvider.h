@@ -9,12 +9,12 @@
 
 // Interface for actors or components that provide data to the integrated debug system.
 UINTERFACE(BlueprintType)
-class UUOUDebugProvider : public UInterface
+class UNDERONEUMBRELLA_API UUOUDebugProvider : public UInterface
 {
 	GENERATED_BODY()
 };
 
-class IUOUDebugProvider
+class UNDERONEUMBRELLA_API IUOUDebugProvider
 {
 	GENERATED_BODY()
 
