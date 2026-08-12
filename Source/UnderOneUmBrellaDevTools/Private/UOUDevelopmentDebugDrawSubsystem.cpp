@@ -62,6 +62,7 @@
 #include "World/Light/UOULightExposureReceiverComponent.h"
 #include "World/Light/UOULightExposureSourceComponent.h"
 #include "World/Light/UOURotatableMirrorComponent.h"
+#include "World/Light/UOULightReceivableInterface.h"
 #include "World/NPC/UOUNPCCharacter.h"
 #include "World/Pour/UOUPourDropActor.h"
 #include "World/RainArea/UOUUmbrellaRainArea.h"
@@ -2234,7 +2235,7 @@ void UUOUDevelopmentDebugDrawSubsystem::DrawLightExposureReceiverDebug() const
 
 		TArray<UUOULightExposureReceiverComponent*> ReceiverComponents;
 		SelectedActor->GetComponents<UUOULightExposureReceiverComponent>(ReceiverComponents);
-		for (const UUOULightExposureReceiverComponent* ReceiverComponent : ReceiverComponents)
+		for (UUOULightExposureReceiverComponent* ReceiverComponent : ReceiverComponents)
 		{
 			if (!IsValid(ReceiverComponent))
 			{
@@ -2242,7 +2243,9 @@ void UUOUDevelopmentDebugDrawSubsystem::DrawLightExposureReceiverDebug() const
 			}
 
 			const FVector DebugLocation =
-				ReceiverComponent->GetLightReceiverPosition_Implementation() + DebugOffset;
+				IUOULightReceivableInterface::Execute_GetLightReceiverPosition(
+					ReceiverComponent)
+				+ DebugOffset;
 			const FString DebugText = FString::Printf(
 				TEXT("Temp: %.1f C\nLight: %s\nIntensity: %.2f"),
 				ReceiverComponent->CurrentTemperature,
