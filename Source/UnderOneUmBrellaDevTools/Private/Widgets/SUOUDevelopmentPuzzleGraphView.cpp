@@ -28,6 +28,7 @@ void SUOUDevelopmentPuzzleGraphView::Construct(const FArguments& InArgs)
 {
 	PuzzleCheatSubsystem = InArgs._PuzzleCheatSubsystem;
 	OnNodeClicked = InArgs._OnNodeClicked;
+	SetVisibility(EVisibility::SelfHitTestInvisible);
 
 	ChildSlot
 	[

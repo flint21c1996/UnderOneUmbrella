@@ -23,6 +23,7 @@ void SUOUDevelopmentPuzzleCheatHUD::Construct(const FArguments& InArgs)
 	DebugControlSubsystem = InArgs._DebugControlSubsystem;
 	DebugDrawSubsystem = InArgs._DebugDrawSubsystem;
 	PuzzleCheatSubsystem = InArgs._PuzzleCheatSubsystem;
+	SetVisibility(EVisibility::SelfHitTestInvisible);
 
 	ChildSlot
 	[
