@@ -111,8 +111,11 @@ public:
 	FString PuzzleGraphStatusMessage;
 
 private:
+	void CollectConditionDependencyActors(
+		AUOUPuzzleConditionGroupActor& PuzzleGroup,
+		TArray<AActor*>& OutDependencyActors) const;
 	void BuildPuzzleGraphConnections();
-	void AddPuzzleGraphEdge(int32 SourceNodeIndex, int32 TargetNodeIndex);
+	void AddPuzzleGraphEdge(int32 SourceNodeIndex, int32 TargetNodeIndex, AActor* RelationActor);
 	bool ValidateAndAssignPuzzleGraphDepths();
 	bool BuildGraphExecutionWaves(int32 TargetNodeIndex);
 	void ExecuteNextGraphWave();

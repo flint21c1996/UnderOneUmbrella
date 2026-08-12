@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "UOUDevelopmentPuzzleCheatGraphTypes.generated.h"
 
+class AActor;
 class AUOUPuzzleConditionGroupActor;
 
 // ConditionGroup 하나와 그래프에서 계산된 선행/후속 관계를 보관하는 런타임 캐시입니다.
@@ -28,9 +29,6 @@ struct UNDERONEUMBRELLADEVTOOLS_API FUOUDevelopmentPuzzleCheatGraphNode
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Puzzle Cheat|Graph")
 	TArray<int32> DependentNodeIndices;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Puzzle Cheat|Graph")
-	int32 InvalidPrerequisiteCount = 0;
-
 	// 같은 깊이의 노드들은 서로의 완료를 요구하지 않으므로 이후 병렬 실행 묶음이 될 수 있습니다.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Puzzle Cheat|Graph")
 	int32 ExecutionDepth = INDEX_NONE;
@@ -48,6 +46,9 @@ struct UNDERONEUMBRELLADEVTOOLS_API FUOUDevelopmentPuzzleCheatGraphEdge
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Puzzle Cheat|Graph")
 	int32 TargetNodeIndex = INDEX_NONE;
 
+	// Source의 Result이면서 Target의 Condition으로 사용되어 두 그룹을 연결한 액터입니다.
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Puzzle Cheat|Graph")
+	TObjectPtr<AActor> RelationActor = nullptr;
 };
 
 // 대상 노드까지 진행할 때 같은 깊이에서 함께 활성화할 노드 묶음입니다.
