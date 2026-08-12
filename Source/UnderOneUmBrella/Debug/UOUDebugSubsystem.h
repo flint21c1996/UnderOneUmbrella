@@ -70,8 +70,6 @@ public:
 
 private:
 	void ResolveDebugController();
-	void TryAutoCreateRuntimeDebugController(UWorld* World);
-	bool ShouldAutoCreateRuntimeDebugController(const UWorld* World) const;
 	void CompactRegisteredProviders();
 
 	TWeakObjectPtr<AUOUDebugController> ActiveDebugController;

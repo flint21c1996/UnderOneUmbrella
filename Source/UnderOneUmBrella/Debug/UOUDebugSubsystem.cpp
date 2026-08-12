@@ -344,32 +344,6 @@ void UUOUDebugSubsystem::ResolveDebugController()
 		}
 	}
 
-	TryAutoCreateRuntimeDebugController(World);
-}
-
-void UUOUDebugSubsystem::TryAutoCreateRuntimeDebugController(UWorld* World)
-{
-#if !UE_BUILD_SHIPPING
-	if (ShouldAutoCreateRuntimeDebugController(World))
-	{
-		if (AUOUDebugController* DebugController =
-			AUOUDebugController::FindOrCreateDebugController(World))
-		{
-			RegisterDebugController(DebugController);
-		}
-	}
-#endif
-}
-
-bool UUOUDebugSubsystem::ShouldAutoCreateRuntimeDebugController(const UWorld* World) const
-{
-#if UE_BUILD_SHIPPING
-	return false;
-#else
-	return World != nullptr
-		&& (World->WorldType == EWorldType::Game || World->WorldType == EWorldType::PIE)
-		&& World->GetNetMode() != NM_DedicatedServer;
-#endif
 }
 
 void UUOUDebugSubsystem::CompactRegisteredProviders()
