@@ -53,6 +53,8 @@ namespace UOUPuzzleCheatConsolePrivate
 	void LogPuzzleCheatStatus(const UUOUDevelopmentPuzzleCheatSubsystem& Subsystem)
 	{
 		const TArray<FUOUDevelopmentPuzzleCheatStep> Steps = Subsystem.GetPuzzleSteps();
+		const TArray<FUOUDevelopmentPuzzleCheatGraphNode> GraphNodes = Subsystem.GetPuzzleGraphNodes();
+		const TArray<FUOUDevelopmentPuzzleCheatGraphEdge> GraphEdges = Subsystem.GetPuzzleGraphEdges();
 		UE_LOG(
 			LogUOUPuzzleCheatConsole,
 			Display,
@@ -75,6 +77,47 @@ namespace UOUPuzzleCheatConsolePrivate
 				PuzzleGroup != nullptr && PuzzleGroup->IsSatisfied() ? TEXT("Yes") : TEXT("No"),
 				Step.DelayAfterActivationSeconds);
 		}
+
+		UE_LOG(
+			LogUOUPuzzleCheatConsole,
+			Display,
+			TEXT("Puzzle graph status: Valid=%s, Nodes=%d, Edges=%d, Message=%s"),
+			Subsystem.IsPuzzleGraphValid() ? TEXT("Yes") : TEXT("No"),
+			GraphNodes.Num(),
+			GraphEdges.Num(),
+			*Subsystem.PuzzleGraphStatusMessage);
+		for (const FUOUDevelopmentPuzzleCheatGraphNode& Node : GraphNodes)
+		{
+			const AUOUPuzzleConditionGroupActor* PuzzleGroup = Node.PuzzleGroup.Get();
+			UE_LOG(
+				LogUOUPuzzleCheatConsole,
+				Display,
+				TEXT("  GraphNode=%d, Depth=%d, Label=%s, Actor=%s, Prerequisites=%d, Dependents=%d"),
+				Node.NodeIndex,
+				Node.ExecutionDepth,
+				*Node.DisplayName.ToString(),
+				PuzzleGroup != nullptr ? *PuzzleGroup->GetName() : TEXT("None"),
+				Node.PrerequisiteNodeIndices.Num(),
+				Node.DependentNodeIndices.Num());
+		}
+		for (const FUOUDevelopmentPuzzleCheatGraphEdge& Edge : GraphEdges)
+		{
+			const FString SourceName = GraphNodes.IsValidIndex(Edge.SourceNodeIndex)
+				? GraphNodes[Edge.SourceNodeIndex].DisplayName.ToString()
+				: TEXT("Invalid");
+			const FString TargetName = GraphNodes.IsValidIndex(Edge.TargetNodeIndex)
+				? GraphNodes[Edge.TargetNodeIndex].DisplayName.ToString()
+				: TEXT("Invalid");
+			UE_LOG(
+				LogUOUPuzzleCheatConsole,
+				Display,
+				TEXT("  GraphEdge=%d->%d, Source=%s, Target=%s, RelationActor=%s"),
+				Edge.SourceNodeIndex,
+				Edge.TargetNodeIndex,
+				*SourceName,
+				*TargetName,
+				*GetNameSafe(Edge.RelationActor.Get()));
+		}
 	}
 
 	void ExecuteRefresh(const TArray<FString>& Args, UWorld* CommandWorld)
@@ -85,8 +128,13 @@ namespace UOUPuzzleCheatConsolePrivate
 			return;
 		}
 
-		const bool bSucceeded = Subsystem->RefreshPuzzleSequence();
-		UE_LOG(LogUOUPuzzleCheatConsole, Display, TEXT("Puzzle cheat refresh: %s"), bSucceeded ? TEXT("Succeeded") : TEXT("Failed"));
+		const bool bSequenceSucceeded = Subsystem->RefreshPuzzleSequence();
+		UE_LOG(
+			LogUOUPuzzleCheatConsole,
+			Display,
+			TEXT("Puzzle cheat refresh: Sequence=%s, Graph=%s"),
+			bSequenceSucceeded ? TEXT("Succeeded") : TEXT("Failed"),
+			Subsystem->IsPuzzleGraphValid() ? TEXT("Succeeded") : TEXT("Failed"));
 		LogPuzzleCheatStatus(*Subsystem);
 	}
 

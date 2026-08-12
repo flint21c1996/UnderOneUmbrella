@@ -2,12 +2,14 @@
 
 #include "UOUDevelopmentPuzzleCheatSubsystem.h"
 
+#include "Components/ActorComponent.h"
 #include "Debug/UOUDevelopmentCheatBuild.h"
 #include "Engine/GameInstance.h"
 #include "Engine/GameViewportClient.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "Puzzle/Core/UOUPuzzleConditionGroupActor.h"
+#include "Puzzle/Core/UOUPuzzleConditionSourceComponent.h"
 #include "Puzzle/Core/UOUPuzzleResultCompletionState.h"
 #include "UOUDevelopmentDebugControlSubsystem.h"
 #include "UOUDevelopmentDebugDrawSubsystem.h"
@@ -96,6 +98,8 @@ void UUOUDevelopmentPuzzleCheatSubsystem::Deinitialize()
 	}
 
 	PuzzleSteps.Reset();
+	PuzzleGraphNodes.Reset();
+	PuzzleGraphEdges.Reset();
 	PendingStepIndices.Reset();
 	PendingQueuePosition = 0;
 	ActiveStepIndex = INDEX_NONE;
@@ -103,6 +107,8 @@ void UUOUDevelopmentPuzzleCheatSubsystem::Deinitialize()
 	ActiveStepMinimumWaitSeconds = 0.0f;
 	bSequenceRunning = false;
 	bPuzzleSequenceValid = false;
+	bPuzzleGraphValid = false;
+	PuzzleGraphStatusMessage.Reset();
 	Super::Deinitialize();
 }
 
@@ -123,6 +129,8 @@ bool UUOUDevelopmentPuzzleCheatSubsystem::RefreshPuzzleSequence()
 		LastStatusMessage = TEXT("Puzzle cheat sequence refresh failed because no game world was available.");
 		return false;
 	}
+
+	RefreshPuzzleGraph();
 
 	for (TActorIterator<AUOUPuzzleConditionGroupActor> It(World); It; ++It)
 	{
@@ -182,7 +190,7 @@ bool UUOUDevelopmentPuzzleCheatSubsystem::RefreshPuzzleSequence()
 		TEXT("Collected %d puzzle cheat step(s); duplicate step orders: %d."),
 		PuzzleSteps.Num(),
 		DuplicateOrderCount);
-	if (!PuzzleSteps.IsEmpty())
+	if (!PuzzleSteps.IsEmpty() || !PuzzleGraphNodes.IsEmpty())
 	{
 		EnsureCheatHUDCreated();
 	}
@@ -283,6 +291,266 @@ int32 UUOUDevelopmentPuzzleCheatSubsystem::GetFirstIncompleteStepOrder() const
 TArray<FUOUDevelopmentPuzzleCheatStep> UUOUDevelopmentPuzzleCheatSubsystem::GetPuzzleSteps() const
 {
 	return PuzzleSteps;
+}
+
+bool UUOUDevelopmentPuzzleCheatSubsystem::RefreshPuzzleGraph()
+{
+	PuzzleGraphNodes.Reset();
+	PuzzleGraphEdges.Reset();
+	bPuzzleGraphValid = false;
+
+	UWorld* World = GetWorld();
+	if (World == nullptr || !World->IsGameWorld())
+	{
+		PuzzleGraphStatusMessage = TEXT("Puzzle graph refresh failed because no game world was available.");
+		return false;
+	}
+
+	TArray<AUOUPuzzleConditionGroupActor*> PuzzleGroups;
+	for (TActorIterator<AUOUPuzzleConditionGroupActor> It(World); It; ++It)
+	{
+		if (AUOUPuzzleConditionGroupActor* PuzzleGroup = *It; IsValid(PuzzleGroup))
+		{
+			PuzzleGroups.Add(PuzzleGroup);
+		}
+	}
+
+	PuzzleGroups.Sort(
+		[](const AUOUPuzzleConditionGroupActor& Left, const AUOUPuzzleConditionGroupActor& Right)
+		{
+			return Left.GetPathName() < Right.GetPathName();
+		});
+
+	PuzzleGraphNodes.Reserve(PuzzleGroups.Num());
+	for (AUOUPuzzleConditionGroupActor* PuzzleGroup : PuzzleGroups)
+	{
+		FUOUDevelopmentPuzzleCheatGraphNode& Node = PuzzleGraphNodes.AddDefaulted_GetRef();
+		Node.NodeIndex = PuzzleGraphNodes.Num() - 1;
+		Node.DisplayName = UOUDevelopmentPuzzleCheatPrivate::ResolveDisplayName(*PuzzleGroup);
+		Node.PuzzleGroup = PuzzleGroup;
+	}
+
+	BuildPuzzleGraphConnections();
+	bPuzzleGraphValid = ValidateAndAssignPuzzleGraphDepths();
+	return bPuzzleGraphValid;
+}
+
+TArray<FUOUDevelopmentPuzzleCheatGraphNode>
+UUOUDevelopmentPuzzleCheatSubsystem::GetPuzzleGraphNodes() const
+{
+	return PuzzleGraphNodes;
+}
+
+TArray<FUOUDevelopmentPuzzleCheatGraphEdge>
+UUOUDevelopmentPuzzleCheatSubsystem::GetPuzzleGraphEdges() const
+{
+	return PuzzleGraphEdges;
+}
+
+void UUOUDevelopmentPuzzleCheatSubsystem::CollectConditionDependencyActors(
+	AUOUPuzzleConditionGroupActor& PuzzleGroup,
+	TArray<AActor*>& OutDependencyActors) const
+{
+	OutDependencyActors.Reset();
+
+	for (AActor* ConditionActor : PuzzleGroup.ConditionActors)
+	{
+		if (IsValid(ConditionActor))
+		{
+			OutDependencyActors.AddUnique(ConditionActor);
+		}
+	}
+
+	for (const FComponentReference& ConditionSourceReference : PuzzleGroup.ConditionSourceReferences)
+	{
+		if (const UActorComponent* ConditionSourceComponent = ConditionSourceReference.GetComponent(&PuzzleGroup))
+		{
+			if (AActor* ConditionOwner = ConditionSourceComponent->GetOwner(); IsValid(ConditionOwner))
+			{
+				OutDependencyActors.AddUnique(ConditionOwner);
+			}
+		}
+	}
+
+	for (const UUOUPuzzleConditionSourceComponent* ResolvedConditionSource : PuzzleGroup.ResolvedConditionSources)
+	{
+		if (ResolvedConditionSource != nullptr)
+		{
+			if (AActor* ConditionOwner = ResolvedConditionSource->GetOwner(); IsValid(ConditionOwner))
+			{
+				OutDependencyActors.AddUnique(ConditionOwner);
+			}
+		}
+	}
+}
+
+void UUOUDevelopmentPuzzleCheatSubsystem::BuildPuzzleGraphConnections()
+{
+	TMap<AActor*, TArray<int32>> ConsumerNodeIndicesByActor;
+	TMap<AUOUPuzzleConditionGroupActor*, int32> NodeIndexByGroup;
+
+	for (const FUOUDevelopmentPuzzleCheatGraphNode& Node : PuzzleGraphNodes)
+	{
+		AUOUPuzzleConditionGroupActor* PuzzleGroup = Node.PuzzleGroup.Get();
+		if (!IsValid(PuzzleGroup))
+		{
+			continue;
+		}
+
+		NodeIndexByGroup.Add(PuzzleGroup, Node.NodeIndex);
+
+		TArray<AActor*> DependencyActors;
+		CollectConditionDependencyActors(*PuzzleGroup, DependencyActors);
+		for (AActor* DependencyActor : DependencyActors)
+		{
+			ConsumerNodeIndicesByActor.FindOrAdd(DependencyActor).AddUnique(Node.NodeIndex);
+		}
+	}
+
+	for (const FUOUDevelopmentPuzzleCheatGraphNode& SourceNode : PuzzleGraphNodes)
+	{
+		const AUOUPuzzleConditionGroupActor* SourceGroup = SourceNode.PuzzleGroup.Get();
+		if (!IsValid(SourceGroup))
+		{
+			continue;
+		}
+
+		for (const FOUUPuzzleResultBinding& ResultBinding : SourceGroup->ResultBindings)
+		{
+			AActor* RelationActor = ResultBinding.TargetActor.Get();
+			if (!IsValid(RelationActor)
+				|| ResultBinding.SatisfiedAction == EOUUPuzzleResultAction::None)
+			{
+				continue;
+			}
+
+			if (AUOUPuzzleConditionGroupActor* TargetGroup = Cast<AUOUPuzzleConditionGroupActor>(RelationActor))
+			{
+				if (const int32* TargetNodeIndex = NodeIndexByGroup.Find(TargetGroup))
+				{
+					AddPuzzleGraphEdge(SourceNode.NodeIndex, *TargetNodeIndex, RelationActor);
+				}
+			}
+
+			if (const TArray<int32>* ConsumerNodeIndices = ConsumerNodeIndicesByActor.Find(RelationActor))
+			{
+				for (const int32 TargetNodeIndex : *ConsumerNodeIndices)
+				{
+					AddPuzzleGraphEdge(SourceNode.NodeIndex, TargetNodeIndex, RelationActor);
+				}
+			}
+		}
+	}
+}
+
+void UUOUDevelopmentPuzzleCheatSubsystem::AddPuzzleGraphEdge(
+	int32 SourceNodeIndex,
+	int32 TargetNodeIndex,
+	AActor* RelationActor)
+{
+	if (!PuzzleGraphNodes.IsValidIndex(SourceNodeIndex)
+		|| !PuzzleGraphNodes.IsValidIndex(TargetNodeIndex)
+		|| SourceNodeIndex == TargetNodeIndex)
+	{
+		return;
+	}
+
+	const bool bAlreadyExists = PuzzleGraphEdges.ContainsByPredicate(
+		[SourceNodeIndex, TargetNodeIndex](const FUOUDevelopmentPuzzleCheatGraphEdge& Edge)
+		{
+			return Edge.SourceNodeIndex == SourceNodeIndex && Edge.TargetNodeIndex == TargetNodeIndex;
+		});
+	if (bAlreadyExists)
+	{
+		return;
+	}
+
+	FUOUDevelopmentPuzzleCheatGraphEdge& Edge = PuzzleGraphEdges.AddDefaulted_GetRef();
+	Edge.SourceNodeIndex = SourceNodeIndex;
+	Edge.TargetNodeIndex = TargetNodeIndex;
+	Edge.RelationActor = RelationActor;
+
+	PuzzleGraphNodes[SourceNodeIndex].DependentNodeIndices.AddUnique(TargetNodeIndex);
+	PuzzleGraphNodes[TargetNodeIndex].PrerequisiteNodeIndices.AddUnique(SourceNodeIndex);
+}
+
+bool UUOUDevelopmentPuzzleCheatSubsystem::ValidateAndAssignPuzzleGraphDepths()
+{
+	if (PuzzleGraphNodes.IsEmpty())
+	{
+		PuzzleGraphStatusMessage = TEXT("No PuzzleConditionGroup actors were found for the puzzle graph.");
+		return false;
+	}
+
+	TArray<int32> RemainingPrerequisiteCounts;
+	RemainingPrerequisiteCounts.SetNumZeroed(PuzzleGraphNodes.Num());
+	TArray<int32> ReadyNodeIndices;
+
+	for (FUOUDevelopmentPuzzleCheatGraphNode& Node : PuzzleGraphNodes)
+	{
+		Node.PrerequisiteNodeIndices.Sort();
+		Node.DependentNodeIndices.Sort();
+		Node.ExecutionDepth = INDEX_NONE;
+		RemainingPrerequisiteCounts[Node.NodeIndex] = Node.PrerequisiteNodeIndices.Num();
+		if (Node.PrerequisiteNodeIndices.IsEmpty())
+		{
+			Node.ExecutionDepth = 0;
+			ReadyNodeIndices.Add(Node.NodeIndex);
+		}
+	}
+	ReadyNodeIndices.Sort();
+
+	int32 ProcessedNodeCount = 0;
+	int32 MaximumExecutionDepth = 0;
+	while (!ReadyNodeIndices.IsEmpty())
+	{
+		const int32 NodeIndex = ReadyNodeIndices[0];
+		ReadyNodeIndices.RemoveAt(0, 1, EAllowShrinking::No);
+		if (!PuzzleGraphNodes.IsValidIndex(NodeIndex))
+		{
+			continue;
+		}
+
+		++ProcessedNodeCount;
+		FUOUDevelopmentPuzzleCheatGraphNode& Node = PuzzleGraphNodes[NodeIndex];
+		MaximumExecutionDepth = FMath::Max(MaximumExecutionDepth, Node.ExecutionDepth);
+
+		for (const int32 DependentNodeIndex : Node.DependentNodeIndices)
+		{
+			if (!PuzzleGraphNodes.IsValidIndex(DependentNodeIndex))
+			{
+				continue;
+			}
+
+			FUOUDevelopmentPuzzleCheatGraphNode& DependentNode = PuzzleGraphNodes[DependentNodeIndex];
+			DependentNode.ExecutionDepth = FMath::Max(
+				DependentNode.ExecutionDepth,
+				Node.ExecutionDepth + 1);
+			--RemainingPrerequisiteCounts[DependentNodeIndex];
+			if (RemainingPrerequisiteCounts[DependentNodeIndex] == 0)
+			{
+				ReadyNodeIndices.Add(DependentNodeIndex);
+				ReadyNodeIndices.Sort();
+			}
+		}
+	}
+
+	const int32 CyclicNodeCount = PuzzleGraphNodes.Num() - ProcessedNodeCount;
+	if (CyclicNodeCount > 0)
+	{
+		PuzzleGraphStatusMessage = FString::Printf(
+			TEXT("Puzzle graph is invalid: %d of %d node(s) could not be resolved because of a cyclic dependency."),
+			CyclicNodeCount,
+			PuzzleGraphNodes.Num());
+		return false;
+	}
+
+	PuzzleGraphStatusMessage = FString::Printf(
+		TEXT("Collected %d puzzle graph node(s), %d edge(s), and %d execution depth level(s)."),
+		PuzzleGraphNodes.Num(),
+		PuzzleGraphEdges.Num(),
+		MaximumExecutionDepth + 1);
+	return true;
 }
 
 void UUOUDevelopmentPuzzleCheatSubsystem::ToggleCheatHUD()

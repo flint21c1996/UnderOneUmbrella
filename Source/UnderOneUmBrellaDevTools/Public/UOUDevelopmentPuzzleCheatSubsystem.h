@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "Subsystems/WorldSubsystem.h"
 #include "TimerManager.h"
+#include "UOUDevelopmentPuzzleCheatGraphTypes.h"
 #include "UOUDevelopmentPuzzleCheatSubsystem.generated.h"
 
 class AUOUPuzzleConditionGroupActor;
@@ -69,6 +70,19 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Puzzle Cheat")
 	TArray<FUOUDevelopmentPuzzleCheatStep> GetPuzzleSteps() const;
 
+	// 실제 Condition/Result 참조를 바탕으로 치트 진행용 관계 그래프를 다시 수집하고 검증합니다.
+	UFUNCTION(BlueprintCallable, Category = "Puzzle Cheat|Graph")
+	bool RefreshPuzzleGraph();
+
+	UFUNCTION(BlueprintPure, Category = "Puzzle Cheat|Graph")
+	TArray<FUOUDevelopmentPuzzleCheatGraphNode> GetPuzzleGraphNodes() const;
+
+	UFUNCTION(BlueprintPure, Category = "Puzzle Cheat|Graph")
+	TArray<FUOUDevelopmentPuzzleCheatGraphEdge> GetPuzzleGraphEdges() const;
+
+	UFUNCTION(BlueprintPure, Category = "Puzzle Cheat|Graph")
+	bool IsPuzzleGraphValid() const { return bPuzzleGraphValid; }
+
 	// 순차 실행 중인지 반환하여 중복 요청과 HUD 입력을 제어합니다.
 	UFUNCTION(BlueprintPure, Category = "Puzzle Cheat")
 	bool IsSequenceRunning() const { return bSequenceRunning; }
@@ -86,7 +100,16 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Puzzle Cheat|Runtime")
 	FString LastStatusMessage;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Puzzle Cheat|Graph")
+	FString PuzzleGraphStatusMessage;
+
 private:
+	void CollectConditionDependencyActors(
+		AUOUPuzzleConditionGroupActor& PuzzleGroup,
+		TArray<AActor*>& OutDependencyActors) const;
+	void BuildPuzzleGraphConnections();
+	void AddPuzzleGraphEdge(int32 SourceNodeIndex, int32 TargetNodeIndex, AActor* RelationActor);
+	bool ValidateAndAssignPuzzleGraphDepths();
 	bool BuildActivationQueue(int32 TargetStepOrder);
 	void ExecuteNextQueuedStep();
 	void CheckCurrentStepCompletion();
@@ -100,6 +123,16 @@ private:
 	// 현재 월드에서 Step 태그로 발견해 진행 순서대로 정렬한 런타임 캐시입니다.
 	UPROPERTY(Transient)
 	TArray<FUOUDevelopmentPuzzleCheatStep> PuzzleSteps;
+
+	// 월드의 전체 ConditionGroup과 자동으로 해석한 관계를 보관하는 읽기 전용 그래프 캐시입니다.
+	UPROPERTY(Transient)
+	TArray<FUOUDevelopmentPuzzleCheatGraphNode> PuzzleGraphNodes;
+
+	UPROPERTY(Transient)
+	TArray<FUOUDevelopmentPuzzleCheatGraphEdge> PuzzleGraphEdges;
+
+	UPROPERTY(Transient)
+	bool bPuzzleGraphValid = false;
 
 	// 현재 요청에서 아직 실행할 단계들의 PuzzleSteps 인덱스입니다.
 	UPROPERTY(Transient)

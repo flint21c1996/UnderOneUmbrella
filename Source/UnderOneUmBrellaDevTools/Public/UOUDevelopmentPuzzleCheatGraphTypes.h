@@ -1,0 +1,51 @@
+// Copyright Epic Games, Inc. All Rights Reserved.
+
+#pragma once
+
+#include "CoreMinimal.h"
+#include "UOUDevelopmentPuzzleCheatGraphTypes.generated.h"
+
+class AActor;
+class AUOUPuzzleConditionGroupActor;
+
+// ConditionGroup 하나와 그래프에서 계산된 선행/후속 관계를 보관하는 런타임 캐시입니다.
+USTRUCT(BlueprintType)
+struct UNDERONEUMBRELLADEVTOOLS_API FUOUDevelopmentPuzzleCheatGraphNode
+{
+	GENERATED_BODY()
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Puzzle Cheat|Graph")
+	int32 NodeIndex = INDEX_NONE;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Puzzle Cheat|Graph")
+	FText DisplayName;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Puzzle Cheat|Graph")
+	TObjectPtr<AUOUPuzzleConditionGroupActor> PuzzleGroup = nullptr;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Puzzle Cheat|Graph")
+	TArray<int32> PrerequisiteNodeIndices;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Puzzle Cheat|Graph")
+	TArray<int32> DependentNodeIndices;
+
+	// 같은 깊이의 노드들은 서로의 완료를 요구하지 않으므로 이후 병렬 실행 묶음이 될 수 있습니다.
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Puzzle Cheat|Graph")
+	int32 ExecutionDepth = INDEX_NONE;
+};
+
+// 두 ConditionGroup 사이의 방향과 그 관계를 만든 중간 액터를 기록합니다.
+USTRUCT(BlueprintType)
+struct UNDERONEUMBRELLADEVTOOLS_API FUOUDevelopmentPuzzleCheatGraphEdge
+{
+	GENERATED_BODY()
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Puzzle Cheat|Graph")
+	int32 SourceNodeIndex = INDEX_NONE;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Puzzle Cheat|Graph")
+	int32 TargetNodeIndex = INDEX_NONE;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Puzzle Cheat|Graph")
+	TObjectPtr<AActor> RelationActor = nullptr;
+};
