@@ -280,6 +280,11 @@ void UUOUDevelopmentDebugDrawSubsystem::Tick(float DeltaTime)
 		PlayerDebugText.Reset();
 	}
 
+	if (ControlSubsystem->IsDebugCategoryEnabled(EUOUDebugCategory::Interaction))
+	{
+		DrawInteractionDebug();
+	}
+
 	if (ControlSubsystem->IsDebugCategoryEnabled(EUOUDebugCategory::Performance))
 	{
 		RefreshPerformanceDebugText(DeltaTime);
@@ -519,6 +524,76 @@ void UUOUDevelopmentDebugDrawSubsystem::RefreshPlayerDebugText()
 	}
 
 	PlayerDebugText = FString::Join(Lines, LINE_TERMINATOR);
+}
+
+void UUOUDevelopmentDebugDrawSubsystem::DrawInteractionDebug() const
+{
+	UWorld* World = GetWorld();
+	const APlayerController* PlayerController = World != nullptr
+		? World->GetFirstPlayerController()
+		: nullptr;
+	const APawn* PlayerPawn = PlayerController != nullptr ? PlayerController->GetPawn() : nullptr;
+	const UUOUPushPullInteractorComponent* PushPullComponent = PlayerPawn != nullptr
+		? PlayerPawn->FindComponentByClass<UUOUPushPullInteractorComponent>()
+		: nullptr;
+	if (World == nullptr || PushPullComponent == nullptr)
+	{
+		return;
+	}
+
+	const FVector DetectionOrigin = PushPullComponent->GetCandidateDetectionOriginLocation();
+	FVector CandidateLocation = FVector::ZeroVector;
+	const bool bHasCandidate =
+		PushPullComponent->TryGetCurrentCandidateReferenceLocation(CandidateLocation);
+	DrawDebugSphere(
+		World,
+		DetectionOrigin,
+		PushPullComponent->GetCandidateSearchRadius(),
+		24,
+		bHasCandidate ? FColor::Green : FColor::Cyan,
+		false,
+		0.0f,
+		0,
+		1.5f);
+
+	const FColor InteractionColor = FColor::Orange;
+	if (bHasCandidate)
+	{
+		DrawDebugLine(
+			World,
+			DetectionOrigin,
+			CandidateLocation,
+			InteractionColor,
+			false,
+			0.0f,
+			0,
+			2.0f);
+		DrawDebugSphere(
+			World,
+			CandidateLocation,
+			14.0f,
+			12,
+			InteractionColor,
+			false,
+			0.0f,
+			0,
+			1.5f);
+	}
+
+	FVector GrabbedLocation = FVector::ZeroVector;
+	if (PushPullComponent->TryGetCurrentGrabbedReferenceLocation(GrabbedLocation))
+	{
+		DrawDebugDirectionalArrow(
+			World,
+			GrabbedLocation,
+			GrabbedLocation + PushPullComponent->GetGrabbedMoveAxis() * 100.0f,
+			25.0f,
+			InteractionColor,
+			false,
+			0.0f,
+			0,
+			3.0f);
+	}
 }
 
 void UUOUDevelopmentDebugDrawSubsystem::RefreshPerformanceDebugText(float DeltaTime)

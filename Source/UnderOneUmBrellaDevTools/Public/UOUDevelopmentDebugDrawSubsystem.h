@@ -40,6 +40,7 @@ public:
 
 private:
 	void RefreshPlayerDebugText();
+	void DrawInteractionDebug() const;
 	void RefreshPerformanceDebugText(float DeltaTime);
 	void ResetPerformanceDebugState();
 	void RefreshVFXDebugData(float DeltaTime);
