@@ -7,11 +7,14 @@
 #include "Debug/UOUDebugProvider.h"
 #include "Debug/UOUDebugProviderComponent.h"
 #include "Debug/UOUDebugSubsystem.h"
+#include "Debug/UOUDevelopmentToolsBuild.h"
 #include "Debug/UOUPuzzleDebugProviderComponent.h"
 #include "Engine/Engine.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "Puzzle/Core/UOUPuzzleConditionGroupActor.h"
+
+#if UOU_WITH_DEVELOPMENT_TOOLS
 
 DEFINE_LOG_CATEGORY_STATIC(LogUOUDebugUtility, Log, All);
 
@@ -541,3 +544,124 @@ const TArray<TObjectPtr<UUOUDebugControllerComponentBase>>& AUOUDebugController:
 {
 	return DebugControllerComponents;
 }
+
+#else
+
+AUOUDebugController::AUOUDebugController()
+{
+	PrimaryActorTick.bCanEverTick = false;
+	bEnableDebugTools = false;
+
+	RootSceneComponent = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
+	SetRootComponent(RootSceneComponent);
+	PlayerDebugController =
+		CreateDefaultSubobject<UUOUPlayerDebugControllerComponent>(TEXT("PlayerDebugController"));
+	NPCDebugController =
+		CreateDefaultSubobject<UUOUNPCDebugControllerComponent>(TEXT("NPCDebugController"));
+	PuzzleDebugController =
+		CreateDefaultSubobject<UUOUPuzzleDebugControllerComponent>(TEXT("PuzzleDebugController"));
+	InteractionDebugController =
+		CreateDefaultSubobject<UUOUInteractionDebugControllerComponent>(TEXT("InteractionDebugController"));
+	VFXDebugController =
+		CreateDefaultSubobject<UUOUVFXDebugControllerComponent>(TEXT("VFXDebugController"));
+	PerformanceDebugController =
+		CreateDefaultSubobject<UUOUPerformanceDebugControllerComponent>(TEXT("PerformanceDebugController"));
+}
+
+void AUOUDebugController::OnConstruction(const FTransform& Transform)
+{
+	Super::OnConstruction(Transform);
+}
+
+void AUOUDebugController::PostInitializeComponents()
+{
+	Super::PostInitializeComponents();
+}
+
+void AUOUDebugController::BeginPlay()
+{
+	Super::BeginPlay();
+}
+
+void AUOUDebugController::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	Super::EndPlay(EndPlayReason);
+}
+
+void AUOUDebugController::RefreshDebugControllerComponents()
+{
+	DebugControllerComponents.Reset();
+}
+
+void AUOUDebugController::EnableAllDebug()
+{
+	bEnableDebugTools = false;
+}
+
+void AUOUDebugController::DisableAllDebug()
+{
+	bEnableDebugTools = false;
+}
+
+void AUOUDebugController::ShowPuzzleOnly()
+{
+	bEnableDebugTools = false;
+}
+
+void AUOUDebugController::ShowGameplayDebug()
+{
+	bEnableDebugTools = false;
+}
+
+void AUOUDebugController::ResetDisplayDefaults()
+{
+}
+
+void AUOUDebugController::ValidateDebugSetup()
+{
+	LastValidationSummary = TEXT("Development debug tools are excluded from this build.");
+}
+
+void AUOUDebugController::FindOrCreateDebugControllerInLevel()
+{
+	LastValidationSummary = TEXT("Development debug tools are excluded from this build.");
+}
+
+AUOUDebugController* AUOUDebugController::FindOrCreateDebugController(const UObject*)
+{
+	return nullptr;
+}
+
+bool AUOUDebugController::IsCategoryEnabled(EUOUDebugCategory) const
+{
+	return false;
+}
+
+FColor AUOUDebugController::GetDebugCategoryColor(EUOUDebugCategory) const
+{
+	return FColor::White;
+}
+
+FColor AUOUDebugController::GetPuzzleConnectionColor(EUOUDebugConnectionType) const
+{
+	return FColor::White;
+}
+
+FColor AUOUDebugController::GetDebugConnectionColor(const FUOUDebugConnection& Connection) const
+{
+	return Connection.Color;
+}
+
+UUOUDebugControllerComponentBase* AUOUDebugController::FindDebugControllerComponent(
+	EUOUDebugCategory) const
+{
+	return nullptr;
+}
+
+const TArray<TObjectPtr<UUOUDebugControllerComponentBase>>&
+AUOUDebugController::GetDebugControllerComponents() const
+{
+	return DebugControllerComponents;
+}
+
+#endif

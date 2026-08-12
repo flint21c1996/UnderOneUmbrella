@@ -4,8 +4,11 @@
 
 #include "Debug/UOUDebugController.h"
 #include "Debug/UOUDebugControllerComponent.h"
+#include "Debug/UOUDevelopmentToolsBuild.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
+
+#if UOU_WITH_DEVELOPMENT_TOOLS
 
 namespace UOUDebugSubsystemPrivate
 {
@@ -19,6 +22,12 @@ namespace UOUDebugSubsystemPrivate
 		UWorld* World = WorldContextObject->GetWorld();
 		return World != nullptr ? World->GetSubsystem<UUOUDebugSubsystem>() : nullptr;
 	}
+}
+
+bool UUOUDebugSubsystem::ShouldCreateSubsystem(UObject* Outer) const
+{
+	const UWorld* World = Cast<UWorld>(Outer);
+	return World != nullptr && World->IsGameWorld();
 }
 
 void UUOUDebugSubsystem::Initialize(FSubsystemCollectionBase& Collection)
@@ -298,7 +307,114 @@ void UUOUDebugSubsystem::ResolveDebugController()
 		{
 			RegisterDebugController(DebugController);
 			return;
-		}
 	}
+}
+
+#else
+
+bool UUOUDebugSubsystem::ShouldCreateSubsystem(UObject*) const
+{
+	return false;
+}
+
+void UUOUDebugSubsystem::Initialize(FSubsystemCollectionBase& Collection)
+{
+	Super::Initialize(Collection);
+}
+
+void UUOUDebugSubsystem::Deinitialize()
+{
+	Super::Deinitialize();
+}
+
+void UUOUDebugSubsystem::Tick(float)
+{
+}
+
+TStatId UUOUDebugSubsystem::GetStatId() const
+{
+	RETURN_QUICK_DECLARE_CYCLE_STAT(UUOUDebugSubsystem, STATGROUP_Tickables);
+}
+
+void UUOUDebugSubsystem::RegisterDebugController(AUOUDebugController*)
+{
+}
+
+void UUOUDebugSubsystem::UnregisterDebugController(AUOUDebugController*)
+{
+}
+
+AUOUDebugController* UUOUDebugSubsystem::GetActiveDebugController() const
+{
+	return nullptr;
+}
+
+bool UUOUDebugSubsystem::IsDebugEnabled(EUOUDebugCategory) const
+{
+	return false;
+}
+
+bool UUOUDebugSubsystem::IsScreenMessageEnabled(EUOUDebugCategory) const
+{
+	return false;
+}
+
+bool UUOUDebugSubsystem::IsWorldDrawEnabled(EUOUDebugCategory) const
+{
+	return false;
+}
+
+bool UUOUDebugSubsystem::IsWorldLabelEnabled(EUOUDebugCategory) const
+{
+	return false;
+}
+
+bool UUOUDebugSubsystem::IsDebugCategoryEnabled(
+	const UObject*,
+	EUOUDebugCategory)
+{
+	return false;
+}
+
+bool UUOUDebugSubsystem::IsDebugScreenMessageEnabled(
+	const UObject*,
+	EUOUDebugCategory)
+{
+	return false;
+}
+
+bool UUOUDebugSubsystem::IsDebugWorldDrawEnabled(
+	const UObject*,
+	EUOUDebugCategory)
+{
+	return false;
+}
+
+bool UUOUDebugSubsystem::IsDebugWorldLabelEnabled(
+	const UObject*,
+	EUOUDebugCategory)
+{
+	return false;
+}
+
+FColor UUOUDebugSubsystem::GetDebugCategoryColor(
+	const UObject*,
+	EUOUDebugCategory,
+	FColor FallbackColor)
+{
+	return FallbackColor;
+}
+
+UUOUDebugControllerComponentBase* UUOUDebugSubsystem::FindDebugControllerComponent(
+	EUOUDebugCategory) const
+{
+	return nullptr;
+}
+
+void UUOUDebugSubsystem::ResolveDebugController()
+{
+}
+
+#endif
 
 }
