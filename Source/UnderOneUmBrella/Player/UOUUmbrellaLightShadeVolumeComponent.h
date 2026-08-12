@@ -8,7 +8,7 @@
 
 // 펼친 우산 아래에서 게임플레이용 빛 노출을 차단하는 전용 범위입니다.
 UCLASS(ClassGroup=(Gameplay), meta=(BlueprintSpawnableComponent, DisplayName="UOU Umbrella Light Shade Volume", ToolTip="펼친 우산 아래에서 게임플레이용 빛과 온도 노출을 차단하는 범위입니다."))
-class UUOUUmbrellaLightShadeVolumeComponent : public UBoxComponent
+class UNDERONEUMBRELLA_API UUOUUmbrellaLightShadeVolumeComponent : public UBoxComponent
 {
 	GENERATED_BODY()
 
