@@ -4,6 +4,7 @@
 
 #include "Components/SceneComponent.h"
 #include "Debug/UOUDebugSubsystem.h"
+#include "Debug/UOUDevelopmentToolsBuild.h"
 #include "DrawDebugHelpers.h"
 #include "GameFramework/Actor.h"
 #include "Engine/World.h"
@@ -370,6 +371,7 @@ bool UUOUUmbrellaLightInteractionComponent::TryResolveRainBlockerAlignedTransfor
 
 void UUOUUmbrellaLightInteractionComponent::DrawReflectorDebug() const
 {
+#if UOU_WITH_DEVELOPMENT_TOOLS
 	if (!bDrawReflectorDebug ||
 		LightSurfaceComponent == nullptr ||
 		!UUOUDebugSubsystem::IsDebugWorldDrawEnabled(this, EUOUDebugCategory::Puzzle))
@@ -445,6 +447,7 @@ void UUOUUmbrellaLightInteractionComponent::DrawReflectorDebug() const
 			false,
 			1.0f);
 	}
+#endif
 }
 
 void UUOUUmbrellaLightInteractionComponent::HandleUmbrellaStateChanged(EUOUUmbrellaState NewState, bool bHasUmbrella)

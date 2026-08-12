@@ -5,6 +5,7 @@
 #include "Components/PrimitiveComponent.h"
 #include "Components/SceneComponent.h"
 #include "Debug/UOUDebugSubsystem.h"
+#include "Debug/UOUDevelopmentToolsBuild.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
@@ -340,6 +341,7 @@ void UUOULightExposureReceiverComponent::RecoverTemperature(float DeltaTime)
 
 void UUOULightExposureReceiverComponent::DrawTemperatureDebug() const
 {
+#if UOU_WITH_DEVELOPMENT_TOOLS
 	if (!bDrawTemperatureDebug || !UUOUDebugSubsystem::IsDebugWorldLabelEnabled(this, EUOUDebugCategory::Puzzle))
 	{
 		return;
@@ -372,4 +374,5 @@ void UUOULightExposureReceiverComponent::DrawTemperatureDebug() const
 		TemperatureDebugDrawTime,
 		true,
 		TemperatureDebugTextScale);
+#endif
 }

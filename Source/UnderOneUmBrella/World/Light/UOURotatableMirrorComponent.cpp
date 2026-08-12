@@ -6,6 +6,7 @@
 #include "Components/PrimitiveComponent.h"
 #include "Components/SceneComponent.h"
 #include "Debug/UOUDebugSubsystem.h"
+#include "Debug/UOUDevelopmentToolsBuild.h"
 #include "DrawDebugHelpers.h"
 #include "GameFramework/Actor.h"
 #include "GameFramework/Character.h"
@@ -508,6 +509,7 @@ void UUOURotatableMirrorComponent::ApplyPusherFacing() const
 
 void UUOURotatableMirrorComponent::DrawDebugState(const TArray<AActor*>& OverlappingPushers) const
 {
+#if UOU_WITH_DEVELOPMENT_TOOLS
 	if (!bDrawDebug ||
 		!UUOUDebugSubsystem::IsDebugWorldDrawEnabled(this, EUOUDebugCategory::Puzzle) ||
 		GetWorld() == nullptr ||
@@ -563,4 +565,5 @@ void UUOURotatableMirrorComponent::DrawDebugState(const TArray<AActor*>& Overlap
 			0,
 			1.5f);
 	}
+#endif
 }

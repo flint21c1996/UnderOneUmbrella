@@ -7,6 +7,7 @@
 #include "Components/SceneComponent.h"
 #include "Components/SpotLightComponent.h"
 #include "Debug/UOUDebugSubsystem.h"
+#include "Debug/UOUDevelopmentToolsBuild.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/EngineTypes.h"
 #include "Engine/OverlapResult.h"
@@ -2615,6 +2616,7 @@ float UUOULightExposureSourceComponent::CalculateCylinderFactor(float RadialDist
 
 void UUOULightExposureSourceComponent::DrawDebugSource() const
 {
+#if UOU_WITH_DEVELOPMENT_TOOLS
 	if (!bDrawDebug || !UUOUDebugSubsystem::IsDebugWorldDrawEnabled(this, EUOUDebugCategory::Puzzle))
 	{
 		return;
@@ -2760,10 +2762,12 @@ void UUOULightExposureSourceComponent::DrawDebugSource() const
 			0,
 			1.0f);
 	}
+#endif
 }
 
 void UUOULightExposureSourceComponent::DrawDebugResult(const FUOULightExposureData& ExposureData, bool bLit) const
 {
+#if UOU_WITH_DEVELOPMENT_TOOLS
 	if (!bDrawDebug || !UUOUDebugSubsystem::IsDebugWorldDrawEnabled(this, EUOUDebugCategory::Puzzle))
 	{
 		return;
@@ -2782,10 +2786,12 @@ void UUOULightExposureSourceComponent::DrawDebugResult(const FUOULightExposureDa
 			0,
 			2.0f);
 	}
+#endif
 }
 
 void UUOULightExposureSourceComponent::DrawDebugBlockedHit(const FVector& SourcePosition, const FHitResult& BlockingHit) const
 {
+#if UOU_WITH_DEVELOPMENT_TOOLS
 	if (!bDrawDebug
 		|| !BlockingHit.bBlockingHit
 		|| !UUOUDebugSubsystem::IsDebugWorldDrawEnabled(this, EUOUDebugCategory::Puzzle))
@@ -2799,12 +2805,14 @@ void UUOULightExposureSourceComponent::DrawDebugBlockedHit(const FVector& Source
 		DrawDebugLine(World, SourcePosition, BlockingHit.ImpactPoint, BlockedColor, false, DebugDrawTime, 0, 2.0f);
 		DrawDebugPoint(World, BlockingHit.ImpactPoint, 8.0f, BlockedColor, false, DebugDrawTime);
 	}
+#endif
 }
 
 void UUOULightExposureSourceComponent::DrawDebugSamplePoint(
 	const FVector& Position,
 	const FColor& Color) const
 {
+#if UOU_WITH_DEVELOPMENT_TOOLS
 	if (!bDrawDebug ||
 		!bDrawSampleDebug ||
 		!UUOUDebugSubsystem::IsDebugWorldDrawEnabled(this, EUOUDebugCategory::Puzzle))
@@ -2822,6 +2830,7 @@ void UUOULightExposureSourceComponent::DrawDebugSamplePoint(
 			false,
 			DebugDrawTime);
 	}
+#endif
 }
 
 void UUOULightExposureSourceComponent::DrawDebugSampleSummary(
@@ -2831,6 +2840,7 @@ void UUOULightExposureSourceComponent::DrawDebugSampleSummary(
 	int32 RequiredHits,
 	bool bAccepted) const
 {
+#if UOU_WITH_DEVELOPMENT_TOOLS
 	if (!bDrawDebug ||
 		!bDrawSampleDebug ||
 		!UUOUDebugSubsystem::IsDebugWorldDrawEnabled(this, EUOUDebugCategory::Puzzle))
@@ -2854,6 +2864,7 @@ void UUOULightExposureSourceComponent::DrawDebugSampleSummary(
 			DebugDrawTime,
 			false);
 	}
+#endif
 }
 
 void UUOULightExposureSourceComponent::DrawDebugReflectionFrustum(
@@ -2864,6 +2875,7 @@ void UUOULightExposureSourceComponent::DrawDebugReflectionFrustum(
 	float StartRadius,
 	const FColor& Color) const
 {
+#if UOU_WITH_DEVELOPMENT_TOOLS
 	if (!bDrawDebug || !UUOUDebugSubsystem::IsDebugWorldDrawEnabled(this, EUOUDebugCategory::Puzzle))
 	{
 		return;
@@ -2920,6 +2932,7 @@ void UUOULightExposureSourceComponent::DrawDebugReflectionFrustum(
 		}
 		DrawDebugPoint(World, Start, 8.0f, Color, false, DebugDrawTime);
 	}
+#endif
 }
 
 void UUOULightExposureSourceComponent::AddActorPrimitiveComponentsToIgnore(

@@ -8,6 +8,7 @@
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "DrawDebugHelpers.h"
+#include "Debug/UOUDevelopmentToolsBuild.h"
 #include "Engine/Engine.h"
 #include "Engine/OverlapResult.h"
 #include "GameFramework/Character.h"
@@ -692,6 +693,7 @@ FUOUWindExposureData AUOUWindEmitterActor::MakeExposureData(
 
 void AUOUWindEmitterActor::DrawWindDebug() const
 {
+#if UOU_WITH_DEVELOPMENT_TOOLS
 	if (!bDrawWindDebug || GetWorld() == nullptr)
 	{
 		return;
@@ -738,6 +740,7 @@ void AUOUWindEmitterActor::DrawWindDebug() const
 			0,
 			1.0f);
 	}
+#endif
 }
 
 FCollisionObjectQueryParams AUOUWindEmitterActor::BuildReceiverObjectQueryParams() const

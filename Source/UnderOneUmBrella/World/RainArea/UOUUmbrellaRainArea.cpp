@@ -6,6 +6,7 @@
 #include "Components/BoxComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Debug/UOUDevelopmentToolsBuild.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/GameInstance.h"
 #include "EngineUtils.h"
@@ -705,6 +706,7 @@ void AUOUUmbrellaRainArea::ApplyRainToWaterWheelTargets(float DeltaSeconds, bool
 				RainBlockerWorldRotation,
 				RainBlockerHalfExtent);
 
+#if UOU_WITH_DEVELOPMENT_TOOLS
 			if (bDrawWaterWheelRainInputDebug)
 			{
 				const FColor DebugColor =
@@ -731,6 +733,7 @@ void AUOUUmbrellaRainArea::ApplyRainToWaterWheelTargets(float DeltaSeconds, bool
 					true,
 					0.85f);
 			}
+#endif
 
 			if (CatchSample.Weight <= KINDA_SMALL_NUMBER || RainScale <= KINDA_SMALL_NUMBER)
 			{
@@ -779,6 +782,7 @@ void AUOUUmbrellaRainArea::ApplyRainToWaterWheelTargets(float DeltaSeconds, bool
 			LastWaterWheelAcceptedSampleCount);
 	}
 
+#if UOU_WITH_DEVELOPMENT_TOOLS
 	if (bDrawWaterWheelRainInputDebug && RainVolume != nullptr)
 	{
 		const FColor SummaryColor = LastWaterWheelAcceptedSampleCount > 0 ? FColor::Green : FColor::Red;
@@ -802,6 +806,7 @@ void AUOUUmbrellaRainArea::ApplyRainToWaterWheelTargets(float DeltaSeconds, bool
 			true,
 			0.9f);
 	}
+#endif
 }
 
 void AUOUUmbrellaRainArea::ApplyRainToHeatWireTargets(

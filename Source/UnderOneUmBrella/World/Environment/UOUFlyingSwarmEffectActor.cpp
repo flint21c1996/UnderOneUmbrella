@@ -6,6 +6,7 @@
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "DrawDebugHelpers.h"
+#include "Debug/UOUDevelopmentToolsBuild.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
 #include "GameFramework/Pawn.h"
@@ -830,6 +831,7 @@ void AUOUFlyingSwarmEffectActor::UpdateCodeDrivenPlaneInstances(float DeltaSecon
 
 void AUOUFlyingSwarmEffectActor::DrawRuntimeDebug() const
 {
+#if UOU_WITH_DEVELOPMENT_TOOLS
 	if (!bDrawRuntimeDebug || GetWorld() == nullptr)
 	{
 		return;
@@ -960,6 +962,7 @@ void AUOUFlyingSwarmEffectActor::DrawRuntimeDebug() const
 			0,
 			Thickness * 0.75f);
 	}
+#endif
 }
 
 float AUOUFlyingSwarmEffectActor::GetFlightAlpha() const

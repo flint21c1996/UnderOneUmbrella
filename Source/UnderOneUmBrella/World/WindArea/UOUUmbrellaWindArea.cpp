@@ -8,6 +8,7 @@
 #include "Components/SplineComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "DrawDebugHelpers.h"
+#include "Debug/UOUDevelopmentToolsBuild.h"
 #include "Player/UOUCharacter.h"
 #include "Player/UOUPlayerSplineTravelComponent.h"
 #include "Player/UOUUmbrellaComponent.h"
@@ -84,6 +85,7 @@ void AUOUUmbrellaWindArea::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 
+#if UOU_WITH_DEVELOPMENT_TOOLS
 	if (bDrawWindDebug
 		&& GetWorld() != nullptr
 		&& WindPath != nullptr
@@ -103,6 +105,7 @@ void AUOUUmbrellaWindArea::Tick(float DeltaSeconds)
 			PreviousLocation = SegmentLocation;
 		}
 	}
+#endif
 }
 
 void AUOUUmbrellaWindArea::OnConstruction(const FTransform& Transform)
@@ -158,7 +161,11 @@ void AUOUUmbrellaWindArea::RefreshPreview()
 
 void AUOUUmbrellaWindArea::RefreshTickEnabled()
 {
+#if UOU_WITH_DEVELOPMENT_TOOLS
 	SetActorTickEnabled(bDrawWindDebug);
+#else
+	SetActorTickEnabled(false);
+#endif
 }
 
 void AUOUUmbrellaWindArea::SetOverlappingPlayer(AUOUCharacter* Character)
