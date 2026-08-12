@@ -7,7 +7,6 @@
 #include "Subsystems/WorldSubsystem.h"
 #include "UOUDevelopmentDebugControlSubsystem.generated.h"
 
-class AUOUDebugController;
 class AActor;
 
 // 개발 도구 HUD와 런타임 디버그 설정 사이의 제어 진입점입니다.
@@ -18,7 +17,6 @@ class UNDERONEUMBRELLADEVTOOLS_API UUOUDevelopmentDebugControlSubsystem : public
 
 public:
 	virtual bool ShouldCreateSubsystem(UObject* Outer) const override;
-	virtual void OnWorldBeginPlay(UWorld& InWorld) override;
 
 	// 개발 도구가 소유한 전체 디버그 활성 상태를 반환합니다.
 	UFUNCTION(BlueprintPure, Category = "Development Debug")
@@ -48,11 +46,6 @@ public:
 	bool ShouldDrawDebugActor(const AActor* Actor) const;
 
 private:
-	void ApplyMasterStateToLegacyController() const;
-	void ImportCategoryStatesFromLegacyController(const AUOUDebugController& DebugController);
-	void ApplyCategoryStateToLegacyController(EUOUDebugCategory Category) const;
-	AUOUDebugController* ResolveDebugController() const;
-
 	// 현재 월드의 전체 디버그 표시 여부를 저장하는 개발 도구 런타임 상태입니다.
 	UPROPERTY(Transient)
 	bool bDebugToolsEnabled = true;
