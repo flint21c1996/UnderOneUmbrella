@@ -563,7 +563,6 @@ void UUOUDebugSubsystem::Tick(float DeltaTime)
 		ProviderCompactTimeRemaining = 1.0f;
 	}
 
-	DrawControllerStatus();
 }
 
 TStatId UUOUDebugSubsystem::GetStatId() const

@@ -184,6 +184,13 @@ void SUOUDevelopmentPuzzleCheatHUD::Construct(const FArguments& InArgs)
 							+ SVerticalBox::Slot()
 							.AutoHeight()
 							[
+								SNew(STextBlock)
+								.Text(this, &SUOUDevelopmentPuzzleCheatHUD::GetDebugStatusText)
+							]
+							+ SVerticalBox::Slot()
+							.AutoHeight()
+							.Padding(0.0f, 6.0f, 0.0f, 0.0f)
+							[
 								SNew(SButton)
 								.OnClicked(this, &SUOUDevelopmentPuzzleCheatHUD::HandleDebugToolsToggleClicked)
 								.IsEnabled(this, &SUOUDevelopmentPuzzleCheatHUD::IsDebugControlAvailable)
@@ -508,6 +515,21 @@ EVisibility SUOUDevelopmentPuzzleCheatHUD::GetConditionPageVisibility() const
 EVisibility SUOUDevelopmentPuzzleCheatHUD::GetDebugPageVisibility() const
 {
 	return ActivePage == EActivePage::Debug ? EVisibility::Visible : EVisibility::Collapsed;
+}
+
+FText SUOUDevelopmentPuzzleCheatHUD::GetDebugStatusText() const
+{
+	const UUOUDevelopmentDebugControlSubsystem* ControlSubsystem = DebugControlSubsystem.Get();
+	const UUOUDevelopmentDebugDrawSubsystem* DrawSubsystem = DebugDrawSubsystem.Get();
+	if (ControlSubsystem == nullptr || DrawSubsystem == nullptr)
+	{
+		return FText::FromString(TEXT("Debug status unavailable"));
+	}
+
+	return FText::FromString(FString::Printf(
+		TEXT("Debug: %s | Puzzle Providers: %d"),
+		ControlSubsystem->IsDebugToolsEnabled() ? TEXT("ON") : TEXT("OFF"),
+		DrawSubsystem->GetPuzzleDebugProviderCount()));
 }
 
 FText SUOUDevelopmentPuzzleCheatHUD::GetDebugToolsToggleText() const

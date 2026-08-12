@@ -52,6 +52,7 @@ private:
 	EVisibility GetPanelVisibility() const;
 	EVisibility GetConditionPageVisibility() const;
 	EVisibility GetDebugPageVisibility() const;
+	FText GetDebugStatusText() const;
 	FText GetDebugToolsToggleText() const;
 	FText GetDebugCategoryToggleText(EUOUDebugCategory Category) const;
 	FText GetPlayerDebugInfoText() const;
