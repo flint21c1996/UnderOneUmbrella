@@ -104,24 +104,6 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Runtime", meta = (ToolTip = "마지막으로 이 수신체에 빛을 준 광원 액터입니다."))
 	TObjectPtr<AActor> LastExposureSourceActor = nullptr;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Debug", meta = (ToolTip = "수신체 위에 온도와 빛 노출 상태를 디버그 텍스트로 표시합니다."))
-	bool bDrawTemperatureDebug = false;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Debug", meta = (ToolTip = "디버그 텍스트 위치에 더할 월드 오프셋입니다."))
-	FVector TemperatureDebugOffset = FVector(0.0f, 0.0f, 100.0f);
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Debug", meta = (ClampMin = "0.0", ToolTip = "온도 디버그 텍스트의 유지 시간입니다. 0이면 한 프레임만 표시합니다."))
-	float TemperatureDebugDrawTime = 0.0f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Debug", meta = (ClampMin = "0.1", ToolTip = "온도 디버그 텍스트의 크기입니다."))
-	float TemperatureDebugTextScale = 1.0f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Debug", meta = (ToolTip = "빛을 받지 않을 때 사용할 디버그 텍스트 색상입니다."))
-	FColor TemperatureDebugColor = FColor::Cyan;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Debug", meta = (ToolTip = "빛을 받고 있을 때 사용할 디버그 텍스트 색상입니다."))
-	FColor ExposedTemperatureDebugColor = FColor::Orange;
-
 	UFUNCTION(BlueprintCallable, Category = "Light|Temperature", meta = (ToolTip = "현재 온도를 설정합니다. Min Temperature와 Max Temperature 사이로 제한됩니다."))
 	void SetTemperature(float NewTemperature);
 
@@ -145,5 +127,4 @@ protected:
 	UPrimitiveComponent* GetReceiverVolume() const;
 	void SetReceivingLight(bool bNewReceivingLight);
 	void RecoverTemperature(float DeltaTime);
-	void DrawTemperatureDebug() const;
 };

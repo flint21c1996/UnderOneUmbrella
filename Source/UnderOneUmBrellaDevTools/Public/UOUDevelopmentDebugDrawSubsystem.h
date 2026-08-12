@@ -70,6 +70,7 @@ private:
 	void DrawPlayerBlockingWallDebug() const;
 	void DrawWaterBasinDebug() const;
 	void DrawRotatableMirrorDebug() const;
+	void DrawLightExposureReceiverDebug() const;
 	void DrawSelectedPuzzleInfo() const;
 	void DrawPuzzleProviderConnections() const;
 	void DrawPuzzleProviderLabels() const;

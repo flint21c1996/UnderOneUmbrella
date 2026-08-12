@@ -4,9 +4,6 @@
 
 #include "Components/PrimitiveComponent.h"
 #include "Components/SceneComponent.h"
-#include "Debug/UOUDebugSubsystem.h"
-#include "Debug/UOUDevelopmentToolsBuild.h"
-#include "DrawDebugHelpers.h"
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
 
@@ -46,7 +43,6 @@ void UUOULightExposureReceiverComponent::TickComponent(
 	}
 
 	RecoverTemperature(DeltaTime);
-	DrawTemperatureDebug();
 }
 
 TArray<FString> UUOULightExposureReceiverComponent::GetPuzzleDebugInfo_Implementation() const
@@ -217,8 +213,6 @@ void UUOULightExposureReceiverComponent::ValidateTemperatureSettings()
 	TemperatureRisePerIntensity = FMath::Max(0.0f, TemperatureRisePerIntensity);
 	TemperatureRecoveryRate = FMath::Max(0.0f, TemperatureRecoveryRate);
 	ExposureEndGraceTime = FMath::Max(0.0f, ExposureEndGraceTime);
-	TemperatureDebugDrawTime = FMath::Max(0.0f, TemperatureDebugDrawTime);
-	TemperatureDebugTextScale = FMath::Max(0.1f, TemperatureDebugTextScale);
 }
 
 USceneComponent* UUOULightExposureReceiverComponent::GetReferencedReceiverTransform() const
@@ -337,42 +331,4 @@ void UUOULightExposureReceiverComponent::RecoverTemperature(float DeltaTime)
 		TemperatureRecoveryRate);
 
 	SetTemperature(RecoveredTemperature);
-}
-
-void UUOULightExposureReceiverComponent::DrawTemperatureDebug() const
-{
-#if UOU_WITH_DEVELOPMENT_TOOLS
-	if (!bDrawTemperatureDebug || !UUOUDebugSubsystem::IsDebugWorldLabelEnabled(this, EUOUDebugCategory::Puzzle))
-	{
-		return;
-	}
-
-	UWorld* World = GetWorld();
-	if (World == nullptr)
-	{
-		return;
-	}
-
-	const FVector DebugLocation = GetLightReceiverPosition_Implementation() + TemperatureDebugOffset;
-	const FString DebugText = FString::Printf(
-		TEXT("Temp: %.1f C\nLight: %s\nIntensity: %.2f"),
-		CurrentTemperature,
-		bIsReceivingLight ? TEXT("On") : TEXT("Off"),
-		LastExposureIntensity);
-
-	const FColor TemperatureTextColor = UUOUDebugSubsystem::GetDebugCategoryColor(
-		this,
-		EUOUDebugCategory::Puzzle,
-		bIsReceivingLight ? ExposedTemperatureDebugColor : TemperatureDebugColor);
-
-	DrawDebugString(
-		World,
-		DebugLocation,
-		DebugText,
-		nullptr,
-		TemperatureTextColor,
-		TemperatureDebugDrawTime,
-		true,
-		TemperatureDebugTextScale);
-#endif
 }
