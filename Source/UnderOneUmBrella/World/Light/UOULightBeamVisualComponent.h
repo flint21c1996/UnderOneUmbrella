@@ -79,6 +79,15 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light|Visual", meta = (ToolTip = "VFX BP 내부에 포함된 Light 컴포넌트를 끄고 통합 광원 액터의 SpotLight만 사용합니다."))
 	bool bDisableEmbeddedVFXLights = true;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light|Visual|Appearance", meta = (ClampMin = "0.0", DisplayName = "Visual Brightness Multiplier", ToolTip = "이 액터의 빛줄기 밝기에만 적용되는 배율입니다. 퍼즐 판정용 빛 세기에는 영향을 주지 않습니다."))
+	float VisualBrightnessMultiplier = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light|Visual|Appearance", meta = (ClampMin = "0.0", DisplayName = "Visual Opacity Multiplier", ToolTip = "이 액터의 빛줄기 투명도에만 적용되는 배율입니다. 0이면 완전히 투명하고 1이면 기본 투명도입니다."))
+	float VisualOpacityMultiplier = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light|Visual|Appearance", meta = (ClampMin = "0", ClampMax = "8", DisplayName = "Lumen Dynamic Ray Preset", ToolTip = "원본 Lumen Dynamic Ray 표시 액터를 사용할 때 적용할 프리셋입니다. 0은 표시 액터 기본값, 1~8은 원본 프리셋 번호입니다."))
+	int32 LumenDynamicRayPreset = 0;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Visual|Runtime")
 	int32 ActiveReflectionVFXCount = 0;
 
