@@ -257,8 +257,6 @@ void AUOUCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompon
 
 	if (UUOUUmbrellaComponent* UmbrellaComponent = FindUmbrellaComponent())
 	{
-		PlayerInputComponent->BindKey(UmbrellaComponent->GetLightReflectingKey(), IE_Pressed, this, &AUOUCharacter::HandleUmbrellaLightReflectingPressed);
-
 		if (UmbrellaToggleAction == nullptr)
 		{
 			PlayerInputComponent->BindKey(UmbrellaComponent->GetToggleUmbrellaKey(), IE_Pressed, this, &AUOUCharacter::HandleUmbrellaTogglePressed);
@@ -271,8 +269,8 @@ void AUOUCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompon
 
 		if (ContextInteractAction == nullptr)
 		{
-			PlayerInputComponent->BindKey(UmbrellaComponent->GetPourKey(), IE_Pressed, this, &AUOUCharacter::HandleUmbrellaPourPressed);
-			PlayerInputComponent->BindKey(UmbrellaComponent->GetPourKey(), IE_Released, this, &AUOUCharacter::HandleUmbrellaPourReleased);
+			PlayerInputComponent->BindKey(UmbrellaComponent->GetPourKey(), IE_Pressed, this, &AUOUCharacter::HandleUmbrellaActionPressed);
+			PlayerInputComponent->BindKey(UmbrellaComponent->GetPourKey(), IE_Released, this, &AUOUCharacter::HandleUmbrellaActionReleased);
 		}
 
 		if (UmbrellaComponent->IsDebugFillEnabled() && UmbrellaDebugFillAction == nullptr)
@@ -494,7 +492,7 @@ void AUOUCharacter::HandleUmbrellaInvertPressed()
 	}
 }
 
-void AUOUCharacter::HandleUmbrellaPourPressed()
+void AUOUCharacter::HandleUmbrellaActionPressed()
 {
 	if (IsPlayerInteractionInputBlocked())
 	{
@@ -517,7 +515,7 @@ void AUOUCharacter::HandleUmbrellaPourPressed()
 	}
 }
 
-void AUOUCharacter::HandleUmbrellaPourReleased()
+void AUOUCharacter::HandleUmbrellaActionReleased()
 {
 	if (IsPlayerInteractionInputBlocked())
 	{
@@ -527,19 +525,6 @@ void AUOUCharacter::HandleUmbrellaPourReleased()
 	if (UUOUUmbrellaComponent* UmbrellaComponent = FindUmbrellaComponent())
 	{
 		UmbrellaComponent->HandleInputReleased(UmbrellaComponent->GetPourKey());
-	}
-}
-
-void AUOUCharacter::HandleUmbrellaLightReflectingPressed()
-{
-	if (IsPlayerInteractionInputBlocked())
-	{
-		return;
-	}
-
-	if (UUOUUmbrellaComponent* UmbrellaComponent = FindUmbrellaComponent())
-	{
-		UmbrellaComponent->HandleInputPressed(UmbrellaComponent->GetLightReflectingKey());
 	}
 }
 
@@ -577,9 +562,14 @@ void AUOUCharacter::HandleContextInteractPressed()
 
 	if (UUOUUmbrellaComponent* UmbrellaComponent = FindUmbrellaComponent())
 	{
-		if (UmbrellaComponent->HasUmbrella() && UmbrellaComponent->IsUpsideDown() && UmbrellaComponent->GetCurrentStoredWater() > 0.0f)
+		const bool bShouldUseUmbrellaContextAction =
+			UmbrellaComponent->HasUmbrella() &&
+			(UmbrellaComponent->IsOpen() ||
+				UmbrellaComponent->IsLightReflecting() ||
+				(UmbrellaComponent->IsUpsideDown() && UmbrellaComponent->GetCurrentStoredWater() > 0.0f));
+		if (bShouldUseUmbrellaContextAction)
 		{
-			HandleUmbrellaPourPressed();
+			HandleUmbrellaActionPressed();
 			return;
 		}
 	}
@@ -605,7 +595,7 @@ void AUOUCharacter::HandleContextInteractReleased()
 	{
 		if (UmbrellaComponent->IsPouring())
 		{
-			HandleUmbrellaPourReleased();
+			HandleUmbrellaActionReleased();
 		}
 	}
 
