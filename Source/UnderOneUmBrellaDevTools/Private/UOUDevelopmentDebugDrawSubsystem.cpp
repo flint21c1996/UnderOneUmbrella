@@ -5,6 +5,8 @@
 #include "Components/ActorComponent.h"
 #include "Components/PrimitiveComponent.h"
 #include "Components/SceneComponent.h"
+#include "Components/SkeletalMeshComponent.h"
+#include "Components/SphereComponent.h"
 #include "Debug/UOUPuzzleDebugProviderComponent.h"
 #include "Debug/UOUDebugProvider.h"
 #include "Debug/UOUDevelopmentToolsBuild.h"
@@ -38,6 +40,7 @@
 #include "UOUDevelopmentDebugControlSubsystem.h"
 #include "UnrealClient.h"
 #include "World/Light/UOULightInteractionSurfaceComponent.h"
+#include "World/Pour/UOUPourDropActor.h"
 
 #if !UOU_WITH_DEVELOPMENT_TOOLS
 #error UOUDevelopmentDebugDrawSubsystem must only be compiled when development tools are enabled.
@@ -276,6 +279,7 @@ void UUOUDevelopmentDebugDrawSubsystem::Tick(float DeltaTime)
 		RefreshPlayerDebugText();
 		DrawPlayerUmbrellaRainBlockerDebug();
 		DrawPlayerUmbrellaPourTraceDebug();
+		DrawPlayerUmbrellaPourPlacementDebug();
 	}
 	else
 	{
@@ -734,6 +738,121 @@ void UUOUDevelopmentDebugDrawSubsystem::DrawPlayerUmbrellaPourTraceDebug() const
 		0.0f,
 		true,
 		1.0f);
+}
+
+void UUOUDevelopmentDebugDrawSubsystem::DrawPlayerUmbrellaPourPlacementDebug() const
+{
+	UWorld* World = GetWorld();
+	const APlayerController* PlayerController = World != nullptr
+		? World->GetFirstPlayerController()
+		: nullptr;
+	const APawn* PlayerPawn = PlayerController != nullptr ? PlayerController->GetPawn() : nullptr;
+	const UUOUUmbrellaComponent* UmbrellaComponent = PlayerPawn != nullptr
+		? PlayerPawn->FindComponentByClass<UUOUUmbrellaComponent>()
+		: nullptr;
+	if (World == nullptr || UmbrellaComponent == nullptr || !UmbrellaComponent->HasUmbrella())
+	{
+		return;
+	}
+
+	constexpr float Radius = 10.0f;
+	constexpr float Thickness = 2.0f;
+	FTransform SocketTransform = FTransform::Identity;
+	if (UmbrellaComponent->TryGetPouringPointTransform(SocketTransform))
+	{
+		const FVector SocketLocation = SocketTransform.GetLocation();
+		const USkeletalMeshComponent* SocketSource =
+			UmbrellaComponent->GetPouringSocketSourceComponent();
+		const FString SocketDebugText = FString::Printf(
+			TEXT("PourSocket\nComponent: %s\nMesh: %s\nSocket: %s\nOffset: %.1f %.1f %.1f"),
+			*GetNameSafe(SocketSource),
+			SocketSource != nullptr
+				? *GetNameSafe(SocketSource->GetSkeletalMeshAsset())
+				: TEXT("None"),
+			*UmbrellaComponent->GetPouringSocketName().ToString(),
+			UmbrellaComponent->GetPouringSocketWorldUnitOffset().X,
+			UmbrellaComponent->GetPouringSocketWorldUnitOffset().Y,
+			UmbrellaComponent->GetPouringSocketWorldUnitOffset().Z);
+		DrawDebugSphere(
+			World, SocketLocation, Radius, 16, FColor::Magenta, false, 0.0f, 0, Thickness);
+		DrawDebugCoordinateSystem(
+			World,
+			SocketLocation,
+			SocketTransform.Rotator(),
+			Radius * 2.5f,
+			false,
+			0.0f,
+			0,
+			Thickness);
+		DrawDebugString(
+			World,
+			SocketLocation + FVector(0.0f, 0.0f, Radius + 18.0f),
+			SocketDebugText,
+			nullptr,
+			FColor::Magenta,
+			0.0f,
+			true);
+	}
+
+	FVector DropLocation = FVector::ZeroVector;
+	FVector DropDirection = FVector::ForwardVector;
+	if (UmbrellaComponent->TryGetPourDropSpawnPlacement(DropLocation, DropDirection))
+	{
+		const FVector SafeDirection = DropDirection.IsNearlyZero()
+			? FVector::DownVector
+			: DropDirection.GetSafeNormal();
+		DrawDebugSphere(
+			World, DropLocation, Radius * 0.7f, 16, FColor::Yellow, false, 0.0f, 0, Thickness);
+		DrawDebugLine(
+			World,
+			DropLocation,
+			DropLocation + SafeDirection * 120.0f,
+			FColor::Yellow,
+			false,
+			0.0f,
+			0,
+			Thickness);
+		DrawDebugLine(
+			World,
+			DropLocation,
+			DropLocation + FVector::DownVector * 120.0f,
+			FColor::Cyan,
+			false,
+			0.0f,
+			0,
+			Thickness);
+		DrawDebugString(
+			World,
+			DropLocation + FVector(0.0f, 0.0f, Radius + 36.0f),
+			TEXT("DropSpawn"),
+			nullptr,
+			FColor::Yellow,
+			0.0f,
+			true);
+	}
+
+	for (TActorIterator<AUOUPourDropActor> It(World); It; ++It)
+	{
+		const AUOUPourDropActor* DropActor = *It;
+		const USphereComponent* CollisionComponent = IsValid(DropActor)
+			? DropActor->CollisionComponent
+			: nullptr;
+		if (CollisionComponent == nullptr)
+		{
+			continue;
+		}
+
+		DrawDebugSphere(
+			World,
+			CollisionComponent->GetComponentLocation(),
+			FMath::Max(1.0f, CollisionComponent->GetScaledSphereRadius()),
+			24,
+			DropActor->bHasDeliveredWater ? FColor::Green : FColor::Cyan,
+			false,
+			0.0f,
+			0,
+			1.5f);
+	}
 }
 
 void UUOUDevelopmentDebugDrawSubsystem::DrawInteractionDebug() const

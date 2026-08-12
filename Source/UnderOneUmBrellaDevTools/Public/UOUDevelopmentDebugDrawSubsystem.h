@@ -42,6 +42,7 @@ private:
 	void RefreshPlayerDebugText();
 	void DrawPlayerUmbrellaRainBlockerDebug() const;
 	void DrawPlayerUmbrellaPourTraceDebug() const;
+	void DrawPlayerUmbrellaPourPlacementDebug() const;
 	void DrawInteractionDebug() const;
 	void RefreshPerformanceDebugText(float DeltaTime);
 	void ResetPerformanceDebugState();

@@ -45,9 +45,6 @@ struct UNDERONEUMBRELLA_API FUOUPourDropVisualSettings
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pour Drop|Debug", meta = (EditCondition = "bOverrideDropActorSettings", EditConditionHides, ToolTip = "켜면 DropActor의 mesh를 디버그용으로 표시합니다. 꺼져 있어도 충돌/물 전달 판정은 그대로 동작합니다."))
 	bool bShowDebugVisualMesh = false;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pour Drop|Debug", meta = (EditCondition = "bOverrideDropActorSettings", EditConditionHides, ToolTip = "켜면 DropActor의 실제 충돌 판정 구체를 월드 디버그로 표시합니다. Debug Controller의 Player World Draw가 켜져 있어야 보입니다."))
-	bool bDrawDebugCollisionRadius = false;
-
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pour Drop|Trail", meta = (ToolTip = "DropActor에 붙일 보조 trail Niagara입니다. 기본 붓기 표현은 Stream Visual이 담당하므로 필요할 때만 사용합니다."))
 	TObjectPtr<UNiagaraSystem> TrailEffect = nullptr;
 

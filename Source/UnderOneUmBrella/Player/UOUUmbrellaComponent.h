@@ -278,23 +278,11 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, AdvancedDisplay, Category = "Umbrella|Debug", meta = (ToolTip = "이 값은 더 이상 화면 디버그 표시 여부를 결정하지 않습니다. Debug Controller의 Player HUD 옵션을 사용합니다."))
 	bool bShowScreenDebug = false;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Umbrella|Debug|Pour", meta = (ToolTip = "Draws the resolved PouringPoint socket in the world while the umbrella is held."))
-	bool bDrawPourSocketDebug = true;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Umbrella|Debug|Pour", meta = (ToolTip = "Draws the exact PourDropActor spawn point and direction in the world."))
-	bool bDrawPourDropSpawnDebug = true;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Umbrella|Debug|Pour", meta = (ToolTip = "Draws spawned PourDropActor collision spheres in the world."))
-	bool bDrawPourDropCollisionDebug = true;
-
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Umbrella|Pour Drop", meta = (ToolTip = "Overrides spawned PourDropActor collision radius after profile and Blueprint defaults are applied."))
 	bool bOverridePourDropCollisionRadius = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Umbrella|Pour Drop", meta = (ClampMin = "0.0", EditCondition = "bOverridePourDropCollisionRadius", EditConditionHides))
 	float PourDropCollisionRadiusOverride = 4.0f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Umbrella|Debug|Pour", meta = (ClampMin = "0.0"))
-	float PourSocketDebugRadius = 10.0f;
 
 	// 초당 붓는 물의 양입니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Water", meta = (ClampMin = "0.0"))
@@ -596,6 +584,21 @@ public:
 	// 비 차단 판정 중심에 적용되는 에디터 설정 로컬 오프셋을 반환합니다.
 	const FVector& GetRainBlockerLocalOffset() const { return RainBlockerLocalOffset; }
 
+	// 현재 우산 리소스에서 실제 물줄기 시작 Transform을 계산합니다.
+	bool TryGetPouringPointTransform(FTransform& OutTransform) const;
+
+	// 실제 물방울 생성 위치와 방향을 계산합니다.
+	bool TryGetPourDropSpawnPlacement(FVector& OutDropLocation, FVector& OutDropDirection) const;
+
+	// 물줄기 시작 소켓을 제공하는 현재 스켈레탈 메시 컴포넌트를 반환합니다.
+	const USkeletalMeshComponent* GetPouringSocketSourceComponent() const
+	{
+		return ResolvePouringSocketSourceComponent();
+	}
+
+	FName GetPouringSocketName() const { return PouringSocketName; }
+	const FVector& GetPouringSocketWorldUnitOffset() const { return PouringSocketWorldUnitOffset; }
+
 	// 우산에 현재 저장된 물 양을 반환합니다.
 	UFUNCTION(BlueprintPure, Category = "Umbrella")
 	float GetCurrentStoredWater() const;
@@ -680,11 +683,7 @@ protected:
 
 	void UpdatePouringEffectTransform();
 
-	bool TryGetPouringPointTransform(FTransform& OutTransform) const;
-
 	const USkeletalMeshComponent* ResolvePouringSocketSourceComponent() const;
-
-	bool TryGetPourDropSpawnPlacement(FVector& OutDropLocation, FVector& OutDropDirection) const;
 
 	const UUOUPourContentProfile* ResolvePourContentProfile() const;
 
@@ -701,8 +700,6 @@ protected:
 
 	// 물 붓기 디버그에 사용하는 마지막 트레이스 기록을 비웁니다.
 	void ClearPourTraceDebug();
-
-	void DrawPourSocketAndDropSpawnDebug() const;
 
 	// 물 붓기와 빛 반사 중 플레이어가 마우스 방향을 바라보도록 회전을 보정합니다.
 	void UpdateUmbrellaAimFacing();
