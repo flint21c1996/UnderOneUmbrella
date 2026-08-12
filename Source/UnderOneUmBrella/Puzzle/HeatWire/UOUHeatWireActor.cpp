@@ -4,7 +4,6 @@
 
 #include "Components/SceneComponent.h"
 #include "Components/SplineComponent.h"
-#include "Debug/UOUDebugSubsystem.h"
 #include "Debug/UOUPuzzleDebugInfoProvider.h"
 #include "Engine/StaticMesh.h"
 #include "Materials/MaterialInstanceDynamic.h"
@@ -68,29 +67,11 @@ void AUOUHeatWireActor::BeginPlay()
 	BindHeatWireVisualEvents();
 	RefreshHeatWireVisualState();
 
-	if (bRegisterDebugProvider)
-	{
-		if (UWorld* World = GetWorld())
-		{
-			if (UUOUDebugSubsystem* DebugSubsystem = World->GetSubsystem<UUOUDebugSubsystem>())
-			{
-				DebugSubsystem->RegisterDebugProvider(this);
-			}
-		}
-	}
 }
 
 void AUOUHeatWireActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	UnbindHeatWireVisualEvents();
-
-	if (UWorld* World = GetWorld())
-	{
-		if (UUOUDebugSubsystem* DebugSubsystem = World->GetSubsystem<UUOUDebugSubsystem>())
-		{
-			DebugSubsystem->UnregisterDebugProvider(this);
-		}
-	}
 
 	ClearHeatWireVisualSegments();
 

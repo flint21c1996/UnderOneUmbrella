@@ -4,7 +4,6 @@
 
 #include "Debug/UOUDebugController.h"
 #include "Debug/UOUDebugControllerComponent.h"
-#include "Debug/UOUDebugProvider.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 
@@ -27,13 +26,11 @@ void UUOUDebugSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	Super::Initialize(Collection);
 
 	ControllerSearchTimeRemaining = 0.0f;
-	ProviderCompactTimeRemaining = 0.0f;
 }
 
 void UUOUDebugSubsystem::Deinitialize()
 {
 	ActiveDebugController.Reset();
-	RegisteredProviders.Reset();
 
 	Super::Deinitialize();
 }
@@ -45,13 +42,6 @@ void UUOUDebugSubsystem::Tick(float DeltaTime)
 	{
 		ResolveDebugController();
 		ControllerSearchTimeRemaining = 1.0f;
-	}
-
-	ProviderCompactTimeRemaining -= DeltaTime;
-	if (ProviderCompactTimeRemaining <= 0.0f)
-	{
-		CompactRegisteredProviders();
-		ProviderCompactTimeRemaining = 1.0f;
 	}
 }
 
@@ -76,34 +66,6 @@ void UUOUDebugSubsystem::UnregisterDebugController(AUOUDebugController* DebugCon
 		ActiveDebugController.Reset();
 		ControllerSearchTimeRemaining = 0.0f;
 	}
-}
-
-void UUOUDebugSubsystem::RegisterDebugProvider(UObject* ProviderObject)
-{
-	if (!IsValid(ProviderObject)
-		|| !ProviderObject->GetClass()->ImplementsInterface(UUOUDebugProvider::StaticClass()))
-	{
-		return;
-	}
-
-	for (const TWeakObjectPtr<UObject>& RegisteredProvider : RegisteredProviders)
-	{
-		if (RegisteredProvider.Get() == ProviderObject)
-		{
-			return;
-		}
-	}
-
-	RegisteredProviders.Add(ProviderObject);
-}
-
-void UUOUDebugSubsystem::UnregisterDebugProvider(UObject* ProviderObject)
-{
-	RegisteredProviders.RemoveAll(
-		[ProviderObject](const TWeakObjectPtr<UObject>& RegisteredProvider)
-		{
-			return !RegisteredProvider.IsValid() || RegisteredProvider.Get() == ProviderObject;
-		});
 }
 
 AUOUDebugController* UUOUDebugSubsystem::GetActiveDebugController() const
@@ -317,11 +279,6 @@ UUOUDebugControllerComponentBase* UUOUDebugSubsystem::FindDebugControllerCompone
 		: nullptr;
 }
 
-int32 UUOUDebugSubsystem::GetRegisteredProviderCount() const
-{
-	return RegisteredProviders.Num();
-}
-
 void UUOUDebugSubsystem::ResolveDebugController()
 {
 	if (ActiveDebugController.IsValid())
@@ -344,15 +301,4 @@ void UUOUDebugSubsystem::ResolveDebugController()
 		}
 	}
 
-}
-
-void UUOUDebugSubsystem::CompactRegisteredProviders()
-{
-	RegisteredProviders.RemoveAll(
-		[](const TWeakObjectPtr<UObject>& RegisteredProvider)
-		{
-			const UObject* ProviderObject = RegisteredProvider.Get();
-			return ProviderObject == nullptr
-				|| !ProviderObject->GetClass()->ImplementsInterface(UUOUDebugProvider::StaticClass());
-		});
 }

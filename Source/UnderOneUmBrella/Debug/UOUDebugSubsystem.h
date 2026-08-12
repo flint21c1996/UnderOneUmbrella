@@ -31,12 +31,6 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Debug")
 	void UnregisterDebugController(AUOUDebugController* DebugController);
 
-	UFUNCTION(BlueprintCallable, Category = "Debug")
-	void RegisterDebugProvider(UObject* ProviderObject);
-
-	UFUNCTION(BlueprintCallable, Category = "Debug")
-	void UnregisterDebugProvider(UObject* ProviderObject);
-
 	UFUNCTION(BlueprintPure, Category = "Debug")
 	AUOUDebugController* GetActiveDebugController() const;
 
@@ -65,15 +59,9 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Debug")
 	UUOUDebugControllerComponentBase* FindDebugControllerComponent(EUOUDebugCategory Category) const;
 
-	UFUNCTION(BlueprintPure, Category = "Debug")
-	int32 GetRegisteredProviderCount() const;
-
 private:
 	void ResolveDebugController();
-	void CompactRegisteredProviders();
 
 	TWeakObjectPtr<AUOUDebugController> ActiveDebugController;
-	TArray<TWeakObjectPtr<UObject>> RegisteredProviders;
 	float ControllerSearchTimeRemaining = 0.0f;
-	float ProviderCompactTimeRemaining = 0.0f;
 };
