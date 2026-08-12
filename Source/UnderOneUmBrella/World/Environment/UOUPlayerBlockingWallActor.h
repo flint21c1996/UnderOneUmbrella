@@ -16,7 +16,7 @@ class UStaticMeshComponent;
 // 플레이어 이동만 막기 위한 투명 벽 액터입니다.
 // 충돌 켜기와 끄기를 에디터 버튼과 런타임 함수 양쪽에서 사용할 수 있습니다.
 UCLASS(Blueprintable, meta=(DisplayName="UOU Player Blocking Wall Actor"))
-class AUOUPlayerBlockingWallActor : public AActor, public IUOUPuzzleResultReceiver
+class UNDERONEUMBRELLA_API AUOUPlayerBlockingWallActor : public AActor, public IUOUPuzzleResultReceiver
 {
 	GENERATED_BODY()
 
@@ -57,9 +57,6 @@ public:
 	// 플레이 중에도 반투명 벽 미리보기를 표시할지 정합니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Player Blocking Wall|Preview")
 	bool bShowPreviewInGame = false;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Player Blocking Wall|Preview", meta = (ToolTip = "켜져 있으면 Puzzle 디버그 월드 드로우가 활성화된 동안 런타임에서도 벽 프리뷰를 표시합니다."))
-	bool bShowPreviewInGameWhenPuzzleDebug = true;
 
 	// 미리보기 메쉬에 사용할 반투명 머티리얼입니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Player Blocking Wall|Preview")
@@ -102,7 +99,6 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
-	virtual void Tick(float DeltaSeconds) override;
 	virtual void OnConstruction(const FTransform& Transform) override;
 
 	// 현재 활성 상태와 충돌 채널 설정을 BlockingVolume에 적용합니다.

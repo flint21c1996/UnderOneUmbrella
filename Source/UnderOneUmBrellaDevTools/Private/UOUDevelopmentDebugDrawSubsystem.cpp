@@ -11,6 +11,7 @@
 #include "Components/SceneComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/SphereComponent.h"
+#include "Components/SplineComponent.h"
 #include "Debug/UOUPuzzleDebugProviderComponent.h"
 #include "Debug/UOUDebugProvider.h"
 #include "Debug/UOUDevelopmentToolsBuild.h"
@@ -42,6 +43,10 @@
 #include "Player/UOUUmbrellaLightInteractionComponent.h"
 #include "Player/UOUWaterContainerComponent.h"
 #include "Puzzle/PushPull/UOUPushPullObjectComponent.h"
+#include "Puzzle/HeatWire/UOUHeatWireActor.h"
+#include "Puzzle/HeatWire/UOUHeatWireComponent.h"
+#include "Puzzle/Weight/UOUWeightedButtonComponent.h"
+#include "Puzzle/Weight/UOUWeightSensorComponent.h"
 #include "RHICommandList.h"
 #include "RHIStats.h"
 #include "RenderCounters.h"
@@ -49,6 +54,7 @@
 #include "UOUDevelopmentDebugControlSubsystem.h"
 #include "UnrealClient.h"
 #include "World/Environment/UOUEnvironmentVisualComponent.h"
+#include "World/Environment/UOUPlayerBlockingWallActor.h"
 #include "World/Light/UOULightInteractionSurfaceComponent.h"
 #include "World/NPC/UOUNPCCharacter.h"
 #include "World/Pour/UOUPourDropActor.h"
@@ -494,6 +500,10 @@ void UUOUDevelopmentDebugDrawSubsystem::Tick(float DeltaTime)
 	{
 		return;
 	}
+
+	DrawHeatWireDebug();
+	DrawWeightedButtonDebug();
+	DrawPlayerBlockingWallDebug();
 
 	PuzzleProviderRefreshTimeRemaining -= DeltaTime;
 	if (PuzzleProviderRefreshTimeRemaining <= 0.0f)
@@ -1691,6 +1701,205 @@ void UUOUDevelopmentDebugDrawSubsystem::ResetVFXDebugState()
 TStatId UUOUDevelopmentDebugDrawSubsystem::GetStatId() const
 {
 	RETURN_QUICK_DECLARE_CYCLE_STAT(UUOUDevelopmentDebugDrawSubsystem, STATGROUP_Tickables);
+}
+
+void UUOUDevelopmentDebugDrawSubsystem::DrawHeatWireDebug() const
+{
+	UWorld* World = GetWorld();
+	if (World == nullptr)
+	{
+		return;
+	}
+
+	constexpr float SphereRadius = 18.0f;
+	constexpr int32 SphereSegments = 16;
+	constexpr float Thickness = 2.0f;
+	const FVector LabelOffset(0.0f, 0.0f, 36.0f);
+	for (TActorIterator<AUOUHeatWireActor> It(World); It; ++It)
+	{
+		const AUOUHeatWireActor* HeatWireActor = *It;
+		const USplineComponent* HeatWirePath = IsValid(HeatWireActor)
+			? HeatWireActor->GetHeatWirePathComponent()
+			: nullptr;
+		const UUOUHeatWireComponent* HeatWireComponent = IsValid(HeatWireActor)
+			? HeatWireActor->GetHeatWireComponent()
+			: nullptr;
+		if (HeatWirePath == nullptr)
+		{
+			continue;
+		}
+
+		const int32 SplinePointCount = HeatWirePath->GetNumberOfSplinePoints();
+		const float SplineLength = HeatWirePath->GetSplineLength();
+		const float BurnProgress = HeatWireComponent != nullptr
+			? FMath::Clamp(HeatWireComponent->BurnProgress, 0.0f, 1.0f)
+			: 0.0f;
+		for (int32 PointIndex = 0; PointIndex < SplinePointCount; ++PointIndex)
+		{
+			const FVector PointLocation = HeatWirePath->GetLocationAtSplinePoint(
+				PointIndex,
+				ESplineCoordinateSpace::World);
+			const float PointProgress = SplineLength > KINDA_SMALL_NUMBER
+				? FMath::Clamp(
+					HeatWirePath->GetDistanceAlongSplineAtSplinePoint(PointIndex) / SplineLength,
+					0.0f,
+					1.0f)
+				: (SplinePointCount > 1
+					? static_cast<float>(PointIndex) / static_cast<float>(SplinePointCount - 1)
+					: 0.0f);
+			const bool bReachedByHeat = HeatWireComponent != nullptr
+				&& BurnProgress + KINDA_SMALL_NUMBER >= PointProgress;
+			const FColor PointColor = PointIndex == 0
+				? FColor::Blue
+				: (PointIndex == SplinePointCount - 1 ? FColor::Red : FColor::Green);
+
+			DrawDebugSphere(
+				World,
+				PointLocation,
+				SphereRadius,
+				SphereSegments,
+				PointColor,
+				false,
+				0.0f,
+				0,
+				Thickness);
+			DrawDebugSphere(
+				World,
+				PointLocation,
+				SphereRadius * 0.45f,
+				SphereSegments,
+				bReachedByHeat ? FColor::Orange : FColor::White,
+				false,
+				0.0f,
+				0,
+				Thickness + 1.0f);
+			DrawDebugString(
+				World,
+				PointLocation + LabelOffset,
+				FString::Printf(
+					TEXT("P%d %.0f%% %s"),
+					PointIndex,
+					PointProgress * 100.0f,
+					bReachedByHeat ? TEXT("Reached") : TEXT("Pending")),
+				nullptr,
+				bReachedByHeat ? FColor::Orange : FColor::White,
+				0.0f,
+				true,
+				0.8f);
+		}
+
+		if (HeatWireComponent == nullptr)
+		{
+			continue;
+		}
+
+		const FVector HeatFrontLocation = HeatWireComponent->GetFireWorldLocation();
+		DrawDebugSphere(
+			World,
+			HeatFrontLocation,
+			12.0f,
+			SphereSegments,
+			FColor::Yellow,
+			false,
+			0.0f,
+			0,
+			Thickness + 1.0f);
+		DrawDebugString(
+			World,
+			HeatFrontLocation + LabelOffset,
+			FString::Printf(TEXT("Heat %.0f%%"), BurnProgress * 100.0f),
+			nullptr,
+			FColor::Yellow,
+			0.0f,
+			true,
+			0.85f);
+	}
+}
+
+void UUOUDevelopmentDebugDrawSubsystem::DrawWeightedButtonDebug() const
+{
+	UWorld* World = GetWorld();
+	if (World == nullptr || GEngine == nullptr)
+	{
+		return;
+	}
+
+	for (TActorIterator<AActor> It(World); It; ++It)
+	{
+		AActor* Owner = *It;
+		if (!IsValid(Owner))
+		{
+			continue;
+		}
+
+		TArray<UUOUWeightedButtonComponent*> ButtonComponents;
+		Owner->GetComponents<UUOUWeightedButtonComponent>(ButtonComponents);
+		for (const UUOUWeightedButtonComponent* Button : ButtonComponents)
+		{
+			if (!IsValid(Button))
+			{
+				continue;
+			}
+
+			const UUOUWeightSensorComponent* Sensor = Button->Sensor;
+			const int32 OverlapCount = Sensor != nullptr ? Sensor->OverlappingActorCount : 0;
+			const FString DebugText = FString::Printf(
+				TEXT("Button: %s\nPressed: %s\nCurrent Weight: %.2f\nPress / Release: %.2f / %.2f\nOverlap Count: %d\nSensor: %s\nSensor Volume: %s"),
+				*GetNameSafe(Owner),
+				Button->IsPressed() ? TEXT("Yes") : TEXT("No"),
+				Button->CurrentWeight,
+				Button->PressWeight,
+				Button->ReleaseWeight,
+				OverlapCount,
+				*GetNameSafe(Sensor),
+				Sensor != nullptr ? *GetNameSafe(Sensor->SensorVolume) : TEXT("None"));
+			const uint64 OwnerId = reinterpret_cast<uint64>(Owner);
+			const int32 MessageKey = static_cast<int32>(0x554F4200u + (OwnerId & 0xFFu));
+			GEngine->AddOnScreenDebugMessage(
+				MessageKey,
+				0.0f,
+				Button->IsPressed() ? FColor::Green : FColor::Yellow,
+				DebugText,
+				false,
+				FVector2D(1.0f, 1.0f));
+		}
+	}
+}
+
+void UUOUDevelopmentDebugDrawSubsystem::DrawPlayerBlockingWallDebug() const
+{
+	UWorld* World = GetWorld();
+	if (World == nullptr)
+	{
+		return;
+	}
+
+	for (TActorIterator<AUOUPlayerBlockingWallActor> It(World); It; ++It)
+	{
+		const AUOUPlayerBlockingWallActor* WallActor = *It;
+		const UBoxComponent* BlockingVolume = IsValid(WallActor)
+			? WallActor->BlockingVolume
+			: nullptr;
+		if (BlockingVolume == nullptr)
+		{
+			continue;
+		}
+
+		const FColor StateColor = (
+			WallActor->IsWallEnabled()
+				? WallActor->EnabledPreviewColor
+				: WallActor->DisabledPreviewColor).ToFColor(true);
+		DrawDebugBox(
+			World,
+			BlockingVolume->GetComponentLocation(),
+			BlockingVolume->GetScaledBoxExtent(),
+			BlockingVolume->GetComponentQuat(),
+			StateColor,
+			false,
+			0.0f,
+			0,
+			4.0f);
+	}
 }
 
 void UUOUDevelopmentDebugDrawSubsystem::RefreshPuzzleDebugProviders()

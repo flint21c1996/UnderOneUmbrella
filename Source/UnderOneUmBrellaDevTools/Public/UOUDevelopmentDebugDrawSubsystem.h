@@ -53,6 +53,9 @@ private:
 	void DrawEnvironmentVisualDebug() const;
 	void ResetVFXDebugState();
 	void TryAddPuzzleDebugProvider(UObject* ProviderObject);
+	void DrawHeatWireDebug() const;
+	void DrawWeightedButtonDebug() const;
+	void DrawPlayerBlockingWallDebug() const;
 	void DrawPuzzleProviderConnections() const;
 	void DrawPuzzleProviderLabels() const;
 

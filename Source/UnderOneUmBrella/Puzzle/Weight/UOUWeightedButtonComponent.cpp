@@ -5,8 +5,6 @@
 #include "Audio/UOUAudioCueComponent.h"
 #include "Audio/UOUAudioSubsystem.h"
 #include "Components/SceneComponent.h"
-#include "Debug/UOUDebugSubsystem.h"
-#include "Engine/Engine.h"
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
@@ -42,7 +40,6 @@ void UUOUWeightedButtonComponent::TickComponent(float DeltaTime, ELevelTick Tick
 
 	RefreshPressedState();
 	MoveButtonVisual(DeltaTime);
-	DrawScreenDebug();
 }
 
 float UUOUWeightedButtonComponent::GetPuzzleWeight() const
@@ -86,7 +83,6 @@ void UUOUWeightedButtonComponent::GetPuzzleDebugInputActors_Implementation(TArra
 		Sensor->GetOverlappingActors(OutInputActors);
 	}
 }
-
 bool UUOUWeightedButtonComponent::IsPressed() const
 {
 	return IsSatisfied();
@@ -371,43 +367,3 @@ void UUOUWeightedButtonComponent::SnapVisualToCurrentState()
 	}
 }
 
-void UUOUWeightedButtonComponent::DrawScreenDebug() const
-{
-	if (!bShowScreenDebug
-		|| !UUOUDebugSubsystem::IsDebugScreenMessageEnabled(this, EUOUDebugCategory::Puzzle)
-		|| GEngine == nullptr)
-	{
-		return;
-	}
-
-	const UWorld* World = GetWorld();
-	if (World == nullptr || !World->IsGameWorld())
-	{
-		return;
-	}
-
-	const AActor* Owner = GetOwner();
-	const int32 OverlapCount = Sensor != nullptr ? Sensor->OverlappingActorCount : 0;
-	const FString SensorName = GetNameSafe(Sensor);
-	const FString SensorVolumeName = Sensor != nullptr ? GetNameSafe(Sensor->SensorVolume) : TEXT("None");
-	const FString DebugText = FString::Printf(
-		TEXT("Button: %s\nPressed: %s\nCurrent Weight: %.2f\nPress / Release: %.2f / %.2f\nOverlap Count: %d\nSensor: %s\nSensor Volume: %s"),
-		*GetNameSafe(Owner),
-		IsPressed() ? TEXT("Yes") : TEXT("No"),
-		CurrentWeight,
-		PressWeight,
-		ReleaseWeight,
-		OverlapCount,
-		*SensorName,
-		*SensorVolumeName);
-
-	const uint64 OwnerId = reinterpret_cast<uint64>(Owner);
-	const int32 MessageKey = static_cast<int32>(0x554F4200u + (OwnerId & 0xFFu));
-	GEngine->AddOnScreenDebugMessage(
-		MessageKey,
-		0.0f,
-		UUOUDebugSubsystem::GetDebugCategoryColor(this, EUOUDebugCategory::Puzzle, IsPressed() ? FColor::Green : FColor::Yellow),
-		DebugText,
-		false,
-		FVector2D(1.0f, 1.0f));
-}

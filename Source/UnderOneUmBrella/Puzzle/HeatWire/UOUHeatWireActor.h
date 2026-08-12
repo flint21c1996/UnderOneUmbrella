@@ -31,7 +31,6 @@ class UNDERONEUMBRELLA_API AUOUHeatWireActor
 public:
 	AUOUHeatWireActor();
 
-	virtual void Tick(float DeltaSeconds) override;
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void OnConstruction(const FTransform& Transform) override;
@@ -47,8 +46,10 @@ public:
 	UFUNCTION(BlueprintCallable, CallInEditor, Category = "Heat Wire", meta = (ToolTip = "Heat Wire Path를 따라 열선 Spline Mesh 조각을 다시 생성합니다."))
 	void RebuildHeatWireVisualSegments();
 
+	USplineComponent* GetHeatWirePathComponent() const { return HeatWirePath; }
+	UUOUHeatWireComponent* GetHeatWireComponent() const { return HeatWireComponent; }
+
 #if WITH_EDITOR
-	virtual bool ShouldTickIfViewportsOnly() const override;
 	virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
 	virtual void PostEditMove(bool bFinished) override;
 #endif
@@ -132,36 +133,6 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Heat Wire Debug", meta = (ToolTip = "열선 디버그 월드 라벨을 액터 위치에서 얼마나 띄울지 정합니다."))
 	FVector DebugWorldLocationOffset = FVector(0.0f, 0.0f, 120.0f);
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Heat Wire Debug", meta = (ToolTip = "켜져 있으면 Heat Wire Path의 스플라인 포인트를 구체로 표시합니다. 시작점은 파란색, 끝점은 빨간색, 중간점은 녹색입니다."))
-	bool bDrawPathPointDebug = true;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Heat Wire Debug", meta = (ClampMin = "1.0", ToolTip = "스플라인 포인트 디버그 구체의 반지름입니다."))
-	float PathPointDebugSphereRadius = 18.0f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Heat Wire Debug", meta = (ClampMin = "4", ToolTip = "스플라인 포인트 디버그 구체의 세그먼트 수입니다."))
-	int32 PathPointDebugSphereSegments = 16;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Heat Wire Debug", meta = (ClampMin = "0.0", ToolTip = "스플라인 포인트 디버그 구체의 선 두께입니다."))
-	float PathPointDebugThickness = 2.0f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Heat Wire Debug", meta = (ToolTip = "스플라인 포인트 디버그 구체를 실제 포인트 위치에서 얼마나 띄워 그릴지 정합니다."))
-	FVector PathPointDebugOffset = FVector::ZeroVector;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Heat Wire Debug", meta = (ToolTip = "켜져 있으면 현재 열 진행률 기준으로 각 스플라인 포인트 도달 여부를 함께 표시합니다."))
-	bool bDrawPathPointHeatStateDebug = true;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Heat Wire Debug", meta = (ToolTip = "켜져 있으면 현재 열 진행 지점을 노란색 구체로 표시합니다."))
-	bool bDrawCurrentHeatFrontDebug = true;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Heat Wire Debug", meta = (ClampMin = "1.0", ToolTip = "현재 열 진행 지점 디버그 구체의 반지름입니다."))
-	float CurrentHeatFrontDebugSphereRadius = 12.0f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Heat Wire Debug", meta = (ToolTip = "켜져 있으면 각 스플라인 포인트 위에 진행률과 도달 여부 텍스트를 표시합니다."))
-	bool bDrawPathPointDebugLabels = true;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Heat Wire Debug", meta = (ToolTip = "스플라인 포인트 디버그 텍스트를 포인트 위치에서 얼마나 띄워 그릴지 정합니다."))
-	FVector PathPointDebugLabelOffset = FVector(0.0f, 0.0f, 36.0f);
-
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<USplineMeshComponent>> HeatWireVisualSegments;
 
@@ -184,7 +155,6 @@ protected:
 	void ClearHeatWireVisualSegments();
 	UStaticMesh* ResolveHeatWireSegmentMesh();
 	void RefreshHeatWireVisualState();
-	void DrawPathPointDebug() const;
 	float GetSegmentWetnessAlpha(float SegmentStartProgress, float SegmentEndProgress, bool& bOutBlocked) const;
 	UMaterialInterface* ResolveSegmentMaterial(float SegmentBurnRatio, float SegmentWetnessAlpha, bool bActiveHeat) const;
 	void ApplySegmentMaterialState(int32 SegmentIndex, float SegmentBurnRatio, float SegmentWetnessAlpha, bool bBlocked, bool bActiveHeat);
