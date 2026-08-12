@@ -153,7 +153,8 @@ void UUOUUmbrellaComponent::TickComponent(float DeltaTime, ELevelTick TickType, 
 		return;
 	}
 
-	UpdateUmbrellaAimFacing();
+	UpdatePendingMovementAimDirection(DeltaTime);
+	UpdateUmbrellaAimFacing(DeltaTime);
 	UpdatePouring(DeltaTime);
 	UpdatePouringEffectState();
 	DrawScreenDebug();
@@ -268,6 +269,9 @@ void UUOUUmbrellaComponent::BeginPour()
 	{
 		PourAimWorldDirection = SnapPourDirectionToAngleStep(Owner->GetActorForwardVector());
 	}
+	bMovementAimInputActive = false;
+	bCommittedMovementAimWasDiagonal = false;
+	ClearPendingMovementAimDirection();
 
 	SetState(EUOUUmbrellaState::Pouring);
 }
@@ -292,14 +296,11 @@ void UUOUUmbrellaComponent::BeginLightReflecting()
 
 	if (AActor* Owner = GetOwner())
 	{
-		LightReflectingAimReferenceDirection = Owner->GetActorForwardVector().GetSafeNormal2D();
-		PourAimWorldDirection = LightReflectingAimReferenceDirection;
+		PourAimWorldDirection = SnapPourDirectionToAngleStep(Owner->GetActorForwardVector());
 	}
-	else
-	{
-		LightReflectingAimReferenceDirection = FVector::ForwardVector;
-		PourAimWorldDirection = LightReflectingAimReferenceDirection;
-	}
+	bMovementAimInputActive = false;
+	bCommittedMovementAimWasDiagonal = false;
+	ClearPendingMovementAimDirection();
 
 	SetState(EUOUUmbrellaState::LightReflecting);
 }
@@ -338,6 +339,9 @@ void UUOUUmbrellaComponent::SetPourAimMovementInput(FVector2D MovementInput, flo
 	const float SafeDeadZone = FMath::Clamp(MovementInputPourAimDeadZone, 0.0f, 1.0f);
 	if (MovementInput.SizeSquared() <= FMath::Square(SafeDeadZone))
 	{
+		// 대각선 키를 거의 동시에 놓는 과정에서 잠깐 생긴 단일 방향은 확정하지 않습니다.
+		bMovementAimInputActive = false;
+		ClearPendingMovementAimDirection();
 		return;
 	}
 
@@ -348,11 +352,54 @@ void UUOUUmbrellaComponent::SetPourAimMovementInput(FVector2D MovementInput, flo
 	WorldDirection.Z = 0.0f;
 	if (!WorldDirection.IsNearlyZero())
 	{
-		PourAimWorldDirection = CurrentState == EUOUUmbrellaState::LightReflecting
-			? ConstrainLightReflectingDirectionToAimArc(
-				SnapLightReflectingDirectionToAngleStep(WorldDirection))
-			: SnapPourDirectionToAngleStep(WorldDirection);
+		const FVector SnappedDirection = SnapPourDirectionToAngleStep(WorldDirection);
+		const bool bIsDiagonalInput =
+			FMath::Abs(MovementInput.X) > SafeDeadZone &&
+			FMath::Abs(MovementInput.Y) > SafeDeadZone;
+
+		if (!bMovementAimInputActive || bIsDiagonalInput || !bCommittedMovementAimWasDiagonal)
+		{
+			CommitMovementAimDirection(SnappedDirection, bIsDiagonalInput);
+		}
+		else if (!bHasPendingMovementAimDirection ||
+			!PendingMovementAimWorldDirection.Equals(SnappedDirection, KINDA_SMALL_NUMBER))
+		{
+			// 대각선에서 한 축만 빠졌다면 실제 방향 전환인지 키 해제 순서인지 잠시 구분합니다.
+			PendingMovementAimWorldDirection = SnappedDirection;
+			PendingMovementAimTimeRemaining = FMath::Max(0.0f, MovementAimDiagonalReleaseGraceSeconds);
+			bHasPendingMovementAimDirection = true;
+		}
+
+		bMovementAimInputActive = true;
 	}
+}
+
+void UUOUUmbrellaComponent::UpdatePendingMovementAimDirection(float DeltaTime)
+{
+	if (!bHasPendingMovementAimDirection || !bMovementAimInputActive)
+	{
+		return;
+	}
+
+	PendingMovementAimTimeRemaining -= FMath::Max(0.0f, DeltaTime);
+	if (PendingMovementAimTimeRemaining <= 0.0f)
+	{
+		CommitMovementAimDirection(PendingMovementAimWorldDirection, false);
+	}
+}
+
+void UUOUUmbrellaComponent::CommitMovementAimDirection(const FVector& AimDirection, bool bIsDiagonalInput)
+{
+	PourAimWorldDirection = AimDirection;
+	bCommittedMovementAimWasDiagonal = bIsDiagonalInput;
+	ClearPendingMovementAimDirection();
+}
+
+void UUOUUmbrellaComponent::ClearPendingMovementAimDirection()
+{
+	PendingMovementAimWorldDirection = FVector::ZeroVector;
+	PendingMovementAimTimeRemaining = 0.0f;
+	bHasPendingMovementAimDirection = false;
 }
 
 // 비나 다른 시스템에서 전달받은 물 양을 우산 저장 컨테이너에 더합니다.
@@ -485,13 +532,15 @@ void UUOUUmbrellaComponent::HandleInputPressed(FKey InputKey)
 
 	if (InputKey == PourKey)
 	{
-		BeginPour();
-		return;
-	}
-
-	if (InputKey == LightReflectingKey)
-	{
-		ToggleLightReflectingState();
+		if (CurrentState == EUOUUmbrellaState::Open ||
+			CurrentState == EUOUUmbrellaState::LightReflecting)
+		{
+			ToggleLightReflectingState();
+		}
+		else
+		{
+			BeginPour();
+		}
 		return;
 	}
 
@@ -1870,7 +1919,7 @@ void UUOUUmbrellaComponent::DrawPourSocketAndDropSpawnDebug() const
 	}
 }
 
-void UUOUUmbrellaComponent::UpdateUmbrellaAimFacing()
+void UUOUUmbrellaComponent::UpdateUmbrellaAimFacing(float DeltaTime)
 {
 	const bool bIsPourAimActive = CurrentState == EUOUUmbrellaState::Pouring && bRotateOwnerTowardsPourDirection;
 	const bool bIsLightReflectingAimActive = CurrentState == EUOUUmbrellaState::LightReflecting &&
@@ -1895,10 +1944,7 @@ void UUOUUmbrellaComponent::UpdateUmbrellaAimFacing()
 		return;
 	}
 
-	AimDirection = bIsLightReflectingAimActive
-		? ConstrainLightReflectingDirectionToAimArc(
-			SnapLightReflectingDirectionToAngleStep(AimDirection))
-		: SnapPourDirectionToAngleStep(AimDirection);
+	AimDirection = SnapPourDirectionToAngleStep(AimDirection);
 	if (AimDirection.IsNearlyZero())
 	{
 		return;
@@ -1908,12 +1954,20 @@ void UUOUUmbrellaComponent::UpdateUmbrellaAimFacing()
 	// 캐릭터가 위아래로 기울어지지 않도록 평면 회전만 적용합니다.
 	AimRotation.Pitch = 0.0f;
 	AimRotation.Roll = 0.0f;
-	Owner->SetActorRotation(AimRotation);
+	const float SafeRotationSpeed = FMath::Max(0.0f, MovementAimRotationSpeedDegreesPerSecond);
+	const FRotator NewRotation = SafeRotationSpeed > KINDA_SMALL_NUMBER
+		? FMath::RInterpConstantTo(Owner->GetActorRotation(), AimRotation, FMath::Max(0.0f, DeltaTime), SafeRotationSpeed)
+		: AimRotation;
+	Owner->SetActorRotation(NewRotation);
 }
 
 // 현재는 별도 보관 상태가 없지만, 조준 보정 정리 지점을 명확히 남겨둡니다.
 void UUOUUmbrellaComponent::ClearPourAimFacing()
 {
+	bMovementAimInputActive = false;
+	bCommittedMovementAimWasDiagonal = false;
+	ClearPendingMovementAimDirection();
+
 	if (!bHasAimFacingMovementOverride)
 	{
 		return;
@@ -2272,16 +2326,9 @@ bool UUOUUmbrellaComponent::TryGetScreenSpaceMouseAimDirection(APlayerController
 	}
 
 	ScreenDirection.Normalize();
-	const bool bUseLightReflectingSnap = CurrentState == EUOUUmbrellaState::LightReflecting;
-	const bool bShouldSnapAim = bUseLightReflectingSnap
-		? bSnapLightReflectingAimDirection
-		: bSnapPourAimDirection;
-	if (bShouldSnapAim)
+	if (bSnapPourAimDirection)
 	{
-		const float SnapAngleDegrees = bUseLightReflectingSnap
-			? LightReflectingAimSnapAngleDegrees
-			: PourAimSnapAngleDegrees;
-		const float SafeStep = FMath::Clamp(SnapAngleDegrees, 1.0f, 180.0f);
+		const float SafeStep = FMath::Clamp(PourAimSnapAngleDegrees, 1.0f, 180.0f);
 		const float ScreenAngleDegrees = FMath::RadiansToDegrees(FMath::Atan2(ScreenDirection.Y, ScreenDirection.X));
 		const float SnappedScreenAngleDegrees = FMath::GridSnap(ScreenAngleDegrees, SafeStep);
 		const float SnappedScreenAngleRadians = FMath::DegreesToRadians(SnappedScreenAngleDegrees);
@@ -2345,10 +2392,7 @@ bool UUOUUmbrellaComponent::TryGetActivePourAimDirection(FVector& AimDirection) 
 		}
 
 		AimDirection.Z = 0.0f;
-		AimDirection = CurrentState == EUOUUmbrellaState::LightReflecting
-			? ConstrainLightReflectingDirectionToAimArc(
-				SnapLightReflectingDirectionToAngleStep(AimDirection))
-			: SnapPourDirectionToAngleStep(AimDirection);
+		AimDirection = SnapPourDirectionToAngleStep(AimDirection);
 		return !AimDirection.IsNearlyZero();
 	}
 
@@ -2369,60 +2413,6 @@ FVector UUOUUmbrellaComponent::SnapPourDirectionToAngleStep(const FVector& Direc
 	const float SnappedAngleDegrees = FMath::GridSnap(AngleDegrees, SafeStep);
 	const float SnappedAngleRadians = FMath::DegreesToRadians(SnappedAngleDegrees);
 	return FVector(FMath::Cos(SnappedAngleRadians), FMath::Sin(SnappedAngleRadians), 0.0f).GetSafeNormal();
-}
-
-FVector UUOUUmbrellaComponent::SnapLightReflectingDirectionToAngleStep(const FVector& Direction) const
-{
-	FVector FlatDirection(Direction.X, Direction.Y, 0.0f);
-	if (!bSnapLightReflectingAimDirection || FlatDirection.IsNearlyZero())
-	{
-		return FlatDirection.GetSafeNormal();
-	}
-
-	const float SafeStep = FMath::Clamp(LightReflectingAimSnapAngleDegrees, 1.0f, 180.0f);
-	const float AngleDegrees = FMath::RadiansToDegrees(FMath::Atan2(FlatDirection.Y, FlatDirection.X));
-	const float SnappedAngleDegrees = FMath::GridSnap(AngleDegrees, SafeStep);
-	const float SnappedAngleRadians = FMath::DegreesToRadians(SnappedAngleDegrees);
-	return FVector(FMath::Cos(SnappedAngleRadians), FMath::Sin(SnappedAngleRadians), 0.0f).GetSafeNormal();
-}
-
-FVector UUOUUmbrellaComponent::ConstrainLightReflectingDirectionToAimArc(const FVector& Direction) const
-{
-	const FVector FlatDirection(Direction.X, Direction.Y, 0.0f);
-	if (FlatDirection.IsNearlyZero())
-	{
-		return FVector::ZeroVector;
-	}
-
-	FVector ReferenceDirection(
-		LightReflectingAimReferenceDirection.X,
-		LightReflectingAimReferenceDirection.Y,
-		0.0f);
-	if (ReferenceDirection.IsNearlyZero())
-	{
-		ReferenceDirection = GetOwner() != nullptr
-			? GetOwner()->GetActorForwardVector().GetSafeNormal2D()
-			: FVector::ForwardVector;
-	}
-	ReferenceDirection.Normalize();
-
-	const float ReferenceAngleDegrees =
-		FMath::RadiansToDegrees(FMath::Atan2(ReferenceDirection.Y, ReferenceDirection.X));
-	const FVector SafeDirection = FlatDirection.GetSafeNormal();
-	const float TargetAngleDegrees =
-		FMath::RadiansToDegrees(FMath::Atan2(SafeDirection.Y, SafeDirection.X));
-	const float HalfArcDegrees = FMath::Clamp(LightReflectingAimArcDegrees, 1.0f, 180.0f) * 0.5f;
-	const float DeltaAngleDegrees = FMath::FindDeltaAngleDegrees(
-		ReferenceAngleDegrees,
-		TargetAngleDegrees);
-	const float ConstrainedAngleDegrees =
-		ReferenceAngleDegrees + FMath::Clamp(DeltaAngleDegrees, -HalfArcDegrees, HalfArcDegrees);
-	const float ConstrainedAngleRadians = FMath::DegreesToRadians(ConstrainedAngleDegrees);
-
-	return FVector(
-		FMath::Cos(ConstrainedAngleRadians),
-		FMath::Sin(ConstrainedAngleRadians),
-		0.0f).GetSafeNormal();
 }
 
 bool UUOUUmbrellaComponent::TryGetPourDirection(FVector& PourOriginLocation, FVector& PourDirection) const

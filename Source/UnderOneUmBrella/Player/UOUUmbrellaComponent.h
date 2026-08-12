@@ -112,13 +112,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Input")
 	FKey InvertUmbrellaKey = EKeys::R;
 
-	// 뒤집힌 우산에 담긴 물을 붓기 시작하고 멈추는 기본 키입니다.
+	// 우산 상태에 따라 빛 반사를 토글하거나, 뒤집힌 우산의 물을 붓는 문맥 입력 키입니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Input")
 	FKey PourKey = EKeys::RightMouseButton;
-
-	// 펼친 우산과 빛 반사 상태를 전환하는 키입니다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Input")
-	FKey LightReflectingKey = EKeys::LeftShift;
 
 	// 테스트 중 우산 물 저장량을 빠르게 채우는 디버그 키입니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Input")
@@ -369,27 +365,23 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Umbrella|Aim", meta = (ClampMin = "0.0", EditCondition = "bUseScreenSpacePourAim", EditConditionHides))
 	float ScreenSpacePourAimDeadZone = 12.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Umbrella|Aim", meta = (ToolTip = "Snaps pouring aim to fixed angle steps around the player. 45 degrees gives 8 directions."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Umbrella|Aim", meta = (ToolTip = "물 붓기와 빛 반사 조준을 플레이어 주변의 고정 각도 단위로 보정합니다. 45도는 8방향입니다."))
 	bool bSnapPourAimDirection = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Umbrella|Aim", meta = (ClampMin = "1.0", ClampMax = "180.0", EditCondition = "bSnapPourAimDirection", EditConditionHides))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Umbrella|Aim", meta = (ClampMin = "1.0", ClampMax = "180.0", EditCondition = "bSnapPourAimDirection", EditConditionHides, DisplayName = "Movement Aim Snap Angle Degrees"))
 	float PourAimSnapAngleDegrees = 45.0f;
+
+	// 물 붓기와 빛 반사 중 캐릭터가 목표 조준 방향을 따라가는 일정한 회전 속도입니다. 0이면 즉시 회전합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Umbrella|Aim", meta = (ClampMin = "0.0", Units = "deg/s"))
+	float MovementAimRotationSpeedDegreesPerSecond = 720.0f;
+
+	// 대각선 입력에서 키 하나를 먼저 놓았을 때 단일 방향으로 잘못 확정하지 않도록 기다리는 시간입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Umbrella|Aim", meta = (ClampMin = "0.0", Units = "s"))
+	float MovementAimDiagonalReleaseGraceSeconds = 0.08f;
 
 	// 빛 반사 중 플레이어가 마우스 방향을 바라보게 할지 정합니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Aim")
 	bool bRotateOwnerTowardsLightReflectingDirection = true;
-
-	// 빛 반사 조준을 고정 각도 단위로 보정할지 정합니다.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Umbrella|Aim")
-	bool bSnapLightReflectingAimDirection = true;
-
-	// 빛 반사 조준의 각도 보정 단위입니다. 22.5도는 16방향입니다.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Umbrella|Aim", meta = (ClampMin = "1.0", ClampMax = "180.0", EditCondition = "bSnapLightReflectingAimDirection", EditConditionHides))
-	float LightReflectingAimSnapAngleDegrees = 22.5f;
-
-	// 빛 반사 상태 진입 시 정면을 중심으로 조준할 수 있는 전체 각도입니다. 180도면 좌우 90도까지 조준할 수 있습니다.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Umbrella|Aim", meta = (ClampMin = "1.0", ClampMax = "180.0", Units = "deg", DisplayName = "Light Reflecting Aim Arc", ToolTip = "빛 반사 상태에 들어간 순간의 정면을 기준으로 허용할 전체 조준 각도입니다. 최대 180도이며, 180도는 좌우 90도 범위입니다."))
-	float LightReflectingAimArcDegrees = 180.0f;
 
 	// 우산에 저장된 물이 무게 계산에 얼마나 영향을 줄지 정합니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Rain", meta = (ClampMin = "0.0"))
@@ -633,13 +625,9 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Umbrella")
 	FKey GetInvertUmbrellaKey() const { return InvertUmbrellaKey; }
 
-	// 물 붓기에 쓰는 키를 반환합니다.
+	// 우산의 문맥 동작(빛 반사/물 붓기)에 쓰는 키를 반환합니다.
 	UFUNCTION(BlueprintPure, Category = "Umbrella")
 	FKey GetPourKey() const { return PourKey; }
-
-	// 빛 반사에 쓰는 키를 반환합니다.
-	UFUNCTION(BlueprintPure, Category = "Umbrella")
-	FKey GetLightReflectingKey() const { return LightReflectingKey; }
 
 	// 디버그 물 채우기에 쓰는 키를 반환합니다.
 	UFUNCTION(BlueprintPure, Category = "Umbrella")
@@ -731,8 +719,11 @@ protected:
 
 	void DrawPourSocketAndDropSpawnDebug() const;
 
-	// 물 붓기와 빛 반사 중 플레이어가 마우스 방향을 바라보도록 회전을 보정합니다.
-	void UpdateUmbrellaAimFacing();
+	// 물 붓기와 빛 반사 중 플레이어가 목표 방향을 부드럽게 바라보도록 회전을 보정합니다.
+	void UpdateUmbrellaAimFacing(float DeltaTime);
+	void UpdatePendingMovementAimDirection(float DeltaTime);
+	void CommitMovementAimDirection(const FVector& AimDirection, bool bIsDiagonalInput);
+	void ClearPendingMovementAimDirection();
 
 	// 붓기 조준 회전에서 남겨둔 상태를 정리하기 위한 자리입니다.
 	void ClearPourAimFacing();
@@ -761,8 +752,6 @@ protected:
 	bool TryGetActivePourAimDirection(FVector& AimDirection) const;
 
 	FVector SnapPourDirectionToAngleStep(const FVector& Direction) const;
-	FVector SnapLightReflectingDirectionToAngleStep(const FVector& Direction) const;
-	FVector ConstrainLightReflectingDirectionToAimArc(const FVector& Direction) const;
 
 	// 물 붓기 시작 위치와 최종 방향을 계산합니다.
 	bool TryGetPourDirection(FVector& PourOriginLocation, FVector& PourDirection) const;
@@ -794,7 +783,11 @@ protected:
 	float TimeSinceLastPourDropSpawn = 0.0f;
 
 	FVector PourAimWorldDirection = FVector::ZeroVector;
-	FVector LightReflectingAimReferenceDirection = FVector::ForwardVector;
+	FVector PendingMovementAimWorldDirection = FVector::ZeroVector;
+	float PendingMovementAimTimeRemaining = 0.0f;
+	bool bHasPendingMovementAimDirection = false;
+	bool bMovementAimInputActive = false;
+	bool bCommittedMovementAimWasDiagonal = false;
 
 	bool bRainBlockedAudioPlaying = false;
 
