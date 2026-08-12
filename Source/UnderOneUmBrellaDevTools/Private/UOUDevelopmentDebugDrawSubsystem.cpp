@@ -20,6 +20,8 @@
 #include "GameFramework/PlayerController.h"
 #include "HAL/PlatformMemory.h"
 #include "InputCoreTypes.h"
+#include "NiagaraComponent.h"
+#include "Particles/ParticleSystemComponent.h"
 #include "Player/UOUCameraControllerComponent.h"
 #include "Player/UOUCharacter.h"
 #include "Player/UOUInteractionComponent.h"
@@ -45,6 +47,7 @@ namespace UOUDevelopmentDebugDrawPrivate
 {
 	constexpr float PuzzleProviderRefreshIntervalSeconds = 1.0f;
 	constexpr float PerformanceUpdateIntervalSeconds = 0.5f;
+	constexpr float VFXUpdateIntervalSeconds = 0.5f;
 
 	FString FormatMemoryGB(uint64 Bytes)
 	{
@@ -250,6 +253,7 @@ void UUOUDevelopmentDebugDrawSubsystem::Deinitialize()
 {
 	PlayerDebugText.Reset();
 	ResetPerformanceDebugState();
+	ResetVFXDebugState();
 	PuzzleDebugProviders.Reset();
 	PuzzleProviderRefreshTimeRemaining = 0.0f;
 	DebugControlSubsystem.Reset();
@@ -263,6 +267,7 @@ void UUOUDevelopmentDebugDrawSubsystem::Tick(float DeltaTime)
 	{
 		PlayerDebugText.Reset();
 		ResetPerformanceDebugState();
+		ResetVFXDebugState();
 		return;
 	}
 
@@ -282,6 +287,16 @@ void UUOUDevelopmentDebugDrawSubsystem::Tick(float DeltaTime)
 	else
 	{
 		ResetPerformanceDebugState();
+	}
+
+	if (ControlSubsystem->IsDebugCategoryEnabled(EUOUDebugCategory::VFX))
+	{
+		RefreshVFXDebugData(DeltaTime);
+		DrawVFXOwnerLabels();
+	}
+	else
+	{
+		ResetVFXDebugState();
 	}
 
 	if (!ControlSubsystem->IsDebugCategoryEnabled(EUOUDebugCategory::Puzzle))
@@ -605,6 +620,149 @@ void UUOUDevelopmentDebugDrawSubsystem::ResetPerformanceDebugState()
 	PerformanceUpdateTimeRemaining = 0.0f;
 	PerformanceAccumulatedDeltaTime = 0.0f;
 	PerformanceSampleCount = 0;
+}
+
+void UUOUDevelopmentDebugDrawSubsystem::RefreshVFXDebugData(float DeltaTime)
+{
+	VFXUpdateTimeRemaining -= FMath::Max(0.0f, DeltaTime);
+	if (VFXUpdateTimeRemaining > 0.0f && !VFXDebugText.IsEmpty())
+	{
+		return;
+	}
+
+	VFXOwnerLabelTexts.Reset();
+	VFXOwnerLabelLocations.Reset();
+
+	UWorld* World = GetWorld();
+	if (World == nullptr)
+	{
+		VFXDebugText = TEXT("VFX\nWorld: None");
+		VFXUpdateTimeRemaining = UOUDevelopmentDebugDrawPrivate::VFXUpdateIntervalSeconds;
+		return;
+	}
+
+	struct FVFXOwnerStats
+	{
+		int32 ActiveNiagaraCount = 0;
+		int32 ActiveCascadeCount = 0;
+		int32 LocationSampleCount = 0;
+		FVector AccumulatedLocation = FVector::ZeroVector;
+	};
+
+	int32 TotalNiagaraCount = 0;
+	int32 ActiveNiagaraCount = 0;
+	int32 TotalCascadeCount = 0;
+	int32 ActiveCascadeCount = 0;
+	TMap<AActor*, FVFXOwnerStats> OwnerStats;
+
+	for (TActorIterator<AActor> It(World); It; ++It)
+	{
+		AActor* Actor = *It;
+		if (!IsValid(Actor))
+		{
+			continue;
+		}
+
+		TArray<UNiagaraComponent*> NiagaraComponents;
+		Actor->GetComponents<UNiagaraComponent>(NiagaraComponents);
+		TotalNiagaraCount += NiagaraComponents.Num();
+		for (UNiagaraComponent* NiagaraComponent : NiagaraComponents)
+		{
+			if (!IsValid(NiagaraComponent)
+				|| !NiagaraComponent->IsRegistered()
+				|| !NiagaraComponent->IsActive())
+			{
+				continue;
+			}
+
+			++ActiveNiagaraCount;
+			FVFXOwnerStats& Stats = OwnerStats.FindOrAdd(Actor);
+			++Stats.ActiveNiagaraCount;
+			++Stats.LocationSampleCount;
+			Stats.AccumulatedLocation += NiagaraComponent->GetComponentLocation();
+		}
+
+		TArray<UParticleSystemComponent*> CascadeComponents;
+		Actor->GetComponents<UParticleSystemComponent>(CascadeComponents);
+		TotalCascadeCount += CascadeComponents.Num();
+		for (UParticleSystemComponent* CascadeComponent : CascadeComponents)
+		{
+			if (!IsValid(CascadeComponent)
+				|| !CascadeComponent->IsRegistered()
+				|| !CascadeComponent->IsActive())
+			{
+				continue;
+			}
+
+			++ActiveCascadeCount;
+			FVFXOwnerStats& Stats = OwnerStats.FindOrAdd(Actor);
+			++Stats.ActiveCascadeCount;
+			++Stats.LocationSampleCount;
+			Stats.AccumulatedLocation += CascadeComponent->GetComponentLocation();
+		}
+	}
+
+	VFXDebugText = FString::Printf(
+		TEXT("VFX\nNiagara Components: %d / %d active\nCascade Components: %d / %d active\nOwners: %d"),
+		ActiveNiagaraCount,
+		TotalNiagaraCount,
+		ActiveCascadeCount,
+		TotalCascadeCount,
+		OwnerStats.Num());
+
+	VFXOwnerLabelTexts.Reserve(OwnerStats.Num());
+	VFXOwnerLabelLocations.Reserve(OwnerStats.Num());
+	for (const TPair<AActor*, FVFXOwnerStats>& Pair : OwnerStats)
+	{
+		const AActor* Owner = Pair.Key;
+		const FVFXOwnerStats& Stats = Pair.Value;
+		if (!IsValid(Owner) || Stats.LocationSampleCount <= 0)
+		{
+			continue;
+		}
+
+		VFXOwnerLabelTexts.Add(FString::Printf(
+			TEXT("VFX: %s\nNiagara: %d\nCascade: %d"),
+			*Owner->GetName(),
+			Stats.ActiveNiagaraCount,
+			Stats.ActiveCascadeCount));
+		VFXOwnerLabelLocations.Add(
+			Stats.AccumulatedLocation / static_cast<float>(Stats.LocationSampleCount)
+			+ FVector(0.0f, 0.0f, 120.0f));
+	}
+
+	VFXUpdateTimeRemaining = UOUDevelopmentDebugDrawPrivate::VFXUpdateIntervalSeconds;
+}
+
+void UUOUDevelopmentDebugDrawSubsystem::DrawVFXOwnerLabels() const
+{
+	UWorld* World = GetWorld();
+	if (World == nullptr)
+	{
+		return;
+	}
+
+	const int32 LabelCount = FMath::Min(VFXOwnerLabelTexts.Num(), VFXOwnerLabelLocations.Num());
+	for (int32 Index = 0; Index < LabelCount; ++Index)
+	{
+		DrawDebugString(
+			World,
+			VFXOwnerLabelLocations[Index],
+			VFXOwnerLabelTexts[Index],
+			nullptr,
+			FColor::Cyan,
+			0.0f,
+			true,
+			0.9f);
+	}
+}
+
+void UUOUDevelopmentDebugDrawSubsystem::ResetVFXDebugState()
+{
+	VFXDebugText.Reset();
+	VFXOwnerLabelTexts.Reset();
+	VFXOwnerLabelLocations.Reset();
+	VFXUpdateTimeRemaining = 0.0f;
 }
 
 TStatId UUOUDevelopmentDebugDrawSubsystem::GetStatId() const

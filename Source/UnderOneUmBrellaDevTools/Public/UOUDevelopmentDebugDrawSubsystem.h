@@ -35,10 +35,16 @@ public:
 	// 이 Subsystem에서 주기적으로 갱신한 최신 성능 정보를 HUD에 제공합니다.
 	const FString& GetPerformanceDebugText() const { return PerformanceDebugText; }
 
+	// 이 Subsystem에서 주기적으로 갱신한 최신 VFX 개수 정보를 HUD에 제공합니다.
+	const FString& GetVFXDebugText() const { return VFXDebugText; }
+
 private:
 	void RefreshPlayerDebugText();
 	void RefreshPerformanceDebugText(float DeltaTime);
 	void ResetPerformanceDebugState();
+	void RefreshVFXDebugData(float DeltaTime);
+	void DrawVFXOwnerLabels() const;
+	void ResetVFXDebugState();
 	void TryAddPuzzleDebugProvider(UObject* ProviderObject);
 	void DrawPuzzleProviderConnections() const;
 	void DrawPuzzleProviderLabels() const;
@@ -66,4 +72,16 @@ private:
 
 	// 평균 프레임 시간을 계산하기 위해 누적한 샘플 수입니다.
 	int32 PerformanceSampleCount = 0;
+
+	// 개발 HUD가 읽는 현재 월드 VFX 개수 정보의 런타임 캐시입니다.
+	FString VFXDebugText;
+
+	// 활성 VFX를 가진 Owner별 월드 라벨 문자열의 런타임 캐시입니다.
+	TArray<FString> VFXOwnerLabelTexts;
+
+	// Owner별 월드 라벨을 표시할 위치의 런타임 캐시입니다.
+	TArray<FVector> VFXOwnerLabelLocations;
+
+	// 다음 VFX 컴포넌트 스캔까지 남은 런타임 시간입니다.
+	float VFXUpdateTimeRemaining = 0.0f;
 };
