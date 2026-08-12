@@ -570,6 +570,27 @@ FText SUOUDevelopmentPuzzleCheatHUD::GetPlayerDebugInfoText() const
 		: DebugText);
 }
 
+FText SUOUDevelopmentPuzzleCheatHUD::GetPerformanceDebugInfoText() const
+{
+	const UUOUDevelopmentDebugControlSubsystem* ControlSubsystem = DebugControlSubsystem.Get();
+	const UUOUDevelopmentDebugDrawSubsystem* DrawSubsystem = DebugDrawSubsystem.Get();
+	if (ControlSubsystem == nullptr || DrawSubsystem == nullptr)
+	{
+		return FText::FromString(TEXT("Performance debug information is unavailable."));
+	}
+
+	if (!ControlSubsystem->IsDebugToolsEnabled()
+		|| !ControlSubsystem->IsDebugCategoryEnabled(EUOUDebugCategory::Performance))
+	{
+		return FText::FromString(TEXT("Performance debug information is disabled."));
+	}
+
+	const FString& DebugText = DrawSubsystem->GetPerformanceDebugText();
+	return FText::FromString(DebugText.IsEmpty()
+		? TEXT("Waiting for performance debug information...")
+		: DebugText);
+}
+
 FText SUOUDevelopmentPuzzleCheatHUD::GetStatusText() const
 {
 	const UUOUDevelopmentPuzzleCheatSubsystem* Subsystem = PuzzleCheatSubsystem.Get();
