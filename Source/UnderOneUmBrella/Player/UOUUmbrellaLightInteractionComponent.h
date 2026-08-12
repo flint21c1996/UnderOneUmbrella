@@ -68,15 +68,6 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Light|Placement", meta = (EditCondition = "bAlignLightInteractionToRainBlocker", DisplayName = "빛 반사 상태 추가 위치 오프셋", ToolTip = "회전된 빛 판정 박스에 추가할 플레이어 로컬 위치 오프셋입니다."))
 	FVector LightReflectingBlockerAdditionalLocalOffset = FVector::ZeroVector;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Light|Debug", meta = (DisplayName = "Draw Reflector Debug", ToolTip = "Puzzle 월드 디버그가 켜져 있을 때 우산 반사판 박스와 반사 방향을 표시합니다."))
-	bool bDrawReflectorDebug = true;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Light|Debug", meta = (ClampMin = "0.0", DisplayName = "Reflector Debug Arrow Length", ToolTip = "우산 반사판에서 표시하는 반사 방향 화살표의 길이입니다."))
-	float ReflectorDebugArrowLength = 180.0f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Light|Debug", meta = (ClampMin = "0.0", DisplayName = "Reflector Debug Thickness", ToolTip = "우산 반사판 디버그 박스와 화살표의 선 두께입니다."))
-	float ReflectorDebugThickness = 3.0f;
-
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Light", meta = (ClampMin = "0.0"))
 	FVector RuntimeSurfaceBoxExtent = FVector(70.0f, 70.0f, 6.0f);
 
@@ -118,8 +109,6 @@ protected:
 		FVector& OutWorldCenter,
 		FRotator& OutWorldRotation,
 		FVector& OutHalfExtent) const;
-	void DrawReflectorDebug() const;
-
 	UFUNCTION()
 	void HandleUmbrellaStateChanged(EUOUUmbrellaState NewState, bool bHasUmbrella);
 };

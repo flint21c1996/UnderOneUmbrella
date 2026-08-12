@@ -43,6 +43,7 @@
 #include "Player/UOURainReceiverComponent.h"
 #include "Player/UOUUmbrellaComponent.h"
 #include "Player/UOUUmbrellaLightInteractionComponent.h"
+#include "Player/UOUUmbrellaLightShadeVolumeComponent.h"
 #include "Player/UOUWaterContainerComponent.h"
 #include "Puzzle/PushPull/UOUPushPullObjectComponent.h"
 #include "Puzzle/HeatWire/UOUHeatWireActor.h"
@@ -525,6 +526,7 @@ void UUOUDevelopmentDebugDrawSubsystem::Tick(float DeltaTime)
 	DrawWaterBasinDebug();
 	DrawRotatableMirrorDebug();
 	DrawLightExposureReceiverDebug();
+	DrawUmbrellaLightReflectorDebug();
 	DrawSelectedPuzzleInfo();
 
 	PuzzleProviderRefreshTimeRemaining -= DeltaTime;
@@ -2258,6 +2260,105 @@ void UUOUDevelopmentDebugDrawSubsystem::DrawLightExposureReceiverDebug() const
 				TextColor,
 				0.0f,
 				true,
+				1.0f);
+		}
+	}
+}
+
+void UUOUDevelopmentDebugDrawSubsystem::DrawUmbrellaLightReflectorDebug() const
+{
+	UWorld* World = GetWorld();
+	const UUOUDevelopmentDebugControlSubsystem* ControlSubsystem = DebugControlSubsystem.Get();
+	const TArray<AActor*> SelectedActors = ControlSubsystem != nullptr
+		? ControlSubsystem->GetSelectedDebugActors()
+		: TArray<AActor*>();
+	if (World == nullptr || SelectedActors.IsEmpty())
+	{
+		return;
+	}
+
+	constexpr float ReflectorArrowLength = 180.0f;
+	constexpr float ReflectorThickness = 3.0f;
+	for (AActor* SelectedActor : SelectedActors)
+	{
+		if (!IsValid(SelectedActor))
+		{
+			continue;
+		}
+
+		TArray<UUOUUmbrellaLightInteractionComponent*> LightInteractionComponents;
+		SelectedActor->GetComponents<UUOUUmbrellaLightInteractionComponent>(
+			LightInteractionComponents);
+		for (const UUOUUmbrellaLightInteractionComponent* LightInteractionComponent
+			: LightInteractionComponents)
+		{
+			if (!IsValid(LightInteractionComponent)
+				|| !IsValid(LightInteractionComponent->LightSurfaceComponent))
+			{
+				continue;
+			}
+
+			const UUOULightInteractionSurfaceComponent* LightSurfaceComponent =
+				LightInteractionComponent->LightSurfaceComponent;
+			const EUOULightInteractionMode InteractionMode =
+				LightSurfaceComponent->LightInteractionMode;
+			const bool bShadeActive =
+				IsValid(LightInteractionComponent->LightShadeVolumeComponent)
+				&& LightInteractionComponent->LightShadeVolumeComponent->CanShadeLight();
+			const bool bDebugBlocking = InteractionMode == EUOULightInteractionMode::Blocking
+				|| (InteractionMode == EUOULightInteractionMode::Disabled && bShadeActive);
+			const FColor SurfaceColor = InteractionMode == EUOULightInteractionMode::Reflecting
+				? FColor::Magenta
+				: (bDebugBlocking ? FColor::Yellow : FColor::Silver);
+			const FVector SurfaceLocation = LightSurfaceComponent->GetComponentLocation();
+			const FVector SurfaceExtent = LightSurfaceComponent->GetScaledBoxExtent();
+
+			DrawDebugBox(
+				World,
+				SurfaceLocation,
+				SurfaceExtent,
+				LightSurfaceComponent->GetComponentQuat(),
+				SurfaceColor,
+				false,
+				0.0f,
+				0,
+				ReflectorThickness);
+
+			const AActor* Owner = LightInteractionComponent->GetOwner();
+			const FVector ReflectionDirection = Owner != nullptr
+				? Owner->GetActorForwardVector().GetSafeNormal()
+				: LightSurfaceComponent->GetForwardVector().GetSafeNormal();
+			if (InteractionMode == EUOULightInteractionMode::Reflecting
+				&& !ReflectionDirection.IsNearlyZero())
+			{
+				DrawDebugDirectionalArrow(
+					World,
+					SurfaceLocation,
+					SurfaceLocation + ReflectionDirection * ReflectorArrowLength,
+					24.0f,
+					FColor::Green,
+					false,
+					0.0f,
+					0,
+					ReflectorThickness);
+			}
+
+			const TCHAR* ModeText = InteractionMode == EUOULightInteractionMode::Reflecting
+				? TEXT("Reflecting")
+				: (bDebugBlocking ? TEXT("Blocking") : TEXT("Disabled"));
+			DrawDebugString(
+				World,
+				SurfaceLocation + FVector(0.0f, 0.0f, SurfaceExtent.Z + 20.0f),
+				FString::Printf(
+					TEXT("Umbrella Reflector: %s\nExtent: %.1f %.1f %.1f"),
+					ModeText,
+					SurfaceExtent.X,
+					SurfaceExtent.Y,
+					SurfaceExtent.Z),
+				nullptr,
+				SurfaceColor,
+				0.0f,
+				false,
 				1.0f);
 		}
 	}

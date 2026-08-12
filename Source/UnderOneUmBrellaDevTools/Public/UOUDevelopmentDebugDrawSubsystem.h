@@ -71,6 +71,7 @@ private:
 	void DrawWaterBasinDebug() const;
 	void DrawRotatableMirrorDebug() const;
 	void DrawLightExposureReceiverDebug() const;
+	void DrawUmbrellaLightReflectorDebug() const;
 	void DrawSelectedPuzzleInfo() const;
 	void DrawPuzzleProviderConnections() const;
 	void DrawPuzzleProviderLabels() const;
