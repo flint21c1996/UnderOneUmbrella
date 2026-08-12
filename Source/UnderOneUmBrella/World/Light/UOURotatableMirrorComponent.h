@@ -125,9 +125,6 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Mirror|Push", meta = (ClampMin = "1.0", Units = "cm", ToolTip = "이 거리 이상 가장자리를 밀면 최대 회전력이 적용됩니다."))
 	float FullTorqueLeverArm = 100.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Mirror|Debug", meta = (ToolTip = "회전축, 플레이어의 밀기 방향 및 현재 각도를 표시합니다."))
-	bool bDrawDebug = false;
-
 	UPROPERTY(BlueprintReadOnly, Transient, Category = "Mirror|Runtime", meta = (Units = "deg", ToolTip = "초기 배치 각도를 기준으로 한 현재 회전각입니다."))
 	float CurrentAngle = 0.0f;
 
@@ -182,7 +179,6 @@ protected:
 	float CalculatePushInput(const APawn* Pusher) const;
 	FVector GetPivotWorldLocation() const;
 	FVector GetRotationAxisWorld() const;
-	void DrawDebugState(const TArray<AActor*>& OverlappingPushers) const;
 	USceneComponent* FindNearestPushHandle(const AActor* Interactor) const;
 	bool UpdateAttachedPlayerTransform(bool bSweepMovement);
 	void ApplyPusherFacing() const;
