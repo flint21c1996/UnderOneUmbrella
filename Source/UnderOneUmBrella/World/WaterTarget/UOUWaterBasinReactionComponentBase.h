@@ -245,7 +245,6 @@ protected:
 
 	float ResolveCurrentValue(const FUOUWaterBasinReactionContext& Context) const;
 	bool DoesValueSatisfyCondition(float CurrentValue) const;
-	void DrawReactionDebugText();
 
 private:
 	UPROPERTY(Transient)

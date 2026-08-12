@@ -14,6 +14,7 @@
 #include "Components/SplineComponent.h"
 #include "Debug/UOUPuzzleDebugProviderComponent.h"
 #include "Debug/UOUDebugProvider.h"
+#include "Debug/UOUPuzzleDebugInfoProvider.h"
 #include "Debug/UOUDevelopmentToolsBuild.h"
 #include "DrawDebugHelpers.h"
 #include "DynamicRHI.h"
@@ -56,9 +57,14 @@
 #include "World/Environment/UOUEnvironmentVisualComponent.h"
 #include "World/Environment/UOUPlayerBlockingWallActor.h"
 #include "World/Light/UOULightInteractionSurfaceComponent.h"
+#include "World/Light/UOULightExposureReceiverComponent.h"
+#include "World/Light/UOULightExposureSourceComponent.h"
+#include "World/Light/UOURotatableMirrorComponent.h"
 #include "World/NPC/UOUNPCCharacter.h"
 #include "World/Pour/UOUPourDropActor.h"
 #include "World/RainArea/UOUUmbrellaRainArea.h"
+#include "World/WaterTarget/UOUWaterBasinReactionComponentBase.h"
+#include "World/WaterTarget/UOUWaterBasinTargetComponent.h"
 
 #if !UOU_WITH_DEVELOPMENT_TOOLS
 #error UOUDevelopmentDebugDrawSubsystem must only be compiled when development tools are enabled.
@@ -515,6 +521,8 @@ void UUOUDevelopmentDebugDrawSubsystem::Tick(float DeltaTime)
 	DrawHeatWireDebug();
 	DrawWeightedButtonDebug();
 	DrawPlayerBlockingWallDebug();
+	DrawWaterBasinDebug();
+	DrawSelectedPuzzleInfo();
 
 	PuzzleProviderRefreshTimeRemaining -= DeltaTime;
 	if (PuzzleProviderRefreshTimeRemaining <= 0.0f)
@@ -1945,6 +1953,212 @@ void UUOUDevelopmentDebugDrawSubsystem::DrawPlayerBlockingWallDebug() const
 	}
 }
 
+void UUOUDevelopmentDebugDrawSubsystem::DrawWaterBasinDebug() const
+{
+	UWorld* World = GetWorld();
+	const UUOUDevelopmentDebugControlSubsystem* ControlSubsystem = DebugControlSubsystem.Get();
+	AActor* SelectedActor = ControlSubsystem != nullptr
+		? ControlSubsystem->GetSelectedDebugActor()
+		: nullptr;
+	if (World == nullptr || !IsValid(SelectedActor))
+	{
+		return;
+	}
+
+	TArray<UUOUWaterBasinTargetComponent*> TargetComponents;
+	SelectedActor->GetComponents<UUOUWaterBasinTargetComponent>(TargetComponents);
+	for (const UUOUWaterBasinTargetComponent* TargetComponent : TargetComponents)
+	{
+		if (!IsValid(TargetComponent))
+		{
+			continue;
+		}
+
+		const FBox OwnerBounds = SelectedActor->GetComponentsBoundingBox(true);
+		const FVector OwnerCenter = OwnerBounds.IsValid
+			? OwnerBounds.GetCenter()
+			: SelectedActor->GetActorLocation();
+		const FVector OwnerExtent = OwnerBounds.IsValid
+			? OwnerBounds.GetExtent()
+			: FVector(50.0f);
+		const float BottomWorldZ = TargetComponent->GetBottomWorldZ();
+		const float TopWorldZ = TargetComponent->GetTopWorldZ();
+		const float HalfHeight = FMath::Max(1.0f, (TopWorldZ - BottomWorldZ) * 0.5f);
+		FVector CapacityCenter = OwnerCenter;
+		CapacityCenter.Z = BottomWorldZ + HalfHeight;
+		const FVector CapacityExtent(
+			FMath::Max(1.0f, OwnerExtent.X),
+			FMath::Max(1.0f, OwnerExtent.Y),
+			HalfHeight);
+		DrawDebugBox(
+			World,
+			CapacityCenter,
+			CapacityExtent,
+			FColor::Blue,
+			false,
+			0.0f,
+			0,
+			3.0f);
+
+		FVector SurfaceCenter = OwnerCenter;
+		SurfaceCenter.Z = TargetComponent->WaterSurfaceWorldZ;
+		DrawDebugBox(
+			World,
+			SurfaceCenter,
+			FVector(CapacityExtent.X, CapacityExtent.Y, 2.0f),
+			FColor::Cyan,
+			false,
+			0.0f,
+			0,
+			2.0f);
+
+		const FUOUWaterBasinGroupDebugData GroupData =
+			TargetComponent->GetConnectedGroupDebugData();
+		const FString DebugText = FString::Printf(
+			TEXT("Water Basin: %s\nTarget %.2f / %.2f (%.1f%%)\nDepth %.2f / Surface Z %.1f\nGroup %d targets / %.2f / %.2f (%.1f%%)"),
+			*SelectedActor->GetName(),
+			TargetComponent->CurrentWaterVolume,
+			TargetComponent->GetCapacity(),
+			TargetComponent->CurrentFillRatio * 100.0f,
+			TargetComponent->CurrentWaterDepth,
+			TargetComponent->WaterSurfaceWorldZ,
+			GroupData.TargetCount,
+			GroupData.TotalVolume,
+			GroupData.TotalCapacity,
+			GroupData.FillRatio * 100.0f);
+		DrawDebugString(
+			World,
+			FVector(OwnerCenter.X, OwnerCenter.Y, TopWorldZ + 100.0f),
+			DebugText,
+			nullptr,
+			FColor::Cyan,
+			0.0f,
+			true,
+			0.9f);
+
+		for (const AActor* ConnectedActor : TargetComponent->ConnectedTargets)
+		{
+			if (!IsValid(ConnectedActor))
+			{
+				continue;
+			}
+
+			const FBox ConnectedBounds = ConnectedActor->GetComponentsBoundingBox(true);
+			const FVector ConnectedCenter = ConnectedBounds.IsValid
+				? ConnectedBounds.GetCenter()
+				: ConnectedActor->GetActorLocation();
+			DrawDebugDirectionalArrow(
+				World,
+				OwnerCenter,
+				ConnectedCenter,
+				50.0f,
+				FColor::Yellow,
+				false,
+				0.0f,
+				0,
+				3.0f);
+		}
+	}
+
+	TArray<UUOUWaterBasinReactionComponentBase*> ReactionComponents;
+	SelectedActor->GetComponents<UUOUWaterBasinReactionComponentBase>(ReactionComponents);
+	for (int32 Index = 0; Index < ReactionComponents.Num(); ++Index)
+	{
+		const UUOUWaterBasinReactionComponentBase* ReactionComponent = ReactionComponents[Index];
+		if (!IsValid(ReactionComponent))
+		{
+			continue;
+		}
+
+		const TArray<FString> DebugLines = ReactionComponent->GetPuzzleDebugInfo_Implementation();
+		const FString DebugText = FString::Join(DebugLines, LINE_TERMINATOR);
+		DrawDebugString(
+			World,
+			SelectedActor->GetActorLocation()
+				+ FVector(0.0f, 0.0f, 280.0f + static_cast<float>(Index) * 140.0f),
+			DebugText,
+			nullptr,
+			ReactionComponent->bHasEvaluated
+				? (ReactionComponent->bIsConditionSatisfied ? FColor::Green : FColor::Red)
+				: FColor::Yellow,
+			0.0f,
+			true,
+			0.85f);
+	}
+}
+
+void UUOUDevelopmentDebugDrawSubsystem::DrawSelectedPuzzleInfo() const
+{
+	UWorld* World = GetWorld();
+	const UUOUDevelopmentDebugControlSubsystem* ControlSubsystem = DebugControlSubsystem.Get();
+	AActor* SelectedActor = ControlSubsystem != nullptr
+		? ControlSubsystem->GetSelectedDebugActor()
+		: nullptr;
+	if (World == nullptr || !IsValid(SelectedActor))
+	{
+		return;
+	}
+
+	TArray<UObject*> InfoProviders;
+	if (SelectedActor->GetClass()->ImplementsInterface(UUOUPuzzleDebugInfoProvider::StaticClass()))
+	{
+		InfoProviders.Add(SelectedActor);
+	}
+
+	TInlineComponentArray<UActorComponent*> Components(SelectedActor);
+	for (UActorComponent* Component : Components)
+	{
+		if (!IsValid(Component)
+			|| Component->IsA<UUOULightExposureReceiverComponent>()
+			|| Component->IsA<UUOULightExposureSourceComponent>()
+			|| Component->IsA<UUOURotatableMirrorComponent>()
+			|| Component->IsA<UUOUWaterBasinReactionComponentBase>()
+			|| !Component->GetClass()->ImplementsInterface(
+				UUOUPuzzleDebugInfoProvider::StaticClass()))
+		{
+			continue;
+		}
+
+		InfoProviders.Add(Component);
+	}
+
+	const FBox ActorBounds = SelectedActor->GetComponentsBoundingBox(true);
+	const float BaseWorldZ = ActorBounds.IsValid
+		? ActorBounds.Max.Z + 180.0f
+		: SelectedActor->GetActorLocation().Z + 180.0f;
+	for (int32 Index = 0; Index < InfoProviders.Num(); ++Index)
+	{
+		UObject* Provider = InfoProviders[Index];
+		if (!IsValid(Provider))
+		{
+			continue;
+		}
+
+		const TArray<FString> DebugLines =
+			IUOUPuzzleDebugInfoProvider::Execute_GetPuzzleDebugInfo(Provider);
+		if (DebugLines.IsEmpty())
+		{
+			continue;
+		}
+
+		const FString DebugText = FString::Printf(
+			TEXT("%s\n%s"),
+			*Provider->GetName(),
+			*FString::Join(DebugLines, LINE_TERMINATOR));
+		FVector DrawLocation = SelectedActor->GetActorLocation();
+		DrawLocation.Z = BaseWorldZ + static_cast<float>(Index) * 150.0f;
+		DrawDebugString(
+			World,
+			DrawLocation,
+			DebugText,
+			nullptr,
+			FColor::White,
+			0.0f,
+			true,
+			0.85f);
+	}
+}
+
 void UUOUDevelopmentDebugDrawSubsystem::RefreshPuzzleDebugProviders()
 {
 	PuzzleDebugProviders.Reset();
@@ -2042,7 +2256,9 @@ void UUOUDevelopmentDebugDrawSubsystem::GetSelectableDebugActors(
 
 		bool bPuzzleActor = Actor->IsA<AUOUHeatWireActor>()
 			|| Actor->IsA<AUOUPlayerBlockingWallActor>()
-			|| Actor->FindComponentByClass<UUOUWeightedButtonComponent>() != nullptr;
+			|| Actor->FindComponentByClass<UUOUWeightedButtonComponent>() != nullptr
+			|| Actor->FindComponentByClass<UUOUWaterBasinTargetComponent>() != nullptr
+			|| Actor->FindComponentByClass<UUOUWaterBasinReactionComponentBase>() != nullptr;
 		if (!bPuzzleActor
 			&& Actor->GetClass()->ImplementsInterface(UUOUDebugProvider::StaticClass()))
 		{
@@ -2058,6 +2274,33 @@ void UUOUDevelopmentDebugDrawSubsystem::GetSelectableDebugActors(
 					&& Component->GetClass()->ImplementsInterface(UUOUDebugProvider::StaticClass())
 					&& IUOUDebugProvider::Execute_GetDebugCategory(Component)
 						== EUOUDebugCategory::Puzzle)
+				{
+					bPuzzleActor = true;
+					break;
+				}
+			}
+		}
+		if (!bPuzzleActor
+			&& Actor->GetClass()->ImplementsInterface(
+				UUOUPuzzleDebugInfoProvider::StaticClass()))
+		{
+			bPuzzleActor = true;
+		}
+		if (!bPuzzleActor)
+		{
+			TInlineComponentArray<UActorComponent*> Components(Actor);
+			for (UActorComponent* Component : Components)
+			{
+				if (!IsValid(Component)
+					|| Component->IsA<UUOULightExposureReceiverComponent>()
+					|| Component->IsA<UUOULightExposureSourceComponent>()
+					|| Component->IsA<UUOURotatableMirrorComponent>())
+				{
+					continue;
+				}
+
+				if (Component->GetClass()->ImplementsInterface(
+					UUOUPuzzleDebugInfoProvider::StaticClass()))
 				{
 					bPuzzleActor = true;
 					break;

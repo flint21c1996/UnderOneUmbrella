@@ -2,8 +2,6 @@
 
 #include "World/WaterTarget/UOUWaterBasinReactionComponentBase.h"
 
-#include "Debug/UOUDebugSubsystem.h"
-#include "DrawDebugHelpers.h"
 #include "GameFramework/Actor.h"
 #include "World/WaterTarget/UOUWaterBasinPlatformComponent.h"
 #include "World/WaterTarget/UOUWaterBasinTargetComponent.h"
@@ -15,7 +13,6 @@ namespace
 
 	// DrawDebugString에서 0초는 한 프레임 표시를 의미합니다.
 	// 이 컴포넌트는 Tick마다 다시 그리므로 지속 시간을 길게 주면 이전 텍스트가 겹쳐 보일 수 있습니다.
-	constexpr float ReactionDebugTextLifeTime = 0.0f;
 
 	FString GetReactionValueSourceDebugName(EUOUWaterBasinReactionValueSource InValueSource)
 	{
@@ -33,7 +30,6 @@ namespace
 		return TEXT("Unknown");
 	}
 }
-
 UUOUWaterBasinReactionComponentBase::UUOUWaterBasinReactionComponentBase()
 {
 	PrimaryComponentTick.bCanEverTick = true;
@@ -74,7 +70,6 @@ void UUOUWaterBasinReactionComponentBase::TickComponent(float DeltaTime, ELevelT
 		EvaluateReaction();
 	}
 
-	DrawReactionDebugText();
 }
 
 #if WITH_EDITOR
@@ -377,35 +372,3 @@ void UUOUWaterBasinReactionComponentBase::NotifyReactionResult(const FUOUWaterBa
 	}
 }
 
-void UUOUWaterBasinReactionComponentBase::DrawReactionDebugText()
-{
-	if (!bDrawDebugText
-		|| !UUOUDebugSubsystem::IsDebugWorldLabelEnabled(this, EUOUDebugCategory::Puzzle)
-		|| !GetWorld()
-		|| !GetOwner())
-	{
-		return;
-	}
-
-	const FVector DrawLocation = GetOwner()->GetActorLocation() + DrawDebugOffset;
-	const FColor TextColor = UUOUDebugSubsystem::GetDebugCategoryColor(
-		this,
-		EUOUDebugCategory::Puzzle,
-		bHasEvaluated ? (bIsConditionSatisfied ? DebugSatisfiedColor : DebugUnsatisfiedColor) : DebugWaitingColor);
-
-	const FString DebugText = FString::Printf(
-		TEXT("%s\nSatisfied: %s\nValue Source: %s\nValue: %.3f / %.3f\nWater Z: %.1f\nDepth: %.3f\nFill: %.3f\nVolume: %.3f\nEvents: +%d / -%d"),
-		*GetName(),
-		bIsConditionSatisfied ? TEXT("TRUE") : TEXT("FALSE"),
-		*GetReactionValueSourceDebugName(bHasEvaluated ? LastContext.ValueSource : ValueSource),
-		LastContext.CurrentValue,
-		LastContext.ThresholdValue,
-		LastContext.WaterSurfaceWorldZ,
-		LastContext.WaterDepth,
-		LastContext.WaterFillRatio,
-		LastContext.WaterVolume,
-		SatisfiedEventCount,
-		UnsatisfiedEventCount);
-
-	DrawDebugString(GetWorld(), DrawLocation, DebugText, nullptr, TextColor, ReactionDebugTextLifeTime, true);
-}

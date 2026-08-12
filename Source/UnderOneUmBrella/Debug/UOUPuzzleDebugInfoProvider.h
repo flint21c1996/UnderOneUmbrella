@@ -8,12 +8,12 @@
 
 // Interface for puzzle actors or components that expose compact runtime values to the condition-group debug board.
 UINTERFACE(BlueprintType)
-class UUOUPuzzleDebugInfoProvider : public UInterface
+class UNDERONEUMBRELLA_API UUOUPuzzleDebugInfoProvider : public UInterface
 {
 	GENERATED_BODY()
 };
 
-class IUOUPuzzleDebugInfoProvider
+class UNDERONEUMBRELLA_API IUOUPuzzleDebugInfoProvider
 {
 	GENERATED_BODY()
 

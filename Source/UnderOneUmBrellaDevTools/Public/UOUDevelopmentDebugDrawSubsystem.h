@@ -68,6 +68,8 @@ private:
 	void DrawHeatWireDebug() const;
 	void DrawWeightedButtonDebug() const;
 	void DrawPlayerBlockingWallDebug() const;
+	void DrawWaterBasinDebug() const;
+	void DrawSelectedPuzzleInfo() const;
 	void DrawPuzzleProviderConnections() const;
 	void DrawPuzzleProviderLabels() const;
 	bool ShouldDrawActor(const AActor* Actor) const;
