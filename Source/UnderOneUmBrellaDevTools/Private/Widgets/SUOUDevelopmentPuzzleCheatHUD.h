@@ -44,7 +44,6 @@ private:
 	};
 
 	void RebuildGraphRows();
-	void RebuildStepRows();
 	void RebuildDebugActorRows();
 	void RebuildDebugActorClassFilters(const TArray<FUOUDevelopmentDebugActorEntry>& ActorEntries);
 	FReply HandleToggleClicked();
@@ -57,10 +56,8 @@ private:
 	FReply HandleDebugActorClicked(TWeakObjectPtr<AActor> DebugActor);
 	FReply HandleDebugActorClassFilterClicked(TWeakObjectPtr<UClass> DebugActorClass);
 	FReply HandleRefreshClicked();
-	FReply HandleNextClicked();
 	FReply HandleCancelClicked();
 	void HandleGraphNodeClicked(int32 TargetNodeIndex);
-	FReply HandleStepClicked(int32 TargetStepOrder);
 	EVisibility GetPanelVisibility() const;
 	EVisibility GetConditionPageVisibility() const;
 	EVisibility GetDebugPageVisibility() const;
@@ -75,7 +72,6 @@ private:
 	FSlateColor GetGraphStatusColor() const;
 	FText GetStatusText() const;
 	FSlateColor GetStatusColor() const;
-	bool IsPuzzleActionEnabled() const;
 	bool IsCancelEnabled() const;
 	bool IsDebugControlAvailable() const;
 	bool DoesDebugActorPassClassFilter(const AActor* DebugActor) const;
@@ -91,9 +87,6 @@ private:
 
 	// 실제 Condition/Result 관계를 열과 연결선으로 표시하는 그래프 위젯입니다.
 	TSharedPtr<SUOUDevelopmentPuzzleGraphView> PuzzleGraphView;
-
-	// 현재 수집된 퍼즐 Step 버튼을 동적으로 담는 Slate 컨테이너입니다.
-	TSharedPtr<SVerticalBox> StepListBox;
 
 	// 현재 월드에서 선택 가능한 디버그 액터 버튼을 담는 동적 Slate 컨테이너입니다.
 	TSharedPtr<SVerticalBox> DebugActorListBox;

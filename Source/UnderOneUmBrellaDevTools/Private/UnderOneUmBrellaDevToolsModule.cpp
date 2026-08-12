@@ -52,40 +52,18 @@ namespace UOUPuzzleCheatConsolePrivate
 
 	void LogPuzzleCheatStatus(const UUOUDevelopmentPuzzleCheatSubsystem& Subsystem)
 	{
-		const TArray<FUOUDevelopmentPuzzleCheatStep> Steps = Subsystem.GetPuzzleSteps();
 		const TArray<FUOUDevelopmentPuzzleCheatGraphNode> GraphNodes = Subsystem.GetPuzzleGraphNodes();
 		const TArray<FUOUDevelopmentPuzzleCheatGraphEdge> GraphEdges = Subsystem.GetPuzzleGraphEdges();
+
 		UE_LOG(
 			LogUOUPuzzleCheatConsole,
 			Display,
-			TEXT("Puzzle cheat status: Running=%s, GraphRunning=%s, FirstIncomplete=%d, Steps=%d, Message=%s"),
-			Subsystem.IsSequenceRunning() ? TEXT("Yes") : TEXT("No"),
+			TEXT("Puzzle graph status: Running=%s, Valid=%s, Nodes=%d, Edges=%d, Message=%s, GraphMessage=%s"),
 			Subsystem.IsGraphExecutionActive() ? TEXT("Yes") : TEXT("No"),
-			Subsystem.GetFirstIncompleteStepOrder(),
-			Steps.Num(),
-			*Subsystem.LastStatusMessage);
-
-		for (const FUOUDevelopmentPuzzleCheatStep& Step : Steps)
-		{
-			const AUOUPuzzleConditionGroupActor* PuzzleGroup = Step.PuzzleGroup.Get();
-			UE_LOG(
-				LogUOUPuzzleCheatConsole,
-				Display,
-				TEXT("  Step=%d, Label=%s, Actor=%s, Satisfied=%s, Delay=%.3fs"),
-				Step.StepOrder,
-				*Step.DisplayName.ToString(),
-				PuzzleGroup != nullptr ? *PuzzleGroup->GetName() : TEXT("None"),
-				PuzzleGroup != nullptr && PuzzleGroup->IsSatisfied() ? TEXT("Yes") : TEXT("No"),
-				Step.DelayAfterActivationSeconds);
-		}
-
-		UE_LOG(
-			LogUOUPuzzleCheatConsole,
-			Display,
-			TEXT("Puzzle graph status: Valid=%s, Nodes=%d, Edges=%d, Message=%s"),
 			Subsystem.IsPuzzleGraphValid() ? TEXT("Yes") : TEXT("No"),
 			GraphNodes.Num(),
 			GraphEdges.Num(),
+			*Subsystem.LastStatusMessage,
 			*Subsystem.PuzzleGraphStatusMessage);
 		for (const FUOUDevelopmentPuzzleCheatGraphNode& Node : GraphNodes)
 		{
@@ -129,51 +107,13 @@ namespace UOUPuzzleCheatConsolePrivate
 			return;
 		}
 
-		const bool bSequenceSucceeded = Subsystem->RefreshPuzzleSequence();
+		const bool bGraphSucceeded = Subsystem->RefreshPuzzleGraph();
 		UE_LOG(
 			LogUOUPuzzleCheatConsole,
 			Display,
-			TEXT("Puzzle cheat refresh: Sequence=%s, Graph=%s"),
-			bSequenceSucceeded ? TEXT("Succeeded") : TEXT("Failed"),
-			Subsystem->IsPuzzleGraphValid() ? TEXT("Succeeded") : TEXT("Failed"));
+			TEXT("Puzzle graph refresh: %s"),
+			bGraphSucceeded ? TEXT("Succeeded") : TEXT("Failed"));
 		LogPuzzleCheatStatus(*Subsystem);
-	}
-
-	void ExecuteNext(const TArray<FString>& Args, UWorld* CommandWorld)
-	{
-		UUOUDevelopmentPuzzleCheatSubsystem* Subsystem = ResolvePuzzleCheatSubsystem(CommandWorld);
-		if (Subsystem == nullptr)
-		{
-			return;
-		}
-
-		const bool bAccepted = Subsystem->AdvanceToNextPuzzle();
-		UE_LOG(LogUOUPuzzleCheatConsole, Display, TEXT("Puzzle cheat next request: %s, Message=%s"), bAccepted ? TEXT("Accepted") : TEXT("Rejected"), *Subsystem->LastStatusMessage);
-	}
-
-	void ExecuteAdvance(const TArray<FString>& Args, UWorld* CommandWorld)
-	{
-		if (Args.Num() != 1 || !Args[0].IsNumeric())
-		{
-			UE_LOG(LogUOUPuzzleCheatConsole, Error, TEXT("Usage: uou.PuzzleCheat.Advance <StepOrder>"));
-			return;
-		}
-
-		UUOUDevelopmentPuzzleCheatSubsystem* Subsystem = ResolvePuzzleCheatSubsystem(CommandWorld);
-		if (Subsystem == nullptr)
-		{
-			return;
-		}
-
-		const int32 TargetStepOrder = FCString::Atoi(*Args[0]);
-		const bool bAccepted = Subsystem->AdvanceThroughStep(TargetStepOrder);
-		UE_LOG(
-			LogUOUPuzzleCheatConsole,
-			Display,
-			TEXT("Puzzle cheat advance request through StepOrder %d: %s, Message=%s"),
-			TargetStepOrder,
-			bAccepted ? TEXT("Accepted") : TEXT("Rejected"),
-			*Subsystem->LastStatusMessage);
 	}
 
 	void ExecuteGraphNode(const TArray<FString>& Args, UWorld* CommandWorld)
@@ -209,7 +149,7 @@ namespace UOUPuzzleCheatConsolePrivate
 			return;
 		}
 
-		Subsystem->CancelPendingSequence();
+		Subsystem->CancelGraphExecution();
 		UE_LOG(LogUOUPuzzleCheatConsole, Display, TEXT("%s"), *Subsystem->LastStatusMessage);
 	}
 
@@ -240,18 +180,8 @@ namespace UOUPuzzleCheatConsolePrivate
 
 	FAutoConsoleCommandWithWorldAndArgs RefreshCommand(
 		TEXT("uou.PuzzleCheat.Refresh"),
-		TEXT("현재 PIE 또는 게임 월드에서 태그가 설정된 퍼즐 조건 그룹을 다시 수집합니다."),
+		TEXT("현재 PIE 또는 게임 월드의 Condition/Result 관계 그래프를 다시 수집합니다."),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&ExecuteRefresh));
-
-	FAutoConsoleCommandWithWorldAndArgs NextCommand(
-		TEXT("uou.PuzzleCheat.Next"),
-		TEXT("태그가 설정된 퍼즐 중 첫 번째 미완료 단계를 만족 상태로 진행합니다."),
-		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&ExecuteNext));
-
-	FAutoConsoleCommandWithWorldAndArgs AdvanceCommand(
-		TEXT("uou.PuzzleCheat.Advance"),
-		TEXT("지정한 StepOrder까지 태그가 설정된 미완료 퍼즐을 순서대로 진행합니다. 사용법: uou.PuzzleCheat.Advance <StepOrder>"),
-		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&ExecuteAdvance));
 
 	FAutoConsoleCommandWithWorldAndArgs GraphNodeCommand(
 		TEXT("uou.PuzzleCheat.GraphNode"),
@@ -260,12 +190,12 @@ namespace UOUPuzzleCheatConsolePrivate
 
 	FAutoConsoleCommandWithWorldAndArgs CancelCommand(
 		TEXT("uou.PuzzleCheat.Cancel"),
-		TEXT("이미 완료한 단계는 유지하고 아직 실행되지 않은 퍼즐 치트 예약을 취소합니다."),
+		TEXT("이미 완료된 노드는 유지하고 아직 실행되지 않은 그래프 Wave를 취소합니다."),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&ExecuteCancel));
 
 	FAutoConsoleCommandWithWorldAndArgs StatusCommand(
 		TEXT("uou.PuzzleCheat.Status"),
-		TEXT("수집된 퍼즐 치트 단계와 각 단계의 현재 런타임 상태를 로그에 출력합니다."),
+		TEXT("수집된 퍼즐 관계 그래프와 현재 실행 상태를 로그에 출력합니다."),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&ExecuteStatus));
 
 	FAutoConsoleCommandWithWorldAndArgs ToggleHUDCommand(

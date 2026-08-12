@@ -394,7 +394,7 @@ bool SUOUDevelopmentPuzzleGraphView::IsNodeActionEnabled() const
 	const UUOUDevelopmentPuzzleCheatSubsystem* Subsystem = PuzzleCheatSubsystem.Get();
 	return Subsystem != nullptr
 		&& Subsystem->IsPuzzleGraphValid()
-		&& !Subsystem->IsSequenceRunning();
+		&& !Subsystem->IsGraphExecutionActive();
 }
 
 const FUOUDevelopmentPuzzleCheatGraphNode* SUOUDevelopmentPuzzleGraphView::FindNode(int32 NodeIndex) const
