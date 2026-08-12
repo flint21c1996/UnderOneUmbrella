@@ -39,6 +39,7 @@ void SUOUDevelopmentPuzzleCheatHUD::Construct(const FArguments& InArgs)
 			.AutoHeight()
 			[
 				SNew(SButton)
+				.IsFocusable(false)
 				.OnClicked(this, &SUOUDevelopmentPuzzleCheatHUD::HandleToggleClicked)
 				.ContentPadding(FMargin(10.0f, 5.0f))
 				[
@@ -76,6 +77,7 @@ void SUOUDevelopmentPuzzleCheatHUD::Construct(const FArguments& InArgs)
 							.Padding(0.0f, 0.0f, 3.0f, 0.0f)
 							[
 								SNew(SButton)
+								.IsFocusable(false)
 								.OnClicked(this, &SUOUDevelopmentPuzzleCheatHUD::HandleConditionTabClicked)
 								.IsEnabled_Lambda([this]()
 								{
@@ -91,6 +93,7 @@ void SUOUDevelopmentPuzzleCheatHUD::Construct(const FArguments& InArgs)
 							.Padding(3.0f, 0.0f, 0.0f, 0.0f)
 							[
 								SNew(SButton)
+								.IsFocusable(false)
 								.OnClicked(this, &SUOUDevelopmentPuzzleCheatHUD::HandleDebugTabClicked)
 								.IsEnabled_Lambda([this]()
 								{
@@ -126,6 +129,7 @@ void SUOUDevelopmentPuzzleCheatHUD::Construct(const FArguments& InArgs)
 								.Padding(0.0f, 0.0f, 3.0f, 0.0f)
 								[
 									SNew(SButton)
+									.IsFocusable(false)
 									.OnClicked(this, &SUOUDevelopmentPuzzleCheatHUD::HandleRefreshClicked)
 									.IsEnabled_Lambda([this]()
 									{
@@ -142,6 +146,7 @@ void SUOUDevelopmentPuzzleCheatHUD::Construct(const FArguments& InArgs)
 								.Padding(3.0f, 0.0f)
 								[
 									SNew(SButton)
+									.IsFocusable(false)
 									.OnClicked(this, &SUOUDevelopmentPuzzleCheatHUD::HandleNextClicked)
 									.IsEnabled(this, &SUOUDevelopmentPuzzleCheatHUD::IsPuzzleActionEnabled)
 									[
@@ -154,6 +159,7 @@ void SUOUDevelopmentPuzzleCheatHUD::Construct(const FArguments& InArgs)
 								.Padding(3.0f, 0.0f, 0.0f, 0.0f)
 								[
 									SNew(SButton)
+									.IsFocusable(false)
 									.OnClicked(this, &SUOUDevelopmentPuzzleCheatHUD::HandleCancelClicked)
 									.IsEnabled(this, &SUOUDevelopmentPuzzleCheatHUD::IsCancelEnabled)
 									[
@@ -236,6 +242,7 @@ void SUOUDevelopmentPuzzleCheatHUD::Construct(const FArguments& InArgs)
 							.Padding(0.0f, 6.0f, 0.0f, 0.0f)
 							[
 								SNew(SButton)
+								.IsFocusable(false)
 								.OnClicked(this, &SUOUDevelopmentPuzzleCheatHUD::HandleDebugToolsToggleClicked)
 								.IsEnabled(this, &SUOUDevelopmentPuzzleCheatHUD::IsDebugControlAvailable)
 								[
@@ -253,6 +260,7 @@ void SUOUDevelopmentPuzzleCheatHUD::Construct(const FArguments& InArgs)
 								.Padding(0.0f, 0.0f, 3.0f, 0.0f)
 								[
 									SNew(SButton)
+									.IsFocusable(false)
 									.OnClicked(this, &SUOUDevelopmentPuzzleCheatHUD::HandleDebugCategoryToggleClicked, EUOUDebugCategory::Player)
 									.IsEnabled(this, &SUOUDevelopmentPuzzleCheatHUD::IsDebugControlAvailable)
 									[
@@ -265,6 +273,7 @@ void SUOUDevelopmentPuzzleCheatHUD::Construct(const FArguments& InArgs)
 								.Padding(3.0f, 0.0f, 0.0f, 0.0f)
 								[
 									SNew(SButton)
+									.IsFocusable(false)
 									.OnClicked(this, &SUOUDevelopmentPuzzleCheatHUD::HandleDebugCategoryToggleClicked, EUOUDebugCategory::Puzzle)
 									.IsEnabled(this, &SUOUDevelopmentPuzzleCheatHUD::IsDebugControlAvailable)
 									[
@@ -283,6 +292,7 @@ void SUOUDevelopmentPuzzleCheatHUD::Construct(const FArguments& InArgs)
 								.Padding(0.0f, 0.0f, 3.0f, 0.0f)
 								[
 									SNew(SButton)
+									.IsFocusable(false)
 									.OnClicked(this, &SUOUDevelopmentPuzzleCheatHUD::HandleDebugCategoryToggleClicked, EUOUDebugCategory::NPC)
 									.IsEnabled(this, &SUOUDevelopmentPuzzleCheatHUD::IsDebugControlAvailable)
 									[
@@ -295,6 +305,7 @@ void SUOUDevelopmentPuzzleCheatHUD::Construct(const FArguments& InArgs)
 								.Padding(3.0f, 0.0f, 0.0f, 0.0f)
 								[
 									SNew(SButton)
+									.IsFocusable(false)
 									.OnClicked(this, &SUOUDevelopmentPuzzleCheatHUD::HandleDebugCategoryToggleClicked, EUOUDebugCategory::Interaction)
 									.IsEnabled(this, &SUOUDevelopmentPuzzleCheatHUD::IsDebugControlAvailable)
 									[
@@ -313,6 +324,7 @@ void SUOUDevelopmentPuzzleCheatHUD::Construct(const FArguments& InArgs)
 								.Padding(0.0f, 0.0f, 3.0f, 0.0f)
 								[
 									SNew(SButton)
+									.IsFocusable(false)
 									.OnClicked(this, &SUOUDevelopmentPuzzleCheatHUD::HandleDebugCategoryToggleClicked, EUOUDebugCategory::VFX)
 									.IsEnabled(this, &SUOUDevelopmentPuzzleCheatHUD::IsDebugControlAvailable)
 									[
@@ -325,6 +337,7 @@ void SUOUDevelopmentPuzzleCheatHUD::Construct(const FArguments& InArgs)
 								.Padding(3.0f, 0.0f, 0.0f, 0.0f)
 								[
 									SNew(SButton)
+									.IsFocusable(false)
 									.OnClicked(this, &SUOUDevelopmentPuzzleCheatHUD::HandleDebugCategoryToggleClicked, EUOUDebugCategory::Performance)
 									.IsEnabled(this, &SUOUDevelopmentPuzzleCheatHUD::IsDebugControlAvailable)
 									[
@@ -360,6 +373,7 @@ void SUOUDevelopmentPuzzleCheatHUD::Construct(const FArguments& InArgs)
 										.Padding(0.0f, 0.0f, 3.0f, 0.0f)
 										[
 											SNew(SButton)
+											.IsFocusable(false)
 											.OnClicked(this, &SUOUDevelopmentPuzzleCheatHUD::HandleDebugActorRefreshClicked)
 											[
 												SNew(STextBlock)
@@ -371,6 +385,7 @@ void SUOUDevelopmentPuzzleCheatHUD::Construct(const FArguments& InArgs)
 										.Padding(3.0f, 0.0f, 0.0f, 0.0f)
 										[
 											SNew(SButton)
+											.IsFocusable(false)
 											.OnClicked(this, &SUOUDevelopmentPuzzleCheatHUD::HandleDebugActorClearClicked)
 											[
 												SNew(STextBlock)
@@ -511,6 +526,7 @@ void SUOUDevelopmentPuzzleCheatHUD::RebuildStepRows()
 		.Padding(0.0f, 0.0f, 0.0f, 4.0f)
 		[
 			SNew(SButton)
+			.IsFocusable(false)
 			.OnClicked(this, &SUOUDevelopmentPuzzleCheatHUD::HandleStepClicked, StepOrder)
 			.IsEnabled(this, &SUOUDevelopmentPuzzleCheatHUD::IsPuzzleActionEnabled)
 			.ContentPadding(FMargin(8.0f, 5.0f))
@@ -602,6 +618,7 @@ void SUOUDevelopmentPuzzleCheatHUD::RebuildDebugActorRows()
 		.Padding(0.0f, 0.0f, 0.0f, 3.0f)
 		[
 			SNew(SButton)
+			.IsFocusable(false)
 			.OnClicked(this, &SUOUDevelopmentPuzzleCheatHUD::HandleDebugActorClicked, DebugActor)
 			.IsEnabled_Lambda([DebugActor]() { return DebugActor.IsValid(); })
 			[
@@ -745,7 +762,7 @@ FReply SUOUDevelopmentPuzzleCheatHUD::HandleStepClicked(int32 TargetStepOrder)
 
 EVisibility SUOUDevelopmentPuzzleCheatHUD::GetPanelVisibility() const
 {
-	return bPanelExpanded ? EVisibility::Visible : EVisibility::Collapsed;
+	return bPanelExpanded ? EVisibility::SelfHitTestInvisible : EVisibility::Collapsed;
 }
 
 EVisibility SUOUDevelopmentPuzzleCheatHUD::GetConditionPageVisibility() const

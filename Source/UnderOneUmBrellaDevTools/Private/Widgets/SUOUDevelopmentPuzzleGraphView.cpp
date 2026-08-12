@@ -218,6 +218,7 @@ void SUOUDevelopmentPuzzleGraphView::RebuildLayout()
 			.Size(FVector2D(NodeWidth, NodeHeight))
 			[
 				SNew(SButton)
+				.IsFocusable(false)
 				.OnClicked(this, &SUOUDevelopmentPuzzleGraphView::HandleNodeClicked, NodeIndex)
 				.IsEnabled(this, &SUOUDevelopmentPuzzleGraphView::IsNodeActionEnabled)
 				.ContentPadding(0.0f)
