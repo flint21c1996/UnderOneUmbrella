@@ -4,6 +4,7 @@
 
 #include "Components/SceneComponent.h"
 #include "Components/SpotLightComponent.h"
+#include "World/Light/UOULightBeamMeshVisualActor.h"
 #include "World/Light/UOULightBeamVisualComponent.h"
 #include "World/Light/UOULightExposureSourceComponent.h"
 #include "World/Light/UOULightReflectionSpotLightComponent.h"
@@ -26,4 +27,5 @@ AUOULightSourceActor::AUOULightSourceActor()
 	ExposureSource = CreateDefaultSubobject<UUOULightExposureSourceComponent>(TEXT("ExposureSource"));
 	ReflectionSpotLights = CreateDefaultSubobject<UUOULightReflectionSpotLightComponent>(TEXT("ReflectionSpotLights"));
 	BeamVisual = CreateDefaultSubobject<UUOULightBeamVisualComponent>(TEXT("BeamVisual"));
+	BeamVisual->VFXActorClass = AUOULightBeamMeshVisualActor::StaticClass();
 }
