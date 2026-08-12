@@ -36,7 +36,7 @@ enum class EUOULightBeamShape : uint8
 
 // 원뿔 또는 원기둥 형태의 광원에서 주변 수신체로 게임플레이용 빛 노출을 전달합니다.
 UCLASS(ClassGroup=(Light), meta=(BlueprintSpawnableComponent, DisplayName="UOU Light Exposure Source", ToolTip = "선택한 광원 형상 안의 수신체에 게임플레이용 빛 노출을 전달합니다."))
-class UUOULightExposureSourceComponent : public UActorComponent, public IUOUPuzzleDebugInfoProvider
+class UNDERONEUMBRELLA_API UUOULightExposureSourceComponent : public UActorComponent, public IUOUPuzzleDebugInfoProvider
 {
 	GENERATED_BODY()
 
@@ -124,18 +124,6 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection|Stability", meta = (ClampMin = "0.0", Units = "s", ToolTip = "거울 가장자리에서 반사 경로가 순간적으로 줄어들었을 때 직전 경로를 유지하는 시간입니다."))
 	float ReflectionPathLossGraceTime = 0.1f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Debug", meta = (ToolTip = "광원 원뿔, 히트 라인, 반사 디버그 도형을 그립니다."))
-	bool bDrawDebug = false;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Debug", meta = (EditCondition = "bDrawDebug", ToolTip = "거울과 대상의 개별 판정 샘플을 색상으로 표시합니다. 초록/청록은 적중, 빨강은 차단, 노랑은 빛 범위 밖입니다."))
-	bool bDrawSampleDebug = true;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Debug", meta = (ClampMin = "1.0", EditCondition = "bDrawDebug && bDrawSampleDebug", ToolTip = "판정 샘플 점의 화면 표시 크기입니다."))
-	float DebugSamplePointSize = 10.0f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Debug", meta = (ClampMin = "0.0", ToolTip = "디버그 드로우 유지 시간입니다. 0이면 한 프레임만 표시합니다."))
-	float DebugDrawTime = 0.06f;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Runtime", meta = (ToolTip = "마지막 샘플링에서 검사한 수신체 개수입니다."))
 	int32 LastReceiverCount = 0;
@@ -354,23 +342,6 @@ protected:
 	float CalculateIntensity(float Distance, float Angle, float& OutDistanceFactor, float& OutAngleFactor) const;
 	float CalculateConeFactor(float Angle, float ConeAngle) const;
 	float CalculateCylinderFactor(float RadialDistance) const;
-	void DrawDebugSource() const;
-	void DrawDebugResult(const FUOULightExposureData& ExposureData, bool bLit) const;
-	void DrawDebugBlockedHit(const FVector& SourcePosition, const FHitResult& BlockingHit) const;
-	void DrawDebugSamplePoint(const FVector& Position, const FColor& Color) const;
-	void DrawDebugSampleSummary(
-		const FVector& Position,
-		const TCHAR* SampleType,
-		int32 HitCount,
-		int32 RequiredHits,
-		bool bAccepted) const;
-	void DrawDebugReflectionFrustum(
-		const FVector& Start,
-		const FVector& Direction,
-		float Length,
-		float ConeAngleDegrees,
-		float StartRadius,
-		const FColor& Color) const;
 	static void AddActorPrimitiveComponentsToIgnore(
 		const AActor* Actor,
 		FCollisionQueryParams& QueryParams,

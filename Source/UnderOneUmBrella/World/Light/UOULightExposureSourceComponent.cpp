@@ -6,9 +6,6 @@
 #include "Components/PrimitiveComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/SpotLightComponent.h"
-#include "Debug/UOUDebugSubsystem.h"
-#include "Debug/UOUDevelopmentToolsBuild.h"
-#include "DrawDebugHelpers.h"
 #include "Engine/EngineTypes.h"
 #include "Engine/OverlapResult.h"
 #include "Engine/World.h"
@@ -186,8 +183,6 @@ void UUOULightExposureSourceComponent::EmitLight(float DeltaTime)
 		return;
 	}
 
-	DrawDebugSource();
-
 	TArray<FOverlapResult> OverlapResults;
 	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(UOULightReceiverOverlap), false, GetOwner());
 	if (bIgnoreOwner && GetOwner() != nullptr)
@@ -249,7 +244,6 @@ void UUOULightExposureSourceComponent::EmitLight(float DeltaTime)
 			{
 				++LastBlockedCount;
 				LastBlockedName = GetNameSafe(BlockingHit.GetComponent());
-				DrawDebugBlockedHit(GetSourceLocation(), BlockingHit);
 			}
 		}
 	}
@@ -350,8 +344,6 @@ void UUOULightExposureSourceComponent::ValidateSettings()
 		180.0f);
 	ReflectionPathIntensityTolerance = FMath::Max(0.0f, ReflectionPathIntensityTolerance);
 	ReflectionPathLossGraceTime = FMath::Max(0.0f, ReflectionPathLossGraceTime);
-	DebugSamplePointSize = FMath::Max(1.0f, DebugSamplePointSize);
-	DebugDrawTime = FMath::Max(0.0f, DebugDrawTime);
 }
 
 void UUOULightExposureSourceComponent::PublishComputedPaths(bool bAllowLossGrace)
@@ -1097,7 +1089,6 @@ bool UUOULightExposureSourceComponent::TryBuildExposureData(
 			SampleBlockingHit))
 		{
 			++HitCount;
-			DrawDebugSamplePoint(SamplePosition, FColor::Green);
 			if (SampleExposureData.Intensity > BestIntensity)
 			{
 				BestIntensity = SampleExposureData.Intensity;
@@ -1106,9 +1097,6 @@ bool UUOULightExposureSourceComponent::TryBuildExposureData(
 		}
 		else
 		{
-			DrawDebugSamplePoint(
-				SamplePosition,
-				SampleBlockingHit.bBlockingHit ? FColor::Red : FColor::Yellow);
 			if (!FirstBlockingHit.bBlockingHit && SampleBlockingHit.bBlockingHit)
 			{
 				FirstBlockingHit = SampleBlockingHit;
@@ -1117,15 +1105,6 @@ bool UUOULightExposureSourceComponent::TryBuildExposureData(
 	}
 
 	const bool bAccepted = HitCount >= RequiredHits;
-	const FVector SummaryPosition = SamplePositions.IsEmpty()
-		? IUOULightReceivableInterface::Execute_GetLightReceiverPosition(ReceiverObject)
-		: SamplePositions[0];
-	DrawDebugSampleSummary(
-		SummaryPosition,
-		TEXT("Receiver"),
-		HitCount,
-		RequiredHits,
-		bAccepted);
 	if (!bAccepted)
 	{
 		OutExposureData = FUOULightExposureData();
@@ -1558,13 +1537,6 @@ bool UUOULightExposureSourceComponent::TryBuildLightInteractionSurfaceHit(
 			SurfaceComponent->GetOwner());
 		if (IsBlockedByActiveUmbrellaShade(CenterHit, SurfaceComponent->GetOwner()))
 		{
-			DrawDebugSamplePoint(CenterHit.ImpactPoint, FColor::Red);
-			DrawDebugSampleSummary(
-				SurfaceCenter,
-				TEXT("Mirror"),
-				0,
-				1,
-				false);
 			return false;
 		}
 	}
@@ -1592,13 +1564,6 @@ bool UUOULightExposureSourceComponent::TryBuildLightInteractionSurfaceHit(
 				SurfaceComponent->GetOwner());
 			if (IsBlockedByActiveUmbrellaShade(AxisOcclusionHit, SurfaceComponent->GetOwner()))
 			{
-				DrawDebugSamplePoint(AxisOcclusionHit.ImpactPoint, FColor::Red);
-				DrawDebugSampleSummary(
-					SurfaceCenter,
-					TEXT("Mirror Axis"),
-					0,
-					1,
-					false);
 				return false;
 			}
 		}
@@ -1639,7 +1604,6 @@ bool UUOULightExposureSourceComponent::TryBuildLightInteractionSurfaceHit(
 				++HitCount;
 				BestScore = AxisDistanceFactor * AxisShapeFactor;
 				OutSurfaceHit = AxisHit;
-				DrawDebugSamplePoint(AxisHit.ImpactPoint, FColor::Cyan);
 			}
 		}
 	}
@@ -1657,7 +1621,6 @@ bool UUOULightExposureSourceComponent::TryBuildLightInteractionSurfaceHit(
 			DistanceFactor,
 			ShapeFactor))
 		{
-			DrawDebugSamplePoint(SamplePosition, FColor::Yellow);
 			continue;
 		}
 
@@ -1685,14 +1648,10 @@ bool UUOULightExposureSourceComponent::TryBuildLightInteractionSurfaceHit(
 				SampleHit.ImpactNormal);
 		if (!bHitSurface)
 		{
-			DrawDebugSamplePoint(
-				SamplePosition,
-				SampleHit.bBlockingHit ? FColor::Red : FColor::Yellow);
 			continue;
 		}
 
 		++HitCount;
-		DrawDebugSamplePoint(SampleHit.ImpactPoint, FColor::Cyan);
 		const float SampleScore = DistanceFactor * ShapeFactor;
 		if (SampleScore > BestScore)
 		{
@@ -1701,12 +1660,6 @@ bool UUOULightExposureSourceComponent::TryBuildLightInteractionSurfaceHit(
 		}
 	}
 
-	DrawDebugSampleSummary(
-		SurfaceComponent->GetComponentLocation(),
-		TEXT("Mirror"),
-		HitCount,
-		1,
-		OutSurfaceHit.bBlockingHit);
 	return OutSurfaceHit.bBlockingHit;
 }
 
@@ -1775,7 +1728,6 @@ void UUOULightExposureSourceComponent::DeliverPendingExposures(
 			++LastReflectedCount;
 		}
 		LastLitTargetName = GetReceivableDebugName(ReceiverObject);
-		DrawDebugResult(Candidate->ExposureData, true);
 	}
 }
 
@@ -1954,32 +1906,6 @@ void UUOULightExposureSourceComponent::EmitReflectedLightFromSurface(
 				NextSurfaceAngle,
 				OutgoingBeamConeAngle)
 			: 0.0f;
-		FColor ReflectionDebugColor = FColor::White;
-		if (ReflectionDepth >= MaxReflectionBouncesPerPath)
-		{
-			ReflectionDebugColor = FColor::Purple;
-		}
-		else if (bHasNextSurface && NextSurfaceIntensity <= MinimumReflectedIntensity)
-		{
-			ReflectionDebugColor = FColor::Yellow;
-		}
-		else if (bHasNextSurface)
-		{
-			ReflectionDebugColor = FColor::Blue;
-		}
-		else if (SegmentBlockingHit.bBlockingHit)
-		{
-			ReflectionDebugColor = FColor::Red;
-		}
-
-		DrawDebugReflectionFrustum(
-			ReflectionOrigin,
-			ReflectedDirection,
-			SegmentLength,
-			OutgoingBeamConeAngle,
-			CurrentBeamStartRadius,
-			ReflectionDebugColor);
-
 		TArray<TObjectPtr<UObject>> ReachedReceivers;
 		EmitReflectedLightToReceivers(
 			CurrentSurface,
@@ -2148,7 +2074,6 @@ void UUOULightExposureSourceComponent::EmitReflectedLightToReceivers(
 			{
 				++LastBlockedCount;
 				LastBlockedName = GetNameSafe(BlockingHit.GetComponent());
-				DrawDebugBlockedHit(ReflectionOrigin, BlockingHit);
 			}
 		}
 	}
@@ -2252,7 +2177,6 @@ bool UUOULightExposureSourceComponent::TryFindNextReflectionSurface(
 
 			TArray<FVector> CandidateSamplePositions;
 			CandidateSurface->GetReflectionSamplePositions(CandidateSamplePositions);
-			int32 CandidateHitCount = 0;
 
 			// 반사 빔의 중심축이 표면 샘플 사이를 통과해도 다음 거울을 검출합니다.
 			FHitResult AxisHit;
@@ -2268,8 +2192,6 @@ bool UUOULightExposureSourceComponent::TryFindNextReflectionSurface(
 					AxisHit.ImpactNormal);
 			if (bAxisHitCandidate)
 			{
-				++CandidateHitCount;
-				DrawDebugSamplePoint(AxisHit.ImpactPoint, FColor::Cyan);
 				const float AxisHitDistance = FVector::Dist(ReflectionOrigin, AxisHit.ImpactPoint);
 				if (AxisHitDistance < ClosestHitDistance)
 				{
@@ -2288,7 +2210,6 @@ bool UUOULightExposureSourceComponent::TryFindNextReflectionSurface(
 				if (CandidateDistance <= KINDA_SMALL_NUMBER ||
 					CandidateDistance > CurrentSurface->ReflectionRange)
 				{
-					DrawDebugSamplePoint(CandidateSamplePosition, FColor::Yellow);
 					continue;
 				}
 
@@ -2304,7 +2225,6 @@ bool UUOULightExposureSourceComponent::TryFindNextReflectionSurface(
 					: 0.0f;
 				if (AxialDistance <= KINDA_SMALL_NUMBER || RadialDistance > MaximumBeamRadius)
 				{
-					DrawDebugSamplePoint(CandidateSamplePosition, FColor::Yellow);
 					continue;
 				}
 
@@ -2326,14 +2246,9 @@ bool UUOULightExposureSourceComponent::TryFindNextReflectionSurface(
 						CandidateHit.ImpactNormal);
 				if (!bHitCandidate)
 				{
-					DrawDebugSamplePoint(
-						CandidateSamplePosition,
-						CandidateHit.bBlockingHit ? FColor::Red : FColor::Yellow);
 					continue;
 				}
 
-				++CandidateHitCount;
-				DrawDebugSamplePoint(CandidateHit.ImpactPoint, FColor::Cyan);
 				const float HitDistance = FVector::Dist(ReflectionOrigin, CandidateHit.ImpactPoint);
 				if (HitDistance < ClosestHitDistance)
 				{
@@ -2345,12 +2260,6 @@ bool UUOULightExposureSourceComponent::TryFindNextReflectionSurface(
 				}
 			}
 
-			DrawDebugSampleSummary(
-				CandidateSurface->GetComponentLocation(),
-				TEXT("Mirror"),
-				CandidateHitCount,
-				1,
-				CandidateHitCount > 0);
 		}
 	}
 
@@ -2433,7 +2342,6 @@ bool UUOULightExposureSourceComponent::TryBuildReflectedExposureData(
 			SampleBlockingHit))
 		{
 			++HitCount;
-			DrawDebugSamplePoint(SamplePosition, FColor::Green);
 			if (SampleExposureData.Intensity > BestIntensity)
 			{
 				BestIntensity = SampleExposureData.Intensity;
@@ -2442,9 +2350,6 @@ bool UUOULightExposureSourceComponent::TryBuildReflectedExposureData(
 		}
 		else
 		{
-			DrawDebugSamplePoint(
-				SamplePosition,
-				SampleBlockingHit.bBlockingHit ? FColor::Red : FColor::Yellow);
 			if (!FirstBlockingHit.bBlockingHit && SampleBlockingHit.bBlockingHit)
 			{
 				FirstBlockingHit = SampleBlockingHit;
@@ -2453,15 +2358,6 @@ bool UUOULightExposureSourceComponent::TryBuildReflectedExposureData(
 	}
 
 	const bool bAccepted = HitCount >= RequiredHits;
-	const FVector SummaryPosition = SamplePositions.IsEmpty()
-		? IUOULightReceivableInterface::Execute_GetLightReceiverPosition(ReceiverObject)
-		: SamplePositions[0];
-	DrawDebugSampleSummary(
-		SummaryPosition,
-		TEXT("Reflected Receiver"),
-		HitCount,
-		RequiredHits,
-		bAccepted);
 	if (!bAccepted)
 	{
 		OutExposureData = FUOULightExposureData();
@@ -2614,326 +2510,6 @@ float UUOULightExposureSourceComponent::CalculateCylinderFactor(float RadialDist
 		1.0f);
 }
 
-void UUOULightExposureSourceComponent::DrawDebugSource() const
-{
-#if UOU_WITH_DEVELOPMENT_TOOLS
-	if (!bDrawDebug || !UUOUDebugSubsystem::IsDebugWorldDrawEnabled(this, EUOUDebugCategory::Puzzle))
-	{
-		return;
-	}
-
-	UWorld* World = GetWorld();
-	if (World == nullptr)
-	{
-		return;
-	}
-
-	const FVector SourcePosition = GetSourceLocation();
-	const FVector SourceForward = GetSourceForwardVector().GetSafeNormal();
-	const float ExposureRange = GetExposureRange();
-	if (SourceForward.IsNearlyZero() || ExposureRange <= 0.0f)
-	{
-		return;
-	}
-
-	const float OuterConeRadians = FMath::DegreesToRadians(GetEffectiveOuterConeAngle());
-	const FColor SourceDebugColor = UUOUDebugSubsystem::GetDebugCategoryColor(this, EUOUDebugCategory::Puzzle, FColor::Cyan);
-	const FColor ConeDebugColor = UUOUDebugSubsystem::GetDebugCategoryColor(this, EUOUDebugCategory::Puzzle, FColor::Yellow);
-	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(UOULightSourceDebugTrace), false, GetOwner());
-	if (bIgnoreOwner && GetOwner() != nullptr)
-	{
-		QueryParams.AddIgnoredActor(GetOwner());
-	}
-
-	if (BeamShape == EUOULightBeamShape::Cylinder)
-	{
-		constexpr int32 CylinderSegments = 24;
-		const float SafeRadius = FMath::Max(0.0f, CylinderRadius);
-		FVector RadiusAxisX = FVector::ZeroVector;
-		FVector RadiusAxisY = FVector::ZeroVector;
-		SourceForward.FindBestAxisVectors(RadiusAxisX, RadiusAxisY);
-		TArray<FVector, TInlineAllocator<CylinderSegments>> StartPoints;
-		TArray<FVector, TInlineAllocator<CylinderSegments>> EndPoints;
-		StartPoints.Reserve(CylinderSegments);
-		EndPoints.Reserve(CylinderSegments);
-
-		for (int32 SegmentIndex = 0; SegmentIndex < CylinderSegments; ++SegmentIndex)
-		{
-			const float Angle =
-				UE_TWO_PI * static_cast<float>(SegmentIndex) / static_cast<float>(CylinderSegments);
-			const FVector RadiusDirection =
-				RadiusAxisX * FMath::Cos(Angle) + RadiusAxisY * FMath::Sin(Angle);
-			const FVector RayStart = SourcePosition + RadiusDirection * SafeRadius;
-			const FVector TraceEnd = RayStart + SourceForward * ExposureRange;
-			FHitResult BlockingHit;
-			const FVector RayEnd = TraceLightPathSingle(
-				BlockingHit,
-				RayStart,
-				TraceEnd,
-				QueryParams)
-				? BlockingHit.ImpactPoint
-				: TraceEnd;
-			StartPoints.Add(RayStart);
-			EndPoints.Add(RayEnd);
-		}
-
-		DrawDebugPoint(World, SourcePosition, 10.0f, SourceDebugColor, false, DebugDrawTime);
-		for (int32 SegmentIndex = 0; SegmentIndex < CylinderSegments; ++SegmentIndex)
-		{
-			const int32 NextSegmentIndex = (SegmentIndex + 1) % CylinderSegments;
-			DrawDebugLine(
-				World,
-				StartPoints[SegmentIndex],
-				EndPoints[SegmentIndex],
-				ConeDebugColor,
-				false,
-				DebugDrawTime,
-				0,
-				1.0f);
-			DrawDebugLine(
-				World,
-				StartPoints[SegmentIndex],
-				StartPoints[NextSegmentIndex],
-				ConeDebugColor,
-				false,
-				DebugDrawTime,
-				0,
-				1.0f);
-			DrawDebugLine(
-				World,
-				EndPoints[SegmentIndex],
-				EndPoints[NextSegmentIndex],
-				ConeDebugColor,
-				false,
-				DebugDrawTime,
-				0,
-				1.0f);
-		}
-
-		return;
-	}
-
-	const auto FindClippedRayEnd =
-		[this, World, &QueryParams, &SourcePosition, ExposureRange](const FVector& RayDirection)
-		{
-			const FVector TraceEnd = SourcePosition + RayDirection * ExposureRange;
-			FHitResult BlockingHit;
-			return TraceLightPathSingle(
-				BlockingHit,
-				SourcePosition,
-				TraceEnd,
-				QueryParams)
-				? BlockingHit.ImpactPoint
-				: TraceEnd;
-		};
-
-	DrawDebugPoint(World, SourcePosition, 10.0f, SourceDebugColor, false, DebugDrawTime);
-	DrawDebugLine(
-		World,
-		SourcePosition,
-		FindClippedRayEnd(SourceForward),
-		SourceDebugColor,
-		false,
-		DebugDrawTime,
-		0,
-		1.5f);
-
-	FVector ConeAxisX = FVector::ZeroVector;
-	FVector ConeAxisY = FVector::ZeroVector;
-	SourceForward.FindBestAxisVectors(ConeAxisX, ConeAxisY);
-	constexpr int32 ConeSegments = 24;
-	const float ForwardScale = FMath::Cos(OuterConeRadians);
-	const float RadiusScale = FMath::Sin(OuterConeRadians);
-	for (int32 SegmentIndex = 0; SegmentIndex < ConeSegments; ++SegmentIndex)
-	{
-		const float Angle =
-			UE_TWO_PI * static_cast<float>(SegmentIndex) / static_cast<float>(ConeSegments);
-		const FVector RadiusDirection =
-			ConeAxisX * FMath::Cos(Angle) + ConeAxisY * FMath::Sin(Angle);
-		const FVector RayDirection =
-			(SourceForward * ForwardScale + RadiusDirection * RadiusScale).GetSafeNormal();
-		DrawDebugLine(
-			World,
-			SourcePosition,
-			FindClippedRayEnd(RayDirection),
-			ConeDebugColor,
-			false,
-			DebugDrawTime,
-			0,
-			1.0f);
-	}
-#endif
-}
-
-void UUOULightExposureSourceComponent::DrawDebugResult(const FUOULightExposureData& ExposureData, bool bLit) const
-{
-#if UOU_WITH_DEVELOPMENT_TOOLS
-	if (!bDrawDebug || !UUOUDebugSubsystem::IsDebugWorldDrawEnabled(this, EUOUDebugCategory::Puzzle))
-	{
-		return;
-	}
-
-	if (UWorld* World = GetWorld())
-	{
-		const FColor ResultColor = UUOUDebugSubsystem::GetDebugCategoryColor(this, EUOUDebugCategory::Puzzle, bLit ? FColor::Green : FColor::Red);
-		DrawDebugLine(
-			World,
-			ExposureData.SourcePosition,
-			ExposureData.ReceiverPosition,
-			ResultColor,
-			false,
-			DebugDrawTime,
-			0,
-			2.0f);
-	}
-#endif
-}
-
-void UUOULightExposureSourceComponent::DrawDebugBlockedHit(const FVector& SourcePosition, const FHitResult& BlockingHit) const
-{
-#if UOU_WITH_DEVELOPMENT_TOOLS
-	if (!bDrawDebug
-		|| !BlockingHit.bBlockingHit
-		|| !UUOUDebugSubsystem::IsDebugWorldDrawEnabled(this, EUOUDebugCategory::Puzzle))
-	{
-		return;
-	}
-
-	if (UWorld* World = GetWorld())
-	{
-		const FColor BlockedColor = UUOUDebugSubsystem::GetDebugCategoryColor(this, EUOUDebugCategory::Puzzle, FColor::Red);
-		DrawDebugLine(World, SourcePosition, BlockingHit.ImpactPoint, BlockedColor, false, DebugDrawTime, 0, 2.0f);
-		DrawDebugPoint(World, BlockingHit.ImpactPoint, 8.0f, BlockedColor, false, DebugDrawTime);
-	}
-#endif
-}
-
-void UUOULightExposureSourceComponent::DrawDebugSamplePoint(
-	const FVector& Position,
-	const FColor& Color) const
-{
-#if UOU_WITH_DEVELOPMENT_TOOLS
-	if (!bDrawDebug ||
-		!bDrawSampleDebug ||
-		!UUOUDebugSubsystem::IsDebugWorldDrawEnabled(this, EUOUDebugCategory::Puzzle))
-	{
-		return;
-	}
-
-	if (UWorld* World = GetWorld())
-	{
-		DrawDebugPoint(
-			World,
-			Position,
-			DebugSamplePointSize,
-			Color,
-			false,
-			DebugDrawTime);
-	}
-#endif
-}
-
-void UUOULightExposureSourceComponent::DrawDebugSampleSummary(
-	const FVector& Position,
-	const TCHAR* SampleType,
-	int32 HitCount,
-	int32 RequiredHits,
-	bool bAccepted) const
-{
-#if UOU_WITH_DEVELOPMENT_TOOLS
-	if (!bDrawDebug ||
-		!bDrawSampleDebug ||
-		!UUOUDebugSubsystem::IsDebugWorldDrawEnabled(this, EUOUDebugCategory::Puzzle))
-	{
-		return;
-	}
-
-	if (UWorld* World = GetWorld())
-	{
-		DrawDebugString(
-			World,
-			Position + FVector(0.0f, 0.0f, 20.0f),
-			FString::Printf(
-				TEXT("%s %d/%d %s"),
-				SampleType,
-				HitCount,
-				RequiredHits,
-				bAccepted ? TEXT("ON") : TEXT("OFF")),
-			nullptr,
-			bAccepted ? FColor::Green : FColor::Red,
-			DebugDrawTime,
-			false);
-	}
-#endif
-}
-
-void UUOULightExposureSourceComponent::DrawDebugReflectionFrustum(
-	const FVector& Start,
-	const FVector& Direction,
-	float Length,
-	float ConeAngleDegrees,
-	float StartRadius,
-	const FColor& Color) const
-{
-#if UOU_WITH_DEVELOPMENT_TOOLS
-	if (!bDrawDebug || !UUOUDebugSubsystem::IsDebugWorldDrawEnabled(this, EUOUDebugCategory::Puzzle))
-	{
-		return;
-	}
-
-	const FVector SafeDirection = Direction.GetSafeNormal();
-	const float SafeLength = FMath::Max(0.0f, Length);
-	if (SafeDirection.IsNearlyZero() || SafeLength <= KINDA_SMALL_NUMBER)
-	{
-		return;
-	}
-
-	if (UWorld* World = GetWorld())
-	{
-		const FVector End = Start + SafeDirection * SafeLength;
-		const float ConeAngleRadians = FMath::DegreesToRadians(
-			FMath::Clamp(ConeAngleDegrees, 0.0f, 89.0f));
-		const float SafeStartRadius = FMath::Max(0.0f, StartRadius);
-		const float EndRadius = SafeStartRadius + SafeLength * FMath::Tan(ConeAngleRadians);
-		constexpr int32 ConeSegments = 24;
-		FVector RadiusAxisX = FVector::ZeroVector;
-		FVector RadiusAxisY = FVector::ZeroVector;
-		SafeDirection.FindBestAxisVectors(RadiusAxisX, RadiusAxisY);
-
-		DrawDebugLine(World, Start, End, Color, false, DebugDrawTime, 0, 1.5f);
-		for (int32 SegmentIndex = 0; SegmentIndex < ConeSegments; ++SegmentIndex)
-		{
-			const float Angle = UE_TWO_PI * static_cast<float>(SegmentIndex) / static_cast<float>(ConeSegments);
-			const float NextAngle =
-				UE_TWO_PI * static_cast<float>(SegmentIndex + 1) / static_cast<float>(ConeSegments);
-			const FVector RadiusDirection =
-				RadiusAxisX * FMath::Cos(Angle) + RadiusAxisY * FMath::Sin(Angle);
-			const FVector NextRadiusDirection =
-				RadiusAxisX * FMath::Cos(NextAngle) + RadiusAxisY * FMath::Sin(NextAngle);
-			const FVector StartPoint = Start + RadiusDirection * SafeStartRadius;
-			const FVector NextStartPoint = Start + NextRadiusDirection * SafeStartRadius;
-			const FVector EndPoint = End + RadiusDirection * EndRadius;
-			const FVector NextEndPoint = End + NextRadiusDirection * EndRadius;
-
-			DrawDebugLine(World, StartPoint, EndPoint, Color, false, DebugDrawTime, 0, 1.0f);
-			DrawDebugLine(World, EndPoint, NextEndPoint, Color, false, DebugDrawTime, 0, 1.0f);
-			if (SafeStartRadius > KINDA_SMALL_NUMBER)
-			{
-				DrawDebugLine(
-					World,
-					StartPoint,
-					NextStartPoint,
-					Color,
-					false,
-					DebugDrawTime,
-					0,
-					1.0f);
-			}
-		}
-		DrawDebugPoint(World, Start, 8.0f, Color, false, DebugDrawTime);
-	}
-#endif
-}
 
 void UUOULightExposureSourceComponent::AddActorPrimitiveComponentsToIgnore(
 	const AActor* Actor,

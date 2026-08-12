@@ -72,6 +72,7 @@ private:
 	void DrawRotatableMirrorDebug() const;
 	void DrawLightExposureReceiverDebug() const;
 	void DrawUmbrellaLightReflectorDebug() const;
+	void DrawLightExposureSourceDebug() const;
 	void DrawSelectedPuzzleInfo() const;
 	void DrawPuzzleProviderConnections() const;
 	void DrawPuzzleProviderLabels() const;

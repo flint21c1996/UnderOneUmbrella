@@ -21,7 +21,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnUOULightTemperatureChangedSignat
 
 // 게임플레이용 빛 노출을 받아 온도 값으로 변환하는 컴포넌트입니다.
 UCLASS(ClassGroup=(Light), meta=(BlueprintSpawnableComponent, DisplayName="UOU Light Exposure Receiver", ToolTip = "게임플레이용 빛 노출을 받아 온도를 갱신합니다."))
-class UUOULightExposureReceiverComponent : public UActorComponent, public IUOULightReceivableInterface, public IUOUPuzzleDebugInfoProvider
+class UNDERONEUMBRELLA_API UUOULightExposureReceiverComponent : public UActorComponent, public IUOULightReceivableInterface, public IUOUPuzzleDebugInfoProvider
 {
 	GENERATED_BODY()
 
