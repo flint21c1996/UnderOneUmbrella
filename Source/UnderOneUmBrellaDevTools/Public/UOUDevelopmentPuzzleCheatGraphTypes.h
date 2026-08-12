@@ -49,3 +49,32 @@ struct UNDERONEUMBRELLADEVTOOLS_API FUOUDevelopmentPuzzleCheatGraphEdge
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Puzzle Cheat|Graph")
 	TObjectPtr<AActor> RelationActor = nullptr;
 };
+
+// 대상 노드까지 진행할 때 같은 깊이에서 함께 활성화할 노드 묶음입니다.
+USTRUCT()
+struct UNDERONEUMBRELLADEVTOOLS_API FUOUDevelopmentPuzzleCheatGraphExecutionWave
+{
+	GENERATED_BODY()
+
+	UPROPERTY(Transient)
+	int32 ExecutionDepth = INDEX_NONE;
+
+	UPROPERTY(Transient)
+	TArray<int32> NodeIndices;
+};
+
+// 현재 병렬 묶음에서 결과 완료를 기다리는 노드별 시간 상태입니다.
+USTRUCT()
+struct UNDERONEUMBRELLADEVTOOLS_API FUOUDevelopmentPuzzleCheatActiveGraphNode
+{
+	GENERATED_BODY()
+
+	UPROPERTY(Transient)
+	int32 NodeIndex = INDEX_NONE;
+
+	UPROPERTY(Transient)
+	double StartTimeSeconds = 0.0;
+
+	UPROPERTY(Transient)
+	float MinimumWaitSeconds = 0.0f;
+};

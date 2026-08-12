@@ -83,6 +83,13 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Puzzle Cheat|Graph")
 	bool IsPuzzleGraphValid() const { return bPuzzleGraphValid; }
 
+	// 대상 그래프 노드의 미완료 선행 관계를 병렬 묶음으로 계산해 대상까지 진행합니다.
+	UFUNCTION(BlueprintCallable, Category = "Puzzle Cheat|Graph")
+	bool AdvanceThroughGraphNode(int32 TargetNodeIndex);
+
+	UFUNCTION(BlueprintPure, Category = "Puzzle Cheat|Graph")
+	bool IsGraphExecutionActive() const { return bGraphExecutionActive; }
+
 	// 순차 실행 중인지 반환하여 중복 요청과 HUD 입력을 제어합니다.
 	UFUNCTION(BlueprintPure, Category = "Puzzle Cheat")
 	bool IsSequenceRunning() const { return bSequenceRunning; }
@@ -110,6 +117,13 @@ private:
 	void BuildPuzzleGraphConnections();
 	void AddPuzzleGraphEdge(int32 SourceNodeIndex, int32 TargetNodeIndex, AActor* RelationActor);
 	bool ValidateAndAssignPuzzleGraphDepths();
+	bool BuildGraphExecutionWaves(int32 TargetNodeIndex);
+	void ExecuteNextGraphWave();
+	void CheckCurrentGraphWaveCompletion();
+	void ScheduleGraphCompletionCheck();
+	bool ArePuzzleGroupResultsCompleted(const AUOUPuzzleConditionGroupActor* PuzzleGroup) const;
+	float GetDelayBeforeNextGraphWave(const FUOUDevelopmentPuzzleCheatGraphNode& Node) const;
+	void FinishGraphSequence();
 	bool BuildActivationQueue(int32 TargetStepOrder);
 	void ExecuteNextQueuedStep();
 	void CheckCurrentStepCompletion();
@@ -133,6 +147,23 @@ private:
 
 	UPROPERTY(Transient)
 	bool bPuzzleGraphValid = false;
+
+	// 현재 그래프 실행 요청에서 깊이 순서대로 처리할 병렬 노드 묶음입니다.
+	UPROPERTY(Transient)
+	TArray<FUOUDevelopmentPuzzleCheatGraphExecutionWave> PendingGraphExecutionWaves;
+
+	UPROPERTY(Transient)
+	int32 PendingGraphWavePosition = 0;
+
+	// 현재 묶음에서 각 노드의 결과 완료와 최소 대기 시간을 추적합니다.
+	UPROPERTY(Transient)
+	TArray<FUOUDevelopmentPuzzleCheatActiveGraphNode> ActiveGraphNodes;
+
+	UPROPERTY(Transient)
+	int32 ActivatedGraphNodeCount = 0;
+
+	UPROPERTY(Transient)
+	bool bGraphExecutionActive = false;
 
 	// 현재 요청에서 아직 실행할 단계들의 PuzzleSteps 인덱스입니다.
 	UPROPERTY(Transient)

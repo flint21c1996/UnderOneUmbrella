@@ -100,7 +100,10 @@ void UUOUDevelopmentPuzzleCheatSubsystem::Deinitialize()
 	PuzzleSteps.Reset();
 	PuzzleGraphNodes.Reset();
 	PuzzleGraphEdges.Reset();
+	PendingGraphExecutionWaves.Reset();
+	ActiveGraphNodes.Reset();
 	PendingStepIndices.Reset();
+	PendingGraphWavePosition = 0;
 	PendingQueuePosition = 0;
 	ActiveStepIndex = INDEX_NONE;
 	ActiveStepStartTimeSeconds = 0.0;
@@ -108,6 +111,8 @@ void UUOUDevelopmentPuzzleCheatSubsystem::Deinitialize()
 	bSequenceRunning = false;
 	bPuzzleSequenceValid = false;
 	bPuzzleGraphValid = false;
+	bGraphExecutionActive = false;
+	ActivatedGraphNodeCount = 0;
 	PuzzleGraphStatusMessage.Reset();
 	Super::Deinitialize();
 }
@@ -242,6 +247,7 @@ bool UUOUDevelopmentPuzzleCheatSubsystem::AdvanceThroughStep(int32 TargetStepOrd
 
 	PendingQueuePosition = 0;
 	bSequenceRunning = true;
+	bGraphExecutionActive = false;
 	LastStatusMessage = FString::Printf(
 		TEXT("Starting puzzle cheat sequence through StepOrder %d (%d pending step(s))."),
 		TargetStepOrder,
@@ -257,12 +263,19 @@ void UUOUDevelopmentPuzzleCheatSubsystem::CancelPendingSequence()
 		World->GetTimerManager().ClearTimer(SequenceTimerHandle);
 	}
 
-	const bool bHadPendingSequence = bSequenceRunning || !PendingStepIndices.IsEmpty();
+	const bool bHadPendingSequence = bSequenceRunning
+		|| !PendingStepIndices.IsEmpty()
+		|| !PendingGraphExecutionWaves.IsEmpty();
 	PendingStepIndices.Reset();
+	PendingGraphExecutionWaves.Reset();
+	ActiveGraphNodes.Reset();
 	PendingQueuePosition = 0;
+	PendingGraphWavePosition = 0;
 	ActiveStepIndex = INDEX_NONE;
 	ActiveStepStartTimeSeconds = 0.0;
 	ActiveStepMinimumWaitSeconds = 0.0f;
+	ActivatedGraphNodeCount = 0;
+	bGraphExecutionActive = false;
 	bSequenceRunning = false;
 	LastStatusMessage = bHadPendingSequence
 		? TEXT("Pending puzzle cheat sequence cancelled. Already activated steps were kept.")
@@ -553,6 +566,321 @@ bool UUOUDevelopmentPuzzleCheatSubsystem::ValidateAndAssignPuzzleGraphDepths()
 	return true;
 }
 
+bool UUOUDevelopmentPuzzleCheatSubsystem::AdvanceThroughGraphNode(int32 TargetNodeIndex)
+{
+	if (bSequenceRunning)
+	{
+		LastStatusMessage = TEXT("A puzzle cheat sequence is already running.");
+		return false;
+	}
+
+	if (!bPuzzleGraphValid && !RefreshPuzzleGraph())
+	{
+		LastStatusMessage = FString::Printf(
+			TEXT("Cannot start graph execution: %s"),
+			*PuzzleGraphStatusMessage);
+		return false;
+	}
+
+	if (!BuildGraphExecutionWaves(TargetNodeIndex))
+	{
+		return false;
+	}
+
+	if (PendingGraphExecutionWaves.IsEmpty())
+	{
+		LastStatusMessage = FString::Printf(
+			TEXT("Puzzle graph node %d and all of its prerequisites are already satisfied."),
+			TargetNodeIndex);
+		return true;
+	}
+
+	PendingGraphWavePosition = 0;
+	ActivatedGraphNodeCount = 0;
+	bGraphExecutionActive = true;
+	bSequenceRunning = true;
+	LastStatusMessage = FString::Printf(
+		TEXT("Starting puzzle graph execution through node %d (%d wave(s))."),
+		TargetNodeIndex,
+		PendingGraphExecutionWaves.Num());
+	ExecuteNextGraphWave();
+	return true;
+}
+
+bool UUOUDevelopmentPuzzleCheatSubsystem::BuildGraphExecutionWaves(int32 TargetNodeIndex)
+{
+	PendingGraphExecutionWaves.Reset();
+	ActiveGraphNodes.Reset();
+
+	if (!PuzzleGraphNodes.IsValidIndex(TargetNodeIndex))
+	{
+		LastStatusMessage = FString::Printf(
+			TEXT("Puzzle graph node index %d was not found."),
+			TargetNodeIndex);
+		return false;
+	}
+
+	TSet<int32> RequiredNodeIndices;
+	TArray<int32> NodesToVisit;
+	NodesToVisit.Add(TargetNodeIndex);
+	while (!NodesToVisit.IsEmpty())
+	{
+		const int32 NodeIndex = NodesToVisit.Pop(EAllowShrinking::No);
+		if (RequiredNodeIndices.Contains(NodeIndex))
+		{
+			continue;
+		}
+
+		if (!PuzzleGraphNodes.IsValidIndex(NodeIndex))
+		{
+			PendingGraphExecutionWaves.Reset();
+			LastStatusMessage = FString::Printf(
+				TEXT("Puzzle graph contains an invalid prerequisite node index %d."),
+				NodeIndex);
+			return false;
+		}
+
+		RequiredNodeIndices.Add(NodeIndex);
+		NodesToVisit.Append(PuzzleGraphNodes[NodeIndex].PrerequisiteNodeIndices);
+	}
+
+	TArray<int32> OrderedNodeIndices = RequiredNodeIndices.Array();
+	OrderedNodeIndices.Sort(
+		[this](int32 LeftNodeIndex, int32 RightNodeIndex)
+		{
+			const FUOUDevelopmentPuzzleCheatGraphNode& LeftNode = PuzzleGraphNodes[LeftNodeIndex];
+			const FUOUDevelopmentPuzzleCheatGraphNode& RightNode = PuzzleGraphNodes[RightNodeIndex];
+			return LeftNode.ExecutionDepth == RightNode.ExecutionDepth
+				? LeftNodeIndex < RightNodeIndex
+				: LeftNode.ExecutionDepth < RightNode.ExecutionDepth;
+		});
+
+	for (const int32 NodeIndex : OrderedNodeIndices)
+	{
+		const FUOUDevelopmentPuzzleCheatGraphNode& Node = PuzzleGraphNodes[NodeIndex];
+		const AUOUPuzzleConditionGroupActor* PuzzleGroup = Node.PuzzleGroup.Get();
+		if (!IsValid(PuzzleGroup))
+		{
+			PendingGraphExecutionWaves.Reset();
+			LastStatusMessage = FString::Printf(
+				TEXT("Cannot build puzzle graph execution: node %d has no valid PuzzleGroup."),
+				NodeIndex);
+			return false;
+		}
+
+		if (PuzzleGroup->IsSatisfied())
+		{
+			continue;
+		}
+
+		if (PendingGraphExecutionWaves.IsEmpty()
+			|| PendingGraphExecutionWaves.Last().ExecutionDepth != Node.ExecutionDepth)
+		{
+			FUOUDevelopmentPuzzleCheatGraphExecutionWave& Wave =
+				PendingGraphExecutionWaves.AddDefaulted_GetRef();
+			Wave.ExecutionDepth = Node.ExecutionDepth;
+		}
+
+		PendingGraphExecutionWaves.Last().NodeIndices.Add(NodeIndex);
+	}
+
+	return true;
+}
+
+void UUOUDevelopmentPuzzleCheatSubsystem::ExecuteNextGraphWave()
+{
+	if (!bSequenceRunning || !bGraphExecutionActive)
+	{
+		return;
+	}
+
+	if (!PendingGraphExecutionWaves.IsValidIndex(PendingGraphWavePosition))
+	{
+		FinishGraphSequence();
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	if (World == nullptr)
+	{
+		CancelPendingSequence();
+		LastStatusMessage = TEXT("Puzzle graph execution stopped because its world was unavailable.");
+		return;
+	}
+
+	ActiveGraphNodes.Reset();
+	const FUOUDevelopmentPuzzleCheatGraphExecutionWave& Wave =
+		PendingGraphExecutionWaves[PendingGraphWavePosition];
+	const double WaveStartTimeSeconds = World->GetTimeSeconds();
+	for (const int32 NodeIndex : Wave.NodeIndices)
+	{
+		if (!PuzzleGraphNodes.IsValidIndex(NodeIndex))
+		{
+			CancelPendingSequence();
+			LastStatusMessage = FString::Printf(
+				TEXT("Puzzle graph execution lost node index %d."),
+				NodeIndex);
+			return;
+		}
+
+		const FUOUDevelopmentPuzzleCheatGraphNode& Node = PuzzleGraphNodes[NodeIndex];
+		AUOUPuzzleConditionGroupActor* PuzzleGroup = Node.PuzzleGroup.Get();
+		if (!IsValid(PuzzleGroup))
+		{
+			CancelPendingSequence();
+			LastStatusMessage = FString::Printf(
+				TEXT("Puzzle graph node %d lost its PuzzleGroup."),
+				NodeIndex);
+			return;
+		}
+
+		if (PuzzleGroup->IsSatisfied())
+		{
+			continue;
+		}
+
+		if (!PuzzleGroup->ForceSatisfiedForCheat())
+		{
+			CancelPendingSequence();
+			LastStatusMessage = FString::Printf(
+				TEXT("Failed to satisfy puzzle graph node %d (%s)."),
+				NodeIndex,
+				*Node.DisplayName.ToString());
+			return;
+		}
+
+		FUOUDevelopmentPuzzleCheatActiveGraphNode& ActiveNode =
+			ActiveGraphNodes.AddDefaulted_GetRef();
+		ActiveNode.NodeIndex = NodeIndex;
+		ActiveNode.StartTimeSeconds = WaveStartTimeSeconds;
+		ActiveNode.MinimumWaitSeconds = GetDelayBeforeNextGraphWave(Node)
+			+ UOUDevelopmentPuzzleCheatPrivate::CompletionPollIntervalSeconds;
+		++ActivatedGraphNodeCount;
+	}
+
+	if (ActiveGraphNodes.IsEmpty())
+	{
+		++PendingGraphWavePosition;
+		ExecuteNextGraphWave();
+		return;
+	}
+
+	LastStatusMessage = FString::Printf(
+		TEXT("Activated puzzle graph wave %d/%d at depth %d (%d node(s)); waiting for result completion."),
+		PendingGraphWavePosition + 1,
+		PendingGraphExecutionWaves.Num(),
+		Wave.ExecutionDepth,
+		ActiveGraphNodes.Num());
+	ScheduleGraphCompletionCheck();
+}
+
+void UUOUDevelopmentPuzzleCheatSubsystem::CheckCurrentGraphWaveCompletion()
+{
+	if (!bSequenceRunning || !bGraphExecutionActive)
+	{
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	if (World == nullptr)
+	{
+		CancelPendingSequence();
+		LastStatusMessage = TEXT("Puzzle graph execution stopped because its world was unavailable.");
+		return;
+	}
+
+	for (const FUOUDevelopmentPuzzleCheatActiveGraphNode& ActiveNode : ActiveGraphNodes)
+	{
+		if (!PuzzleGraphNodes.IsValidIndex(ActiveNode.NodeIndex))
+		{
+			CancelPendingSequence();
+			LastStatusMessage = TEXT("Puzzle graph execution lost an active node.");
+			return;
+		}
+
+		const AUOUPuzzleConditionGroupActor* PuzzleGroup =
+			PuzzleGraphNodes[ActiveNode.NodeIndex].PuzzleGroup.Get();
+		if (!IsValid(PuzzleGroup))
+		{
+			CancelPendingSequence();
+			LastStatusMessage = TEXT("Puzzle graph execution lost an active PuzzleGroup.");
+			return;
+		}
+
+		const double ElapsedSeconds = World->GetTimeSeconds() - ActiveNode.StartTimeSeconds;
+		if (ElapsedSeconds < ActiveNode.MinimumWaitSeconds
+			|| !ArePuzzleGroupResultsCompleted(PuzzleGroup))
+		{
+			ScheduleGraphCompletionCheck();
+			return;
+		}
+	}
+
+	++PendingGraphWavePosition;
+	ActiveGraphNodes.Reset();
+	ExecuteNextGraphWave();
+}
+
+void UUOUDevelopmentPuzzleCheatSubsystem::ScheduleGraphCompletionCheck()
+{
+	UWorld* World = GetWorld();
+	if (World == nullptr)
+	{
+		CancelPendingSequence();
+		LastStatusMessage = TEXT("Puzzle graph execution stopped because its world was unavailable.");
+		return;
+	}
+
+	World->GetTimerManager().SetTimer(
+		SequenceTimerHandle,
+		this,
+		&UUOUDevelopmentPuzzleCheatSubsystem::CheckCurrentGraphWaveCompletion,
+		UOUDevelopmentPuzzleCheatPrivate::CompletionPollIntervalSeconds,
+		false);
+}
+
+float UUOUDevelopmentPuzzleCheatSubsystem::GetDelayBeforeNextGraphWave(
+	const FUOUDevelopmentPuzzleCheatGraphNode& Node) const
+{
+	int32 DelayMilliseconds = FMath::RoundToInt(
+		UOUDevelopmentPuzzleCheatPrivate::DefaultDelayAfterActivationSeconds * 1000.0f);
+	if (const AUOUPuzzleConditionGroupActor* PuzzleGroup = Node.PuzzleGroup.Get())
+	{
+		UOUDevelopmentPuzzleCheatPrivate::TryParseIntegerTag(
+			*PuzzleGroup,
+			UOUDevelopmentPuzzleCheatPrivate::DelayTagPrefix,
+			DelayMilliseconds);
+
+		float LongestResultDelay = 0.0f;
+		for (const FOUUPuzzleResultBinding& Binding : PuzzleGroup->ResultBindings)
+		{
+			LongestResultDelay = FMath::Max(LongestResultDelay, Binding.SatisfiedDelaySeconds);
+		}
+		return FMath::Max(FMath::Max(0, DelayMilliseconds) / 1000.0f, LongestResultDelay);
+	}
+
+	return FMath::Max(0, DelayMilliseconds) / 1000.0f;
+}
+
+void UUOUDevelopmentPuzzleCheatSubsystem::FinishGraphSequence()
+{
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(SequenceTimerHandle);
+	}
+
+	const int32 CompletedNodeCount = ActivatedGraphNodeCount;
+	PendingGraphExecutionWaves.Reset();
+	ActiveGraphNodes.Reset();
+	PendingGraphWavePosition = 0;
+	ActivatedGraphNodeCount = 0;
+	bGraphExecutionActive = false;
+	bSequenceRunning = false;
+	LastStatusMessage = FString::Printf(
+		TEXT("Puzzle graph execution completed. Activated %d node(s)."),
+		CompletedNodeCount);
+}
+
 void UUOUDevelopmentPuzzleCheatSubsystem::ToggleCheatHUD()
 {
 	EnsureCheatHUDCreated();
@@ -718,7 +1046,13 @@ bool UUOUDevelopmentPuzzleCheatSubsystem::AreStepResultsCompleted(
 	const FUOUDevelopmentPuzzleCheatStep& Step) const
 {
 	const AUOUPuzzleConditionGroupActor* PuzzleGroup = Step.PuzzleGroup.Get();
-	if (PuzzleGroup == nullptr)
+	return ArePuzzleGroupResultsCompleted(PuzzleGroup);
+}
+
+bool UUOUDevelopmentPuzzleCheatSubsystem::ArePuzzleGroupResultsCompleted(
+	const AUOUPuzzleConditionGroupActor* PuzzleGroup) const
+{
+	if (!IsValid(PuzzleGroup))
 	{
 		return false;
 	}
@@ -771,10 +1105,15 @@ void UUOUDevelopmentPuzzleCheatSubsystem::FinishSequence()
 
 	const int32 ActivatedStepCount = PendingQueuePosition;
 	PendingStepIndices.Reset();
+	PendingGraphExecutionWaves.Reset();
+	ActiveGraphNodes.Reset();
 	PendingQueuePosition = 0;
+	PendingGraphWavePosition = 0;
 	ActiveStepIndex = INDEX_NONE;
 	ActiveStepStartTimeSeconds = 0.0;
 	ActiveStepMinimumWaitSeconds = 0.0f;
+	ActivatedGraphNodeCount = 0;
+	bGraphExecutionActive = false;
 	bSequenceRunning = false;
 	LastStatusMessage = FString::Printf(
 		TEXT("Puzzle cheat sequence completed. Activated %d step(s)."),

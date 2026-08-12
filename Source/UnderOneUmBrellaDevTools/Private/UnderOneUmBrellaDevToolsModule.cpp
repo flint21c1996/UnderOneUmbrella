@@ -58,8 +58,9 @@ namespace UOUPuzzleCheatConsolePrivate
 		UE_LOG(
 			LogUOUPuzzleCheatConsole,
 			Display,
-			TEXT("Puzzle cheat status: Running=%s, FirstIncomplete=%d, Steps=%d, Message=%s"),
+			TEXT("Puzzle cheat status: Running=%s, GraphRunning=%s, FirstIncomplete=%d, Steps=%d, Message=%s"),
 			Subsystem.IsSequenceRunning() ? TEXT("Yes") : TEXT("No"),
+			Subsystem.IsGraphExecutionActive() ? TEXT("Yes") : TEXT("No"),
 			Subsystem.GetFirstIncompleteStepOrder(),
 			Steps.Num(),
 			*Subsystem.LastStatusMessage);
@@ -175,6 +176,31 @@ namespace UOUPuzzleCheatConsolePrivate
 			*Subsystem->LastStatusMessage);
 	}
 
+	void ExecuteGraphNode(const TArray<FString>& Args, UWorld* CommandWorld)
+	{
+		if (Args.Num() != 1 || !Args[0].IsNumeric())
+		{
+			UE_LOG(LogUOUPuzzleCheatConsole, Error, TEXT("Usage: uou.PuzzleCheat.GraphNode <NodeIndex>"));
+			return;
+		}
+
+		UUOUDevelopmentPuzzleCheatSubsystem* Subsystem = ResolvePuzzleCheatSubsystem(CommandWorld);
+		if (Subsystem == nullptr)
+		{
+			return;
+		}
+
+		const int32 TargetNodeIndex = FCString::Atoi(*Args[0]);
+		const bool bAccepted = Subsystem->AdvanceThroughGraphNode(TargetNodeIndex);
+		UE_LOG(
+			LogUOUPuzzleCheatConsole,
+			Display,
+			TEXT("Puzzle cheat graph request through node %d: %s, Message=%s"),
+			TargetNodeIndex,
+			bAccepted ? TEXT("Accepted") : TEXT("Rejected"),
+			*Subsystem->LastStatusMessage);
+	}
+
 	void ExecuteCancel(const TArray<FString>& Args, UWorld* CommandWorld)
 	{
 		UUOUDevelopmentPuzzleCheatSubsystem* Subsystem = ResolvePuzzleCheatSubsystem(CommandWorld);
@@ -226,6 +252,11 @@ namespace UOUPuzzleCheatConsolePrivate
 		TEXT("uou.PuzzleCheat.Advance"),
 		TEXT("지정한 StepOrder까지 태그가 설정된 미완료 퍼즐을 순서대로 진행합니다. 사용법: uou.PuzzleCheat.Advance <StepOrder>"),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&ExecuteAdvance));
+
+	FAutoConsoleCommandWithWorldAndArgs GraphNodeCommand(
+		TEXT("uou.PuzzleCheat.GraphNode"),
+		TEXT("지정한 그래프 노드의 미완료 선행 노드를 병렬 묶음으로 처리한 뒤 대상 노드까지 진행합니다. 사용법: uou.PuzzleCheat.GraphNode <NodeIndex>"),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&ExecuteGraphNode));
 
 	FAutoConsoleCommandWithWorldAndArgs CancelCommand(
 		TEXT("uou.PuzzleCheat.Cancel"),
