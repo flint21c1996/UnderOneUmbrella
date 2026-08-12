@@ -7,6 +7,7 @@
 #include "Widgets/Layout/SBorder.h"
 #include "Widgets/Layout/SBox.h"
 #include "Widgets/Layout/SScrollBox.h"
+#include "Widgets/Layout/SWrapBox.h"
 #include "Widgets/SOverlay.h"
 #include "Widgets/SBoxPanel.h"
 #include "Widgets/Text/STextBlock.h"
@@ -398,6 +399,25 @@ void SUOUDevelopmentPuzzleCheatHUD::Construct(const FArguments& InArgs)
 									.AutoHeight()
 									.Padding(0.0f, 6.0f, 0.0f, 0.0f)
 									[
+										SNew(SVerticalBox)
+										+ SVerticalBox::Slot()
+										.AutoHeight()
+										[
+											SNew(STextBlock)
+											.Text(FText::FromString(TEXT("클래스 필터")))
+										]
+										+ SVerticalBox::Slot()
+										.AutoHeight()
+										.Padding(0.0f, 3.0f, 0.0f, 0.0f)
+										[
+											SAssignNew(DebugActorClassFilterBox, SWrapBox)
+											.UseAllottedSize(true)
+										]
+									]
+									+ SVerticalBox::Slot()
+									.AutoHeight()
+									.Padding(0.0f, 6.0f, 0.0f, 0.0f)
+									[
 										SNew(SBox)
 										.MaxDesiredHeight(220.0f)
 										[
@@ -563,9 +583,11 @@ void SUOUDevelopmentPuzzleCheatHUD::RebuildDebugActorRows()
 	}
 
 	DebugActorListBox->ClearChildren();
+	TArray<FUOUDevelopmentDebugActorEntry> ActorEntries;
 	const UUOUDevelopmentDebugDrawSubsystem* DrawSubsystem = DebugDrawSubsystem.Get();
 	if (DrawSubsystem == nullptr)
 	{
+		RebuildDebugActorClassFilters(ActorEntries);
 		DebugActorListBox->AddSlot()
 		.AutoHeight()
 		[
@@ -575,8 +597,8 @@ void SUOUDevelopmentPuzzleCheatHUD::RebuildDebugActorRows()
 		return;
 	}
 
-	TArray<FUOUDevelopmentDebugActorEntry> ActorEntries;
 	DrawSubsystem->GetSelectableDebugActors(ActorEntries);
+	RebuildDebugActorClassFilters(ActorEntries);
 	if (ActorEntries.IsEmpty())
 	{
 		DebugActorListBox->AddSlot()
@@ -591,6 +613,11 @@ void SUOUDevelopmentPuzzleCheatHUD::RebuildDebugActorRows()
 	for (const FUOUDevelopmentDebugActorEntry& Entry : ActorEntries)
 	{
 		const TWeakObjectPtr<AActor> DebugActor = Entry.Actor;
+		if (!DoesDebugActorPassClassFilter(DebugActor.Get()))
+		{
+			continue;
+		}
+
 		const TCHAR* CategoryName = TEXT("System");
 		switch (Entry.Category)
 		{
@@ -611,8 +638,9 @@ void SUOUDevelopmentPuzzleCheatHUD::RebuildDebugActorRows()
 		}
 
 		const FText ButtonText = FText::FromString(FString::Printf(
-			TEXT("[%s] %s"),
+			TEXT("[%s / %s] %s"),
 			CategoryName,
+			*GetNameSafe(DebugActor.IsValid() ? DebugActor->GetClass() : nullptr),
 			*GetNameSafe(DebugActor.Get())));
 		DebugActorListBox->AddSlot()
 		.AutoHeight()
@@ -634,6 +662,96 @@ void SUOUDevelopmentPuzzleCheatHUD::RebuildDebugActorRows()
 							&& ControlSubsystem->GetSelectedDebugActor() == DebugActor.Get()
 							? FLinearColor(0.25f, 1.0f, 0.35f, 1.0f)
 							: FLinearColor::White);
+				})
+			]
+		];
+	}
+
+	if (DebugActorListBox->NumSlots() == 0)
+	{
+		DebugActorListBox->AddSlot()
+		.AutoHeight()
+		[
+			SNew(STextBlock)
+			.Text(FText::FromString(TEXT("선택한 클래스에 해당하는 디버그 액터가 없습니다.")))
+		];
+	}
+}
+
+void SUOUDevelopmentPuzzleCheatHUD::RebuildDebugActorClassFilters(
+	const TArray<FUOUDevelopmentDebugActorEntry>& ActorEntries)
+{
+	if (!DebugActorClassFilterBox.IsValid())
+	{
+		return;
+	}
+
+	DebugActorClassFilterBox->ClearChildren();
+	TArray<TWeakObjectPtr<UClass>> ActorClasses;
+	for (const FUOUDevelopmentDebugActorEntry& Entry : ActorEntries)
+	{
+		if (const AActor* Actor = Entry.Actor.Get())
+		{
+			ActorClasses.AddUnique(Actor->GetClass());
+		}
+	}
+	ActorClasses.Sort([](const TWeakObjectPtr<UClass>& Left, const TWeakObjectPtr<UClass>& Right)
+	{
+		return GetNameSafe(Left.Get()) < GetNameSafe(Right.Get());
+	});
+
+	if (SelectedDebugActorClassFilter.IsValid()
+		&& !ActorClasses.Contains(SelectedDebugActorClassFilter))
+	{
+		SelectedDebugActorClassFilter.Reset();
+	}
+
+	DebugActorClassFilterBox->AddSlot()
+	.Padding(FMargin(0.0f, 0.0f, 4.0f, 4.0f))
+	[
+		SNew(SButton)
+		.IsFocusable(false)
+		.OnClicked(
+			this,
+			&SUOUDevelopmentPuzzleCheatHUD::HandleDebugActorClassFilterClicked,
+			TWeakObjectPtr<UClass>())
+		[
+			SNew(STextBlock)
+			.Text(FText::FromString(TEXT("전체")))
+			.ColorAndOpacity_Lambda([this]()
+			{
+				return FSlateColor(SelectedDebugActorClassFilter.IsValid()
+					? FLinearColor::White
+					: FLinearColor(0.25f, 1.0f, 0.35f, 1.0f));
+			})
+		]
+	];
+
+	for (const TWeakObjectPtr<UClass>& ActorClass : ActorClasses)
+	{
+		const UClass* Class = ActorClass.Get();
+		if (Class == nullptr)
+		{
+			continue;
+		}
+
+		DebugActorClassFilterBox->AddSlot()
+		.Padding(FMargin(0.0f, 0.0f, 4.0f, 4.0f))
+		[
+			SNew(SButton)
+			.IsFocusable(false)
+			.OnClicked(
+				this,
+				&SUOUDevelopmentPuzzleCheatHUD::HandleDebugActorClassFilterClicked,
+				ActorClass)
+			[
+				SNew(STextBlock)
+				.Text(Class->GetDisplayNameText())
+				.ColorAndOpacity_Lambda([this, ActorClass]()
+				{
+					return FSlateColor(SelectedDebugActorClassFilter == ActorClass
+						? FLinearColor(0.25f, 1.0f, 0.35f, 1.0f)
+						: FLinearColor::White);
 				})
 			]
 		];
@@ -712,6 +830,14 @@ FReply SUOUDevelopmentPuzzleCheatHUD::HandleDebugActorClicked(
 		Subsystem->SetSelectedDebugActor(
 			Subsystem->GetSelectedDebugActor() == Actor ? nullptr : Actor);
 	}
+	return FReply::Handled();
+}
+
+FReply SUOUDevelopmentPuzzleCheatHUD::HandleDebugActorClassFilterClicked(
+	TWeakObjectPtr<UClass> DebugActorClass)
+{
+	SelectedDebugActorClassFilter = DebugActorClass;
+	RebuildDebugActorRows();
 	return FReply::Handled();
 }
 
@@ -999,4 +1125,11 @@ bool SUOUDevelopmentPuzzleCheatHUD::IsCancelEnabled() const
 bool SUOUDevelopmentPuzzleCheatHUD::IsDebugControlAvailable() const
 {
 	return DebugControlSubsystem.IsValid();
+}
+
+bool SUOUDevelopmentPuzzleCheatHUD::DoesDebugActorPassClassFilter(const AActor* DebugActor) const
+{
+	return IsValid(DebugActor)
+		&& (!SelectedDebugActorClassFilter.IsValid()
+			|| DebugActor->GetClass() == SelectedDebugActorClassFilter.Get());
 }
