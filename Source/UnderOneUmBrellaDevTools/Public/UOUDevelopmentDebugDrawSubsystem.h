@@ -3,10 +3,19 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Debug/UOUDebugTypes.h"
 #include "Subsystems/WorldSubsystem.h"
 #include "UOUDevelopmentDebugDrawSubsystem.generated.h"
 
 class UUOUDevelopmentDebugControlSubsystem;
+class AActor;
+
+// HUD 액터 목록에 표시할 액터와 대표 디버그 카테고리입니다.
+struct FUOUDevelopmentDebugActorEntry
+{
+	TWeakObjectPtr<AActor> Actor;
+	EUOUDebugCategory Category = EUOUDebugCategory::System;
+};
 
 // 개발 도구 설정을 읽고 디버그 정보와 월드 표시를 렌더링할 실행부입니다.
 UCLASS()
@@ -38,6 +47,9 @@ public:
 	// 이 Subsystem에서 주기적으로 갱신한 최신 VFX 개수 정보를 HUD에 제공합니다.
 	const FString& GetVFXDebugText() const { return VFXDebugText; }
 
+	// 현재 이관된 액터 단위 디버그 표시가 지원하는 월드 액터 목록을 반환합니다.
+	void GetSelectableDebugActors(TArray<FUOUDevelopmentDebugActorEntry>& OutActors) const;
+
 private:
 	void RefreshPlayerDebugText();
 	void DrawPlayerUmbrellaRainBlockerDebug() const;
@@ -58,6 +70,7 @@ private:
 	void DrawPlayerBlockingWallDebug() const;
 	void DrawPuzzleProviderConnections() const;
 	void DrawPuzzleProviderLabels() const;
+	bool ShouldDrawActor(const AActor* Actor) const;
 
 	// 같은 월드의 전체 및 카테고리 디버그 설정을 읽기 위한 약한 참조입니다.
 	TWeakObjectPtr<UUOUDevelopmentDebugControlSubsystem> DebugControlSubsystem;
@@ -94,4 +107,7 @@ private:
 
 	// 다음 VFX 컴포넌트 스캔까지 남은 런타임 시간입니다.
 	float VFXUpdateTimeRemaining = 0.0f;
+
+	// VFX 캐시를 만든 시점의 선택 액터입니다. 선택 변경 시 캐시를 즉시 갱신합니다.
+	TWeakObjectPtr<AActor> VFXCachedSelectedActor;
 };

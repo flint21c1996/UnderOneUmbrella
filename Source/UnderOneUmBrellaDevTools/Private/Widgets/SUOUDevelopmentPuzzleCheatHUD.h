@@ -6,6 +6,7 @@
 #include "Widgets/SCompoundWidget.h"
 
 class AUOUPuzzleConditionGroupActor;
+class AActor;
 class SVerticalBox;
 class UUOUDevelopmentDebugControlSubsystem;
 class UUOUDevelopmentDebugDrawSubsystem;
@@ -40,11 +41,15 @@ private:
 	};
 
 	void RebuildStepRows();
+	void RebuildDebugActorRows();
 	FReply HandleToggleClicked();
 	FReply HandleConditionTabClicked();
 	FReply HandleDebugTabClicked();
 	FReply HandleDebugToolsToggleClicked();
 	FReply HandleDebugCategoryToggleClicked(EUOUDebugCategory Category);
+	FReply HandleDebugActorRefreshClicked();
+	FReply HandleDebugActorClearClicked();
+	FReply HandleDebugActorClicked(TWeakObjectPtr<AActor> DebugActor);
 	FReply HandleRefreshClicked();
 	FReply HandleNextClicked();
 	FReply HandleCancelClicked();
@@ -55,6 +60,7 @@ private:
 	FText GetDebugStatusText() const;
 	FText GetDebugToolsToggleText() const;
 	FText GetDebugCategoryToggleText(EUOUDebugCategory Category) const;
+	FText GetSelectedDebugActorText() const;
 	FText GetPlayerDebugInfoText() const;
 	FText GetPerformanceDebugInfoText() const;
 	FText GetVFXDebugInfoText() const;
@@ -75,6 +81,9 @@ private:
 
 	// 현재 수집된 퍼즐 Step 버튼을 동적으로 담는 Slate 컨테이너입니다.
 	TSharedPtr<SVerticalBox> StepListBox;
+
+	// 현재 월드에서 선택 가능한 디버그 액터 버튼을 담는 동적 Slate 컨테이너입니다.
+	TSharedPtr<SVerticalBox> DebugActorListBox;
 
 	// 확장 패널에서 현재 표시 중인 최상위 페이지입니다.
 	EActivePage ActivePage = EActivePage::Condition;

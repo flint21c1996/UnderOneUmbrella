@@ -11,6 +11,7 @@
 #include "Widgets/SBoxPanel.h"
 #include "Widgets/Text/STextBlock.h"
 
+#include "GameFramework/Actor.h"
 #include "Puzzle/Core/UOUPuzzleConditionGroupActor.h"
 #include "UOUDevelopmentDebugControlSubsystem.h"
 #include "UOUDevelopmentDebugDrawSubsystem.h"
@@ -55,7 +56,7 @@ void SUOUDevelopmentPuzzleCheatHUD::Construct(const FArguments& InArgs)
 				.Padding(12.0f)
 				[
 					SNew(SBox)
-					.WidthOverride(360.0f)
+					.WidthOverride(420.0f)
 					[
 						SNew(SVerticalBox)
 						+ SVerticalBox::Slot()
@@ -295,6 +296,67 @@ void SUOUDevelopmentPuzzleCheatHUD::Construct(const FArguments& InArgs)
 							[
 								SNew(SBorder)
 								.BorderImage(FCoreStyle::Get().GetBrush(TEXT("GenericWhiteBox")))
+								.BorderBackgroundColor(FLinearColor(0.06f, 0.06f, 0.06f, 0.9f))
+								.Padding(8.0f)
+								[
+									SNew(SVerticalBox)
+									+ SVerticalBox::Slot()
+									.AutoHeight()
+									[
+										SNew(STextBlock)
+										.Text(this, &SUOUDevelopmentPuzzleCheatHUD::GetSelectedDebugActorText)
+										.AutoWrapText(true)
+									]
+									+ SVerticalBox::Slot()
+									.AutoHeight()
+									.Padding(0.0f, 6.0f, 0.0f, 0.0f)
+									[
+										SNew(SHorizontalBox)
+										+ SHorizontalBox::Slot()
+										.FillWidth(1.0f)
+										.Padding(0.0f, 0.0f, 3.0f, 0.0f)
+										[
+											SNew(SButton)
+											.OnClicked(this, &SUOUDevelopmentPuzzleCheatHUD::HandleDebugActorRefreshClicked)
+											[
+												SNew(STextBlock)
+												.Text(FText::FromString(TEXT("액터 목록 새로고침")))
+											]
+										]
+										+ SHorizontalBox::Slot()
+										.FillWidth(1.0f)
+										.Padding(3.0f, 0.0f, 0.0f, 0.0f)
+										[
+											SNew(SButton)
+											.OnClicked(this, &SUOUDevelopmentPuzzleCheatHUD::HandleDebugActorClearClicked)
+											[
+												SNew(STextBlock)
+												.Text(FText::FromString(TEXT("선택 해제")))
+											]
+										]
+									]
+									+ SVerticalBox::Slot()
+									.AutoHeight()
+									.Padding(0.0f, 6.0f, 0.0f, 0.0f)
+									[
+										SNew(SBox)
+										.MaxDesiredHeight(220.0f)
+										[
+											SNew(SScrollBox)
+											+ SScrollBox::Slot()
+											[
+												SAssignNew(DebugActorListBox, SVerticalBox)
+											]
+										]
+									]
+								]
+							]
+							+ SVerticalBox::Slot()
+							.AutoHeight()
+							.Padding(0.0f, 10.0f, 0.0f, 0.0f)
+							[
+								SNew(SBorder)
+								.BorderImage(FCoreStyle::Get().GetBrush(TEXT("GenericWhiteBox")))
 								.BorderBackgroundColor(FLinearColor(0.08f, 0.08f, 0.08f, 0.9f))
 								.Padding(8.0f)
 								[
@@ -339,6 +401,7 @@ void SUOUDevelopmentPuzzleCheatHUD::Construct(const FArguments& InArgs)
 	];
 
 	RebuildStepRows();
+	RebuildDebugActorRows();
 }
 
 void SUOUDevelopmentPuzzleCheatHUD::TogglePanel()
@@ -347,6 +410,7 @@ void SUOUDevelopmentPuzzleCheatHUD::TogglePanel()
 	if (bPanelExpanded)
 	{
 		RebuildStepRows();
+		RebuildDebugActorRows();
 	}
 }
 
@@ -421,6 +485,90 @@ void SUOUDevelopmentPuzzleCheatHUD::RebuildStepRows()
 	}
 }
 
+void SUOUDevelopmentPuzzleCheatHUD::RebuildDebugActorRows()
+{
+	if (!DebugActorListBox.IsValid())
+	{
+		return;
+	}
+
+	DebugActorListBox->ClearChildren();
+	const UUOUDevelopmentDebugDrawSubsystem* DrawSubsystem = DebugDrawSubsystem.Get();
+	if (DrawSubsystem == nullptr)
+	{
+		DebugActorListBox->AddSlot()
+		.AutoHeight()
+		[
+			SNew(STextBlock)
+			.Text(FText::FromString(TEXT("디버그 액터 목록을 사용할 수 없습니다.")))
+		];
+		return;
+	}
+
+	TArray<FUOUDevelopmentDebugActorEntry> ActorEntries;
+	DrawSubsystem->GetSelectableDebugActors(ActorEntries);
+	if (ActorEntries.IsEmpty())
+	{
+		DebugActorListBox->AddSlot()
+		.AutoHeight()
+		[
+			SNew(STextBlock)
+			.Text(FText::FromString(TEXT("현재 월드에 지원되는 디버그 액터가 없습니다.")))
+		];
+		return;
+	}
+
+	for (const FUOUDevelopmentDebugActorEntry& Entry : ActorEntries)
+	{
+		const TWeakObjectPtr<AActor> DebugActor = Entry.Actor;
+		const TCHAR* CategoryName = TEXT("System");
+		switch (Entry.Category)
+		{
+		case EUOUDebugCategory::Player:
+			CategoryName = TEXT("Player");
+			break;
+		case EUOUDebugCategory::NPC:
+			CategoryName = TEXT("NPC");
+			break;
+		case EUOUDebugCategory::Puzzle:
+			CategoryName = TEXT("Puzzle");
+			break;
+		case EUOUDebugCategory::VFX:
+			CategoryName = TEXT("VFX");
+			break;
+		default:
+			break;
+		}
+
+		const FText ButtonText = FText::FromString(FString::Printf(
+			TEXT("[%s] %s"),
+			CategoryName,
+			*GetNameSafe(DebugActor.Get())));
+		DebugActorListBox->AddSlot()
+		.AutoHeight()
+		.Padding(0.0f, 0.0f, 0.0f, 3.0f)
+		[
+			SNew(SButton)
+			.OnClicked(this, &SUOUDevelopmentPuzzleCheatHUD::HandleDebugActorClicked, DebugActor)
+			.IsEnabled_Lambda([DebugActor]() { return DebugActor.IsValid(); })
+			[
+				SNew(STextBlock)
+				.Text(ButtonText)
+				.ColorAndOpacity_Lambda([this, DebugActor]()
+				{
+					const UUOUDevelopmentDebugControlSubsystem* ControlSubsystem =
+						DebugControlSubsystem.Get();
+					return FSlateColor(
+						ControlSubsystem != nullptr
+							&& ControlSubsystem->GetSelectedDebugActor() == DebugActor.Get()
+							? FLinearColor(0.25f, 1.0f, 0.35f, 1.0f)
+							: FLinearColor::White);
+				})
+			]
+		];
+	}
+}
+
 FReply SUOUDevelopmentPuzzleCheatHUD::HandleToggleClicked()
 {
 	if (UUOUDevelopmentPuzzleCheatSubsystem* Subsystem = PuzzleCheatSubsystem.Get())
@@ -443,6 +591,7 @@ FReply SUOUDevelopmentPuzzleCheatHUD::HandleConditionTabClicked()
 FReply SUOUDevelopmentPuzzleCheatHUD::HandleDebugTabClicked()
 {
 	ActivePage = EActivePage::Debug;
+	RebuildDebugActorRows();
 	return FReply::Handled();
 }
 
@@ -461,6 +610,34 @@ FReply SUOUDevelopmentPuzzleCheatHUD::HandleDebugCategoryToggleClicked(EUOUDebug
 	{
 		const bool bNewEnabled = !Subsystem->IsDebugCategoryEnabled(Category);
 		Subsystem->SetDebugCategoryEnabled(Category, bNewEnabled);
+	}
+	return FReply::Handled();
+}
+
+FReply SUOUDevelopmentPuzzleCheatHUD::HandleDebugActorRefreshClicked()
+{
+	RebuildDebugActorRows();
+	return FReply::Handled();
+}
+
+FReply SUOUDevelopmentPuzzleCheatHUD::HandleDebugActorClearClicked()
+{
+	if (UUOUDevelopmentDebugControlSubsystem* Subsystem = DebugControlSubsystem.Get())
+	{
+		Subsystem->SetSelectedDebugActor(nullptr);
+	}
+	return FReply::Handled();
+}
+
+FReply SUOUDevelopmentPuzzleCheatHUD::HandleDebugActorClicked(
+	TWeakObjectPtr<AActor> DebugActor)
+{
+	UUOUDevelopmentDebugControlSubsystem* Subsystem = DebugControlSubsystem.Get();
+	AActor* Actor = DebugActor.Get();
+	if (Subsystem != nullptr && IsValid(Actor))
+	{
+		Subsystem->SetSelectedDebugActor(
+			Subsystem->GetSelectedDebugActor() == Actor ? nullptr : Actor);
 	}
 	return FReply::Handled();
 }
@@ -583,6 +760,17 @@ FText SUOUDevelopmentPuzzleCheatHUD::GetDebugCategoryToggleText(EUOUDebugCategor
 		TEXT("%s: %s"),
 		CategoryName,
 		Subsystem->IsDebugCategoryEnabled(Category) ? TEXT("ON") : TEXT("OFF")));
+}
+
+FText SUOUDevelopmentPuzzleCheatHUD::GetSelectedDebugActorText() const
+{
+	const UUOUDevelopmentDebugControlSubsystem* Subsystem = DebugControlSubsystem.Get();
+	const AActor* SelectedActor = Subsystem != nullptr
+		? Subsystem->GetSelectedDebugActor()
+		: nullptr;
+	return FText::FromString(FString::Printf(
+		TEXT("선택 대상: %s"),
+		SelectedActor != nullptr ? *SelectedActor->GetName() : TEXT("없음")));
 }
 
 FText SUOUDevelopmentPuzzleCheatHUD::GetPlayerDebugInfoText() const

@@ -7,6 +7,7 @@
 #include "Debug/UOUDebugSubsystem.h"
 #include "Debug/UOUDevelopmentToolsBuild.h"
 #include "Engine/World.h"
+#include "GameFramework/Actor.h"
 
 #if !UOU_WITH_DEVELOPMENT_TOOLS
 #error UOUDevelopmentDebugControlSubsystem must only be compiled when development tools are enabled.
@@ -85,6 +86,27 @@ void UUOUDevelopmentDebugControlSubsystem::SetDebugCategoryEnabled(
 	}
 
 	ApplyCategoryStateToLegacyController(Category);
+}
+
+void UUOUDevelopmentDebugControlSubsystem::SetSelectedDebugActor(AActor* NewSelectedActor)
+{
+	if (IsValid(NewSelectedActor))
+	{
+		SelectedDebugActor = NewSelectedActor;
+		return;
+	}
+
+	SelectedDebugActor.Reset();
+}
+
+AActor* UUOUDevelopmentDebugControlSubsystem::GetSelectedDebugActor() const
+{
+	return SelectedDebugActor.Get();
+}
+
+bool UUOUDevelopmentDebugControlSubsystem::ShouldDrawDebugActor(const AActor* Actor) const
+{
+	return IsValid(Actor) && SelectedDebugActor.Get() == Actor;
 }
 
 void UUOUDevelopmentDebugControlSubsystem::ApplyMasterStateToLegacyController() const

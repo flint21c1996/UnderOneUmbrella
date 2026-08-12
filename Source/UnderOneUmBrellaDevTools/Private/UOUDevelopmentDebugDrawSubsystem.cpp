@@ -388,6 +388,17 @@ namespace UOUDevelopmentDebugDrawPrivate
 		return false;
 	}
 
+	AActor* GetDebugObjectOwnerActor(UObject* Object)
+	{
+		if (AActor* Actor = Cast<AActor>(Object))
+		{
+			return Actor;
+		}
+
+		const UActorComponent* ActorComponent = Cast<UActorComponent>(Object);
+		return ActorComponent != nullptr ? ActorComponent->GetOwner() : nullptr;
+	}
+
 	FString BuildPuzzleProviderLabelText(UObject* ProviderObject)
 	{
 		if (!IsValid(ProviderObject))
@@ -527,6 +538,11 @@ void UUOUDevelopmentDebugDrawSubsystem::RefreshPlayerDebugText()
 	if (PlayerPawn == nullptr)
 	{
 		PlayerDebugText = TEXT("Player\nPawn: None");
+		return;
+	}
+	if (!ShouldDrawActor(PlayerPawn))
+	{
+		PlayerDebugText = TEXT("Player\nSelect the player actor to inspect it.");
 		return;
 	}
 
@@ -732,7 +748,7 @@ void UUOUDevelopmentDebugDrawSubsystem::DrawPlayerUmbrellaRainBlockerDebug() con
 	const UUOUUmbrellaComponent* UmbrellaComponent = PlayerPawn != nullptr
 		? PlayerPawn->FindComponentByClass<UUOUUmbrellaComponent>()
 		: nullptr;
-	if (World == nullptr || UmbrellaComponent == nullptr)
+	if (World == nullptr || !ShouldDrawActor(PlayerPawn) || UmbrellaComponent == nullptr)
 	{
 		return;
 	}
@@ -815,7 +831,10 @@ void UUOUDevelopmentDebugDrawSubsystem::DrawPlayerUmbrellaPourTraceDebug() const
 	const UUOUUmbrellaComponent* UmbrellaComponent = PlayerPawn != nullptr
 		? PlayerPawn->FindComponentByClass<UUOUUmbrellaComponent>()
 		: nullptr;
-	if (World == nullptr || UmbrellaComponent == nullptr || !UmbrellaComponent->bHasLastPourTrace)
+	if (World == nullptr
+		|| !ShouldDrawActor(PlayerPawn)
+		|| UmbrellaComponent == nullptr
+		|| !UmbrellaComponent->bHasLastPourTrace)
 	{
 		return;
 	}
@@ -940,85 +959,91 @@ void UUOUDevelopmentDebugDrawSubsystem::DrawPlayerUmbrellaPourPlacementDebug() c
 	const UUOUUmbrellaComponent* UmbrellaComponent = PlayerPawn != nullptr
 		? PlayerPawn->FindComponentByClass<UUOUUmbrellaComponent>()
 		: nullptr;
-	if (World == nullptr || UmbrellaComponent == nullptr || !UmbrellaComponent->HasUmbrella())
+	if (World == nullptr)
 	{
 		return;
 	}
 
 	constexpr float Radius = 10.0f;
 	constexpr float Thickness = 2.0f;
-	FTransform SocketTransform = FTransform::Identity;
-	if (UmbrellaComponent->TryGetPouringPointTransform(SocketTransform))
+	const bool bDrawPlayerPlacement = ShouldDrawActor(PlayerPawn)
+		&& UmbrellaComponent != nullptr
+		&& UmbrellaComponent->HasUmbrella();
+	if (bDrawPlayerPlacement)
 	{
-		const FVector SocketLocation = SocketTransform.GetLocation();
-		const USkeletalMeshComponent* SocketSource =
-			UmbrellaComponent->GetPouringSocketSourceComponent();
-		const FString SocketDebugText = FString::Printf(
-			TEXT("PourSocket\nComponent: %s\nMesh: %s\nSocket: %s\nOffset: %.1f %.1f %.1f"),
-			*GetNameSafe(SocketSource),
-			SocketSource != nullptr
-				? *GetNameSafe(SocketSource->GetSkeletalMeshAsset())
-				: TEXT("None"),
-			*UmbrellaComponent->GetPouringSocketName().ToString(),
-			UmbrellaComponent->GetPouringSocketWorldUnitOffset().X,
-			UmbrellaComponent->GetPouringSocketWorldUnitOffset().Y,
-			UmbrellaComponent->GetPouringSocketWorldUnitOffset().Z);
-		DrawDebugSphere(
-			World, SocketLocation, Radius, 16, FColor::Magenta, false, 0.0f, 0, Thickness);
-		DrawDebugCoordinateSystem(
-			World,
-			SocketLocation,
-			SocketTransform.Rotator(),
-			Radius * 2.5f,
-			false,
-			0.0f,
-			0,
-			Thickness);
-		DrawDebugString(
-			World,
-			SocketLocation + FVector(0.0f, 0.0f, Radius + 18.0f),
-			SocketDebugText,
-			nullptr,
-			FColor::Magenta,
-			0.0f,
-			true);
-	}
+		FTransform SocketTransform = FTransform::Identity;
+		if (UmbrellaComponent->TryGetPouringPointTransform(SocketTransform))
+		{
+			const FVector SocketLocation = SocketTransform.GetLocation();
+			const USkeletalMeshComponent* SocketSource =
+				UmbrellaComponent->GetPouringSocketSourceComponent();
+			const FString SocketDebugText = FString::Printf(
+				TEXT("PourSocket\nComponent: %s\nMesh: %s\nSocket: %s\nOffset: %.1f %.1f %.1f"),
+				*GetNameSafe(SocketSource),
+				SocketSource != nullptr
+					? *GetNameSafe(SocketSource->GetSkeletalMeshAsset())
+					: TEXT("None"),
+				*UmbrellaComponent->GetPouringSocketName().ToString(),
+				UmbrellaComponent->GetPouringSocketWorldUnitOffset().X,
+				UmbrellaComponent->GetPouringSocketWorldUnitOffset().Y,
+				UmbrellaComponent->GetPouringSocketWorldUnitOffset().Z);
+			DrawDebugSphere(
+				World, SocketLocation, Radius, 16, FColor::Magenta, false, 0.0f, 0, Thickness);
+			DrawDebugCoordinateSystem(
+				World,
+				SocketLocation,
+				SocketTransform.Rotator(),
+				Radius * 2.5f,
+				false,
+				0.0f,
+				0,
+				Thickness);
+			DrawDebugString(
+				World,
+				SocketLocation + FVector(0.0f, 0.0f, Radius + 18.0f),
+				SocketDebugText,
+				nullptr,
+				FColor::Magenta,
+				0.0f,
+				true);
+		}
 
-	FVector DropLocation = FVector::ZeroVector;
-	FVector DropDirection = FVector::ForwardVector;
-	if (UmbrellaComponent->TryGetPourDropSpawnPlacement(DropLocation, DropDirection))
-	{
-		const FVector SafeDirection = DropDirection.IsNearlyZero()
-			? FVector::DownVector
-			: DropDirection.GetSafeNormal();
-		DrawDebugSphere(
-			World, DropLocation, Radius * 0.7f, 16, FColor::Yellow, false, 0.0f, 0, Thickness);
-		DrawDebugLine(
-			World,
-			DropLocation,
-			DropLocation + SafeDirection * 120.0f,
-			FColor::Yellow,
-			false,
-			0.0f,
-			0,
-			Thickness);
-		DrawDebugLine(
-			World,
-			DropLocation,
-			DropLocation + FVector::DownVector * 120.0f,
-			FColor::Cyan,
-			false,
-			0.0f,
-			0,
-			Thickness);
-		DrawDebugString(
-			World,
-			DropLocation + FVector(0.0f, 0.0f, Radius + 36.0f),
-			TEXT("DropSpawn"),
-			nullptr,
-			FColor::Yellow,
-			0.0f,
-			true);
+		FVector DropLocation = FVector::ZeroVector;
+		FVector DropDirection = FVector::ForwardVector;
+		if (UmbrellaComponent->TryGetPourDropSpawnPlacement(DropLocation, DropDirection))
+		{
+			const FVector SafeDirection = DropDirection.IsNearlyZero()
+				? FVector::DownVector
+				: DropDirection.GetSafeNormal();
+			DrawDebugSphere(
+				World, DropLocation, Radius * 0.7f, 16, FColor::Yellow, false, 0.0f, 0, Thickness);
+			DrawDebugLine(
+				World,
+				DropLocation,
+				DropLocation + SafeDirection * 120.0f,
+				FColor::Yellow,
+				false,
+				0.0f,
+				0,
+				Thickness);
+			DrawDebugLine(
+				World,
+				DropLocation,
+				DropLocation + FVector::DownVector * 120.0f,
+				FColor::Cyan,
+				false,
+				0.0f,
+				0,
+				Thickness);
+			DrawDebugString(
+				World,
+				DropLocation + FVector(0.0f, 0.0f, Radius + 36.0f),
+				TEXT("DropSpawn"),
+				nullptr,
+				FColor::Yellow,
+				0.0f,
+				true);
+		}
 	}
 
 	for (TActorIterator<AUOUPourDropActor> It(World); It; ++It)
@@ -1027,7 +1052,7 @@ void UUOUDevelopmentDebugDrawSubsystem::DrawPlayerUmbrellaPourPlacementDebug() c
 		const USphereComponent* CollisionComponent = IsValid(DropActor)
 			? DropActor->CollisionComponent
 			: nullptr;
-		if (CollisionComponent == nullptr)
+		if (!ShouldDrawActor(DropActor) || CollisionComponent == nullptr)
 		{
 			continue;
 		}
@@ -1056,7 +1081,7 @@ void UUOUDevelopmentDebugDrawSubsystem::DrawNPCDebug() const
 	for (TActorIterator<AUOUNPCCharacter> It(World); It; ++It)
 	{
 		const AUOUNPCCharacter* NPC = *It;
-		if (!IsValid(NPC))
+		if (!IsValid(NPC) || !ShouldDrawActor(NPC))
 		{
 			continue;
 		}
@@ -1212,7 +1237,7 @@ void UUOUDevelopmentDebugDrawSubsystem::DrawInteractionDebug() const
 	const UUOUPushPullInteractorComponent* PushPullComponent = PlayerPawn != nullptr
 		? PlayerPawn->FindComponentByClass<UUOUPushPullInteractorComponent>()
 		: nullptr;
-	if (World == nullptr || PushPullComponent == nullptr)
+	if (World == nullptr || !ShouldDrawActor(PlayerPawn) || PushPullComponent == nullptr)
 	{
 		return;
 	}
@@ -1375,6 +1400,15 @@ void UUOUDevelopmentDebugDrawSubsystem::ResetPerformanceDebugState()
 
 void UUOUDevelopmentDebugDrawSubsystem::RefreshVFXDebugData(float DeltaTime)
 {
+	const UUOUDevelopmentDebugControlSubsystem* ControlSubsystem = DebugControlSubsystem.Get();
+	AActor* SelectedActor = ControlSubsystem != nullptr
+		? ControlSubsystem->GetSelectedDebugActor()
+		: nullptr;
+	if (VFXCachedSelectedActor.Get() != SelectedActor)
+	{
+		VFXUpdateTimeRemaining = 0.0f;
+	}
+
 	VFXUpdateTimeRemaining -= FMath::Max(0.0f, DeltaTime);
 	if (VFXUpdateTimeRemaining > 0.0f && !VFXDebugText.IsEmpty())
 	{
@@ -1389,6 +1423,13 @@ void UUOUDevelopmentDebugDrawSubsystem::RefreshVFXDebugData(float DeltaTime)
 	{
 		VFXDebugText = TEXT("VFX\nWorld: None");
 		VFXUpdateTimeRemaining = UOUDevelopmentDebugDrawPrivate::VFXUpdateIntervalSeconds;
+		return;
+	}
+	if (SelectedActor == nullptr)
+	{
+		VFXDebugText = TEXT("VFX\nSelect a VFX actor to inspect it.");
+		VFXUpdateTimeRemaining = UOUDevelopmentDebugDrawPrivate::VFXUpdateIntervalSeconds;
+		VFXCachedSelectedActor.Reset();
 		return;
 	}
 
@@ -1409,7 +1450,7 @@ void UUOUDevelopmentDebugDrawSubsystem::RefreshVFXDebugData(float DeltaTime)
 	for (TActorIterator<AActor> It(World); It; ++It)
 	{
 		AActor* Actor = *It;
-		if (!IsValid(Actor))
+		if (!IsValid(Actor) || !ShouldDrawActor(Actor))
 		{
 			continue;
 		}
@@ -1467,7 +1508,7 @@ void UUOUDevelopmentDebugDrawSubsystem::RefreshVFXDebugData(float DeltaTime)
 	{
 		const AActor* Owner = Pair.Key;
 		const FVFXOwnerStats& Stats = Pair.Value;
-		if (!IsValid(Owner) || Stats.LocationSampleCount <= 0)
+		if (!IsValid(Owner) || !ShouldDrawActor(Owner) || Stats.LocationSampleCount <= 0)
 		{
 			continue;
 		}
@@ -1483,6 +1524,7 @@ void UUOUDevelopmentDebugDrawSubsystem::RefreshVFXDebugData(float DeltaTime)
 	}
 
 	VFXUpdateTimeRemaining = UOUDevelopmentDebugDrawPrivate::VFXUpdateIntervalSeconds;
+	VFXCachedSelectedActor = SelectedActor;
 }
 
 void UUOUDevelopmentDebugDrawSubsystem::DrawVFXOwnerLabels() const
@@ -1523,7 +1565,7 @@ void UUOUDevelopmentDebugDrawSubsystem::DrawRainAreaVFXDebug() const
 		const UBoxComponent* RainVolume = IsValid(RainArea)
 			? RainArea->GetRainVolumeComponent()
 			: nullptr;
-		if (RainVolume == nullptr)
+		if (!ShouldDrawActor(RainArea) || RainVolume == nullptr)
 		{
 			continue;
 		}
@@ -1600,7 +1642,7 @@ void UUOUDevelopmentDebugDrawSubsystem::DrawEnvironmentVisualDebug() const
 	for (TActorIterator<AActor> It(World); It; ++It)
 	{
 		AActor* Actor = *It;
-		if (!IsValid(Actor))
+		if (!IsValid(Actor) || !ShouldDrawActor(Actor))
 		{
 			continue;
 		}
@@ -1696,6 +1738,7 @@ void UUOUDevelopmentDebugDrawSubsystem::ResetVFXDebugState()
 	VFXOwnerLabelTexts.Reset();
 	VFXOwnerLabelLocations.Reset();
 	VFXUpdateTimeRemaining = 0.0f;
+	VFXCachedSelectedActor.Reset();
 }
 
 TStatId UUOUDevelopmentDebugDrawSubsystem::GetStatId() const
@@ -1724,7 +1767,7 @@ void UUOUDevelopmentDebugDrawSubsystem::DrawHeatWireDebug() const
 		const UUOUHeatWireComponent* HeatWireComponent = IsValid(HeatWireActor)
 			? HeatWireActor->GetHeatWireComponent()
 			: nullptr;
-		if (HeatWirePath == nullptr)
+		if (!ShouldDrawActor(HeatWireActor) || HeatWirePath == nullptr)
 		{
 			continue;
 		}
@@ -1827,7 +1870,7 @@ void UUOUDevelopmentDebugDrawSubsystem::DrawWeightedButtonDebug() const
 	for (TActorIterator<AActor> It(World); It; ++It)
 	{
 		AActor* Owner = *It;
-		if (!IsValid(Owner))
+		if (!IsValid(Owner) || !ShouldDrawActor(Owner))
 		{
 			continue;
 		}
@@ -1880,7 +1923,7 @@ void UUOUDevelopmentDebugDrawSubsystem::DrawPlayerBlockingWallDebug() const
 		const UBoxComponent* BlockingVolume = IsValid(WallActor)
 			? WallActor->BlockingVolume
 			: nullptr;
-		if (BlockingVolume == nullptr)
+		if (!ShouldDrawActor(WallActor) || BlockingVolume == nullptr)
 		{
 			continue;
 		}
@@ -1944,6 +1987,120 @@ int32 UUOUDevelopmentDebugDrawSubsystem::GetPuzzleDebugProviderCount() const
 	return ValidProviderCount;
 }
 
+void UUOUDevelopmentDebugDrawSubsystem::GetSelectableDebugActors(
+	TArray<FUOUDevelopmentDebugActorEntry>& OutActors) const
+{
+	OutActors.Reset();
+	UWorld* World = GetWorld();
+	if (World == nullptr)
+	{
+		return;
+	}
+
+	TSet<TWeakObjectPtr<AActor>> AddedActors;
+	const auto AddActor = [&OutActors, &AddedActors](AActor* Actor, EUOUDebugCategory Category)
+	{
+		if (!IsValid(Actor))
+		{
+			return;
+		}
+		const TWeakObjectPtr<AActor> WeakActor(Actor);
+		if (AddedActors.Contains(WeakActor))
+		{
+			return;
+		}
+
+		AddedActors.Add(WeakActor);
+		FUOUDevelopmentDebugActorEntry& Entry = OutActors.AddDefaulted_GetRef();
+		Entry.Actor = Actor;
+		Entry.Category = Category;
+	};
+
+	if (const APlayerController* PlayerController = World->GetFirstPlayerController())
+	{
+		AddActor(PlayerController->GetPawn(), EUOUDebugCategory::Player);
+	}
+
+	for (TActorIterator<AUOUPourDropActor> It(World); It; ++It)
+	{
+		AddActor(*It, EUOUDebugCategory::Player);
+	}
+
+	for (TActorIterator<AActor> It(World); It; ++It)
+	{
+		AActor* Actor = *It;
+		if (!IsValid(Actor))
+		{
+			continue;
+		}
+
+		if (Actor->IsA<AUOUNPCCharacter>())
+		{
+			AddActor(Actor, EUOUDebugCategory::NPC);
+			continue;
+		}
+
+		bool bPuzzleActor = Actor->IsA<AUOUHeatWireActor>()
+			|| Actor->IsA<AUOUPlayerBlockingWallActor>()
+			|| Actor->FindComponentByClass<UUOUWeightedButtonComponent>() != nullptr;
+		if (!bPuzzleActor
+			&& Actor->GetClass()->ImplementsInterface(UUOUDebugProvider::StaticClass()))
+		{
+			bPuzzleActor = IUOUDebugProvider::Execute_GetDebugCategory(Actor)
+				== EUOUDebugCategory::Puzzle;
+		}
+		if (!bPuzzleActor)
+		{
+			TInlineComponentArray<UActorComponent*> Components(Actor);
+			for (UActorComponent* Component : Components)
+			{
+				if (IsValid(Component)
+					&& Component->GetClass()->ImplementsInterface(UUOUDebugProvider::StaticClass())
+					&& IUOUDebugProvider::Execute_GetDebugCategory(Component)
+						== EUOUDebugCategory::Puzzle)
+				{
+					bPuzzleActor = true;
+					break;
+				}
+			}
+		}
+
+		if (bPuzzleActor)
+		{
+			AddActor(Actor, EUOUDebugCategory::Puzzle);
+			continue;
+		}
+
+		const bool bVFXActor = Actor->IsA<AUOUUmbrellaRainArea>()
+			|| Actor->FindComponentByClass<UUOUEnvironmentVisualComponent>() != nullptr
+			|| Actor->FindComponentByClass<UNiagaraComponent>() != nullptr
+			|| Actor->FindComponentByClass<UParticleSystemComponent>() != nullptr;
+		if (bVFXActor)
+		{
+			AddActor(Actor, EUOUDebugCategory::VFX);
+		}
+	}
+
+	OutActors.Sort([](
+		const FUOUDevelopmentDebugActorEntry& Left,
+		const FUOUDevelopmentDebugActorEntry& Right)
+	{
+		if (Left.Category != Right.Category)
+		{
+			return static_cast<uint8>(Left.Category) < static_cast<uint8>(Right.Category);
+		}
+
+		return GetNameSafe(Left.Actor.Get()) < GetNameSafe(Right.Actor.Get());
+	});
+}
+
+bool UUOUDevelopmentDebugDrawSubsystem::ShouldDrawActor(const AActor* Actor) const
+{
+	const UUOUDevelopmentDebugControlSubsystem* ControlSubsystem =
+		DebugControlSubsystem.Get();
+	return ControlSubsystem != nullptr && ControlSubsystem->ShouldDrawDebugActor(Actor);
+}
+
 void UUOUDevelopmentDebugDrawSubsystem::TryAddPuzzleDebugProvider(UObject* ProviderObject)
 {
 	if (!IsValid(ProviderObject)
@@ -1968,6 +2125,8 @@ void UUOUDevelopmentDebugDrawSubsystem::DrawPuzzleProviderConnections() const
 	{
 		UObject* ProviderObject = WeakProviderObject.Get();
 		if (!IsValid(ProviderObject)
+			|| !ShouldDrawActor(
+				UOUDevelopmentDebugDrawPrivate::GetDebugObjectOwnerActor(ProviderObject))
 			|| !ProviderObject->GetClass()->ImplementsInterface(UUOUDebugProvider::StaticClass())
 			|| !IUOUDebugProvider::Execute_IsDebugProviderEnabled(ProviderObject))
 		{
@@ -2017,6 +2176,8 @@ void UUOUDevelopmentDebugDrawSubsystem::DrawPuzzleProviderLabels() const
 	{
 		UObject* ProviderObject = WeakProviderObject.Get();
 		if (!IsValid(ProviderObject)
+			|| !ShouldDrawActor(
+				UOUDevelopmentDebugDrawPrivate::GetDebugObjectOwnerActor(ProviderObject))
 			|| !ProviderObject->GetClass()->ImplementsInterface(UUOUDebugProvider::StaticClass())
 			|| !IUOUDebugProvider::Execute_IsDebugProviderEnabled(ProviderObject))
 		{
