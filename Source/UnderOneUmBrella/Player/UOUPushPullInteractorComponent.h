@@ -16,7 +16,7 @@ class UUOURotatableMirrorComponent;
 // 플레이어가 퍼즐 블럭을 잡고 밀고 당기는 전용 흐름을 관리하는 컴포넌트다.
 // 후보 탐색과 잡기 상태, 이동 입력 해석을 모두 이곳에서 맡는다.
 UCLASS(ClassGroup=(Gameplay), meta=(BlueprintSpawnableComponent))
-class UUOUPushPullInteractorComponent : public UActorComponent
+class UNDERONEUMBRELLA_API UUOUPushPullInteractorComponent : public UActorComponent
 {
 	GENERATED_BODY()
 

@@ -47,7 +47,7 @@ enum class EUOULightReflectionDirectionMode : uint8
 
 // 우산 표면처럼 게임플레이 빛 트레이스를 차단하거나 반사하는 표면 컴포넌트입니다.
 UCLASS(ClassGroup=(Light), meta=(BlueprintSpawnableComponent, DisplayName="UOU Light Interaction Surface", ToolTip = "UOU Light Exposure Source에서 나온 게임플레이 빛을 차단하거나 반사합니다."))
-class UUOULightInteractionSurfaceComponent : public UBoxComponent
+class UNDERONEUMBRELLA_API UUOULightInteractionSurfaceComponent : public UBoxComponent
 {
 	GENERATED_BODY()
 

@@ -28,7 +28,7 @@ struct FOccludedMeshState
 
 // 8방향 스냅 카메라와 줌, 가림 처리를 한 번에 관리하는 카메라 전용 컴포넌트다.
 UCLASS(ClassGroup=(Camera), meta=(BlueprintSpawnableComponent))
-class UUOUCameraControllerComponent : public UActorComponent
+class UNDERONEUMBRELLA_API UUOUCameraControllerComponent : public UActorComponent
 {
 	GENERATED_BODY()
 

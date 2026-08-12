@@ -12,7 +12,7 @@ class UUOUUmbrellaLightShadeVolumeComponent;
 class USceneComponent;
 
 UCLASS(ClassGroup=(Gameplay), meta=(BlueprintSpawnableComponent, DisplayName="UOU Umbrella Light Interaction"))
-class UUOUUmbrellaLightInteractionComponent : public UActorComponent
+class UNDERONEUMBRELLA_API UUOUUmbrellaLightInteractionComponent : public UActorComponent
 {
 	GENERATED_BODY()
 

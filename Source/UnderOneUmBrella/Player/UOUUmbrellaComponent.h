@@ -76,7 +76,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnUmbrellaRainBlockedSignature, flo
 // 플레이어가 들고 있는 우산의 보유 상태, 형태 전환, 물 저장과 붓기, 비 차단을 담당하는 컴포넌트입니다.
 // 캐릭터 블루프린트에 붙여두고 참조 컴포넌트와 입력 키를 디테일 창에서 조정할 수 있게 열어둡니다.
 UCLASS(ClassGroup=(Gameplay), meta=(BlueprintSpawnableComponent, DisplayName="UOU Umbrella"))
-class UUOUUmbrellaComponent : public UActorComponent
+class UNDERONEUMBRELLA_API UUOUUmbrellaComponent : public UActorComponent
 {
 	GENERATED_BODY()
 
