@@ -564,7 +564,6 @@ void UUOUDebugSubsystem::Tick(float DeltaTime)
 	}
 
 	DrawControllerStatus();
-	DrawPlayerDebug();
 	DrawPerformanceStats(DeltaTime);
 	DrawVFXDebug();
 }

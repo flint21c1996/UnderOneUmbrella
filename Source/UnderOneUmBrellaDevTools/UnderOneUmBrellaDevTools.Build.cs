@@ -18,6 +18,7 @@ public class UnderOneUmBrellaDevTools : ModuleRules
 
 		PrivateDependencyModuleNames.AddRange(new string[]
 		{
+			"InputCore",
 			"Slate",
 			"SlateCore"
 		});
