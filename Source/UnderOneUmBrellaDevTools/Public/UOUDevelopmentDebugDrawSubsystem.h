@@ -44,6 +44,7 @@ private:
 	void DrawPlayerUmbrellaPourTraceDebug() const;
 	void DrawPlayerUmbrellaPourPlacementDebug() const;
 	void DrawInteractionDebug() const;
+	void DrawNPCDebug() const;
 	void RefreshPerformanceDebugText(float DeltaTime);
 	void ResetPerformanceDebugState();
 	void RefreshVFXDebugData(float DeltaTime);

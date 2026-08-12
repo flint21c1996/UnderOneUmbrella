@@ -18,7 +18,9 @@ public class UnderOneUmBrellaDevTools : ModuleRules
 
 		PrivateDependencyModuleNames.AddRange(new string[]
 		{
+			"AIModule",
 			"InputCore",
+			"NavigationSystem",
 			"Niagara",
 			"RenderCore",
 			"RHI",

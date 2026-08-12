@@ -2,6 +2,9 @@
 
 #include "UOUDevelopmentDebugDrawSubsystem.h"
 
+#include "AIController.h"
+#include "Animation/AnimInstance.h"
+#include "Animation/AnimMontage.h"
 #include "Components/ActorComponent.h"
 #include "Components/PrimitiveComponent.h"
 #include "Components/SceneComponent.h"
@@ -23,6 +26,8 @@
 #include "HAL/PlatformMemory.h"
 #include "InputCoreTypes.h"
 #include "NiagaraComponent.h"
+#include "Navigation/PathFollowingComponent.h"
+#include "NavigationPath.h"
 #include "Particles/ParticleSystemComponent.h"
 #include "Player/UOUCameraControllerComponent.h"
 #include "Player/UOUCharacter.h"
@@ -40,6 +45,7 @@
 #include "UOUDevelopmentDebugControlSubsystem.h"
 #include "UnrealClient.h"
 #include "World/Light/UOULightInteractionSurfaceComponent.h"
+#include "World/NPC/UOUNPCCharacter.h"
 #include "World/Pour/UOUPourDropActor.h"
 
 #if !UOU_WITH_DEVELOPMENT_TOOLS
@@ -135,6 +141,28 @@ namespace UOUDevelopmentDebugDrawPrivate
 			return TEXT("Flying");
 		case MOVE_Custom:
 			return FString::Printf(TEXT("Custom(%d)"), MovementComponent->CustomMovementMode);
+		default:
+			return TEXT("Unknown");
+		}
+	}
+
+	FString GetPathFollowingStatusName(const UPathFollowingComponent* PathFollowingComponent)
+	{
+		if (PathFollowingComponent == nullptr)
+		{
+			return TEXT("No Controller");
+		}
+
+		switch (PathFollowingComponent->GetStatus())
+		{
+		case EPathFollowingStatus::Idle:
+			return TEXT("Idle");
+		case EPathFollowingStatus::Waiting:
+			return TEXT("Waiting");
+		case EPathFollowingStatus::Paused:
+			return TEXT("Paused");
+		case EPathFollowingStatus::Moving:
+			return TEXT("Moving");
 		default:
 			return TEXT("Unknown");
 		}
@@ -289,6 +317,11 @@ void UUOUDevelopmentDebugDrawSubsystem::Tick(float DeltaTime)
 	if (ControlSubsystem->IsDebugCategoryEnabled(EUOUDebugCategory::Interaction))
 	{
 		DrawInteractionDebug();
+	}
+
+	if (ControlSubsystem->IsDebugCategoryEnabled(EUOUDebugCategory::NPC))
+	{
+		DrawNPCDebug();
 	}
 
 	if (ControlSubsystem->IsDebugCategoryEnabled(EUOUDebugCategory::Performance))
@@ -852,6 +885,163 @@ void UUOUDevelopmentDebugDrawSubsystem::DrawPlayerUmbrellaPourPlacementDebug() c
 			0.0f,
 			0,
 			1.5f);
+	}
+}
+
+void UUOUDevelopmentDebugDrawSubsystem::DrawNPCDebug() const
+{
+	UWorld* World = GetWorld();
+	if (World == nullptr)
+	{
+		return;
+	}
+
+	for (TActorIterator<AUOUNPCCharacter> It(World); It; ++It)
+	{
+		const AUOUNPCCharacter* NPC = *It;
+		if (!IsValid(NPC))
+		{
+			continue;
+		}
+
+		const FUOUNPCActionRequest ActionRequest = NPC->GetCurrentActionRequest();
+		const AAIController* AIController = Cast<AAIController>(NPC->GetController());
+		const UPathFollowingComponent* PathFollowingComponent = AIController != nullptr
+			? AIController->GetPathFollowingComponent()
+			: nullptr;
+		FVector TargetLocation = FVector::ZeroVector;
+		const bool bHasTargetLocation = NPC->GetCurrentActionTargetLocation(TargetLocation);
+
+		TArray<FString> Lines;
+		Lines.Add(UOUDevelopmentDebugDrawPrivate::GetActorDebugName(NPC));
+		Lines.Add(FString::Printf(
+			TEXT("Activated: %s"),
+			UOUDevelopmentDebugDrawPrivate::GetYesNo(NPC->bActivated)));
+		Lines.Add(FString::Printf(
+			TEXT("Action Request: %s"),
+			NPC->bHasActiveActionRequest ? TEXT("Active") : TEXT("Legacy")));
+		Lines.Add(FString::Printf(
+			TEXT("Action: %s"),
+			*UOUDevelopmentDebugDrawPrivate::GetEnumValueName(
+				StaticEnum<EUOUNPCActionType>(),
+				static_cast<int64>(ActionRequest.ActionType))));
+		Lines.Add(FString::Printf(TEXT("Source: %s"), *GetNameSafe(NPC->ActiveActionSource.Get())));
+		Lines.Add(FString::Printf(
+			TEXT("Movement: %s"),
+			*UOUDevelopmentDebugDrawPrivate::GetMovementModeName(NPC->GetCharacterMovement())));
+		Lines.Add(FString::Printf(
+			TEXT("Path: %s"),
+			*UOUDevelopmentDebugDrawPrivate::GetPathFollowingStatusName(PathFollowingComponent)));
+		Lines.Add(FString::Printf(
+			TEXT("Pending Jump Move: %s"),
+			UOUDevelopmentDebugDrawPrivate::GetYesNo(NPC->bPendingMoveAfterJumpLanding)));
+
+		if (ActionRequest.bUseTargetActor)
+		{
+			Lines.Add(FString::Printf(
+				TEXT("Target Actor: %s"),
+				*UOUDevelopmentDebugDrawPrivate::GetActorDebugName(ActionRequest.TargetActor.Get())));
+		}
+		else
+		{
+			Lines.Add(FString::Printf(
+				TEXT("Target Location: %s"),
+				*ActionRequest.TargetLocation.ToCompactString()));
+		}
+
+		if (bHasTargetLocation)
+		{
+			Lines.Add(FString::Printf(
+				TEXT("Distance: %.1f / %.1f"),
+				FVector::Dist2D(NPC->GetActorLocation(), TargetLocation),
+				NPC->GetCurrentActionAcceptanceRadius()));
+		}
+
+		const UAnimMontage* RequestedMontage = ActionRequest.AnimationMontage != nullptr
+			? ActionRequest.AnimationMontage.Get()
+			: NPC->ActivationMontage.Get();
+		const USkeletalMeshComponent* MeshComponent = NPC->GetMesh();
+		UAnimInstance* AnimInstance = MeshComponent != nullptr
+			? MeshComponent->GetAnimInstance()
+			: nullptr;
+		const UAnimMontage* ActiveMontage = AnimInstance != nullptr
+			? AnimInstance->GetCurrentActiveMontage()
+			: nullptr;
+		Lines.Add(FString::Printf(TEXT("Requested Montage: %s"), *GetNameSafe(RequestedMontage)));
+		Lines.Add(FString::Printf(TEXT("Active Montage: %s"), *GetNameSafe(ActiveMontage)));
+		Lines.Add(FString::Printf(TEXT("Anim Rate: %.2f"), ActionRequest.AnimationPlayRate));
+		Lines.Add(FString::Printf(
+			TEXT("Anim Section: %s"),
+			*ActionRequest.AnimationStartSection.ToString()));
+
+		DrawDebugString(
+			World,
+			NPC->GetActorLocation()
+				+ FVector(0.0f, 0.0f, NPC->GetSimpleCollisionHalfHeight() + 60.0f),
+			FString::Join(Lines, LINE_TERMINATOR),
+			nullptr,
+			FColor::White,
+			0.0f,
+			true,
+			0.9f);
+
+		if (bHasTargetLocation)
+		{
+			const FVector StartLocation = NPC->GetActorLocation() + FVector(0.0f, 0.0f, 40.0f);
+			const FVector EndLocation = TargetLocation + FVector(0.0f, 0.0f, 40.0f);
+			const float AcceptanceRadius = FMath::Max(
+				0.0f,
+				NPC->GetCurrentActionAcceptanceRadius());
+			DrawDebugDirectionalArrow(
+				World, StartLocation, EndLocation, 80.0f, FColor::Green, false, 0.0f, 0, 2.0f);
+			DrawDebugSphere(World, TargetLocation, 24.0f, 12, FColor::Green, false, 0.0f, 0, 2.0f);
+
+			if (AcceptanceRadius > 0.0f)
+			{
+				DrawDebugCylinder(
+					World,
+					TargetLocation,
+					TargetLocation + FVector(0.0f, 0.0f, 80.0f),
+					AcceptanceRadius,
+					24,
+					FColor::Green,
+					false,
+					0.0f,
+					0,
+					1.0f);
+			}
+		}
+
+		const FNavPathSharedPtr Path = PathFollowingComponent != nullptr
+			? PathFollowingComponent->GetPath()
+			: nullptr;
+		if (!Path.IsValid())
+		{
+			continue;
+		}
+
+		const TArray<FNavPathPoint>& PathPoints = Path->GetPathPoints();
+		for (int32 Index = 0; Index < PathPoints.Num(); ++Index)
+		{
+			const FVector PointLocation =
+				PathPoints[Index].Location + FVector(0.0f, 0.0f, 20.0f);
+			DrawDebugSphere(World, PointLocation, 12.0f, 8, FColor::Cyan, false, 0.0f, 0, 1.0f);
+
+			if (Index > 0)
+			{
+				const FVector PreviousLocation =
+					PathPoints[Index - 1].Location + FVector(0.0f, 0.0f, 20.0f);
+				DrawDebugLine(
+					World,
+					PreviousLocation,
+					PointLocation,
+					FColor::Cyan,
+					false,
+					0.0f,
+					0,
+					2.0f);
+			}
+		}
 	}
 }
 
