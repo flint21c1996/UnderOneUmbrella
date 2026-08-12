@@ -8,7 +8,10 @@
 
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "EditorWorldUtils.h"
+#include "Engine/World.h"
 #include "Engine/StaticMesh.h"
+#include "GameFramework/Character.h"
 #include "Misc/AutomationTest.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
@@ -53,6 +56,92 @@ bool FUOUUmbrellaStateTransitionTest::RunTest(const FString& Parameters)
 
 	Umbrella->RemoveUmbrella();
 	TestFalse(TEXT("Remove clears umbrella ownership"), Umbrella->HasUmbrella());
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FUOUUmbrellaLightReflectionEightWayAimTest,
+	"UnderOneUmBrella.Player.Umbrella.LightReflectionEightWayAim",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUOUUmbrellaLightReflectionEightWayAimTest::RunTest(const FString& Parameters)
+{
+	UWorld* UninitializedWorld = UWorld::CreateWorld(
+		EWorldType::Editor,
+		false,
+		TEXT("UOUUmbrellaEightWayAimWorld"),
+		nullptr,
+		false,
+		ERHIFeatureLevel::Num,
+		nullptr,
+		true);
+	FScopedEditorWorld ScopedWorld(
+		UninitializedWorld,
+		UWorld::InitializationValues()
+			.RequiresHitProxies(false)
+			.ShouldSimulatePhysics(false)
+			.EnableTraceCollision(false)
+			.CreateNavigation(false)
+			.CreateAISystem(false)
+			.AllowAudioPlayback(false)
+			.CreatePhysicsScene(false));
+	UWorld* World = ScopedWorld.GetWorld();
+	TestNotNull(TEXT("8방향 반사 조준 테스트용 월드를 생성한다"), World);
+	if (World == nullptr)
+	{
+		return false;
+	}
+
+	ACharacter* Character = World->SpawnActor<ACharacter>();
+	TestNotNull(TEXT("8방향 반사 조준 테스트용 캐릭터를 생성한다"), Character);
+	if (Character == nullptr)
+	{
+		return false;
+	}
+
+	UUOUUmbrellaComponent* Umbrella = NewObject<UUOUUmbrellaComponent>(Character);
+	TestNotNull(TEXT("캐릭터에 우산 컴포넌트를 생성한다"), Umbrella);
+	if (Umbrella == nullptr)
+	{
+		return false;
+	}
+
+	Character->AddInstanceComponent(Umbrella);
+	Umbrella->RegisterComponent();
+	Umbrella->AcquireUmbrella();
+	Umbrella->OpenUmbrella();
+	Umbrella->BeginLightReflecting();
+	TestTrue(TEXT("펼친 우산이 빛 반사 상태로 진입한다"), Umbrella->IsLightReflecting());
+
+	struct FEightWayAimCase
+	{
+		const TCHAR* Name;
+		FVector2D Input;
+		float ExpectedYaw;
+	};
+
+	constexpr float CameraYaw = 45.0f;
+	const FEightWayAimCase Cases[] = {
+		{TEXT("W"), FVector2D(0.0f, 1.0f), 45.0f},
+		{TEXT("W+D"), FVector2D(1.0f, 1.0f), 90.0f},
+		{TEXT("D"), FVector2D(1.0f, 0.0f), 135.0f},
+		{TEXT("S+D"), FVector2D(1.0f, -1.0f), 180.0f},
+		{TEXT("S"), FVector2D(0.0f, -1.0f), -135.0f},
+		{TEXT("S+A"), FVector2D(-1.0f, -1.0f), -90.0f},
+		{TEXT("A"), FVector2D(-1.0f, 0.0f), -45.0f},
+		{TEXT("W+A"), FVector2D(-1.0f, 1.0f), 0.0f}
+	};
+
+	for (const FEightWayAimCase& AimCase : Cases)
+	{
+		Umbrella->SetPourAimMovementInput(AimCase.Input, CameraYaw);
+		Umbrella->TickComponent(1.0f / 60.0f, LEVELTICK_All, nullptr);
+		const float ActualYaw = Character->GetActorRotation().Yaw;
+		TestTrue(
+			FString::Printf(TEXT("%s 입력은 카메라 기준 8방향 Yaw %.1f를 사용한다"), AimCase.Name, AimCase.ExpectedYaw),
+			FMath::Abs(FMath::FindDeltaAngleDegrees(ActualYaw, AimCase.ExpectedYaw)) <= 0.1f);
+	}
 
 	return true;
 }
