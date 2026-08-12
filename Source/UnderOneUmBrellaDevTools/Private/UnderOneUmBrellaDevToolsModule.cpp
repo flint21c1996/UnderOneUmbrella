@@ -93,13 +93,14 @@ namespace UOUPuzzleCheatConsolePrivate
 			UE_LOG(
 				LogUOUPuzzleCheatConsole,
 				Display,
-				TEXT("  GraphNode=%d, Depth=%d, Label=%s, Actor=%s, Prerequisites=%d, Dependents=%d"),
+				TEXT("  GraphNode=%d, Depth=%d, Label=%s, Actor=%s, Prerequisites=%d, Dependents=%d, InvalidPrerequisites=%d"),
 				Node.NodeIndex,
 				Node.ExecutionDepth,
 				*Node.DisplayName.ToString(),
 				PuzzleGroup != nullptr ? *PuzzleGroup->GetName() : TEXT("None"),
 				Node.PrerequisiteNodeIndices.Num(),
-				Node.DependentNodeIndices.Num());
+				Node.DependentNodeIndices.Num(),
+				Node.InvalidPrerequisiteCount);
 		}
 		for (const FUOUDevelopmentPuzzleCheatGraphEdge& Edge : GraphEdges)
 		{
@@ -112,12 +113,11 @@ namespace UOUPuzzleCheatConsolePrivate
 			UE_LOG(
 				LogUOUPuzzleCheatConsole,
 				Display,
-				TEXT("  GraphEdge=%d->%d, Source=%s, Target=%s, RelationActor=%s"),
+				TEXT("  GraphEdge=%d->%d, Source=%s, Target=%s"),
 				Edge.SourceNodeIndex,
 				Edge.TargetNodeIndex,
 				*SourceName,
-				*TargetName,
-				*GetNameSafe(Edge.RelationActor.Get()));
+				*TargetName);
 		}
 	}
 

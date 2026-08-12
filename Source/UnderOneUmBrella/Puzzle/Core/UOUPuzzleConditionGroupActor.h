@@ -99,6 +99,11 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Puzzle|Group Actor|Conditions")
 	bool bCollectConditionSourcesFromConditionActors = true;
 
+	// 치트 진행 그래프에서 이 그룹보다 먼저 만족해야 하는 ConditionGroup들입니다.
+	// 실제 퍼즐 만족 계산에는 관여하지 않고 개발 도구의 진행 순서 정의에만 사용됩니다.
+	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Puzzle|Group Actor|Flow")
+	TArray<TObjectPtr<AUOUPuzzleConditionGroupActor>> PrerequisiteConditionGroups;
+
 	// 조건 만족과 해제에 반응할 결과 액터 바인딩 목록입니다.
 	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Puzzle|Group Actor|Results")
 	TArray<FOUUPuzzleResultBinding> ResultBindings;
