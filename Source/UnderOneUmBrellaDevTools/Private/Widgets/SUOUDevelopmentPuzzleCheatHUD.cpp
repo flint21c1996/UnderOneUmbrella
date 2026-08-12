@@ -57,7 +57,7 @@ void SUOUDevelopmentPuzzleCheatHUD::Construct(const FArguments& InArgs)
 				.Padding(12.0f)
 				[
 					SNew(SBox)
-					.WidthOverride(620.0f)
+					.WidthOverride(1180.0f)
 					[
 						SNew(SVerticalBox)
 						+ SVerticalBox::Slot()
@@ -180,7 +180,7 @@ void SUOUDevelopmentPuzzleCheatHUD::Construct(const FArguments& InArgs)
 								.Padding(0.0f, 6.0f, 0.0f, 0.0f)
 								[
 									SNew(SBox)
-									.MaxDesiredHeight(390.0f)
+									.MaxDesiredHeight(560.0f)
 									[
 										SNew(SScrollBox)
 										+ SScrollBox::Slot()
