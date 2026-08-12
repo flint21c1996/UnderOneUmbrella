@@ -4,6 +4,7 @@
 
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Engine/StaticMesh.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
 #include "UObject/ConstructorHelpers.h"
@@ -47,6 +48,14 @@ AUOULightBeamMeshVisualActor::AUOULightBeamMeshVisualActor()
 		ConeMesh = ConeMeshFinder.Object;
 	}
 
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> OriginalLumenConeMeshFinder(
+		TEXT("/Game/UOU/Effects/StylizedLightFX/StaticScatters/"
+			"_LUMENRAY42_Spotlight_Scatter_1._LUMENRAY42_Spotlight_Scatter_1"));
+	if (OriginalLumenConeMeshFinder.Succeeded())
+	{
+		OriginalLumenConeMesh = OriginalLumenConeMeshFinder.Object;
+	}
+
 	static ConstructorHelpers::FObjectFinder<UMaterialInterface> BeamMaterialFinder(
 		TEXT("/Game/UOU/Effects/StylizedLightFX/Materials/M_SLF_Beam_Master.M_SLF_Beam_Master"));
 	if (BeamMaterialFinder.Succeeded())
@@ -64,6 +73,7 @@ void AUOULightBeamMeshVisualActor::OnConstruction(const FTransform& Transform)
 
 	BeamMeshComponent->SetTranslucentSortPriority(BaseTranslucencySortPriority);
 	CoreBeamMeshComponent->SetTranslucentSortPriority(BaseTranslucencySortPriority + 1);
+	CoreBeamMeshComponent->SetVisibility(bEnableCoreLayer, true);
 	SetActorTickEnabled(bEnableVariation);
 	EnsureDynamicMaterials();
 }
@@ -94,9 +104,17 @@ void AUOULightBeamMeshVisualActor::ApplyLightBeamSegment_Implementation(
 		ConeMesh != nullptr &&
 		FMath::Abs(SegmentData.EndRadius - SegmentData.StartRadius) > CylinderRadiusTolerance;
 
-	BeamMeshComponent->SetStaticMesh(bUseCone ? ConeMesh : CylinderMesh);
-	CoreBeamMeshComponent->SetStaticMesh(bUseCone ? ConeMesh : CylinderMesh);
-	ApplyMeshTransform(SegmentData, bUseCone);
+	UStaticMesh* SelectedMesh = CylinderMesh;
+	if (bUseCone)
+	{
+		SelectedMesh = bUseOriginalLumenConeMesh && OriginalLumenConeMesh != nullptr
+			? OriginalLumenConeMesh
+			: ConeMesh;
+	}
+
+	BeamMeshComponent->SetStaticMesh(SelectedMesh);
+	CoreBeamMeshComponent->SetStaticMesh(SelectedMesh);
+	ApplyMeshTransform(SegmentData, bUseCone, SelectedMesh);
 	ApplyMaterialParameters(SegmentData);
 	BeamMeshComponent->SetTranslucentSortPriority(
 		BaseTranslucencySortPriority + (SegmentData.bReflected ? 1 : 0));
@@ -109,7 +127,7 @@ void AUOULightBeamMeshVisualActor::SetLightBeamVisualActive_Implementation(const
 {
 	SetActorHiddenInGame(!bActive);
 	BeamMeshComponent->SetVisibility(bActive, true);
-	CoreBeamMeshComponent->SetVisibility(bActive, true);
+	CoreBeamMeshComponent->SetVisibility(bActive && bEnableCoreLayer, true);
 }
 
 void AUOULightBeamMeshVisualActor::ConfigureMeshComponent(UStaticMeshComponent* MeshComponent) const
@@ -163,13 +181,14 @@ void AUOULightBeamMeshVisualActor::ApplyMaterialParameters(
 	CurrentBeamColor = SegmentData.Color;
 	CurrentEmissiveIntensity = FMath::Max(
 		0.0f,
-		SegmentData.Intensity * EmissiveIntensityScale);
+		SegmentData.Intensity * EmissiveIntensityScale * SegmentData.VisualBrightnessMultiplier);
 	DynamicBeamMaterial->SetVectorParameterValue(BeamColorParameter, CurrentBeamColor);
 	DynamicCoreMaterial->SetVectorParameterValue(BeamColorParameter, CurrentBeamColor);
-	DynamicBeamMaterial->SetScalarParameterValue(OpacityParameter, FMath::Clamp(Opacity, 0.0f, 1.0f));
+	const float InstanceOpacity = Opacity * SegmentData.VisualOpacityMultiplier;
+	DynamicBeamMaterial->SetScalarParameterValue(OpacityParameter, FMath::Clamp(InstanceOpacity, 0.0f, 1.0f));
 	DynamicCoreMaterial->SetScalarParameterValue(
 		OpacityParameter,
-		FMath::Clamp(Opacity * CoreOpacityMultiplier, 0.0f, 1.0f));
+		FMath::Clamp(InstanceOpacity * CoreOpacityMultiplier, 0.0f, 1.0f));
 	UpdateAnimatedMaterialParameters(GetWorld() != nullptr ? GetWorld()->GetTimeSeconds() : 0.0f);
 }
 
@@ -198,24 +217,40 @@ void AUOULightBeamMeshVisualActor::UpdateAnimatedMaterialParameters(const float 
 
 void AUOULightBeamMeshVisualActor::ApplyMeshTransform(
 	const FUOULightBeamVisualSegmentData& SegmentData,
-	const bool bUseCone)
+	const bool bUseCone,
+	const UStaticMesh* SelectedMesh)
 {
 	const FVector SafeDirection = SegmentData.Direction.GetSafeNormal();
 	const FVector Midpoint = SegmentData.Start + SafeDirection * (SegmentData.Length * 0.5f);
 	const float VisualRadius = FMath::Max(
 		KINDA_SMALL_NUMBER,
 		FMath::Max(SegmentData.StartRadius, SegmentData.EndRadius));
-	const float RadiusScale = VisualRadius / EngineBasicShapeRadius;
-	const float LengthScale = SegmentData.Length / EngineBasicShapeLength;
+	float MeshRadius = EngineBasicShapeRadius;
+	float MeshLength = EngineBasicShapeLength;
+	FVector MeshBoundsCenter = FVector::ZeroVector;
+	if (SelectedMesh != nullptr)
+	{
+		const FBox MeshBounds = SelectedMesh->GetBoundingBox();
+		const FVector MeshSize = MeshBounds.GetSize();
+		MeshRadius = FMath::Max(KINDA_SMALL_NUMBER, FMath::Max(MeshSize.X, MeshSize.Y) * 0.5f);
+		MeshLength = FMath::Max(KINDA_SMALL_NUMBER, MeshSize.Z);
+		MeshBoundsCenter = MeshBounds.GetCenter();
+	}
+
+	const float RadiusScale = VisualRadius / MeshRadius;
+	const float LengthScale = SegmentData.Length / MeshLength;
 	const FVector MeshAxis = bUseCone && bReverseConeAxis ? -SafeDirection : SafeDirection;
+	const FRotator MeshRotation = FRotationMatrix::MakeFromZ(MeshAxis).Rotator();
+	const FVector MeshScale(RadiusScale, RadiusScale, LengthScale);
+	const FVector BoundsOffset = MeshRotation.RotateVector(MeshBoundsCenter * MeshScale);
 
 	BeamMeshComponent->SetWorldLocationAndRotation(
-		Midpoint,
-		FRotationMatrix::MakeFromZ(MeshAxis).Rotator());
-	BeamMeshComponent->SetWorldScale3D(FVector(RadiusScale, RadiusScale, LengthScale));
+		Midpoint - BoundsOffset,
+		MeshRotation);
+	BeamMeshComponent->SetWorldScale3D(MeshScale);
 	CoreBeamMeshComponent->SetWorldLocationAndRotation(
-		Midpoint,
-		FRotationMatrix::MakeFromZ(MeshAxis).Rotator());
+		Midpoint - BoundsOffset,
+		MeshRotation);
 	CoreBeamMeshComponent->SetWorldScale3D(FVector(
 		RadiusScale * CoreRadiusScale,
 		RadiusScale * CoreRadiusScale,

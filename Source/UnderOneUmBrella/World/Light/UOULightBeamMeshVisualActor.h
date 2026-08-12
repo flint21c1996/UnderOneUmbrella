@@ -63,14 +63,23 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light Beam|Mesh", meta = (ToolTip = "Engine 기본 Cone처럼 꼭짓점이 +Z에 있는 메시를 시작점이 꼭짓점이 되도록 뒤집습니다."))
 	bool bReverseConeAxis = true;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light Beam|Mesh", meta = (DisplayName = "원본 Lumen 원뿔 메시 사용", ToolTip = "켜면 확산하는 빛줄기에 Unity Lumen 에셋의 Spotlight Scatter 메시를 사용합니다. 끄면 기존 Engine Cone을 사용합니다."))
+	bool bUseOriginalLumenConeMesh = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light Beam|Mesh", meta = (DisplayName = "원본 Lumen 원뿔 메시", EditCondition = "bUseOriginalLumenConeMesh", ToolTip = "확산하는 빛줄기에 사용할 원본 Lumen Static Scatter 메시입니다. 기본값은 Spotlight Scatter 1입니다."))
+	TObjectPtr<UStaticMesh> OriginalLumenConeMesh;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light Beam|Material", meta = (ToolTip = "빛줄기에 사용할 반투명 Emissive 머티리얼입니다."))
 	TObjectPtr<UMaterialInterface> BeamMaterial;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light Beam|Material", meta = (ClampMin = "0.0", ToolTip = "게임플레이 빛 세기를 머티리얼 Emissive 세기로 변환하는 배율입니다."))
-	float EmissiveIntensityScale = 5.0f;
+	float EmissiveIntensityScale = 2.5f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light Beam|Material", meta = (ClampMin = "0.0", ClampMax = "1.0", ToolTip = "빛줄기의 기본 불투명도입니다."))
-	float Opacity = 0.16f;
+	float Opacity = 0.09f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light Beam|Style", meta = (ToolTip = "빛줄기 중심에 별도의 밝은 코어 레이어를 겹칠지 결정합니다."))
+	bool bEnableCoreLayer = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light Beam|Style", meta = (ClampMin = "0.05", ClampMax = "1.0", ToolTip = "외곽 빔 안에 겹치는 밝은 코어의 반지름 비율입니다."))
 	float CoreRadiusScale = 0.45f;
@@ -108,5 +117,8 @@ private:
 	void EnsureDynamicMaterials();
 	void ApplyMaterialParameters(const FUOULightBeamVisualSegmentData& SegmentData);
 	void UpdateAnimatedMaterialParameters(float TimeSeconds);
-	void ApplyMeshTransform(const FUOULightBeamVisualSegmentData& SegmentData, bool bUseCone);
+	void ApplyMeshTransform(
+		const FUOULightBeamVisualSegmentData& SegmentData,
+		bool bUseCone,
+		const UStaticMesh* SelectedMesh);
 };
