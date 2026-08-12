@@ -34,14 +34,6 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Development Debug")
 	void SetDebugCategoryEnabled(EUOUDebugCategory Category, bool bNewEnabled);
 
-	// 기존 단일 선택 호출자를 위해 현재 선택을 비우고 전달한 액터 하나만 선택합니다.
-	UFUNCTION(BlueprintCallable, Category = "Development Debug|Selection")
-	void SetSelectedDebugActor(AActor* NewSelectedActor);
-
-	// 기존 단일 선택 렌더러를 위해 유효한 선택 액터 하나를 반환합니다.
-	UFUNCTION(BlueprintPure, Category = "Development Debug|Selection")
-	AActor* GetSelectedDebugActor() const;
-
 	// HUD에서 전달한 액터를 현재 복수 선택 집합에 추가하거나 제거합니다.
 	UFUNCTION(BlueprintCallable, Category = "Development Debug|Selection")
 	void ToggleSelectedDebugActor(AActor* DebugActor);

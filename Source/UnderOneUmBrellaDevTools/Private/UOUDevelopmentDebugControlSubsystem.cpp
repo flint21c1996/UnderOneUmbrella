@@ -72,28 +72,6 @@ void UUOUDevelopmentDebugControlSubsystem::SetDebugCategoryEnabled(
 
 }
 
-void UUOUDevelopmentDebugControlSubsystem::SetSelectedDebugActor(AActor* NewSelectedActor)
-{
-	SelectedDebugActors.Reset();
-	if (IsValid(NewSelectedActor))
-	{
-		SelectedDebugActors.Add(NewSelectedActor);
-	}
-}
-
-AActor* UUOUDevelopmentDebugControlSubsystem::GetSelectedDebugActor() const
-{
-	for (const TWeakObjectPtr<AActor>& SelectedActor : SelectedDebugActors)
-	{
-		if (AActor* Actor = SelectedActor.Get(); IsValid(Actor))
-		{
-			return Actor;
-		}
-	}
-
-	return nullptr;
-}
-
 void UUOUDevelopmentDebugControlSubsystem::ToggleSelectedDebugActor(AActor* DebugActor)
 {
 	for (auto SelectedActorIterator = SelectedDebugActors.CreateIterator();
