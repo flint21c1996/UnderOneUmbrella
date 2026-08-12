@@ -112,13 +112,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Input")
 	FKey InvertUmbrellaKey = EKeys::R;
 
-	// 뒤집힌 우산에 담긴 물을 붓기 시작하고 멈추는 기본 키입니다.
+	// 우산 상태에 따라 빛 반사를 토글하거나, 뒤집힌 우산의 물을 붓는 문맥 입력 키입니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Input")
 	FKey PourKey = EKeys::RightMouseButton;
-
-	// 펼친 우산과 빛 반사 상태를 전환하는 키입니다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Input")
-	FKey LightReflectingKey = EKeys::LeftShift;
 
 	// 테스트 중 우산 물 저장량을 빠르게 채우는 디버그 키입니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Input")
@@ -621,13 +617,9 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Umbrella")
 	FKey GetInvertUmbrellaKey() const { return InvertUmbrellaKey; }
 
-	// 물 붓기에 쓰는 키를 반환합니다.
+	// 우산의 문맥 동작(빛 반사/물 붓기)에 쓰는 키를 반환합니다.
 	UFUNCTION(BlueprintPure, Category = "Umbrella")
 	FKey GetPourKey() const { return PourKey; }
-
-	// 빛 반사에 쓰는 키를 반환합니다.
-	UFUNCTION(BlueprintPure, Category = "Umbrella")
-	FKey GetLightReflectingKey() const { return LightReflectingKey; }
 
 	// 디버그 물 채우기에 쓰는 키를 반환합니다.
 	UFUNCTION(BlueprintPure, Category = "Umbrella")

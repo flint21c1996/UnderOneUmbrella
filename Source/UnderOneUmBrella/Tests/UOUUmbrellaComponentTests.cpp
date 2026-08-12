@@ -39,12 +39,15 @@ bool FUOUUmbrellaStateTransitionTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("Open command enters the open state"), Umbrella->IsOpen());
 	TestEqual(TEXT("Open umbrella uses the open visual state"), Umbrella->GetCurrentVisualState(), EUOUUmbrellaVisualState::Open);
 
-	Umbrella->ToggleLightReflectingState();
-	TestTrue(TEXT("Light reflection begins from the open state"), Umbrella->IsLightReflecting());
+	Umbrella->HandleInputPressed(EKeys::RightMouseButton);
+	TestTrue(TEXT("Right mouse begins light reflection from the open state"), Umbrella->IsLightReflecting());
 	TestEqual(TEXT("Light reflecting reuses the open visual state"), Umbrella->GetCurrentVisualState(), EUOUUmbrellaVisualState::Open);
 
-	Umbrella->ToggleLightReflectingState();
-	TestTrue(TEXT("Ending light reflection returns to the open state"), Umbrella->IsOpen());
+	Umbrella->HandleInputPressed(EKeys::LeftShift);
+	TestTrue(TEXT("Left Shift no longer changes the light reflection state"), Umbrella->IsLightReflecting());
+
+	Umbrella->HandleInputPressed(EKeys::RightMouseButton);
+	TestTrue(TEXT("Pressing right mouse again ends light reflection"), Umbrella->IsOpen());
 
 	Umbrella->TurnUmbrellaUpsideDown();
 	TestTrue(TEXT("Invert command enters the upside-down state"), Umbrella->IsUpsideDown());

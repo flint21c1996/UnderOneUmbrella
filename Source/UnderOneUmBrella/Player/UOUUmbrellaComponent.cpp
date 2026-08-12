@@ -477,13 +477,15 @@ void UUOUUmbrellaComponent::HandleInputPressed(FKey InputKey)
 
 	if (InputKey == PourKey)
 	{
-		BeginPour();
-		return;
-	}
-
-	if (InputKey == LightReflectingKey)
-	{
-		ToggleLightReflectingState();
+		if (CurrentState == EUOUUmbrellaState::Open ||
+			CurrentState == EUOUUmbrellaState::LightReflecting)
+		{
+			ToggleLightReflectingState();
+		}
+		else
+		{
+			BeginPour();
+		}
 		return;
 	}
 
