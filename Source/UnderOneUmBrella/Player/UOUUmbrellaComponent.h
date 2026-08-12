@@ -278,14 +278,6 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, AdvancedDisplay, Category = "Umbrella|Debug", meta = (ToolTip = "이 값은 더 이상 화면 디버그 표시 여부를 결정하지 않습니다. Debug Controller의 Player HUD 옵션을 사용합니다."))
 	bool bShowScreenDebug = false;
 
-	// 우산 월드 디버그 표시 여부는 이제 Debug Controller의 Player 카테고리가 결정합니다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, AdvancedDisplay, Category = "Umbrella|Debug", meta = (ToolTip = "이 값은 더 이상 비 차단 월드 디버그 표시 여부를 결정하지 않습니다. Debug Controller의 Player World Debug 옵션을 사용합니다."))
-	bool bDrawRainBlockerDebug = true;
-
-	// 비 차단 디버그 선과 중심점의 두께입니다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Debug", meta = (ClampMin = "0.0", ToolTip = "비 차단 디버그 선과 중심점의 두께입니다."))
-	float RainBlockerDebugThickness = 2.0f;
-
 	// 물 붓기 라인트레이스 표시 여부는 이제 Debug Controller의 Player 카테고리가 결정합니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, AdvancedDisplay, Category = "Umbrella|Debug", meta = (ToolTip = "이 값은 더 이상 물 붓기 라인트레이스 표시 여부를 결정하지 않습니다. Debug Controller의 Player World Debug 옵션을 사용합니다."))
 	bool bDrawPourTraceDebug = true;
@@ -617,6 +609,9 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Umbrella")
 	bool TryGetGameplayRainBlockerVolumeData(FVector& OutWorldCenter, FRotator& OutWorldRotation, FVector& OutHalfExtent) const;
 
+	// 비 차단 판정 중심에 적용되는 에디터 설정 로컬 오프셋을 반환합니다.
+	const FVector& GetRainBlockerLocalOffset() const { return RainBlockerLocalOffset; }
+
 	// 우산에 현재 저장된 물 양을 반환합니다.
 	UFUNCTION(BlueprintPure, Category = "Umbrella")
 	float GetCurrentStoredWater() const;
@@ -719,9 +714,6 @@ protected:
 
 	// 우산 상태와 물 정보를 화면 디버그 텍스트로 표시합니다.
 	void DrawScreenDebug() const;
-
-	// 우산이 실제로 비를 막는 위치와 범위를 월드 디버그 선과 구로 그립니다.
-	void DrawRainBlockerDebug() const;
 
 	// 물 붓기 라인트레이스와 마지막 전달 결과를 월드 디버그로 그립니다.
 	void DrawPourTraceDebug() const;

@@ -40,6 +40,7 @@ public:
 
 private:
 	void RefreshPlayerDebugText();
+	void DrawPlayerUmbrellaRainBlockerDebug() const;
 	void DrawInteractionDebug() const;
 	void RefreshPerformanceDebugText(float DeltaTime);
 	void ResetPerformanceDebugState();

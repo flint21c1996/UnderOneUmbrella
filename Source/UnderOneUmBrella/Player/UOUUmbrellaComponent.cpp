@@ -149,7 +149,6 @@ void UUOUUmbrellaComponent::TickComponent(float DeltaTime, ELevelTick TickType, 
 		ClearPourAimFacing();
 		ClearPourTraceDebug();
 		DrawScreenDebug();
-		DrawRainBlockerDebug();
 		return;
 	}
 
@@ -157,7 +156,6 @@ void UUOUUmbrellaComponent::TickComponent(float DeltaTime, ELevelTick TickType, 
 	UpdatePouring(DeltaTime);
 	UpdatePouringEffectState();
 	DrawScreenDebug();
-	DrawRainBlockerDebug();
 	DrawPourSocketAndDropSpawnDebug();
 	DrawPourTraceDebug();
 	UpdateRainBlockedAudioState();
@@ -1587,87 +1585,6 @@ void UUOUUmbrellaComponent::ApplyHeldVisualFromAssets(UStaticMesh* Mesh, const T
 void UUOUUmbrellaComponent::DrawScreenDebug() const
 {
 	// 플레이어/우산 화면 디버그는 Debug Controller의 Player HUD에서 통합 표시합니다.
-}
-
-// 우산이 비를 막는 중심과 범위를 월드에 그려 RainArea 판정 위치를 눈으로 확인합니다.
-void UUOUUmbrellaComponent::DrawRainBlockerDebug() const
-{
-	if (!UUOUDebugSubsystem::IsDebugWorldDrawEnabled(this, EUOUDebugCategory::Player))
-	{
-		return;
-	}
-
-	UWorld* World = GetWorld();
-	if (World == nullptr)
-	{
-		return;
-	}
-
-	FVector BlockerWorldCenter = FVector::ZeroVector;
-	FRotator BlockerWorldRotation = FRotator::ZeroRotator;
-	FVector BlockerHalfExtent = FVector::ZeroVector;
-	if (!TryGetGameplayRainBlockerVolumeData(BlockerWorldCenter, BlockerWorldRotation, BlockerHalfExtent))
-	{
-		// 비를 막는 상태가 아니면 그릴 기준 데이터가 없으므로 바로 종료합니다.
-		return;
-	}
-
-	const float Thickness = FMath::Max(0.0f, RainBlockerDebugThickness);
-	const float LifeTime = 0.0f;
-	const bool bIsActiveBlocker = IsBlockingRain();
-	const FColor PlayerDebugColor = bIsActiveBlocker
-		? FColor::Cyan
-		: FColor(90, 90, 90);
-
-	DrawDebugSphere(
-		World,
-		BlockerWorldCenter,
-		8.0f,
-		12,
-		PlayerDebugColor,
-		false,
-		LifeTime,
-		0,
-		Thickness);
-
-	DrawDebugBox(
-		World,
-		BlockerWorldCenter,
-		BlockerHalfExtent,
-		BlockerWorldRotation.Quaternion(),
-		PlayerDebugColor,
-		false,
-		LifeTime,
-		0,
-		Thickness);
-
-	DrawDebugLine(
-		World,
-		BlockerWorldCenter + BlockerWorldRotation.Quaternion().GetAxisZ() * BlockerHalfExtent.Z,
-		BlockerWorldCenter - BlockerWorldRotation.Quaternion().GetAxisZ() * BlockerHalfExtent.Z,
-		PlayerDebugColor,
-		false,
-		LifeTime,
-		0,
-		Thickness);
-
-	DrawDebugString(
-		World,
-		BlockerWorldCenter + BlockerWorldRotation.Quaternion().GetAxisZ() * (BlockerHalfExtent.Z + 18.0f),
-		FString::Printf(
-			TEXT("Gameplay RainBlocker %s Half %.1f %.1f %.1f Offset %.1f %.1f %.1f"),
-			bIsActiveBlocker ? TEXT("Active") : TEXT("Inactive"),
-			BlockerHalfExtent.X,
-			BlockerHalfExtent.Y,
-			BlockerHalfExtent.Z,
-			RainBlockerLocalOffset.X,
-			RainBlockerLocalOffset.Y,
-			RainBlockerLocalOffset.Z),
-		nullptr,
-		PlayerDebugColor,
-		LifeTime,
-		false,
-		1.0f);
 }
 
 // 물 붓기 라인트레이스의 마지막 결과를 월드에 그려 어느 대상에 닿았는지 확인합니다.

@@ -274,6 +274,7 @@ void UUOUDevelopmentDebugDrawSubsystem::Tick(float DeltaTime)
 	if (ControlSubsystem->IsDebugCategoryEnabled(EUOUDebugCategory::Player))
 	{
 		RefreshPlayerDebugText();
+		DrawPlayerUmbrellaRainBlockerDebug();
 	}
 	else
 	{
@@ -524,6 +525,89 @@ void UUOUDevelopmentDebugDrawSubsystem::RefreshPlayerDebugText()
 	}
 
 	PlayerDebugText = FString::Join(Lines, LINE_TERMINATOR);
+}
+
+void UUOUDevelopmentDebugDrawSubsystem::DrawPlayerUmbrellaRainBlockerDebug() const
+{
+	UWorld* World = GetWorld();
+	const APlayerController* PlayerController = World != nullptr
+		? World->GetFirstPlayerController()
+		: nullptr;
+	const APawn* PlayerPawn = PlayerController != nullptr ? PlayerController->GetPawn() : nullptr;
+	const UUOUUmbrellaComponent* UmbrellaComponent = PlayerPawn != nullptr
+		? PlayerPawn->FindComponentByClass<UUOUUmbrellaComponent>()
+		: nullptr;
+	if (World == nullptr || UmbrellaComponent == nullptr)
+	{
+		return;
+	}
+
+	FVector BlockerWorldCenter = FVector::ZeroVector;
+	FRotator BlockerWorldRotation = FRotator::ZeroRotator;
+	FVector BlockerHalfExtent = FVector::ZeroVector;
+	if (!UmbrellaComponent->TryGetGameplayRainBlockerVolumeData(
+			BlockerWorldCenter,
+			BlockerWorldRotation,
+			BlockerHalfExtent))
+	{
+		return;
+	}
+
+	constexpr float Thickness = 2.0f;
+	const bool bIsActiveBlocker = UmbrellaComponent->IsBlockingRain();
+	const FColor PlayerDebugColor = bIsActiveBlocker
+		? FColor::Cyan
+		: FColor(90, 90, 90);
+	const FVector RotationAxisZ = BlockerWorldRotation.Quaternion().GetAxisZ();
+
+	DrawDebugSphere(
+		World,
+		BlockerWorldCenter,
+		8.0f,
+		12,
+		PlayerDebugColor,
+		false,
+		0.0f,
+		0,
+		Thickness);
+	DrawDebugBox(
+		World,
+		BlockerWorldCenter,
+		BlockerHalfExtent,
+		BlockerWorldRotation.Quaternion(),
+		PlayerDebugColor,
+		false,
+		0.0f,
+		0,
+		Thickness);
+	DrawDebugLine(
+		World,
+		BlockerWorldCenter + RotationAxisZ * BlockerHalfExtent.Z,
+		BlockerWorldCenter - RotationAxisZ * BlockerHalfExtent.Z,
+		PlayerDebugColor,
+		false,
+		0.0f,
+		0,
+		Thickness);
+
+	const FVector& LocalOffset = UmbrellaComponent->GetRainBlockerLocalOffset();
+	DrawDebugString(
+		World,
+		BlockerWorldCenter + RotationAxisZ * (BlockerHalfExtent.Z + 18.0f),
+		FString::Printf(
+			TEXT("Gameplay RainBlocker %s Half %.1f %.1f %.1f Offset %.1f %.1f %.1f"),
+			bIsActiveBlocker ? TEXT("Active") : TEXT("Inactive"),
+			BlockerHalfExtent.X,
+			BlockerHalfExtent.Y,
+			BlockerHalfExtent.Z,
+			LocalOffset.X,
+			LocalOffset.Y,
+			LocalOffset.Z),
+		nullptr,
+		PlayerDebugColor,
+		0.0f,
+		false,
+		1.0f);
 }
 
 void UUOUDevelopmentDebugDrawSubsystem::DrawInteractionDebug() const
