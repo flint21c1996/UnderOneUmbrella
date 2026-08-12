@@ -7,6 +7,7 @@
 #include "Rendering/DrawElements.h"
 #include "Styling/CoreStyle.h"
 #include "UOUDevelopmentPuzzleCheatSubsystem.h"
+#include "Widgets/Input/SButton.h"
 #include "Widgets/Layout/SBorder.h"
 #include "Widgets/SBoxPanel.h"
 #include "Widgets/SCanvas.h"
@@ -26,6 +27,7 @@ namespace UOUDevelopmentPuzzleGraphViewPrivate
 void SUOUDevelopmentPuzzleGraphView::Construct(const FArguments& InArgs)
 {
 	PuzzleCheatSubsystem = InArgs._PuzzleCheatSubsystem;
+	OnNodeClicked = InArgs._OnNodeClicked;
 
 	ChildSlot
 	[
@@ -215,27 +217,33 @@ void SUOUDevelopmentPuzzleGraphView::RebuildLayout()
 			.Position(NodePosition)
 			.Size(FVector2D(NodeWidth, NodeHeight))
 			[
-				SNew(SBorder)
-				.BorderImage(FCoreStyle::Get().GetBrush(TEXT("GenericWhiteBox")))
-				.BorderBackgroundColor(FLinearColor(0.055f, 0.06f, 0.075f, 0.98f))
-				.Padding(8.0f)
+				SNew(SButton)
+				.OnClicked(this, &SUOUDevelopmentPuzzleGraphView::HandleNodeClicked, NodeIndex)
+				.IsEnabled(this, &SUOUDevelopmentPuzzleGraphView::IsNodeActionEnabled)
+				.ContentPadding(0.0f)
 				[
-					SNew(SVerticalBox)
-					+ SVerticalBox::Slot()
-					.AutoHeight()
+					SNew(SBorder)
+					.BorderImage(FCoreStyle::Get().GetBrush(TEXT("GenericWhiteBox")))
+					.BorderBackgroundColor(FLinearColor(0.055f, 0.06f, 0.075f, 0.98f))
+					.Padding(8.0f)
 					[
-						SNew(STextBlock)
-						.Text(this, &SUOUDevelopmentPuzzleGraphView::GetNodeTitleText, NodeIndex)
-						.ColorAndOpacity(this, &SUOUDevelopmentPuzzleGraphView::GetNodeTitleColor, NodeIndex)
-					]
-					+ SVerticalBox::Slot()
-					.AutoHeight()
-					.Padding(0.0f, 6.0f, 0.0f, 0.0f)
-					[
-						SNew(STextBlock)
-						.Text(BuildNodeDetailText(NodeIndex))
-						.AutoWrapText(true)
-						.ColorAndOpacity(FLinearColor(0.78f, 0.78f, 0.78f, 1.0f))
+						SNew(SVerticalBox)
+						+ SVerticalBox::Slot()
+						.AutoHeight()
+						[
+							SNew(STextBlock)
+							.Text(this, &SUOUDevelopmentPuzzleGraphView::GetNodeTitleText, NodeIndex)
+							.ColorAndOpacity(this, &SUOUDevelopmentPuzzleGraphView::GetNodeTitleColor, NodeIndex)
+						]
+						+ SVerticalBox::Slot()
+						.AutoHeight()
+						.Padding(0.0f, 6.0f, 0.0f, 0.0f)
+						[
+							SNew(STextBlock)
+							.Text(BuildNodeDetailText(NodeIndex))
+							.AutoWrapText(true)
+							.ColorAndOpacity(FLinearColor(0.78f, 0.78f, 0.78f, 1.0f))
+						]
 					]
 				]
 			];
@@ -287,6 +295,12 @@ void SUOUDevelopmentPuzzleGraphView::RebuildLayout()
 		FMath::Max(220.0f, CanvasPadding * 2.0f + DepthHeaderHeight + 10.0f
 			+ MaximumRowCount * NodeHeight
 			+ FMath::Max(0, MaximumRowCount - 1) * VerticalGap));
+}
+
+FReply SUOUDevelopmentPuzzleGraphView::HandleNodeClicked(int32 NodeIndex)
+{
+	OnNodeClicked.ExecuteIfBound(NodeIndex);
+	return FReply::Handled();
 }
 
 FText SUOUDevelopmentPuzzleGraphView::BuildNodeDetailText(int32 NodeIndex) const
@@ -371,6 +385,14 @@ FSlateColor SUOUDevelopmentPuzzleGraphView::GetNodeTitleColor(int32 NodeIndex) c
 	return FSlateColor(IsValid(PuzzleGroup) && PuzzleGroup->IsSatisfied()
 		? FLinearColor(0.25f, 1.0f, 0.35f, 1.0f)
 		: FLinearColor::White);
+}
+
+bool SUOUDevelopmentPuzzleGraphView::IsNodeActionEnabled() const
+{
+	const UUOUDevelopmentPuzzleCheatSubsystem* Subsystem = PuzzleCheatSubsystem.Get();
+	return Subsystem != nullptr
+		&& Subsystem->IsPuzzleGraphValid()
+		&& !Subsystem->IsSequenceRunning();
 }
 
 const FUOUDevelopmentPuzzleCheatGraphNode* SUOUDevelopmentPuzzleGraphView::FindNode(int32 NodeIndex) const
