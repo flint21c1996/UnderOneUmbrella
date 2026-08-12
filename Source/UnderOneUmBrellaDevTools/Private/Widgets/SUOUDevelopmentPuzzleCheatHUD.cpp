@@ -362,7 +362,7 @@ void SUOUDevelopmentPuzzleCheatHUD::Construct(const FArguments& InArgs)
 									.AutoHeight()
 									[
 										SNew(STextBlock)
-										.Text(this, &SUOUDevelopmentPuzzleCheatHUD::GetSelectedDebugActorText)
+										.Text(this, &SUOUDevelopmentPuzzleCheatHUD::GetSelectedDebugActorsText)
 										.AutoWrapText(true)
 									]
 									+ SVerticalBox::Slot()
@@ -389,9 +389,9 @@ void SUOUDevelopmentPuzzleCheatHUD::Construct(const FArguments& InArgs)
 											SNew(SButton)
 											.IsFocusable(false)
 											.OnClicked(this, &SUOUDevelopmentPuzzleCheatHUD::HandleDebugActorClearClicked)
-											[
-												SNew(STextBlock)
-												.Text(FText::FromString(TEXT("선택 해제")))
+										[
+											SNew(STextBlock)
+											.Text(FText::FromString(TEXT("전체 선택 해제")))
 											]
 										]
 									]
@@ -659,7 +659,7 @@ void SUOUDevelopmentPuzzleCheatHUD::RebuildDebugActorRows()
 						DebugControlSubsystem.Get();
 					return FSlateColor(
 						ControlSubsystem != nullptr
-							&& ControlSubsystem->GetSelectedDebugActor() == DebugActor.Get()
+							&& ControlSubsystem->IsDebugActorSelected(DebugActor.Get())
 							? FLinearColor(0.25f, 1.0f, 0.35f, 1.0f)
 							: FLinearColor::White);
 				})
@@ -815,7 +815,7 @@ FReply SUOUDevelopmentPuzzleCheatHUD::HandleDebugActorClearClicked()
 {
 	if (UUOUDevelopmentDebugControlSubsystem* Subsystem = DebugControlSubsystem.Get())
 	{
-		Subsystem->SetSelectedDebugActor(nullptr);
+		Subsystem->ClearSelectedDebugActors();
 	}
 	return FReply::Handled();
 }
@@ -827,8 +827,7 @@ FReply SUOUDevelopmentPuzzleCheatHUD::HandleDebugActorClicked(
 	AActor* Actor = DebugActor.Get();
 	if (Subsystem != nullptr && IsValid(Actor))
 	{
-		Subsystem->SetSelectedDebugActor(
-			Subsystem->GetSelectedDebugActor() == Actor ? nullptr : Actor);
+		Subsystem->ToggleSelectedDebugActor(Actor);
 	}
 	return FReply::Handled();
 }
@@ -970,15 +969,28 @@ FText SUOUDevelopmentPuzzleCheatHUD::GetDebugCategoryToggleText(EUOUDebugCategor
 		Subsystem->IsDebugCategoryEnabled(Category) ? TEXT("ON") : TEXT("OFF")));
 }
 
-FText SUOUDevelopmentPuzzleCheatHUD::GetSelectedDebugActorText() const
+FText SUOUDevelopmentPuzzleCheatHUD::GetSelectedDebugActorsText() const
 {
 	const UUOUDevelopmentDebugControlSubsystem* Subsystem = DebugControlSubsystem.Get();
-	const AActor* SelectedActor = Subsystem != nullptr
-		? Subsystem->GetSelectedDebugActor()
-		: nullptr;
+	const TArray<AActor*> SelectedActors = Subsystem != nullptr
+		? Subsystem->GetSelectedDebugActors()
+		: TArray<AActor*>();
+	TArray<FString> SelectedActorNames;
+	for (const AActor* SelectedActor : SelectedActors)
+	{
+		if (IsValid(SelectedActor))
+		{
+			SelectedActorNames.Add(SelectedActor->GetName());
+		}
+	}
+	const FString SelectedActorListText = SelectedActorNames.IsEmpty()
+		? TEXT("없음")
+		: FString::Join(SelectedActorNames, TEXT(", "));
+
 	return FText::FromString(FString::Printf(
-		TEXT("선택 대상: %s"),
-		SelectedActor != nullptr ? *SelectedActor->GetName() : TEXT("없음")));
+		TEXT("선택 대상 (%d): %s"),
+		SelectedActorNames.Num(),
+		*SelectedActorListText));
 }
 
 FText SUOUDevelopmentPuzzleCheatHUD::GetPlayerDebugInfoText() const

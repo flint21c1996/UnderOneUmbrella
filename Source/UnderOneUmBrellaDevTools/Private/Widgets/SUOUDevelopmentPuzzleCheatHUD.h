@@ -67,7 +67,7 @@ private:
 	FText GetDebugStatusText() const;
 	FText GetDebugToolsToggleText() const;
 	FText GetDebugCategoryToggleText(EUOUDebugCategory Category) const;
-	FText GetSelectedDebugActorText() const;
+	FText GetSelectedDebugActorsText() const;
 	FText GetPlayerDebugInfoText() const;
 	FText GetPerformanceDebugInfoText() const;
 	FText GetVFXDebugInfoText() const;

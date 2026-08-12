@@ -34,13 +34,29 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Development Debug")
 	void SetDebugCategoryEnabled(EUOUDebugCategory Category, bool bNewEnabled);
 
-	// HUD에서 선택한 액터를 디버그 표시 대상으로 설정합니다.
+	// 기존 단일 선택 호출자를 위해 현재 선택을 비우고 전달한 액터 하나만 선택합니다.
 	UFUNCTION(BlueprintCallable, Category = "Development Debug|Selection")
 	void SetSelectedDebugActor(AActor* NewSelectedActor);
 
-	// 현재 HUD에서 선택한 디버그 대상 액터를 반환합니다.
+	// 기존 단일 선택 렌더러를 위해 유효한 선택 액터 하나를 반환합니다.
 	UFUNCTION(BlueprintPure, Category = "Development Debug|Selection")
 	AActor* GetSelectedDebugActor() const;
+
+	// HUD에서 전달한 액터를 현재 복수 선택 집합에 추가하거나 제거합니다.
+	UFUNCTION(BlueprintCallable, Category = "Development Debug|Selection")
+	void ToggleSelectedDebugActor(AActor* DebugActor);
+
+	// 현재 선택한 모든 디버그 액터를 해제합니다.
+	UFUNCTION(BlueprintCallable, Category = "Development Debug|Selection")
+	void ClearSelectedDebugActors();
+
+	// 전달한 액터가 현재 복수 선택 집합에 포함되어 있는지 반환합니다.
+	UFUNCTION(BlueprintPure, Category = "Development Debug|Selection")
+	bool IsDebugActorSelected(const AActor* Actor) const;
+
+	// 현재 복수 선택 집합에서 유효한 액터를 이름순으로 반환합니다.
+	UFUNCTION(BlueprintPure, Category = "Development Debug|Selection")
+	TArray<AActor*> GetSelectedDebugActors() const;
 
 	// 전달한 액터가 현재 선택된 디버그 대상인지 확인합니다.
 	bool ShouldDrawDebugActor(const AActor* Actor) const;
@@ -54,7 +70,7 @@ private:
 	UPROPERTY(Transient)
 	TSet<EUOUDebugCategory> DisabledDebugCategories;
 
-	// HUD가 선택한 단일 액터입니다. 월드 액터의 수명을 소유하지 않습니다.
+	// HUD가 선택한 복수 액터의 약한 참조 집합이며 월드 액터의 수명을 소유하지 않습니다.
 	UPROPERTY(Transient)
-	TWeakObjectPtr<AActor> SelectedDebugActor;
+	TSet<TWeakObjectPtr<AActor>> SelectedDebugActors;
 };
