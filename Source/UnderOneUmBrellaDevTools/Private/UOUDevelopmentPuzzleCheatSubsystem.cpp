@@ -402,7 +402,7 @@ void UUOUDevelopmentPuzzleCheatSubsystem::BuildPuzzleGraphConnections()
 	TMap<AActor*, TArray<int32>> ConsumerNodeIndicesByActor;
 	TMap<AUOUPuzzleConditionGroupActor*, int32> NodeIndexByGroup;
 
-	for (const FUOUDevelopmentPuzzleCheatGraphNode& Node : PuzzleGraphNodes)
+	for (FUOUDevelopmentPuzzleCheatGraphNode& Node : PuzzleGraphNodes)
 	{
 		AUOUPuzzleConditionGroupActor* PuzzleGroup = Node.PuzzleGroup.Get();
 		if (!IsValid(PuzzleGroup))
@@ -416,7 +416,18 @@ void UUOUDevelopmentPuzzleCheatSubsystem::BuildPuzzleGraphConnections()
 		CollectConditionDependencyActors(*PuzzleGroup, DependencyActors);
 		for (AActor* DependencyActor : DependencyActors)
 		{
+			Node.InputActors.AddUnique(DependencyActor);
 			ConsumerNodeIndicesByActor.FindOrAdd(DependencyActor).AddUnique(Node.NodeIndex);
+		}
+
+		for (const FOUUPuzzleResultBinding& ResultBinding : PuzzleGroup->ResultBindings)
+		{
+			AActor* ResultActor = ResultBinding.TargetActor.Get();
+			if (IsValid(ResultActor)
+				&& ResultBinding.SatisfiedAction != EOUUPuzzleResultAction::None)
+			{
+				Node.ResultActors.AddUnique(ResultActor);
+			}
 		}
 	}
 
@@ -605,6 +616,15 @@ bool UUOUDevelopmentPuzzleCheatSubsystem::AdvanceThroughGraphNode(int32 TargetNo
 		PendingGraphExecutionWaves.Num());
 	ExecuteNextGraphWave();
 	return true;
+}
+
+bool UUOUDevelopmentPuzzleCheatSubsystem::IsGraphNodeActive(int32 NodeIndex) const
+{
+	return bGraphExecutionActive && ActiveGraphNodes.ContainsByPredicate(
+		[NodeIndex](const FUOUDevelopmentPuzzleCheatActiveGraphNode& ActiveNode)
+		{
+			return ActiveNode.NodeIndex == NodeIndex;
+		});
 }
 
 bool UUOUDevelopmentPuzzleCheatSubsystem::BuildGraphExecutionWaves(int32 TargetNodeIndex)

@@ -80,6 +80,16 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Puzzle Cheat|Graph")
 	TArray<FUOUDevelopmentPuzzleCheatGraphEdge> GetPuzzleGraphEdges() const;
 
+	const TArray<FUOUDevelopmentPuzzleCheatGraphNode>& GetPuzzleGraphNodesView() const
+	{
+		return PuzzleGraphNodes;
+	}
+
+	const TArray<FUOUDevelopmentPuzzleCheatGraphEdge>& GetPuzzleGraphEdgesView() const
+	{
+		return PuzzleGraphEdges;
+	}
+
 	UFUNCTION(BlueprintPure, Category = "Puzzle Cheat|Graph")
 	bool IsPuzzleGraphValid() const { return bPuzzleGraphValid; }
 
@@ -89,6 +99,10 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Puzzle Cheat|Graph")
 	bool IsGraphExecutionActive() const { return bGraphExecutionActive; }
+
+	// HUD가 지정한 그래프 노드가 현재 병렬 실행 묶음에 포함되어 있는지 확인합니다.
+	UFUNCTION(BlueprintPure, Category = "Puzzle Cheat|Graph")
+	bool IsGraphNodeActive(int32 NodeIndex) const;
 
 	// 순차 실행 중인지 반환하여 중복 요청과 HUD 입력을 제어합니다.
 	UFUNCTION(BlueprintPure, Category = "Puzzle Cheat")

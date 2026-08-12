@@ -40,6 +40,7 @@ private:
 		Debug
 	};
 
+	void RebuildGraphRows();
 	void RebuildStepRows();
 	void RebuildDebugActorRows();
 	FReply HandleToggleClicked();
@@ -53,6 +54,7 @@ private:
 	FReply HandleRefreshClicked();
 	FReply HandleNextClicked();
 	FReply HandleCancelClicked();
+	FReply HandleGraphNodeClicked(int32 TargetNodeIndex);
 	FReply HandleStepClicked(int32 TargetStepOrder);
 	EVisibility GetPanelVisibility() const;
 	EVisibility GetConditionPageVisibility() const;
@@ -64,9 +66,13 @@ private:
 	FText GetPlayerDebugInfoText() const;
 	FText GetPerformanceDebugInfoText() const;
 	FText GetVFXDebugInfoText() const;
+	FText GetGraphStatusText() const;
+	FSlateColor GetGraphStatusColor() const;
+	FText BuildGraphNodeDetailText(int32 NodeIndex) const;
 	FText GetStatusText() const;
 	FSlateColor GetStatusColor() const;
 	bool IsPuzzleActionEnabled() const;
+	bool IsGraphActionEnabled() const;
 	bool IsCancelEnabled() const;
 	bool IsDebugControlAvailable() const;
 
@@ -78,6 +84,9 @@ private:
 
 	// HUD를 소유한 현재 월드 Subsystem의 약한 참조입니다.
 	TWeakObjectPtr<UUOUDevelopmentPuzzleCheatSubsystem> PuzzleCheatSubsystem;
+
+	// 실제 Condition/Result 관계를 깊이별 노드 행으로 표시하는 동적 Slate 컨테이너입니다.
+	TSharedPtr<SVerticalBox> GraphListBox;
 
 	// 현재 수집된 퍼즐 Step 버튼을 동적으로 담는 Slate 컨테이너입니다.
 	TSharedPtr<SVerticalBox> StepListBox;

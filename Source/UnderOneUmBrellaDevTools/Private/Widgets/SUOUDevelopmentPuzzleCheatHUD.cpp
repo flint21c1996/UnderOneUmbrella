@@ -56,7 +56,7 @@ void SUOUDevelopmentPuzzleCheatHUD::Construct(const FArguments& InArgs)
 				.Padding(12.0f)
 				[
 					SNew(SBox)
-					.WidthOverride(420.0f)
+					.WidthOverride(620.0f)
 					[
 						SNew(SVerticalBox)
 						+ SVerticalBox::Slot()
@@ -145,7 +145,7 @@ void SUOUDevelopmentPuzzleCheatHUD::Construct(const FArguments& InArgs)
 									.IsEnabled(this, &SUOUDevelopmentPuzzleCheatHUD::IsPuzzleActionEnabled)
 									[
 										SNew(STextBlock)
-										.Text(FText::FromString(TEXT("다음 퍼즐")))
+										.Text(FText::FromString(TEXT("다음 Step (레거시)")))
 									]
 								]
 								+ SHorizontalBox::Slot()
@@ -165,13 +165,48 @@ void SUOUDevelopmentPuzzleCheatHUD::Construct(const FArguments& InArgs)
 							.AutoHeight()
 							.Padding(0.0f, 10.0f, 0.0f, 0.0f)
 							[
-								SNew(SBox)
-								.MaxDesiredHeight(320.0f)
+								SNew(SVerticalBox)
+								+ SVerticalBox::Slot()
+								.AutoHeight()
 								[
-									SNew(SScrollBox)
-									+ SScrollBox::Slot()
+									SNew(STextBlock)
+									.Text(this, &SUOUDevelopmentPuzzleCheatHUD::GetGraphStatusText)
+									.ColorAndOpacity(this, &SUOUDevelopmentPuzzleCheatHUD::GetGraphStatusColor)
+									.AutoWrapText(true)
+								]
+								+ SVerticalBox::Slot()
+								.AutoHeight()
+								.Padding(0.0f, 6.0f, 0.0f, 0.0f)
+								[
+									SNew(SBox)
+									.MaxDesiredHeight(390.0f)
 									[
-										SAssignNew(StepListBox, SVerticalBox)
+										SNew(SScrollBox)
+										+ SScrollBox::Slot()
+										[
+											SAssignNew(GraphListBox, SVerticalBox)
+										]
+									]
+								]
+								+ SVerticalBox::Slot()
+								.AutoHeight()
+								.Padding(0.0f, 10.0f, 0.0f, 0.0f)
+								[
+									SNew(STextBlock)
+									.Text(FText::FromString(TEXT("레거시 Step 태그")))
+								]
+								+ SVerticalBox::Slot()
+								.AutoHeight()
+								.Padding(0.0f, 4.0f, 0.0f, 0.0f)
+								[
+									SNew(SBox)
+									.MaxDesiredHeight(140.0f)
+									[
+										SNew(SScrollBox)
+										+ SScrollBox::Slot()
+										[
+											SAssignNew(StepListBox, SVerticalBox)
+										]
 									]
 								]
 							]
@@ -400,6 +435,7 @@ void SUOUDevelopmentPuzzleCheatHUD::Construct(const FArguments& InArgs)
 		]
 	];
 
+	RebuildGraphRows();
 	RebuildStepRows();
 	RebuildDebugActorRows();
 }
@@ -409,8 +445,141 @@ void SUOUDevelopmentPuzzleCheatHUD::TogglePanel()
 	bPanelExpanded = !bPanelExpanded;
 	if (bPanelExpanded)
 	{
+		RebuildGraphRows();
 		RebuildStepRows();
 		RebuildDebugActorRows();
+	}
+}
+
+void SUOUDevelopmentPuzzleCheatHUD::RebuildGraphRows()
+{
+	if (!GraphListBox.IsValid())
+	{
+		return;
+	}
+
+	GraphListBox->ClearChildren();
+	const UUOUDevelopmentPuzzleCheatSubsystem* Subsystem = PuzzleCheatSubsystem.Get();
+	if (Subsystem == nullptr)
+	{
+		GraphListBox->AddSlot()
+		.AutoHeight()
+		[
+			SNew(STextBlock)
+			.Text(FText::FromString(TEXT("퍼즐 치트 Subsystem을 사용할 수 없습니다.")))
+		];
+		return;
+	}
+
+	TArray<FUOUDevelopmentPuzzleCheatGraphNode> GraphNodes = Subsystem->GetPuzzleGraphNodesView();
+	if (GraphNodes.IsEmpty())
+	{
+		GraphListBox->AddSlot()
+		.AutoHeight()
+		[
+			SNew(STextBlock)
+			.Text(FText::FromString(TEXT("ConditionGroup 관계를 찾지 못했습니다.")))
+		];
+		return;
+	}
+
+	GraphNodes.Sort(
+		[](const FUOUDevelopmentPuzzleCheatGraphNode& Left, const FUOUDevelopmentPuzzleCheatGraphNode& Right)
+		{
+			if (Left.ExecutionDepth != Right.ExecutionDepth)
+			{
+				if (Left.ExecutionDepth == INDEX_NONE)
+				{
+					return false;
+				}
+				if (Right.ExecutionDepth == INDEX_NONE)
+				{
+					return true;
+				}
+				return Left.ExecutionDepth < Right.ExecutionDepth;
+			}
+			return Left.DisplayName.ToString() < Right.DisplayName.ToString();
+		});
+
+	int32 LastExecutionDepth = MAX_int32;
+	for (const FUOUDevelopmentPuzzleCheatGraphNode& Node : GraphNodes)
+	{
+		if (Node.ExecutionDepth != LastExecutionDepth)
+		{
+			LastExecutionDepth = Node.ExecutionDepth;
+			const FString DepthText = Node.ExecutionDepth == INDEX_NONE
+				? TEXT("Depth 오류 / 순환 관계")
+				: FString::Printf(TEXT("Depth %d"), Node.ExecutionDepth);
+			GraphListBox->AddSlot()
+			.AutoHeight()
+			.Padding(0.0f, 4.0f, 0.0f, 3.0f)
+			[
+				SNew(SBorder)
+				.BorderImage(FCoreStyle::Get().GetBrush(TEXT("GenericWhiteBox")))
+				.BorderBackgroundColor(FLinearColor(0.10f, 0.10f, 0.12f, 0.95f))
+				.Padding(FMargin(6.0f, 3.0f))
+				[
+					SNew(STextBlock)
+					.Text(FText::FromString(DepthText))
+				]
+			];
+		}
+
+		const int32 NodeIndex = Node.NodeIndex;
+		const FText DisplayName = Node.DisplayName;
+		const FText DetailText = BuildGraphNodeDetailText(NodeIndex);
+		const TWeakObjectPtr<AUOUPuzzleConditionGroupActor> PuzzleGroup = Node.PuzzleGroup.Get();
+		GraphListBox->AddSlot()
+		.AutoHeight()
+		.Padding(0.0f, 0.0f, 0.0f, 5.0f)
+		[
+			SNew(SButton)
+			.OnClicked(this, &SUOUDevelopmentPuzzleCheatHUD::HandleGraphNodeClicked, NodeIndex)
+			.IsEnabled(this, &SUOUDevelopmentPuzzleCheatHUD::IsGraphActionEnabled)
+			.ContentPadding(FMargin(8.0f, 6.0f))
+			[
+				SNew(SVerticalBox)
+				+ SVerticalBox::Slot()
+				.AutoHeight()
+				[
+					SNew(STextBlock)
+					.ColorAndOpacity_Lambda([this, NodeIndex, PuzzleGroup]()
+					{
+						const UUOUDevelopmentPuzzleCheatSubsystem* CurrentSubsystem =
+							PuzzleCheatSubsystem.Get();
+						if (CurrentSubsystem != nullptr && CurrentSubsystem->IsGraphNodeActive(NodeIndex))
+						{
+							return FSlateColor(FLinearColor(1.0f, 0.8f, 0.2f, 1.0f));
+						}
+						return FSlateColor(PuzzleGroup.IsValid() && PuzzleGroup->IsSatisfied()
+							? FLinearColor(0.25f, 1.0f, 0.35f, 1.0f)
+							: FLinearColor::White);
+					})
+					.Text_Lambda([this, NodeIndex, DisplayName, PuzzleGroup]()
+					{
+						const UUOUDevelopmentPuzzleCheatSubsystem* CurrentSubsystem =
+							PuzzleCheatSubsystem.Get();
+						const TCHAR* StateText = CurrentSubsystem != nullptr
+							&& CurrentSubsystem->IsGraphNodeActive(NodeIndex)
+							? TEXT("실행 중")
+							: (PuzzleGroup.IsValid() && PuzzleGroup->IsSatisfied() ? TEXT("완료") : TEXT("대기"));
+						return FText::FromString(FString::Printf(
+							TEXT("[%s] %s"),
+							StateText,
+							*DisplayName.ToString()));
+					})
+				]
+				+ SVerticalBox::Slot()
+				.AutoHeight()
+				.Padding(8.0f, 3.0f, 0.0f, 0.0f)
+				[
+					SNew(STextBlock)
+					.Text(DetailText)
+					.AutoWrapText(true)
+					.ColorAndOpacity(FLinearColor(0.78f, 0.78f, 0.78f, 1.0f))
+				]
+			]
+		];
 	}
 }
 
@@ -585,6 +754,8 @@ FReply SUOUDevelopmentPuzzleCheatHUD::HandleToggleClicked()
 FReply SUOUDevelopmentPuzzleCheatHUD::HandleConditionTabClicked()
 {
 	ActivePage = EActivePage::Condition;
+	RebuildGraphRows();
+	RebuildStepRows();
 	return FReply::Handled();
 }
 
@@ -647,6 +818,7 @@ FReply SUOUDevelopmentPuzzleCheatHUD::HandleRefreshClicked()
 	if (UUOUDevelopmentPuzzleCheatSubsystem* Subsystem = PuzzleCheatSubsystem.Get())
 	{
 		Subsystem->RefreshPuzzleSequence();
+		RebuildGraphRows();
 		RebuildStepRows();
 	}
 	return FReply::Handled();
@@ -666,6 +838,15 @@ FReply SUOUDevelopmentPuzzleCheatHUD::HandleCancelClicked()
 	if (UUOUDevelopmentPuzzleCheatSubsystem* Subsystem = PuzzleCheatSubsystem.Get())
 	{
 		Subsystem->CancelPendingSequence();
+	}
+	return FReply::Handled();
+}
+
+FReply SUOUDevelopmentPuzzleCheatHUD::HandleGraphNodeClicked(int32 TargetNodeIndex)
+{
+	if (UUOUDevelopmentPuzzleCheatSubsystem* Subsystem = PuzzleCheatSubsystem.Get())
+	{
+		Subsystem->AdvanceThroughGraphNode(TargetNodeIndex);
 	}
 	return FReply::Handled();
 }
@@ -836,6 +1017,109 @@ FText SUOUDevelopmentPuzzleCheatHUD::GetVFXDebugInfoText() const
 		: DebugText);
 }
 
+FText SUOUDevelopmentPuzzleCheatHUD::GetGraphStatusText() const
+{
+	const UUOUDevelopmentPuzzleCheatSubsystem* Subsystem = PuzzleCheatSubsystem.Get();
+	if (Subsystem == nullptr)
+	{
+		return FText::FromString(TEXT("관계 그래프를 사용할 수 없습니다."));
+	}
+
+	return FText::FromString(FString::Printf(
+		TEXT("퍼즐 관계: %s | 노드 %d | 연결 %d\n%s"),
+		Subsystem->IsPuzzleGraphValid() ? TEXT("정상") : TEXT("오류"),
+		Subsystem->GetPuzzleGraphNodesView().Num(),
+		Subsystem->GetPuzzleGraphEdgesView().Num(),
+		*Subsystem->PuzzleGraphStatusMessage));
+}
+
+FSlateColor SUOUDevelopmentPuzzleCheatHUD::GetGraphStatusColor() const
+{
+	const UUOUDevelopmentPuzzleCheatSubsystem* Subsystem = PuzzleCheatSubsystem.Get();
+	if (Subsystem == nullptr || !Subsystem->IsPuzzleGraphValid())
+	{
+		return FSlateColor(FLinearColor(1.0f, 0.25f, 0.2f, 1.0f));
+	}
+
+	if (Subsystem->IsGraphExecutionActive())
+	{
+		return FSlateColor(FLinearColor(1.0f, 0.8f, 0.2f, 1.0f));
+	}
+
+	return FSlateColor(FLinearColor(0.25f, 1.0f, 0.35f, 1.0f));
+}
+
+FText SUOUDevelopmentPuzzleCheatHUD::BuildGraphNodeDetailText(int32 NodeIndex) const
+{
+	const UUOUDevelopmentPuzzleCheatSubsystem* Subsystem = PuzzleCheatSubsystem.Get();
+	if (Subsystem == nullptr)
+	{
+		return FText::GetEmpty();
+	}
+
+	const TArray<FUOUDevelopmentPuzzleCheatGraphNode>& GraphNodes = Subsystem->GetPuzzleGraphNodesView();
+	const TArray<FUOUDevelopmentPuzzleCheatGraphEdge>& GraphEdges = Subsystem->GetPuzzleGraphEdgesView();
+	if (!GraphNodes.IsValidIndex(NodeIndex))
+	{
+		return FText::FromString(TEXT("유효하지 않은 그래프 노드입니다."));
+	}
+
+	const FUOUDevelopmentPuzzleCheatGraphNode& Node = GraphNodes[NodeIndex];
+	TArray<FString> PrerequisiteDescriptions;
+	TSet<const AActor*> IncomingRelationActors;
+	for (const FUOUDevelopmentPuzzleCheatGraphEdge& Edge : GraphEdges)
+	{
+		if (Edge.TargetNodeIndex != NodeIndex || !GraphNodes.IsValidIndex(Edge.SourceNodeIndex))
+		{
+			continue;
+		}
+
+		const AActor* RelationActor = Edge.RelationActor.Get();
+		if (RelationActor != nullptr)
+		{
+			IncomingRelationActors.Add(RelationActor);
+		}
+		PrerequisiteDescriptions.Add(FString::Printf(
+			TEXT("%s → %s"),
+			*GraphNodes[Edge.SourceNodeIndex].DisplayName.ToString(),
+			RelationActor != nullptr ? *RelationActor->GetName() : TEXT("직접 연결")));
+	}
+
+	TArray<FString> IndependentInputNames;
+	for (const TObjectPtr<AActor>& InputActor : Node.InputActors)
+	{
+		if (IsValid(InputActor.Get()) && !IncomingRelationActors.Contains(InputActor.Get()))
+		{
+			IndependentInputNames.AddUnique(InputActor->GetName());
+		}
+	}
+
+	TArray<FString> ResultNames;
+	for (const TObjectPtr<AActor>& ResultActor : Node.ResultActors)
+	{
+		if (IsValid(ResultActor.Get()))
+		{
+			ResultNames.AddUnique(ResultActor->GetName());
+		}
+	}
+
+	const FString PrerequisiteText = PrerequisiteDescriptions.IsEmpty()
+		? TEXT("없음")
+		: FString::Join(PrerequisiteDescriptions, TEXT(", "));
+	const FString IndependentInputText = IndependentInputNames.IsEmpty()
+		? TEXT("없음")
+		: FString::Join(IndependentInputNames, TEXT(", "));
+	const FString ResultText = ResultNames.IsEmpty()
+		? TEXT("없음")
+		: FString::Join(ResultNames, TEXT(", "));
+
+	TArray<FString> DetailLines;
+	DetailLines.Add(FString::Printf(TEXT("선행 연결: %s"), *PrerequisiteText));
+	DetailLines.Add(FString::Printf(TEXT("독립 입력: %s"), *IndependentInputText));
+	DetailLines.Add(FString::Printf(TEXT("결과: %s"), *ResultText));
+	return FText::FromString(FString::Join(DetailLines, LINE_TERMINATOR));
+}
+
 FText SUOUDevelopmentPuzzleCheatHUD::GetStatusText() const
 {
 	const UUOUDevelopmentPuzzleCheatSubsystem* Subsystem = PuzzleCheatSubsystem.Get();
@@ -854,7 +1138,8 @@ FText SUOUDevelopmentPuzzleCheatHUD::GetStatusText() const
 FSlateColor SUOUDevelopmentPuzzleCheatHUD::GetStatusColor() const
 {
 	const UUOUDevelopmentPuzzleCheatSubsystem* Subsystem = PuzzleCheatSubsystem.Get();
-	if (Subsystem == nullptr || !Subsystem->IsPuzzleSequenceValid())
+	if (Subsystem == nullptr
+		|| (!Subsystem->IsPuzzleSequenceValid() && !Subsystem->IsPuzzleGraphValid()))
 	{
 		return FSlateColor(FLinearColor(1.0f, 0.25f, 0.2f, 1.0f));
 	}
@@ -872,6 +1157,14 @@ bool SUOUDevelopmentPuzzleCheatHUD::IsPuzzleActionEnabled() const
 	const UUOUDevelopmentPuzzleCheatSubsystem* Subsystem = PuzzleCheatSubsystem.Get();
 	return Subsystem != nullptr
 		&& Subsystem->IsPuzzleSequenceValid()
+		&& !Subsystem->IsSequenceRunning();
+}
+
+bool SUOUDevelopmentPuzzleCheatHUD::IsGraphActionEnabled() const
+{
+	const UUOUDevelopmentPuzzleCheatSubsystem* Subsystem = PuzzleCheatSubsystem.Get();
+	return Subsystem != nullptr
+		&& Subsystem->IsPuzzleGraphValid()
 		&& !Subsystem->IsSequenceRunning();
 }
 

@@ -23,6 +23,14 @@ struct UNDERONEUMBRELLADEVTOOLS_API FUOUDevelopmentPuzzleCheatGraphNode
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Puzzle Cheat|Graph")
 	TObjectPtr<AUOUPuzzleConditionGroupActor> PuzzleGroup = nullptr;
 
+	// ConditionActors와 ConditionSource 참조에서 해석한 실제 입력 액터 캐시입니다.
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Puzzle Cheat|Graph")
+	TArray<TObjectPtr<AActor>> InputActors;
+
+	// 만족 시 실행되는 유효한 Result 대상 액터 캐시입니다.
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Puzzle Cheat|Graph")
+	TArray<TObjectPtr<AActor>> ResultActors;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Puzzle Cheat|Graph")
 	TArray<int32> PrerequisiteNodeIndices;
 
