@@ -310,6 +310,20 @@ void SUOUDevelopmentPuzzleCheatHUD::Construct(const FArguments& InArgs)
 									.AutoWrapText(true)
 								]
 							]
+							+ SVerticalBox::Slot()
+							.AutoHeight()
+							.Padding(0.0f, 6.0f, 0.0f, 0.0f)
+							[
+								SNew(SBorder)
+								.BorderImage(FCoreStyle::Get().GetBrush(TEXT("GenericWhiteBox")))
+								.BorderBackgroundColor(FLinearColor(0.08f, 0.08f, 0.08f, 0.9f))
+								.Padding(8.0f)
+								[
+									SNew(STextBlock)
+									.Text(this, &SUOUDevelopmentPuzzleCheatHUD::GetVFXDebugInfoText)
+									.AutoWrapText(true)
+								]
+							]
 						]
 					]
 				]
@@ -588,6 +602,27 @@ FText SUOUDevelopmentPuzzleCheatHUD::GetPerformanceDebugInfoText() const
 	const FString& DebugText = DrawSubsystem->GetPerformanceDebugText();
 	return FText::FromString(DebugText.IsEmpty()
 		? TEXT("Waiting for performance debug information...")
+		: DebugText);
+}
+
+FText SUOUDevelopmentPuzzleCheatHUD::GetVFXDebugInfoText() const
+{
+	const UUOUDevelopmentDebugControlSubsystem* ControlSubsystem = DebugControlSubsystem.Get();
+	const UUOUDevelopmentDebugDrawSubsystem* DrawSubsystem = DebugDrawSubsystem.Get();
+	if (ControlSubsystem == nullptr || DrawSubsystem == nullptr)
+	{
+		return FText::FromString(TEXT("VFX debug information is unavailable."));
+	}
+
+	if (!ControlSubsystem->IsDebugToolsEnabled()
+		|| !ControlSubsystem->IsDebugCategoryEnabled(EUOUDebugCategory::VFX))
+	{
+		return FText::FromString(TEXT("VFX debug information is disabled."));
+	}
+
+	const FString& DebugText = DrawSubsystem->GetVFXDebugText();
+	return FText::FromString(DebugText.IsEmpty()
+		? TEXT("Waiting for VFX debug information...")
 		: DebugText);
 }
 
