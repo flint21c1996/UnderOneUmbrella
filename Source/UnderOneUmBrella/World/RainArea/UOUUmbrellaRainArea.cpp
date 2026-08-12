@@ -6,7 +6,6 @@
 #include "Components/BoxComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
-#include "Debug/UOUDebugSubsystem.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/GameInstance.h"
 #include "EngineUtils.h"
@@ -213,7 +212,6 @@ void AUOUUmbrellaRainArea::Tick(float DeltaSeconds)
 
 	// 비주얼 상태는 매 프레임 최신 에디터 세팅과 런타임 토글을 반영합니다.
 	ApplyEnvironmentVisualState();
-	DrawRainVisualDebug();
 	UpdateRainAudio();
 
 	TArray<AActor*> OverlappingActors;
@@ -1306,95 +1304,6 @@ bool AUOUUmbrellaRainArea::IsWorldLocationBlockedByRainBlocker(const FVector& Wo
 	return FlowDirection == EUOURainAreaFlowDirection::Upward
 		? LocalLocation.Z >= -SafeHalfExtent.Z
 		: LocalLocation.Z <= SafeHalfExtent.Z;
-}
-
-void AUOUUmbrellaRainArea::DrawRainVisualDebug() const
-{
-	if (!bDrawRainVisualDebug
-		|| !UUOUDebugSubsystem::IsDebugWorldDrawEnabled(this, EUOUDebugCategory::VFX)
-		|| RainVolume == nullptr)
-	{
-		return;
-	}
-
-	UWorld* World = GetWorld();
-	if (World == nullptr)
-	{
-		return;
-	}
-
-	const FVector BoxExtent = RainVolume->GetScaledBoxExtent();
-	const FVector VolumeCenter = RainVolume->GetComponentLocation();
-	const FQuat VolumeRotation = RainVolume->GetComponentQuat();
-	const FVector VolumeUp = RainVolume->GetUpVector();
-	const bool bFlowUpward = FlowDirection == EUOURainAreaFlowDirection::Upward;
-	const FVector RainSpawnPlaneWorldPosition = bFlowUpward
-		? VolumeCenter - VolumeUp * BoxExtent.Z
-		: VolumeCenter + VolumeUp * BoxExtent.Z;
-	const FVector GroundSplashWorldPosition = bFlowUpward
-		? VolumeCenter + VolumeUp * (BoxExtent.Z - GroundSplashHeightOffset)
-		: VolumeCenter - VolumeUp * (BoxExtent.Z - GroundSplashHeightOffset);
-	const FVector VisualAreaHalfExtent(BoxExtent.X, BoxExtent.Y, 2.0f);
-	const float Thickness = FMath::Max(0.0f, RainVisualDebugThickness);
-	const float LifeTime = 0.0f;
-	const FColor VFXDebugColor = UUOUDebugSubsystem::GetDebugCategoryColor(this, EUOUDebugCategory::VFX, FColor::Cyan);
-
-	// VFX 디버그는 RainVolume 전체, 비 스폰면, 바닥 물튐 위치를 한 번에 확인하기 위한 표시입니다.
-	DrawDebugBox(
-		World,
-		VolumeCenter,
-		BoxExtent,
-		VolumeRotation,
-		VFXDebugColor,
-		false,
-		LifeTime,
-		0,
-		Thickness);
-
-	DrawDebugBox(
-		World,
-		RainSpawnPlaneWorldPosition,
-		VisualAreaHalfExtent,
-		VolumeRotation,
-		VFXDebugColor,
-		false,
-		LifeTime,
-		0,
-		Thickness);
-
-	DrawDebugBox(
-		World,
-		GroundSplashWorldPosition,
-		VisualAreaHalfExtent,
-		VolumeRotation,
-		VFXDebugColor,
-		false,
-		LifeTime,
-		0,
-		Thickness);
-
-	DrawDebugLine(
-		World,
-		GroundSplashWorldPosition,
-		RainSpawnPlaneWorldPosition,
-		VFXDebugColor,
-		false,
-		LifeTime,
-		0,
-		Thickness);
-
-	DrawDebugString(
-		World,
-		RainSpawnPlaneWorldPosition + VolumeUp * 20.0f,
-		FString::Printf(
-			TEXT("RainAreaSize %.1f x %.1f"),
-			BoxExtent.X * 2.0f,
-			BoxExtent.Y * 2.0f),
-		nullptr,
-		VFXDebugColor,
-		LifeTime,
-		false,
-		1.0f);
 }
 
 void AUOUUmbrellaRainArea::ApplyPreviewSettings()

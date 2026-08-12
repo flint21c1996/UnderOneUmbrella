@@ -2,9 +2,6 @@
 
 #include "World/Environment/UOUEnvironmentVisualComponent.h"
 
-#include "Debug/UOUDebugSubsystem.h"
-#include "DrawDebugHelpers.h"
-#include "Engine/Engine.h"
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
 #include "NiagaraComponent.h"
@@ -870,7 +867,6 @@ void UUOUEnvironmentVisualComponent::ApplyNiagaraParameters()
 					*DescribeEnvironmentVisualComponentNiagaraParameterBinding(Effect, RainBlockerLocalPositionParameterName).Replace(TEXT("\n"), TEXT(" ")));
 			}
 
-			DrawRainBlockerNiagaraDebug(Effect, BlockerWorldPosition, CachedRainBlockerHalfExtent);
 		};
 
 	for (UNiagaraComponent* ActiveEffect : ActiveEffects)
@@ -928,74 +924,19 @@ bool UUOUEnvironmentVisualComponent::CanApplyNiagaraState() const
 	return IsRegistered() && !HasAnyFlags(RF_ClassDefaultObject | RF_ArchetypeObject);
 }
 
-void UUOUEnvironmentVisualComponent::DrawRainBlockerNiagaraDebug(const UNiagaraComponent* Effect, const FVector& BlockerWorldCenter, const FVector& BlockerHalfExtent) const
+bool UUOUEnvironmentVisualComponent::GetRainBlockerState(
+	FVector& OutWorldCenter,
+	FVector& OutHalfExtent,
+	float& OutIntensity) const
 {
-	if (!bDrawRainBlockerNiagaraDebug
-		|| !bCachedRainBlockerActive
-		|| !UUOUDebugSubsystem::IsDebugWorldDrawEnabled(this, EUOUDebugCategory::VFX)
-		|| Effect == nullptr
-		|| GetWorld() == nullptr
-		|| BlockerHalfExtent.IsNearlyZero())
-	{
-		return;
-	}
+	OutWorldCenter = GetComponentTransform().TransformPosition(CachedRainBlockerLocalPosition);
+	OutHalfExtent = CachedRainBlockerHalfExtent;
+	OutIntensity = CachedRainBlockerIntensity;
+	return bCachedRainBlockerActive && !CachedRainBlockerHalfExtent.IsNearlyZero();
+}
 
-	const float CenterRadius = FMath::Max(6.0f, RainBlockerNiagaraDebugThickness * 2.0f);
-	const FColor VFXDebugColor = UUOUDebugSubsystem::GetDebugCategoryColor(this, EUOUDebugCategory::VFX, FColor::Magenta);
-
-	DrawDebugBox(
-		GetWorld(),
-		BlockerWorldCenter,
-		BlockerHalfExtent,
-		Effect->GetComponentQuat(),
-		VFXDebugColor,
-		false,
-		0.0f,
-		0,
-		RainBlockerNiagaraDebugThickness);
-
-	DrawDebugSphere(
-		GetWorld(),
-		BlockerWorldCenter,
-		CenterRadius,
-		8,
-		VFXDebugColor,
-		false,
-		0.0f,
-		0,
-		RainBlockerNiagaraDebugThickness);
-
-	const FTransform EffectTransform = Effect->GetComponentTransform();
-	const FVector EffectLocalBlockerPosition = EffectTransform.InverseTransformPosition(BlockerWorldCenter);
-	const FString BindingDebugText = DescribeEnvironmentVisualComponentNiagaraParameterBinding(Effect, RainBlockerLocalPositionParameterName);
-	DrawDebugString(
-		GetWorld(),
-		BlockerWorldCenter + FVector(0.0f, 0.0f, BlockerHalfExtent.Z + 36.0f),
-		FString::Printf(
-			TEXT("RB Local %.1f %.1f %.1f"),
-			EffectLocalBlockerPosition.X,
-			EffectLocalBlockerPosition.Y,
-			EffectLocalBlockerPosition.Z),
-		nullptr,
-		VFXDebugColor,
-		0.0f,
-		false,
-		1.0f);
-
-	if (GEngine != nullptr)
-	{
-		const uint64 EffectHash = static_cast<uint64>(PointerHash(Effect));
-		const uint64 DebugKey = 0x554F55000000ull + EffectHash;
-		GEngine->AddOnScreenDebugMessage(
-			DebugKey,
-			0.0f,
-			VFXDebugColor,
-			FString::Printf(
-				TEXT("%s\nRainBlockerLocal %.1f %.1f %.1f\n%s"),
-				*Effect->GetName(),
-				EffectLocalBlockerPosition.X,
-				EffectLocalBlockerPosition.Y,
-				EffectLocalBlockerPosition.Z,
-				*BindingDebugText));
-	}
+void UUOUEnvironmentVisualComponent::GetRegisteredEffectComponents(
+	TArray<UNiagaraComponent*>& OutEffects) const
+{
+	GatherRegisteredEffectComponents(OutEffects);
 }

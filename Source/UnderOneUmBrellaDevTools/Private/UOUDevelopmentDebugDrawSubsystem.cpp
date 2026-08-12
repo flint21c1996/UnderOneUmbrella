@@ -6,6 +6,7 @@
 #include "Animation/AnimInstance.h"
 #include "Animation/AnimMontage.h"
 #include "Components/ActorComponent.h"
+#include "Components/BoxComponent.h"
 #include "Components/PrimitiveComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -26,6 +27,9 @@
 #include "HAL/PlatformMemory.h"
 #include "InputCoreTypes.h"
 #include "NiagaraComponent.h"
+#include "NiagaraParameterStore.h"
+#include "NiagaraSystem.h"
+#include "NiagaraTypes.h"
 #include "Navigation/PathFollowingComponent.h"
 #include "NavigationPath.h"
 #include "Particles/ParticleSystemComponent.h"
@@ -44,9 +48,11 @@
 #include "RenderTimer.h"
 #include "UOUDevelopmentDebugControlSubsystem.h"
 #include "UnrealClient.h"
+#include "World/Environment/UOUEnvironmentVisualComponent.h"
 #include "World/Light/UOULightInteractionSurfaceComponent.h"
 #include "World/NPC/UOUNPCCharacter.h"
 #include "World/Pour/UOUPourDropActor.h"
+#include "World/RainArea/UOUUmbrellaRainArea.h"
 
 #if !UOU_WITH_DEVELOPMENT_TOOLS
 #error UOUDevelopmentDebugDrawSubsystem must only be compiled when development tools are enabled.
@@ -204,6 +210,145 @@ namespace UOUDevelopmentDebugDrawPrivate
 		return FString::Printf(TEXT("%.0f, %.0f, %.0f"), Vector.X, Vector.Y, Vector.Z);
 	}
 
+	FName NormalizeNiagaraUserParameterName(FName ParameterName)
+	{
+		if (ParameterName.IsNone())
+		{
+			return NAME_None;
+		}
+
+		FString ParameterNameString = ParameterName.ToString();
+		if (ParameterNameString.StartsWith(TEXT("User.")))
+		{
+			ParameterNameString.RightChopInline(5);
+		}
+
+		return FName(*ParameterNameString);
+	}
+
+	const TCHAR* GetNiagaraTypeDebugName(const FNiagaraTypeDefinition& Type)
+	{
+		if (Type == FNiagaraTypeDefinition::GetPositionDef())
+		{
+			return TEXT("Position");
+		}
+		if (Type == FNiagaraTypeDefinition::GetVec3Def())
+		{
+			return TEXT("Vec3");
+		}
+		if (Type == FNiagaraTypeDefinition::GetVec2Def())
+		{
+			return TEXT("Vec2");
+		}
+		if (Type == FNiagaraTypeDefinition::GetFloatDef())
+		{
+			return TEXT("Float");
+		}
+		if (Type == FNiagaraTypeDefinition::GetBoolDef())
+		{
+			return TEXT("Bool");
+		}
+		if (Type == FNiagaraTypeDefinition::GetIntDef())
+		{
+			return TEXT("Int");
+		}
+		return TEXT("Other");
+	}
+
+	const FNiagaraVariableWithOffset* FindNiagaraParameterInStore(
+		const FNiagaraParameterStore& Store,
+		FName ParameterName)
+	{
+		const FNiagaraTypeDefinition CandidateTypes[] =
+		{
+			FNiagaraTypeDefinition::GetPositionDef(),
+			FNiagaraTypeDefinition::GetVec3Def(),
+			FNiagaraTypeDefinition::GetVec2Def(),
+			FNiagaraTypeDefinition::GetFloatDef(),
+			FNiagaraTypeDefinition::GetBoolDef(),
+			FNiagaraTypeDefinition::GetIntDef()
+		};
+
+		for (const FNiagaraTypeDefinition& CandidateType : CandidateTypes)
+		{
+			const FNiagaraVariable QueryParameter(CandidateType, ParameterName);
+			if (const FNiagaraVariableWithOffset* Parameter =
+				Store.FindParameterVariable(QueryParameter, false))
+			{
+				return Parameter;
+			}
+		}
+
+		return nullptr;
+	}
+
+	FString DescribeNiagaraParameterBinding(const UNiagaraComponent* Effect, FName ParameterName)
+	{
+		if (Effect == nullptr || ParameterName.IsNone())
+		{
+			return TEXT("ParamDebug: invalid effect/name");
+		}
+
+		TArray<FName, TInlineAllocator<3>> NamesToCheck;
+		NamesToCheck.AddUnique(ParameterName);
+		const FName NormalizedName = NormalizeNiagaraUserParameterName(ParameterName);
+		NamesToCheck.AddUnique(NormalizedName);
+		if (!NormalizedName.ToString().StartsWith(TEXT("User.")))
+		{
+			NamesToCheck.AddUnique(FName(*FString::Printf(TEXT("User.%s"), *NormalizedName.ToString())));
+		}
+
+		auto AppendMatchingParameters = [](FString& OutText, const TCHAR* Label, const FNiagaraParameterStore& Store)
+		{
+			TArray<FNiagaraVariable> Parameters;
+			Store.GetParameters(Parameters);
+			OutText += FString::Printf(TEXT("\n%s RainBlocker:"), Label);
+			int32 MatchCount = 0;
+			for (const FNiagaraVariable& Parameter : Parameters)
+			{
+				const FString CandidateName = Parameter.GetName().ToString();
+				if (!CandidateName.Contains(TEXT("RainBlocker")))
+				{
+					continue;
+				}
+
+				++MatchCount;
+				OutText += FString::Printf(
+					TEXT(" %s:%s"),
+					*CandidateName,
+					GetNiagaraTypeDebugName(Parameter.GetType()));
+			}
+
+			if (MatchCount == 0)
+			{
+				OutText += TEXT(" none");
+			}
+		};
+
+		FString Result = FString::Printf(TEXT("Param %s |"), *ParameterName.ToString());
+		const UNiagaraSystem* NiagaraSystem = Effect->GetAsset();
+		for (const FName NameToCheck : NamesToCheck)
+		{
+			const FNiagaraVariableWithOffset* SystemParameter = NiagaraSystem != nullptr
+				? FindNiagaraParameterInStore(NiagaraSystem->GetExposedParameters(), NameToCheck)
+				: nullptr;
+			const FNiagaraVariableWithOffset* OverrideParameter =
+				FindNiagaraParameterInStore(Effect->GetOverrideParameters(), NameToCheck);
+			Result += FString::Printf(
+				TEXT(" %s Sys:%s Ovr:%s |"),
+				*NameToCheck.ToString(),
+				SystemParameter != nullptr ? GetNiagaraTypeDebugName(SystemParameter->GetType()) : TEXT("-"),
+				OverrideParameter != nullptr ? GetNiagaraTypeDebugName(OverrideParameter->GetType()) : TEXT("-"));
+		}
+		if (NiagaraSystem != nullptr)
+		{
+			AppendMatchingParameters(Result, TEXT("SysAll"), NiagaraSystem->GetExposedParameters());
+		}
+		AppendMatchingParameters(Result, TEXT("OvrAll"), Effect->GetOverrideParameters());
+
+		return Result;
+	}
+
 	bool TryGetDebugObjectLocation(const UObject* Object, FVector& OutLocation)
 	{
 		if (const AActor* Actor = Cast<AActor>(Object))
@@ -337,6 +482,8 @@ void UUOUDevelopmentDebugDrawSubsystem::Tick(float DeltaTime)
 	{
 		RefreshVFXDebugData(DeltaTime);
 		DrawVFXOwnerLabels();
+		DrawRainAreaVFXDebug();
+		DrawEnvironmentVisualDebug();
 	}
 	else
 	{
@@ -1348,6 +1495,188 @@ void UUOUDevelopmentDebugDrawSubsystem::DrawVFXOwnerLabels() const
 			0.0f,
 			true,
 			0.9f);
+	}
+}
+
+void UUOUDevelopmentDebugDrawSubsystem::DrawRainAreaVFXDebug() const
+{
+	UWorld* World = GetWorld();
+	if (World == nullptr)
+	{
+		return;
+	}
+
+	constexpr float Thickness = 2.0f;
+	for (TActorIterator<AUOUUmbrellaRainArea> It(World); It; ++It)
+	{
+		const AUOUUmbrellaRainArea* RainArea = *It;
+		const UBoxComponent* RainVolume = IsValid(RainArea)
+			? RainArea->GetRainVolumeComponent()
+			: nullptr;
+		if (RainVolume == nullptr)
+		{
+			continue;
+		}
+
+		const FVector BoxExtent = RainVolume->GetScaledBoxExtent();
+		const FVector VolumeCenter = RainVolume->GetComponentLocation();
+		const FQuat VolumeRotation = RainVolume->GetComponentQuat();
+		const FVector VolumeUp = RainVolume->GetUpVector();
+		const bool bFlowUpward =
+			RainArea->GetFlowDirection() == EUOURainAreaFlowDirection::Upward;
+		const FVector RainSpawnPlaneWorldPosition = bFlowUpward
+			? VolumeCenter - VolumeUp * BoxExtent.Z
+			: VolumeCenter + VolumeUp * BoxExtent.Z;
+		const FVector GroundSplashWorldPosition = bFlowUpward
+			? VolumeCenter + VolumeUp * (BoxExtent.Z - RainArea->GetGroundSplashHeightOffset())
+			: VolumeCenter - VolumeUp * (BoxExtent.Z - RainArea->GetGroundSplashHeightOffset());
+		const FVector VisualAreaHalfExtent(BoxExtent.X, BoxExtent.Y, 2.0f);
+
+		DrawDebugBox(
+			World, VolumeCenter, BoxExtent, VolumeRotation, FColor::Cyan, false, 0.0f, 0, Thickness);
+		DrawDebugBox(
+			World,
+			RainSpawnPlaneWorldPosition,
+			VisualAreaHalfExtent,
+			VolumeRotation,
+			FColor::Cyan,
+			false,
+			0.0f,
+			0,
+			Thickness);
+		DrawDebugBox(
+			World,
+			GroundSplashWorldPosition,
+			VisualAreaHalfExtent,
+			VolumeRotation,
+			FColor::Cyan,
+			false,
+			0.0f,
+			0,
+			Thickness);
+		DrawDebugLine(
+			World,
+			GroundSplashWorldPosition,
+			RainSpawnPlaneWorldPosition,
+			FColor::Cyan,
+			false,
+			0.0f,
+			0,
+			Thickness);
+		DrawDebugString(
+			World,
+			RainSpawnPlaneWorldPosition + VolumeUp * 20.0f,
+			FString::Printf(
+				TEXT("RainAreaSize %.1f x %.1f"),
+				BoxExtent.X * 2.0f,
+				BoxExtent.Y * 2.0f),
+			nullptr,
+			FColor::Cyan,
+			0.0f,
+			false,
+			1.0f);
+	}
+}
+
+void UUOUDevelopmentDebugDrawSubsystem::DrawEnvironmentVisualDebug() const
+{
+	UWorld* World = GetWorld();
+	if (World == nullptr)
+	{
+		return;
+	}
+
+	constexpr float Thickness = 2.0f;
+	for (TActorIterator<AActor> It(World); It; ++It)
+	{
+		AActor* Actor = *It;
+		if (!IsValid(Actor))
+		{
+			continue;
+		}
+
+		TArray<UUOUEnvironmentVisualComponent*> VisualComponents;
+		Actor->GetComponents<UUOUEnvironmentVisualComponent>(VisualComponents);
+		for (const UUOUEnvironmentVisualComponent* VisualComponent : VisualComponents)
+		{
+			FVector BlockerWorldCenter = FVector::ZeroVector;
+			FVector BlockerHalfExtent = FVector::ZeroVector;
+			float BlockerIntensity = 0.0f;
+			if (!IsValid(VisualComponent)
+				|| !VisualComponent->GetRainBlockerState(
+					BlockerWorldCenter,
+					BlockerHalfExtent,
+					BlockerIntensity))
+			{
+				continue;
+			}
+
+			TArray<UNiagaraComponent*> Effects;
+			VisualComponent->GetRegisteredEffectComponents(Effects);
+			for (const UNiagaraComponent* Effect : Effects)
+			{
+				if (!IsValid(Effect))
+				{
+					continue;
+				}
+
+				const FVector EffectLocalBlockerPosition =
+					Effect->GetComponentTransform().InverseTransformPosition(BlockerWorldCenter);
+				DrawDebugBox(
+					World,
+					BlockerWorldCenter,
+					BlockerHalfExtent,
+					Effect->GetComponentQuat(),
+					FColor::Magenta,
+					false,
+					0.0f,
+					0,
+					Thickness);
+				DrawDebugSphere(
+					World,
+					BlockerWorldCenter,
+					6.0f,
+					8,
+					FColor::Magenta,
+					false,
+					0.0f,
+					0,
+					Thickness);
+				DrawDebugString(
+					World,
+					BlockerWorldCenter + FVector(0.0f, 0.0f, BlockerHalfExtent.Z + 36.0f),
+					FString::Printf(
+						TEXT("RB Local %.1f %.1f %.1f\nIntensity %.2f"),
+						EffectLocalBlockerPosition.X,
+						EffectLocalBlockerPosition.Y,
+						EffectLocalBlockerPosition.Z,
+						BlockerIntensity),
+					nullptr,
+					FColor::Magenta,
+					0.0f,
+					false,
+					1.0f);
+
+				if (GEngine != nullptr)
+				{
+					const uint64 DebugKey =
+						0x554F55000000ull + static_cast<uint64>(PointerHash(Effect));
+					GEngine->AddOnScreenDebugMessage(
+						DebugKey,
+						0.0f,
+						FColor::Magenta,
+						FString::Printf(
+							TEXT("%s\nRainBlockerLocal %.1f %.1f %.1f\n%s"),
+							*Effect->GetName(),
+							EffectLocalBlockerPosition.X,
+							EffectLocalBlockerPosition.Y,
+							EffectLocalBlockerPosition.Z,
+							*UOUDevelopmentDebugDrawPrivate::DescribeNiagaraParameterBinding(
+								Effect,
+								VisualComponent->GetRainBlockerLocalPositionParameterName())));
+				}
+			}
+		}
 	}
 }
 

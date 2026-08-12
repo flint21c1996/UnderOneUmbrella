@@ -49,6 +49,8 @@ private:
 	void ResetPerformanceDebugState();
 	void RefreshVFXDebugData(float DeltaTime);
 	void DrawVFXOwnerLabels() const;
+	void DrawRainAreaVFXDebug() const;
+	void DrawEnvironmentVisualDebug() const;
 	void ResetVFXDebugState();
 	void TryAddPuzzleDebugProvider(UObject* ProviderObject);
 	void DrawPuzzleProviderConnections() const;
