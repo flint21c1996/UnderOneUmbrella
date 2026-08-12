@@ -296,6 +296,20 @@ void SUOUDevelopmentPuzzleCheatHUD::Construct(const FArguments& InArgs)
 									.AutoWrapText(true)
 								]
 							]
+							+ SVerticalBox::Slot()
+							.AutoHeight()
+							.Padding(0.0f, 6.0f, 0.0f, 0.0f)
+							[
+								SNew(SBorder)
+								.BorderImage(FCoreStyle::Get().GetBrush(TEXT("GenericWhiteBox")))
+								.BorderBackgroundColor(FLinearColor(0.08f, 0.08f, 0.08f, 0.9f))
+								.Padding(8.0f)
+								[
+									SNew(STextBlock)
+									.Text(this, &SUOUDevelopmentPuzzleCheatHUD::GetPerformanceDebugInfoText)
+									.AutoWrapText(true)
+								]
+							]
 						]
 					]
 				]

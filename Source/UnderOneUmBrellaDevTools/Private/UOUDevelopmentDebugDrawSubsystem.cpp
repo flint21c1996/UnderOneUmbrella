@@ -9,12 +9,16 @@
 #include "Debug/UOUDebugProvider.h"
 #include "Debug/UOUDevelopmentToolsBuild.h"
 #include "DrawDebugHelpers.h"
+#include "DynamicRHI.h"
+#include "Engine/Engine.h"
+#include "Engine/GameViewportClient.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "GameFramework/Actor.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/PlayerController.h"
+#include "HAL/PlatformMemory.h"
 #include "InputCoreTypes.h"
 #include "Player/UOUCameraControllerComponent.h"
 #include "Player/UOUCharacter.h"
@@ -25,7 +29,12 @@
 #include "Player/UOUUmbrellaLightInteractionComponent.h"
 #include "Player/UOUWaterContainerComponent.h"
 #include "Puzzle/PushPull/UOUPushPullObjectComponent.h"
+#include "RHICommandList.h"
+#include "RHIStats.h"
+#include "RenderCounters.h"
+#include "RenderTimer.h"
 #include "UOUDevelopmentDebugControlSubsystem.h"
+#include "UnrealClient.h"
 #include "World/Light/UOULightInteractionSurfaceComponent.h"
 
 #if !UOU_WITH_DEVELOPMENT_TOOLS
@@ -35,6 +44,44 @@
 namespace UOUDevelopmentDebugDrawPrivate
 {
 	constexpr float PuzzleProviderRefreshIntervalSeconds = 1.0f;
+	constexpr float PerformanceUpdateIntervalSeconds = 0.5f;
+
+	FString FormatMemoryGB(uint64 Bytes)
+	{
+		constexpr double BytesPerGB = 1024.0 * 1024.0 * 1024.0;
+		return FString::Printf(TEXT("%.2f GB"), static_cast<double>(Bytes) / BytesPerGB);
+	}
+
+	FString FormatCompactCount(int32 Count)
+	{
+		if (Count >= 1000000)
+		{
+			return FString::Printf(TEXT("%.1fM"), Count / 1000000.0f);
+		}
+
+		if (Count >= 10000)
+		{
+			return FString::Printf(TEXT("%.1fK"), Count / 1000.0f);
+		}
+
+		return FString::FromInt(Count);
+	}
+
+	FIntPoint GetFallbackViewportSize(const UWorld* World)
+	{
+		if (World == nullptr)
+		{
+			return FIntPoint::ZeroValue;
+		}
+
+		const UGameViewportClient* GameViewport = World->GetGameViewport();
+		if (GameViewport == nullptr || GameViewport->Viewport == nullptr)
+		{
+			return FIntPoint::ZeroValue;
+		}
+
+		return GameViewport->Viewport->GetSizeXY();
+	}
 
 	const TCHAR* GetYesNo(bool bValue)
 	{
@@ -202,6 +249,7 @@ void UUOUDevelopmentDebugDrawSubsystem::Initialize(FSubsystemCollectionBase& Col
 void UUOUDevelopmentDebugDrawSubsystem::Deinitialize()
 {
 	PlayerDebugText.Reset();
+	ResetPerformanceDebugState();
 	PuzzleDebugProviders.Reset();
 	PuzzleProviderRefreshTimeRemaining = 0.0f;
 	DebugControlSubsystem.Reset();
@@ -214,6 +262,7 @@ void UUOUDevelopmentDebugDrawSubsystem::Tick(float DeltaTime)
 	if (ControlSubsystem == nullptr || !ControlSubsystem->IsDebugToolsEnabled())
 	{
 		PlayerDebugText.Reset();
+		ResetPerformanceDebugState();
 		return;
 	}
 
@@ -224,6 +273,15 @@ void UUOUDevelopmentDebugDrawSubsystem::Tick(float DeltaTime)
 	else
 	{
 		PlayerDebugText.Reset();
+	}
+
+	if (ControlSubsystem->IsDebugCategoryEnabled(EUOUDebugCategory::Performance))
+	{
+		RefreshPerformanceDebugText(DeltaTime);
+	}
+	else
+	{
+		ResetPerformanceDebugState();
 	}
 
 	if (!ControlSubsystem->IsDebugCategoryEnabled(EUOUDebugCategory::Puzzle))
@@ -446,6 +504,107 @@ void UUOUDevelopmentDebugDrawSubsystem::RefreshPlayerDebugText()
 	}
 
 	PlayerDebugText = FString::Join(Lines, LINE_TERMINATOR);
+}
+
+void UUOUDevelopmentDebugDrawSubsystem::RefreshPerformanceDebugText(float DeltaTime)
+{
+	const float SafeDeltaTime = FMath::Max(0.0f, DeltaTime);
+	PerformanceAccumulatedDeltaTime += SafeDeltaTime;
+	++PerformanceSampleCount;
+	PerformanceUpdateTimeRemaining -= SafeDeltaTime;
+	if (PerformanceUpdateTimeRemaining > 0.0f && !PerformanceDebugText.IsEmpty())
+	{
+		return;
+	}
+
+	const float AverageDeltaTime = PerformanceSampleCount > 0
+		? PerformanceAccumulatedDeltaTime / PerformanceSampleCount
+		: SafeDeltaTime;
+	const float FPS = AverageDeltaTime > KINDA_SMALL_NUMBER ? 1.0f / AverageDeltaTime : 0.0f;
+
+	TArray<FString> Lines;
+	Lines.Add(TEXT("Performance"));
+	Lines.Add(FString::Printf(TEXT("FPS: %.1f | Frame: %.2f ms"), FPS, AverageDeltaTime * 1000.0f));
+	Lines.Add(FString::Printf(
+		TEXT("Game: %.2f ms | Draw: %.2f ms | RHI: %.2f ms"),
+		FPlatformTime::ToMilliseconds(GGameThreadTime),
+		FPlatformTime::ToMilliseconds(GRenderThreadTime),
+		FPlatformTime::ToMilliseconds(GRHIThreadTime)));
+	Lines.Add(FString::Printf(
+		TEXT("GPU: %.2f ms | Input: %.2f ms"),
+		FPlatformTime::ToMilliseconds(RHIGetGPUFrameCycles()),
+		FPlatformTime::ToMilliseconds64(GInputLatencyTime)));
+
+	const FPlatformMemoryStats MemoryStats = FPlatformMemory::GetStats();
+	Lines.Add(FString::Printf(
+		TEXT("Memory: %s"),
+		*UOUDevelopmentDebugDrawPrivate::FormatMemoryGB(MemoryStats.UsedPhysical)));
+
+	float ScreenPercentage = GPixelRenderCounters.GetResolutionFraction() * 100.0f;
+	FIntPoint RenderResolution = GPixelRenderCounters.GetRenderResolution();
+	if (ScreenPercentage <= 0.0f || RenderResolution.X <= 0 || RenderResolution.Y <= 0)
+	{
+		ScreenPercentage = 100.0f;
+		RenderResolution = UOUDevelopmentDebugDrawPrivate::GetFallbackViewportSize(GetWorld());
+	}
+
+	Lines.Add(FString::Printf(
+		TEXT("RenderRes: %.1f%% (%dx%d) | Draws: %d | Prims: %s"),
+		ScreenPercentage,
+		RenderResolution.X,
+		RenderResolution.Y,
+		GNumDrawCallsRHI[0],
+		*UOUDevelopmentDebugDrawPrivate::FormatCompactCount(GNumPrimitivesDrawnRHI[0])));
+
+	int32 ActorCount = 0;
+	int32 ComponentCount = 0;
+	if (UWorld* World = GetWorld())
+	{
+		for (TActorIterator<AActor> It(World); It; ++It)
+		{
+			AActor* Actor = *It;
+			if (!IsValid(Actor))
+			{
+				continue;
+			}
+
+			++ActorCount;
+			TInlineComponentArray<UActorComponent*> Components(Actor);
+			ComponentCount += Components.Num();
+		}
+	}
+
+	int32 WorldCount = 0;
+	if (GEngine != nullptr)
+	{
+		for (const FWorldContext& WorldContext : GEngine->GetWorldContexts())
+		{
+			if (WorldContext.World() != nullptr)
+			{
+				++WorldCount;
+			}
+		}
+	}
+
+	Lines.Add(FString::Printf(
+		TEXT("Actors: %d | Components: %d | Worlds: %d"),
+		ActorCount,
+		ComponentCount,
+		WorldCount));
+
+	PerformanceDebugText = FString::Join(Lines, LINE_TERMINATOR);
+	PerformanceAccumulatedDeltaTime = 0.0f;
+	PerformanceSampleCount = 0;
+	PerformanceUpdateTimeRemaining =
+		UOUDevelopmentDebugDrawPrivate::PerformanceUpdateIntervalSeconds;
+}
+
+void UUOUDevelopmentDebugDrawSubsystem::ResetPerformanceDebugState()
+{
+	PerformanceDebugText.Reset();
+	PerformanceUpdateTimeRemaining = 0.0f;
+	PerformanceAccumulatedDeltaTime = 0.0f;
+	PerformanceSampleCount = 0;
 }
 
 TStatId UUOUDevelopmentDebugDrawSubsystem::GetStatId() const

@@ -32,8 +32,13 @@ public:
 	// 이 Subsystem의 Tick에서 갱신한 최신 플레이어 정보를 HUD에 제공합니다.
 	const FString& GetPlayerDebugText() const { return PlayerDebugText; }
 
+	// 이 Subsystem에서 주기적으로 갱신한 최신 성능 정보를 HUD에 제공합니다.
+	const FString& GetPerformanceDebugText() const { return PerformanceDebugText; }
+
 private:
 	void RefreshPlayerDebugText();
+	void RefreshPerformanceDebugText(float DeltaTime);
+	void ResetPerformanceDebugState();
 	void TryAddPuzzleDebugProvider(UObject* ProviderObject);
 	void DrawPuzzleProviderConnections() const;
 	void DrawPuzzleProviderLabels() const;
@@ -49,4 +54,16 @@ private:
 
 	// 개발 HUD가 읽는 현재 월드 플레이어 정보의 런타임 캐시입니다.
 	FString PlayerDebugText;
+
+	// 개발 HUD가 읽는 현재 월드 성능 정보의 런타임 캐시입니다.
+	FString PerformanceDebugText;
+
+	// 다음 성능 정보 갱신까지 남은 런타임 시간입니다.
+	float PerformanceUpdateTimeRemaining = 0.0f;
+
+	// 성능 정보 갱신 구간에 누적한 프레임 시간입니다.
+	float PerformanceAccumulatedDeltaTime = 0.0f;
+
+	// 평균 프레임 시간을 계산하기 위해 누적한 샘플 수입니다.
+	int32 PerformanceSampleCount = 0;
 };

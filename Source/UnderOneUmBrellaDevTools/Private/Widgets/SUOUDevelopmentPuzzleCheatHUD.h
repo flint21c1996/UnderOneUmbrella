@@ -55,6 +55,7 @@ private:
 	FText GetDebugToolsToggleText() const;
 	FText GetDebugCategoryToggleText(EUOUDebugCategory Category) const;
 	FText GetPlayerDebugInfoText() const;
+	FText GetPerformanceDebugInfoText() const;
 	FText GetStatusText() const;
 	FSlateColor GetStatusColor() const;
 	bool IsPuzzleActionEnabled() const;
