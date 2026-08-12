@@ -110,6 +110,6 @@ private:
 	// 다음 VFX 컴포넌트 스캔까지 남은 런타임 시간입니다.
 	float VFXUpdateTimeRemaining = 0.0f;
 
-	// VFX 캐시를 만든 시점의 선택 액터입니다. 선택 변경 시 캐시를 즉시 갱신합니다.
-	TWeakObjectPtr<AActor> VFXCachedSelectedActor;
+	// VFX 캐시를 만든 시점의 복수 선택 액터 목록입니다. 선택 변경 시 캐시를 즉시 갱신합니다.
+	TArray<TWeakObjectPtr<AActor>> VFXCachedSelectedActors;
 };

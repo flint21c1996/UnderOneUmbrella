@@ -1409,10 +1409,20 @@ void UUOUDevelopmentDebugDrawSubsystem::ResetPerformanceDebugState()
 void UUOUDevelopmentDebugDrawSubsystem::RefreshVFXDebugData(float DeltaTime)
 {
 	const UUOUDevelopmentDebugControlSubsystem* ControlSubsystem = DebugControlSubsystem.Get();
-	AActor* SelectedActor = ControlSubsystem != nullptr
-		? ControlSubsystem->GetSelectedDebugActor()
-		: nullptr;
-	if (VFXCachedSelectedActor.Get() != SelectedActor)
+	const TArray<AActor*> SelectedActors = ControlSubsystem != nullptr
+		? ControlSubsystem->GetSelectedDebugActors()
+		: TArray<AActor*>();
+	TArray<TWeakObjectPtr<AActor>> WeakSelectedActors;
+	WeakSelectedActors.Reserve(SelectedActors.Num());
+	for (AActor* SelectedActor : SelectedActors)
+	{
+		if (IsValid(SelectedActor))
+		{
+			WeakSelectedActors.Add(SelectedActor);
+		}
+	}
+
+	if (VFXCachedSelectedActors != WeakSelectedActors)
 	{
 		VFXUpdateTimeRemaining = 0.0f;
 	}
@@ -1433,11 +1443,11 @@ void UUOUDevelopmentDebugDrawSubsystem::RefreshVFXDebugData(float DeltaTime)
 		VFXUpdateTimeRemaining = UOUDevelopmentDebugDrawPrivate::VFXUpdateIntervalSeconds;
 		return;
 	}
-	if (SelectedActor == nullptr)
+	if (SelectedActors.IsEmpty())
 	{
 		VFXDebugText = TEXT("VFX\nSelect a VFX actor to inspect it.");
 		VFXUpdateTimeRemaining = UOUDevelopmentDebugDrawPrivate::VFXUpdateIntervalSeconds;
-		VFXCachedSelectedActor.Reset();
+		VFXCachedSelectedActors.Reset();
 		return;
 	}
 
@@ -1532,7 +1542,7 @@ void UUOUDevelopmentDebugDrawSubsystem::RefreshVFXDebugData(float DeltaTime)
 	}
 
 	VFXUpdateTimeRemaining = UOUDevelopmentDebugDrawPrivate::VFXUpdateIntervalSeconds;
-	VFXCachedSelectedActor = SelectedActor;
+	VFXCachedSelectedActors = MoveTemp(WeakSelectedActors);
 }
 
 void UUOUDevelopmentDebugDrawSubsystem::DrawVFXOwnerLabels() const
@@ -1746,7 +1756,7 @@ void UUOUDevelopmentDebugDrawSubsystem::ResetVFXDebugState()
 	VFXOwnerLabelTexts.Reset();
 	VFXOwnerLabelLocations.Reset();
 	VFXUpdateTimeRemaining = 0.0f;
-	VFXCachedSelectedActor.Reset();
+	VFXCachedSelectedActors.Reset();
 }
 
 TStatId UUOUDevelopmentDebugDrawSubsystem::GetStatId() const
