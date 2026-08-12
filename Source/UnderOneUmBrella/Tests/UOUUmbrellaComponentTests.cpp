@@ -136,15 +136,59 @@ bool FUOUUmbrellaLightReflectionEightWayAimTest::RunTest(const FString& Paramete
 		{TEXT("W+A"), FVector2D(-1.0f, 1.0f), 0.0f}
 	};
 
+	Umbrella->SetPourAimMovementInput(Cases[0].Input, CameraYaw);
+	Umbrella->TickComponent(1.0f / 60.0f, LEVELTICK_All, nullptr);
+	const float FirstFrameYaw = Character->GetActorRotation().Yaw;
+	TestTrue(
+		TEXT("8방향 목표가 바뀌어도 한 프레임 만에 회전이 끝나지 않는다"),
+		FirstFrameYaw > 0.0f && FirstFrameYaw < Cases[0].ExpectedYaw);
+
 	for (const FEightWayAimCase& AimCase : Cases)
 	{
 		Umbrella->SetPourAimMovementInput(AimCase.Input, CameraYaw);
-		Umbrella->TickComponent(1.0f / 60.0f, LEVELTICK_All, nullptr);
+		for (int32 Frame = 0; Frame < 60; ++Frame)
+		{
+			Umbrella->TickComponent(1.0f / 60.0f, LEVELTICK_All, nullptr);
+		}
 		const float ActualYaw = Character->GetActorRotation().Yaw;
 		TestTrue(
 			FString::Printf(TEXT("%s 입력은 카메라 기준 8방향 Yaw %.1f를 사용한다"), AimCase.Name, AimCase.ExpectedYaw),
 			FMath::Abs(FMath::FindDeltaAngleDegrees(ActualYaw, AimCase.ExpectedYaw)) <= 0.1f);
 	}
+
+	Umbrella->SetPourAimMovementInput(FVector2D::ZeroVector, 0.0f);
+	Umbrella->SetPourAimMovementInput(FVector2D(-1.0f, 1.0f), 0.0f);
+	for (int32 Frame = 0; Frame < 60; ++Frame)
+	{
+		Umbrella->TickComponent(1.0f / 60.0f, LEVELTICK_All, nullptr);
+	}
+	TestTrue(
+		TEXT("W+A 입력은 카메라 기준 왼쪽 대각선으로 회전한다"),
+		FMath::Abs(FMath::FindDeltaAngleDegrees(Character->GetActorRotation().Yaw, -45.0f)) <= 0.1f);
+
+	Umbrella->SetPourAimMovementInput(FVector2D(-1.0f, 0.0f), 0.0f);
+	for (int32 Frame = 0; Frame < 2; ++Frame)
+	{
+		Umbrella->TickComponent(1.0f / 60.0f, LEVELTICK_All, nullptr);
+	}
+	Umbrella->SetPourAimMovementInput(FVector2D::ZeroVector, 0.0f);
+	for (int32 Frame = 0; Frame < 30; ++Frame)
+	{
+		Umbrella->TickComponent(1.0f / 60.0f, LEVELTICK_All, nullptr);
+	}
+	TestTrue(
+		TEXT("대각선 키를 거의 동시에 놓을 때 잠깐 들어온 A가 W+A 방향을 덮지 않는다"),
+		FMath::Abs(FMath::FindDeltaAngleDegrees(Character->GetActorRotation().Yaw, -45.0f)) <= 0.1f);
+
+	Umbrella->SetPourAimMovementInput(FVector2D(-1.0f, 1.0f), 0.0f);
+	Umbrella->SetPourAimMovementInput(FVector2D(-1.0f, 0.0f), 0.0f);
+	for (int32 Frame = 0; Frame < 60; ++Frame)
+	{
+		Umbrella->TickComponent(1.0f / 60.0f, LEVELTICK_All, nullptr);
+	}
+	TestTrue(
+		TEXT("대각선에서 A를 계속 유지하면 유예 후 왼쪽 방향으로 전환한다"),
+		FMath::Abs(FMath::FindDeltaAngleDegrees(Character->GetActorRotation().Yaw, -90.0f)) <= 0.1f);
 
 	return true;
 }

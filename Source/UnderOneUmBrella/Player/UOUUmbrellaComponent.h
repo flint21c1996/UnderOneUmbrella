@@ -371,6 +371,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Umbrella|Aim", meta = (ClampMin = "1.0", ClampMax = "180.0", EditCondition = "bSnapPourAimDirection", EditConditionHides, DisplayName = "Movement Aim Snap Angle Degrees"))
 	float PourAimSnapAngleDegrees = 45.0f;
 
+	// 물 붓기와 빛 반사 중 캐릭터가 목표 조준 방향을 따라가는 일정한 회전 속도입니다. 0이면 즉시 회전합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Umbrella|Aim", meta = (ClampMin = "0.0", Units = "deg/s"))
+	float MovementAimRotationSpeedDegreesPerSecond = 720.0f;
+
+	// 대각선 입력에서 키 하나를 먼저 놓았을 때 단일 방향으로 잘못 확정하지 않도록 기다리는 시간입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Umbrella|Aim", meta = (ClampMin = "0.0", Units = "s"))
+	float MovementAimDiagonalReleaseGraceSeconds = 0.08f;
+
 	// 빛 반사 중 플레이어가 마우스 방향을 바라보게 할지 정합니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Aim")
 	bool bRotateOwnerTowardsLightReflectingDirection = true;
@@ -711,8 +719,11 @@ protected:
 
 	void DrawPourSocketAndDropSpawnDebug() const;
 
-	// 물 붓기와 빛 반사 중 플레이어가 마우스 방향을 바라보도록 회전을 보정합니다.
-	void UpdateUmbrellaAimFacing();
+	// 물 붓기와 빛 반사 중 플레이어가 목표 방향을 부드럽게 바라보도록 회전을 보정합니다.
+	void UpdateUmbrellaAimFacing(float DeltaTime);
+	void UpdatePendingMovementAimDirection(float DeltaTime);
+	void CommitMovementAimDirection(const FVector& AimDirection, bool bIsDiagonalInput);
+	void ClearPendingMovementAimDirection();
 
 	// 붓기 조준 회전에서 남겨둔 상태를 정리하기 위한 자리입니다.
 	void ClearPourAimFacing();
@@ -772,6 +783,11 @@ protected:
 	float TimeSinceLastPourDropSpawn = 0.0f;
 
 	FVector PourAimWorldDirection = FVector::ZeroVector;
+	FVector PendingMovementAimWorldDirection = FVector::ZeroVector;
+	float PendingMovementAimTimeRemaining = 0.0f;
+	bool bHasPendingMovementAimDirection = false;
+	bool bMovementAimInputActive = false;
+	bool bCommittedMovementAimWasDiagonal = false;
 
 	bool bRainBlockedAudioPlaying = false;
 

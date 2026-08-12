@@ -153,7 +153,8 @@ void UUOUUmbrellaComponent::TickComponent(float DeltaTime, ELevelTick TickType, 
 		return;
 	}
 
-	UpdateUmbrellaAimFacing();
+	UpdatePendingMovementAimDirection(DeltaTime);
+	UpdateUmbrellaAimFacing(DeltaTime);
 	UpdatePouring(DeltaTime);
 	UpdatePouringEffectState();
 	DrawScreenDebug();
@@ -268,6 +269,9 @@ void UUOUUmbrellaComponent::BeginPour()
 	{
 		PourAimWorldDirection = SnapPourDirectionToAngleStep(Owner->GetActorForwardVector());
 	}
+	bMovementAimInputActive = false;
+	bCommittedMovementAimWasDiagonal = false;
+	ClearPendingMovementAimDirection();
 
 	SetState(EUOUUmbrellaState::Pouring);
 }
@@ -294,6 +298,9 @@ void UUOUUmbrellaComponent::BeginLightReflecting()
 	{
 		PourAimWorldDirection = SnapPourDirectionToAngleStep(Owner->GetActorForwardVector());
 	}
+	bMovementAimInputActive = false;
+	bCommittedMovementAimWasDiagonal = false;
+	ClearPendingMovementAimDirection();
 
 	SetState(EUOUUmbrellaState::LightReflecting);
 }
@@ -332,6 +339,9 @@ void UUOUUmbrellaComponent::SetPourAimMovementInput(FVector2D MovementInput, flo
 	const float SafeDeadZone = FMath::Clamp(MovementInputPourAimDeadZone, 0.0f, 1.0f);
 	if (MovementInput.SizeSquared() <= FMath::Square(SafeDeadZone))
 	{
+		// 대각선 키를 거의 동시에 놓는 과정에서 잠깐 생긴 단일 방향은 확정하지 않습니다.
+		bMovementAimInputActive = false;
+		ClearPendingMovementAimDirection();
 		return;
 	}
 
@@ -342,9 +352,54 @@ void UUOUUmbrellaComponent::SetPourAimMovementInput(FVector2D MovementInput, flo
 	WorldDirection.Z = 0.0f;
 	if (!WorldDirection.IsNearlyZero())
 	{
-		// 물 붓기와 빛 반사는 같은 카메라 기준 8방향 조준 규칙을 공유합니다.
-		PourAimWorldDirection = SnapPourDirectionToAngleStep(WorldDirection);
+		const FVector SnappedDirection = SnapPourDirectionToAngleStep(WorldDirection);
+		const bool bIsDiagonalInput =
+			FMath::Abs(MovementInput.X) > SafeDeadZone &&
+			FMath::Abs(MovementInput.Y) > SafeDeadZone;
+
+		if (!bMovementAimInputActive || bIsDiagonalInput || !bCommittedMovementAimWasDiagonal)
+		{
+			CommitMovementAimDirection(SnappedDirection, bIsDiagonalInput);
+		}
+		else if (!bHasPendingMovementAimDirection ||
+			!PendingMovementAimWorldDirection.Equals(SnappedDirection, KINDA_SMALL_NUMBER))
+		{
+			// 대각선에서 한 축만 빠졌다면 실제 방향 전환인지 키 해제 순서인지 잠시 구분합니다.
+			PendingMovementAimWorldDirection = SnappedDirection;
+			PendingMovementAimTimeRemaining = FMath::Max(0.0f, MovementAimDiagonalReleaseGraceSeconds);
+			bHasPendingMovementAimDirection = true;
+		}
+
+		bMovementAimInputActive = true;
 	}
+}
+
+void UUOUUmbrellaComponent::UpdatePendingMovementAimDirection(float DeltaTime)
+{
+	if (!bHasPendingMovementAimDirection || !bMovementAimInputActive)
+	{
+		return;
+	}
+
+	PendingMovementAimTimeRemaining -= FMath::Max(0.0f, DeltaTime);
+	if (PendingMovementAimTimeRemaining <= 0.0f)
+	{
+		CommitMovementAimDirection(PendingMovementAimWorldDirection, false);
+	}
+}
+
+void UUOUUmbrellaComponent::CommitMovementAimDirection(const FVector& AimDirection, bool bIsDiagonalInput)
+{
+	PourAimWorldDirection = AimDirection;
+	bCommittedMovementAimWasDiagonal = bIsDiagonalInput;
+	ClearPendingMovementAimDirection();
+}
+
+void UUOUUmbrellaComponent::ClearPendingMovementAimDirection()
+{
+	PendingMovementAimWorldDirection = FVector::ZeroVector;
+	PendingMovementAimTimeRemaining = 0.0f;
+	bHasPendingMovementAimDirection = false;
 }
 
 // 비나 다른 시스템에서 전달받은 물 양을 우산 저장 컨테이너에 더합니다.
@@ -1864,7 +1919,7 @@ void UUOUUmbrellaComponent::DrawPourSocketAndDropSpawnDebug() const
 	}
 }
 
-void UUOUUmbrellaComponent::UpdateUmbrellaAimFacing()
+void UUOUUmbrellaComponent::UpdateUmbrellaAimFacing(float DeltaTime)
 {
 	const bool bIsPourAimActive = CurrentState == EUOUUmbrellaState::Pouring && bRotateOwnerTowardsPourDirection;
 	const bool bIsLightReflectingAimActive = CurrentState == EUOUUmbrellaState::LightReflecting &&
@@ -1899,12 +1954,20 @@ void UUOUUmbrellaComponent::UpdateUmbrellaAimFacing()
 	// 캐릭터가 위아래로 기울어지지 않도록 평면 회전만 적용합니다.
 	AimRotation.Pitch = 0.0f;
 	AimRotation.Roll = 0.0f;
-	Owner->SetActorRotation(AimRotation);
+	const float SafeRotationSpeed = FMath::Max(0.0f, MovementAimRotationSpeedDegreesPerSecond);
+	const FRotator NewRotation = SafeRotationSpeed > KINDA_SMALL_NUMBER
+		? FMath::RInterpConstantTo(Owner->GetActorRotation(), AimRotation, FMath::Max(0.0f, DeltaTime), SafeRotationSpeed)
+		: AimRotation;
+	Owner->SetActorRotation(NewRotation);
 }
 
 // 현재는 별도 보관 상태가 없지만, 조준 보정 정리 지점을 명확히 남겨둡니다.
 void UUOUUmbrellaComponent::ClearPourAimFacing()
 {
+	bMovementAimInputActive = false;
+	bCommittedMovementAimWasDiagonal = false;
+	ClearPendingMovementAimDirection();
+
 	if (!bHasAimFacingMovementOverride)
 	{
 		return;
