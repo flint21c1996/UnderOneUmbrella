@@ -278,22 +278,6 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, AdvancedDisplay, Category = "Umbrella|Debug", meta = (ToolTip = "이 값은 더 이상 화면 디버그 표시 여부를 결정하지 않습니다. Debug Controller의 Player HUD 옵션을 사용합니다."))
 	bool bShowScreenDebug = false;
 
-	// 물 붓기 라인트레이스 표시 여부는 이제 Debug Controller의 Player 카테고리가 결정합니다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, AdvancedDisplay, Category = "Umbrella|Debug", meta = (ToolTip = "이 값은 더 이상 물 붓기 라인트레이스 표시 여부를 결정하지 않습니다. Debug Controller의 Player World Debug 옵션을 사용합니다."))
-	bool bDrawPourTraceDebug = true;
-
-	// 물 붓기 라벨 표시 여부는 이제 Debug Controller의 Player 카테고리가 결정합니다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, AdvancedDisplay, Category = "Umbrella|Debug", meta = (ToolTip = "이 값은 더 이상 물 붓기 라벨 표시 여부를 결정하지 않습니다. Debug Controller의 Player World Label 옵션을 사용합니다."))
-	bool bDrawPourTraceDebugLabel = true;
-
-	// 물 붓기 라인트레이스 디버그 선의 두께입니다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Debug", meta = (ClampMin = "0.0"))
-	float PourTraceDebugThickness = 3.0f;
-
-	// 물 붓기 디버그 선과 라벨이 유지되는 시간입니다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Debug", meta = (ClampMin = "0.0"))
-	float PourTraceDebugLifeTime = 0.0f;
-
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Umbrella|Debug|Pour", meta = (ToolTip = "Draws the resolved PouringPoint socket in the world while the umbrella is held."))
 	bool bDrawPourSocketDebug = true;
 
@@ -714,9 +698,6 @@ protected:
 
 	// 우산 상태와 물 정보를 화면 디버그 텍스트로 표시합니다.
 	void DrawScreenDebug() const;
-
-	// 물 붓기 라인트레이스와 마지막 전달 결과를 월드 디버그로 그립니다.
-	void DrawPourTraceDebug() const;
 
 	// 물 붓기 디버그에 사용하는 마지막 트레이스 기록을 비웁니다.
 	void ClearPourTraceDebug();

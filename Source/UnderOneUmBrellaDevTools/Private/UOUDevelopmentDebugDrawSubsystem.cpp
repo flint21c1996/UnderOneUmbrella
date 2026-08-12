@@ -275,6 +275,7 @@ void UUOUDevelopmentDebugDrawSubsystem::Tick(float DeltaTime)
 	{
 		RefreshPlayerDebugText();
 		DrawPlayerUmbrellaRainBlockerDebug();
+		DrawPlayerUmbrellaPourTraceDebug();
 	}
 	else
 	{
@@ -607,6 +608,131 @@ void UUOUDevelopmentDebugDrawSubsystem::DrawPlayerUmbrellaRainBlockerDebug() con
 		PlayerDebugColor,
 		0.0f,
 		false,
+		1.0f);
+}
+
+void UUOUDevelopmentDebugDrawSubsystem::DrawPlayerUmbrellaPourTraceDebug() const
+{
+	UWorld* World = GetWorld();
+	const APlayerController* PlayerController = World != nullptr
+		? World->GetFirstPlayerController()
+		: nullptr;
+	const APawn* PlayerPawn = PlayerController != nullptr ? PlayerController->GetPawn() : nullptr;
+	const UUOUUmbrellaComponent* UmbrellaComponent = PlayerPawn != nullptr
+		? PlayerPawn->FindComponentByClass<UUOUUmbrellaComponent>()
+		: nullptr;
+	if (World == nullptr || UmbrellaComponent == nullptr || !UmbrellaComponent->bHasLastPourTrace)
+	{
+		return;
+	}
+
+	constexpr float Thickness = 3.0f;
+	constexpr float ImpactCrossSize = 18.0f;
+	const FVector DrawEnd = UmbrellaComponent->bLastPourTraceHit
+		? UmbrellaComponent->LastPourTraceImpactPoint
+		: UmbrellaComponent->LastPourTraceEnd;
+	const FColor TraceColor = UmbrellaComponent->bLastPourDeliveredWater
+		? FColor::Green
+		: (UmbrellaComponent->bLastPourTraceHit ? FColor::Red : FColor::Cyan);
+	const FColor ImpactPointColor = UmbrellaComponent->bLastPourCheckedWaterBasinImpactPoint
+		? (UmbrellaComponent->bLastPourImpactPointInsideWaterBasin ? FColor::Green : FColor::Red)
+		: FColor::Orange;
+
+	DrawDebugLine(
+		World,
+		UmbrellaComponent->LastPourTraceStart,
+		DrawEnd,
+		TraceColor,
+		false,
+		0.0f,
+		0,
+		Thickness);
+	DrawDebugSphere(
+		World,
+		UmbrellaComponent->LastPourTraceStart,
+		6.0f,
+		12,
+		TraceColor,
+		false,
+		0.0f,
+		0,
+		Thickness);
+
+	if (UmbrellaComponent->bLastPourTraceHit)
+	{
+		const FVector& ImpactPoint = UmbrellaComponent->LastPourTraceImpactPoint;
+		DrawDebugSphere(
+			World,
+			ImpactPoint,
+			8.0f,
+			12,
+			ImpactPointColor,
+			false,
+			0.0f,
+			0,
+			Thickness);
+		DrawDebugLine(
+			World,
+			ImpactPoint - FVector(ImpactCrossSize, 0.0f, 0.0f),
+			ImpactPoint + FVector(ImpactCrossSize, 0.0f, 0.0f),
+			ImpactPointColor,
+			false,
+			0.0f,
+			0,
+			Thickness);
+		DrawDebugLine(
+			World,
+			ImpactPoint - FVector(0.0f, ImpactCrossSize, 0.0f),
+			ImpactPoint + FVector(0.0f, ImpactCrossSize, 0.0f),
+			ImpactPointColor,
+			false,
+			0.0f,
+			0,
+			Thickness);
+		DrawDebugLine(
+			World,
+			ImpactPoint - FVector(0.0f, 0.0f, ImpactCrossSize),
+			ImpactPoint + FVector(0.0f, 0.0f, ImpactCrossSize),
+			ImpactPointColor,
+			false,
+			0.0f,
+			0,
+			Thickness);
+	}
+
+	const FString ImpactPointText = UmbrellaComponent->bLastPourTraceHit
+		? FString::Printf(
+			TEXT("\nImpactPoint: X %.1f / Y %.1f / Z %.1f"),
+			UmbrellaComponent->LastPourTraceImpactPoint.X,
+			UmbrellaComponent->LastPourTraceImpactPoint.Y,
+			UmbrellaComponent->LastPourTraceImpactPoint.Z)
+		: FString();
+	const FString WaterBasinImpactText = UmbrellaComponent->bLastPourCheckedWaterBasinImpactPoint
+		? FString::Printf(
+			TEXT("\nBasin Check: %s"),
+			UmbrellaComponent->bLastPourImpactPointInsideWaterBasin
+				? TEXT("Inside")
+				: TEXT("Outside"))
+		: FString();
+	const FString LabelText = FString::Printf(
+		TEXT("Pour Trace\nHit: %s\nTarget: %s\nReceiver: %s\nAmount: %.2f\nStored: %.2f -> %.2f%s%s"),
+		*UmbrellaComponent->LastPourHitName,
+		*UmbrellaComponent->LastPourTargetName,
+		*UOUDevelopmentDebugDrawPrivate::GetPourReceiverTypeName(
+			UmbrellaComponent->LastPourReceiverType),
+		UmbrellaComponent->LastPourAmount,
+		UmbrellaComponent->LastPourStoredWaterBefore,
+		UmbrellaComponent->LastPourStoredWaterAfter,
+		*ImpactPointText,
+		*WaterBasinImpactText);
+	DrawDebugString(
+		World,
+		DrawEnd + FVector(0.0f, 0.0f, 24.0f),
+		LabelText,
+		nullptr,
+		TraceColor,
+		0.0f,
+		true,
 		1.0f);
 }
 
