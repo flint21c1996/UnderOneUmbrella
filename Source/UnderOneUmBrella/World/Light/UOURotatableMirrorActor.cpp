@@ -39,7 +39,9 @@ AUOURotatableMirrorActor::AUOURotatableMirrorActor()
 	LightInteractionSurface->SetMobility(EComponentMobility::Movable);
 	LightInteractionSurface->SetBoxExtent(FVector(6.0f, 100.0f, 100.0f));
 	LightInteractionSurface->LightInteractionMode = EUOULightInteractionMode::Reflecting;
-	LightInteractionSurface->ReflectionNormalMode = EUOULightReflectionNormalMode::HitNormal;
+	// 회전된 얇은 Box의 모서리나 옆면이 트레이스에 맞아도 반사 법선이 튀지 않도록
+	// 실제 충돌 면 법선 대신 거울 피벗과 함께 회전하는 고정된 앞 방향을 사용합니다.
+	LightInteractionSurface->ReflectionNormalMode = EUOULightReflectionNormalMode::ComponentForward;
 	LightInteractionSurface->ReflectionFrontNormalMode =
 		EUOULightReflectionFrontNormalMode::ComponentForward;
 
