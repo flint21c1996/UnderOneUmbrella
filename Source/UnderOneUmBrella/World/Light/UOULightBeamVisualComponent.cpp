@@ -21,6 +21,23 @@ DEFINE_LOG_CATEGORY_STATIC(LogUOULightBeamVisual, Log, All);
 
 namespace
 {
+	float CalculateReferenceVisualLength(
+		const TArray<FUOULightPathData>& LightPaths,
+		const USpotLightComponent* SourceSpotLight)
+	{
+		float ReferenceLength = SourceSpotLight != nullptr
+			? FMath::Max(0.0f, SourceSpotLight->AttenuationRadius)
+			: 0.0f;
+		for (const FUOULightPathData& PathData : LightPaths)
+		{
+			for (const FUOULightPathSegmentData& SegmentData : PathData.Segments)
+			{
+				ReferenceLength = FMath::Max(ReferenceLength, SegmentData.Length);
+			}
+		}
+		return ReferenceLength;
+	}
+
 	struct FLazyGodrayBeamProfile
 	{
 		float LengthMultiplier = 1.0f;
@@ -572,7 +589,11 @@ void UUOULightBeamVisualComponent::UpdateDirectVFX(
 		: 0.0f;
 	ApplySegmentToVFX(
 		VFXActor,
-		BuildVisualSegment(*DirectSegment, 0, JunctionEndClearance));
+		BuildVisualSegment(
+			*DirectSegment,
+			0,
+			CalculateReferenceVisualLength(LightPaths, BoundSourceSpotLight),
+			JunctionEndClearance));
 }
 
 void UUOULightBeamVisualComponent::UpdateReflectionVFX(
@@ -584,6 +605,9 @@ void UUOULightBeamVisualComponent::UpdateReflectionVFX(
 		return;
 	}
 
+	const float ReferenceVisualLength = CalculateReferenceVisualLength(
+		LightPaths,
+		BoundSourceSpotLight);
 	int32 EligibleSegmentCount = 0;
 	for (const FUOULightPathData& PathData : LightPaths)
 	{
@@ -700,6 +724,7 @@ void UUOULightBeamVisualComponent::UpdateReflectionVFX(
 			FUOULightBeamVisualSegmentData VisualData = BuildVisualSegment(
 				SegmentData,
 				VFXIndex + 1,
+				ReferenceVisualLength,
 				JunctionEndClearance);
 			VisualData.Color = LightColor;
 			ApplySegmentToVFX(VFXActor, VisualData);
@@ -993,6 +1018,7 @@ void UUOULightBeamVisualComponent::SetVFXActive(AActor* VFXActor, bool bActive) 
 FUOULightBeamVisualSegmentData UUOULightBeamVisualComponent::BuildVisualSegment(
 	const FUOULightPathSegmentData& SegmentData,
 	int32 VisualSegmentIndex,
+	float ReferenceLength,
 	float AdditionalEndPadding) const
 {
 	FUOULightBeamVisualSegmentData VisualData;
@@ -1014,6 +1040,7 @@ FUOULightBeamVisualSegmentData UUOULightBeamVisualComponent::BuildVisualSegment(
 		VisibleEndDistance);
 	VisualData.Start = SegmentData.Start + VisualData.Direction * StartClearance;
 	VisualData.Length = FMath::Max(0.0f, VisibleEndDistance - StartClearance);
+	VisualData.ReferenceLength = FMath::Max(VisualData.Length, ReferenceLength);
 	VisualData.End = VisualData.Start + VisualData.Direction * VisualData.Length;
 	const float StartDistanceRatio = SegmentData.Length > KINDA_SMALL_NUMBER
 		? StartClearance / SegmentData.Length

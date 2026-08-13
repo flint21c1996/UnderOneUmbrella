@@ -132,6 +132,7 @@ protected:
 	FUOULightBeamVisualSegmentData BuildVisualSegment(
 		const FUOULightPathSegmentData& SegmentData,
 		int32 VisualSegmentIndex,
+		float ReferenceLength,
 		float AdditionalEndPadding = 0.0f) const;
 	FLinearColor ResolveLightColor() const;
 	void DestroyVFXActors();

@@ -19,6 +19,7 @@ namespace
 	const FName StaticRayVariationAmountParameter(TEXT("VariationAmount"));
 	const FName StaticRayVariationSpeedParameter(TEXT("VariationSpeed"));
 	const FName StaticRayVariationScaleParameter(TEXT("VariationScale"));
+	const FName StaticRayBeamClipLocalZParameter(TEXT("BeamClipLocalZ"));
 
 	struct FLumenStaticRayLayer
 	{
@@ -223,6 +224,9 @@ void AUOULumenStaticRayVisualActor::ApplyPreset(const FUOULightBeamVisualSegment
 	const float Radius = FMath::Max(
 		KINDA_SMALL_NUMBER,
 		FMath::Max(SegmentData.StartRadius, SegmentData.EndRadius) * BeamWidthScale);
+	const float ReferenceLength = FMath::Max(
+		SegmentData.Length,
+		SegmentData.ReferenceLength);
 	CurrentColor = SegmentData.Color;
 	CurrentIntensity = SegmentData.Intensity * SegmentData.VisualBrightnessMultiplier * EmissiveIntensityScale;
 	CurrentOpacity = FMath::Clamp(OpacityScale * SegmentData.VisualOpacityMultiplier, 0.0f, 1.0f);
@@ -271,7 +275,7 @@ void AUOULumenStaticRayVisualActor::ApplyPreset(const FUOULightBeamVisualSegment
 		const FVector FitScale(
 			Radius / NativeRadius,
 			Radius / NativeRadius,
-			SegmentData.Length / NativeLength);
+			ReferenceLength / NativeLength);
 		const FVector CalculatedLayerScale = FitScale * NormalizedLayerScale;
 		const FVector CurrentLayerScale = Component->GetRelativeScale3D();
 		const FVector AppliedLayerScale = bHasAppliedVisualWidth
@@ -281,16 +285,24 @@ void AUOULumenStaticRayVisualActor::ApplyPreset(const FUOULightBeamVisualSegment
 				CalculatedLayerScale.Z)
 			: CalculatedLayerScale;
 		Component->SetRelativeScale3D(AppliedLayerScale);
+		const float FullLayerLength = NativeLength * FMath::Abs(AppliedLayerScale.Z);
 		// 서브메시가 원본 FBX의 공통 피벗을 유지한 채 분리되어 있으므로,
 		// 바운드 중심의 횡방향 오프셋을 제거하고 시작점에서 광선 구간이 시작되게 맞춥니다.
 		const FVector ScaledBoundsOrigin = MeshBounds.Origin * Component->GetRelativeScale3D();
 		Component->AddRelativeLocation(FVector(
 			-ScaledBoundsOrigin.X,
 			-ScaledBoundsOrigin.Y,
-			-ScaledBoundsOrigin.Z + SegmentData.Length * 0.5f));
+			-ScaledBoundsOrigin.Z + FullLayerLength * 0.5f));
 
 		if (DynamicMaterials.IsValidIndex(Index) && DynamicMaterials[Index] != nullptr)
 		{
+			const float LocalMeshMinZ = MeshBounds.Origin.Z - NativeExtent.Z;
+			const float VisibleLayerLength = FMath::Min(
+				SegmentData.Length,
+				FullLayerLength);
+			const float BeamClipLocalZ = LocalMeshMinZ +
+				VisibleLayerLength /
+				FMath::Max(KINDA_SMALL_NUMBER, FMath::Abs(AppliedLayerScale.Z));
 			const FLinearColor LayerColor = CurrentColor * Layer.Color;
 			DynamicMaterials[Index]->SetVectorParameterValue(StaticRayBeamColorParameter, LayerColor);
 			DynamicMaterials[Index]->SetVectorParameterValue(StaticRayVariationColorParameter, LayerColor);
@@ -305,6 +317,9 @@ void AUOULumenStaticRayVisualActor::ApplyPreset(const FUOULightBeamVisualSegment
 			DynamicMaterials[Index]->SetScalarParameterValue(StaticRayVariationAmountParameter, bUseVariation && Selected.bUseVariation ? 1.0f : 0.0f);
 			DynamicMaterials[Index]->SetScalarParameterValue(StaticRayVariationSpeedParameter, Selected.VariationSpeed);
 			DynamicMaterials[Index]->SetScalarParameterValue(StaticRayVariationScaleParameter, Selected.VariationScale);
+			DynamicMaterials[Index]->SetScalarParameterValue(
+				StaticRayBeamClipLocalZParameter,
+				BeamClipLocalZ);
 		}
 	}
 	bHasAppliedVisualWidth = true;

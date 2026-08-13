@@ -502,6 +502,7 @@ bool FUOULumenStaticRayFixedWidthTest::RunTest(const FString& Parameters)
 	FUOULightBeamVisualSegmentData DirectSegment;
 	DirectSegment.Direction = FVector::ForwardVector;
 	DirectSegment.Length = 300.0f;
+	DirectSegment.ReferenceLength = 600.0f;
 	DirectSegment.StartRadius = 20.0f;
 	DirectSegment.EndRadius = 80.0f;
 	DirectSegment.Intensity = 1.0f;
@@ -525,8 +526,8 @@ bool FUOULumenStaticRayFixedWidthTest::RunTest(const FString& Parameters)
 	TestTrue(
 		TEXT("Shortening a Static Ray preserves its Y scale"),
 		FMath::IsNearlyEqual(ShortenedDirectScale.Y, InitialDirectScale.Y));
-	TestFalse(
-		TEXT("Shortening a Static Ray changes its Z scale"),
+	TestTrue(
+		TEXT("Shortening a Static Ray preserves its reference Z scale"),
 		FMath::IsNearlyEqual(ShortenedDirectScale.Z, InitialDirectScale.Z));
 
 	ReflectionVisual->CopyVisualWidthFrom(DirectVisual);
@@ -546,8 +547,8 @@ bool FUOULumenStaticRayFixedWidthTest::RunTest(const FString& Parameters)
 		TestTrue(
 			TEXT("Reflected Static Ray copies the direct Y scale"),
 			FMath::IsNearlyEqual(ReflectionScale.Y, ShortenedDirectScale.Y));
-		TestFalse(
-			TEXT("Reflected Static Ray keeps its own Z length scale"),
+		TestTrue(
+			TEXT("Reflected Static Ray keeps the shared reference Z scale"),
 			FMath::IsNearlyEqual(ReflectionScale.Z, ShortenedDirectScale.Z));
 	}
 
