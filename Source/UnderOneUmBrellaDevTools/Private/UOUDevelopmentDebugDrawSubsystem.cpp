@@ -61,6 +61,7 @@
 #include "World/Light/UOULightInteractionSurfaceComponent.h"
 #include "World/Light/UOULightExposureReceiverComponent.h"
 #include "World/Light/UOULightExposureSourceComponent.h"
+#include "World/Light/UOULightSourceActor.h"
 #include "World/Light/UOURotatableMirrorComponent.h"
 #include "World/Light/UOULightReceivableInterface.h"
 #include "World/NPC/UOUNPCCharacter.h"
@@ -2740,7 +2741,8 @@ void UUOUDevelopmentDebugDrawSubsystem::GetSelectableDebugActors(
 			continue;
 		}
 
-		bool bPuzzleActor = Actor->IsA<AUOUHeatWireActor>()
+		bool bPuzzleActor = Actor->IsA<AUOULightSourceActor>()
+			|| Actor->IsA<AUOUHeatWireActor>()
 			|| Actor->IsA<AUOUPlayerBlockingWallActor>()
 			|| Actor->FindComponentByClass<UUOUWeightedButtonComponent>() != nullptr
 			|| Actor->FindComponentByClass<UUOUWaterBasinTargetComponent>() != nullptr
