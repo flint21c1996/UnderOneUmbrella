@@ -118,6 +118,7 @@ AUOULumenStaticRayVisualActor::AUOULumenStaticRayVisualActor()
 void AUOULumenStaticRayVisualActor::OnConstruction(const FTransform& Transform)
 {
 	Super::OnConstruction(Transform);
+	bHasAppliedVisualWidth = false;
 	ConfigureComponents();
 	if (bPreviewInEditor)
 	{
@@ -132,6 +133,36 @@ void AUOULumenStaticRayVisualActor::OnConstruction(const FTransform& Transform)
 		PreviewData.Color = FLinearColor::White;
 		ApplyPreset(PreviewData);
 	}
+}
+
+void AUOULumenStaticRayVisualActor::CopyVisualWidthFrom(
+	const AUOULumenStaticRayVisualActor* SourceVisual)
+{
+	if (SourceVisual == nullptr)
+	{
+		return;
+	}
+
+	const int32 SharedLayerCount = FMath::Min(
+		LayerComponents.Num(),
+		SourceVisual->LayerComponents.Num());
+	for (int32 Index = 0; Index < SharedLayerCount; ++Index)
+	{
+		UStaticMeshComponent* TargetLayer = LayerComponents[Index];
+		const UStaticMeshComponent* SourceLayer = SourceVisual->LayerComponents[Index];
+		if (TargetLayer == nullptr || SourceLayer == nullptr)
+		{
+			continue;
+		}
+
+		const FVector SourceScale = SourceLayer->GetRelativeScale3D();
+		const FVector TargetScale = TargetLayer->GetRelativeScale3D();
+		TargetLayer->SetRelativeScale3D(FVector(
+			SourceScale.X,
+			SourceScale.Y,
+			TargetScale.Z));
+	}
+	bHasAppliedVisualWidth = true;
 }
 
 void AUOULumenStaticRayVisualActor::Tick(const float DeltaSeconds)
@@ -241,7 +272,15 @@ void AUOULumenStaticRayVisualActor::ApplyPreset(const FUOULightBeamVisualSegment
 			Radius / NativeRadius,
 			Radius / NativeRadius,
 			SegmentData.Length / NativeLength);
-		Component->SetRelativeScale3D(FitScale * NormalizedLayerScale);
+		const FVector CalculatedLayerScale = FitScale * NormalizedLayerScale;
+		const FVector CurrentLayerScale = Component->GetRelativeScale3D();
+		const FVector AppliedLayerScale = bHasAppliedVisualWidth
+			? FVector(
+				CurrentLayerScale.X,
+				CurrentLayerScale.Y,
+				CalculatedLayerScale.Z)
+			: CalculatedLayerScale;
+		Component->SetRelativeScale3D(AppliedLayerScale);
 		// 서브메시가 원본 FBX의 공통 피벗을 유지한 채 분리되어 있으므로,
 		// 바운드 중심의 횡방향 오프셋을 제거하고 시작점에서 광선 구간이 시작되게 맞춥니다.
 		const FVector ScaledBoundsOrigin = MeshBounds.Origin * Component->GetRelativeScale3D();
@@ -268,6 +307,7 @@ void AUOULumenStaticRayVisualActor::ApplyPreset(const FUOULightBeamVisualSegment
 			DynamicMaterials[Index]->SetScalarParameterValue(StaticRayVariationScaleParameter, Selected.VariationScale);
 		}
 	}
+	bHasAppliedVisualWidth = true;
 	UpdateCameraFacing();
 	UpdateMaterialParameters(GetWorld() != nullptr ? GetWorld()->GetTimeSeconds() : 0.0f);
 }

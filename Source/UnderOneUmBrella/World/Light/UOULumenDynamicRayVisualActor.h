@@ -28,6 +28,7 @@ public:
 	virtual void ApplyLightBeamSegment_Implementation(
 		const FUOULightBeamVisualSegmentData& SegmentData) override;
 	virtual void SetLightBeamVisualActive_Implementation(bool bActive) override;
+	void CopyVisualWidthFrom(const AUOULumenDynamicRayVisualActor* SourceVisual);
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Lumen Dynamic Ray|Components")
 	TObjectPtr<USceneComponent> RootScene;
@@ -55,6 +56,8 @@ private:
 
 	UPROPERTY()
 	TArray<TObjectPtr<UStaticMesh>> ShapeMeshes;
+
+	bool bHasAppliedVisualWidth = false;
 
 	void ConfigureComponents();
 	void EnsureDynamicMaterials();

@@ -89,7 +89,38 @@ AUOULumenDynamicRayVisualActor::AUOULumenDynamicRayVisualActor()
 void AUOULumenDynamicRayVisualActor::OnConstruction(const FTransform& Transform)
 {
 	Super::OnConstruction(Transform);
+	bHasAppliedVisualWidth = false;
 	ConfigureComponents();
+}
+
+void AUOULumenDynamicRayVisualActor::CopyVisualWidthFrom(
+	const AUOULumenDynamicRayVisualActor* SourceVisual)
+{
+	if (SourceVisual == nullptr)
+	{
+		return;
+	}
+
+	const int32 SharedLayerCount = FMath::Min(
+		LayerComponents.Num(),
+		SourceVisual->LayerComponents.Num());
+	for (int32 Index = 0; Index < SharedLayerCount; ++Index)
+	{
+		UStaticMeshComponent* TargetLayer = LayerComponents[Index];
+		const UStaticMeshComponent* SourceLayer = SourceVisual->LayerComponents[Index];
+		if (TargetLayer == nullptr || SourceLayer == nullptr)
+		{
+			continue;
+		}
+
+		const FVector SourceScale = SourceLayer->GetRelativeScale3D();
+		const FVector TargetScale = TargetLayer->GetRelativeScale3D();
+		TargetLayer->SetRelativeScale3D(FVector(
+			SourceScale.X,
+			SourceScale.Y,
+			TargetScale.Z));
+	}
+	bHasAppliedVisualWidth = true;
 }
 
 void AUOULumenDynamicRayVisualActor::ConfigureComponents()
@@ -185,10 +216,17 @@ void AUOULumenDynamicRayVisualActor::ApplyPreset(
 		const float MeshRadiusX = FMath::Max(KINDA_SMALL_NUMBER, MeshSize.X * 0.5f);
 		const float MeshRadiusY = FMath::Max(KINDA_SMALL_NUMBER, MeshSize.Y * 0.5f);
 		const float MeshLength = FMath::Max(KINDA_SMALL_NUMBER, MeshSize.Z);
-		Layer->SetRelativeScale3D(FVector(
+		const FVector CalculatedLayerScale(
 			(Radius / MeshRadiusX) * LayerData.Scale.X,
 			(Radius / MeshRadiusY) * LayerData.Scale.Y,
-			LayerLength / MeshLength));
+			LayerLength / MeshLength);
+		const FVector CurrentLayerScale = Layer->GetRelativeScale3D();
+		Layer->SetRelativeScale3D(bHasAppliedVisualWidth
+			? FVector(
+				CurrentLayerScale.X,
+				CurrentLayerScale.Y,
+				CalculatedLayerScale.Z)
+			: CalculatedLayerScale);
 
 		if (!DynamicMaterials.IsValidIndex(Index) || DynamicMaterials[Index] == nullptr)
 		{
@@ -205,6 +243,7 @@ void AUOULumenDynamicRayVisualActor::ApplyPreset(
 			FMath::Clamp(OpacityScale * SegmentData.VisualOpacityMultiplier, 0.0f, 1.0f));
 		DynamicMaterials[Index]->SetScalarParameterValue(LumenRayLengthParameter, LayerLength);
 	}
+	bHasAppliedVisualWidth = true;
 }
 
 void AUOULumenDynamicRayVisualActor::SetLightBeamVisualActive_Implementation(const bool bActive)

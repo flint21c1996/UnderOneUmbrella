@@ -28,6 +28,7 @@ public:
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void ApplyLightBeamSegment_Implementation(const FUOULightBeamVisualSegmentData& SegmentData) override;
 	virtual void SetLightBeamVisualActive_Implementation(bool bActive) override;
+	void CopyVisualWidthFrom(const AUOULumenStaticRayVisualActor* SourceVisual);
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Lumen Static Ray|Preview", meta = (DisplayName = "에디터 프리뷰", ToolTip = "레벨에 직접 배치했을 때 지정한 길이와 굵기로 Static Ray를 미리 표시합니다."))
 	bool bPreviewInEditor = false;
@@ -97,6 +98,7 @@ private:
 	FLinearColor CurrentColor = FLinearColor::White;
 	float CurrentIntensity = 1.0f;
 	float CurrentOpacity = 1.0f;
+	bool bHasAppliedVisualWidth = false;
 
 	void ConfigureComponents();
 	void EnsureDynamicMaterials();

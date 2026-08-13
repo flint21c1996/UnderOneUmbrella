@@ -17,12 +17,15 @@
 #include "UObject/FieldIterator.h"
 #include "UObject/UnrealType.h"
 #include "World/Light/UOULightBeamVisualComponent.h"
+#include "World/Light/UOULightBeamMeshVisualActor.h"
 #include "World/Light/UOULightExposureReceiverComponent.h"
 #include "World/Light/UOULightExposureSourceComponent.h"
 #include "World/Light/UOULightInteractionSurfaceComponent.h"
 #include "World/Light/UOULightReflectionPathTypes.h"
 #include "World/Light/UOULightReflectionSpotLightComponent.h"
 #include "World/Light/UOULightSourceActor.h"
+#include "World/Light/UOULumenDynamicRayVisualActor.h"
+#include "World/Light/UOULumenStaticRayVisualActor.h"
 
 namespace
 {
@@ -187,6 +190,48 @@ bool FUOULightInteractionModeTest::RunTest(const FString& Parameters)
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FUOUReflectionBeamRadiusPolicyTest,
+	"UnderOneUmbrella.Light.Reflection.BeamRadiusPolicy",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUOUReflectionBeamRadiusPolicyTest::RunTest(const FString& Parameters)
+{
+	UUOULightInteractionSurfaceComponent* Surface =
+		NewObject<UUOULightInteractionSurfaceComponent>();
+	TestNotNull(TEXT("Create a reflection surface for the beam radius policy test"), Surface);
+	if (Surface == nullptr)
+	{
+		return false;
+	}
+
+	constexpr float IncomingRadius = 100.0f;
+	Surface->SetBoxExtent(FVector(5.0f, 50.0f, 50.0f));
+	const FVector ObliqueIncomingDirection = FVector(1.0f, 1.0f, 0.0f).GetSafeNormal();
+	const FVector HitNormal = -FVector::ForwardVector;
+
+	TestFalse(
+		TEXT("Reflection surfaces do not limit beam width by aperture by default"),
+		Surface->bLimitReflectionBySurfaceAperture);
+	TestTrue(
+		TEXT("The default reflection policy preserves the incoming beam radius"),
+		FMath::IsNearlyEqual(
+			Surface->ClampReflectionBeamRadius(
+				IncomingRadius,
+				ObliqueIncomingDirection,
+				HitNormal),
+			IncomingRadius));
+
+	Surface->bLimitReflectionBySurfaceAperture = true;
+	TestTrue(
+		TEXT("Aperture limiting remains available as an explicit surface option"),
+		Surface->ClampReflectionBeamRadius(
+			IncomingRadius,
+			ObliqueIncomingDirection,
+			HitNormal) < IncomingRadius);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FUOULightPathDataTest,
 	"UnderOneUmbrella.Light.Path.DirectAndReflectedSegments",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
@@ -262,6 +307,367 @@ bool FUOULightVisualEventDrivenTest::RunTest(const FString& Parameters)
 	TestFalse(
 		TEXT("빛줄기 VFX는 자체 Tick 추적을 사용하지 않는다"),
 		VisualComponent->PrimaryComponentTick.bCanEverTick);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FUOUConeBeamFixedWidthTest,
+	"UnderOneUmbrella.Light.Visual.ConeBeamFixedWidth",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUOUConeBeamFixedWidthTest::RunTest(const FString& Parameters)
+{
+	UWorld* UninitializedWorld = UWorld::CreateWorld(
+		EWorldType::Editor,
+		false,
+		TEXT("UOUConeBeamFixedWidthWorld"),
+		nullptr,
+		false,
+		ERHIFeatureLevel::Num,
+		nullptr,
+		true);
+	FScopedEditorWorld ScopedWorld(
+		UninitializedWorld,
+		UWorld::InitializationValues()
+			.RequiresHitProxies(false)
+			.ShouldSimulatePhysics(false)
+			.EnableTraceCollision(false)
+			.CreateNavigation(false)
+			.CreateAISystem(false)
+			.AllowAudioPlayback(false)
+			.CreatePhysicsScene(false));
+	UWorld* World = ScopedWorld.GetWorld();
+	TestNotNull(TEXT("Create a world for the fixed cone width test"), World);
+	if (World == nullptr)
+	{
+		return false;
+	}
+
+	AUOULightSourceActor* SourceActor = World->SpawnActor<AUOULightSourceActor>();
+	TestNotNull(TEXT("Spawn a light source for the fixed cone width test"), SourceActor);
+	if (SourceActor == nullptr || SourceActor->ExposureSource == nullptr ||
+		SourceActor->BeamVisual == nullptr)
+	{
+		return false;
+	}
+
+	FUOULightPathSegmentData DirectSegment;
+	DirectSegment.Direction = FVector::ForwardVector;
+	DirectSegment.Length = 200.0f;
+	DirectSegment.End = DirectSegment.Start + DirectSegment.Direction * DirectSegment.Length;
+	DirectSegment.StartRadius = 0.0f;
+	DirectSegment.EndRadius = 50.0f;
+	DirectSegment.ConeAngle = 35.0f;
+
+	FUOULightPathSegmentData ReflectedSegment;
+	ReflectedSegment.SegmentIndex = 1;
+	ReflectedSegment.bReflected = true;
+	ReflectedSegment.Start = DirectSegment.End;
+	ReflectedSegment.Direction = FVector::RightVector;
+	ReflectedSegment.Length = 400.0f;
+	ReflectedSegment.End = ReflectedSegment.Start +
+		ReflectedSegment.Direction * ReflectedSegment.Length;
+	ReflectedSegment.StartRadius = 50.0f;
+	ReflectedSegment.EndRadius = 50.0f;
+	ReflectedSegment.ConeAngle = 0.0f;
+
+	FUOULightPathData Path;
+	Path.Segments = {DirectSegment, ReflectedSegment};
+	SourceActor->ExposureSource->LightPaths = {Path};
+	SourceActor->BeamVisual->VFXActorClass = AUOULightBeamMeshVisualActor::StaticClass();
+	SourceActor->BeamVisual->EndPadding = 0.0f;
+	SourceActor->BeamVisual->RefreshVisuals();
+
+	TArray<FVector> BeamScales;
+	for (TActorIterator<AUOULightBeamMeshVisualActor> ActorIt(World); ActorIt; ++ActorIt)
+	{
+		if (ActorIt->GetOwner() == SourceActor && ActorIt->BeamMeshComponent != nullptr)
+		{
+			BeamScales.Add(ActorIt->BeamMeshComponent->GetComponentScale());
+		}
+	}
+
+	TestEqual(TEXT("Create direct cone and reflected cylinder VFX actors"), BeamScales.Num(), 2);
+	if (BeamScales.Num() == 2)
+	{
+		TestTrue(
+			TEXT("Direct cone and reflected cylinder VFX share the same X scale"),
+			FMath::IsNearlyEqual(BeamScales[0].X, BeamScales[1].X));
+		TestTrue(
+			TEXT("Direct cone and reflected cylinder VFX share the same Y scale"),
+			FMath::IsNearlyEqual(BeamScales[0].Y, BeamScales[1].Y));
+		TestFalse(
+			TEXT("Direct cone and reflected cylinder VFX keep independent Z length scales"),
+			FMath::IsNearlyEqual(BeamScales[0].Z, BeamScales[1].Z));
+	}
+
+	DirectSegment.Length = 100.0f;
+	DirectSegment.End = DirectSegment.Start + DirectSegment.Direction * DirectSegment.Length;
+	Path.Segments = {DirectSegment};
+	SourceActor->ExposureSource->LightPaths = {Path};
+	SourceActor->BeamVisual->RefreshVisuals();
+
+	const AUOULightBeamMeshVisualActor* ShortenedDirectVFX = nullptr;
+	for (TActorIterator<AUOULightBeamMeshVisualActor> ActorIt(World); ActorIt; ++ActorIt)
+	{
+		if (ActorIt->GetOwner() == SourceActor && !ActorIt->IsHidden())
+		{
+			ShortenedDirectVFX = *ActorIt;
+			break;
+		}
+	}
+	TestNotNull(TEXT("Keep the direct cone VFX active after shortening"), ShortenedDirectVFX);
+	if (ShortenedDirectVFX != nullptr && ShortenedDirectVFX->BeamMeshComponent != nullptr &&
+		BeamScales.Num() == 2)
+	{
+		const FVector ShortenedScale =
+			ShortenedDirectVFX->BeamMeshComponent->GetComponentScale();
+		TestTrue(
+			TEXT("Shortening a cone path preserves its X scale"),
+			FMath::IsNearlyEqual(ShortenedScale.X, BeamScales[0].X));
+		TestTrue(
+			TEXT("Shortening a cone path preserves its Y scale"),
+			FMath::IsNearlyEqual(ShortenedScale.Y, BeamScales[0].Y));
+		TestTrue(
+			TEXT("Shortening a cone path changes only its Z scale"),
+			!FMath::IsNearlyEqual(ShortenedScale.Z, BeamScales[0].Z) &&
+			!FMath::IsNearlyEqual(ShortenedScale.Z, BeamScales[1].Z));
+	}
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FUOULumenStaticRayFixedWidthTest,
+	"UnderOneUmbrella.Light.Visual.LumenStaticRayFixedWidth",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUOULumenStaticRayFixedWidthTest::RunTest(const FString& Parameters)
+{
+	UWorld* UninitializedWorld = UWorld::CreateWorld(
+		EWorldType::Editor,
+		false,
+		TEXT("UOULumenStaticRayFixedWidthWorld"),
+		nullptr,
+		false,
+		ERHIFeatureLevel::Num,
+		nullptr,
+		true);
+	FScopedEditorWorld ScopedWorld(
+		UninitializedWorld,
+		UWorld::InitializationValues()
+			.RequiresHitProxies(false)
+			.ShouldSimulatePhysics(false)
+			.EnableTraceCollision(false)
+			.CreateNavigation(false)
+			.CreateAISystem(false)
+			.AllowAudioPlayback(false)
+			.CreatePhysicsScene(false));
+	UWorld* World = ScopedWorld.GetWorld();
+	TestNotNull(TEXT("Create a world for the Static Ray fixed width test"), World);
+	if (World == nullptr)
+	{
+		return false;
+	}
+
+	auto FindFirstVisibleLayer = [](AUOULumenStaticRayVisualActor* VisualActor)
+		-> UStaticMeshComponent*
+	{
+		if (VisualActor == nullptr)
+		{
+			return nullptr;
+		}
+		TInlineComponentArray<UStaticMeshComponent*> Components(VisualActor);
+		for (UStaticMeshComponent* Component : Components)
+		{
+			if (Component != nullptr && Component->IsVisible())
+			{
+				return Component;
+			}
+		}
+		return nullptr;
+	};
+
+	AUOULumenStaticRayVisualActor* DirectVisual =
+		World->SpawnActor<AUOULumenStaticRayVisualActor>();
+	AUOULumenStaticRayVisualActor* ReflectionVisual =
+		World->SpawnActor<AUOULumenStaticRayVisualActor>();
+	TestNotNull(TEXT("Spawn a direct Static Ray visual"), DirectVisual);
+	TestNotNull(TEXT("Spawn a reflected Static Ray visual"), ReflectionVisual);
+	if (DirectVisual == nullptr || ReflectionVisual == nullptr)
+	{
+		return false;
+	}
+
+	FUOULightBeamVisualSegmentData DirectSegment;
+	DirectSegment.Direction = FVector::ForwardVector;
+	DirectSegment.Length = 300.0f;
+	DirectSegment.StartRadius = 20.0f;
+	DirectSegment.EndRadius = 80.0f;
+	DirectSegment.Intensity = 1.0f;
+	DirectVisual->ApplyLightBeamSegment_Implementation(DirectSegment);
+
+	UStaticMeshComponent* DirectLayer = FindFirstVisibleLayer(DirectVisual);
+	TestNotNull(TEXT("Activate a Static Ray layer for the direct segment"), DirectLayer);
+	if (DirectLayer == nullptr)
+	{
+		return false;
+	}
+	const FVector InitialDirectScale = DirectLayer->GetRelativeScale3D();
+
+	DirectSegment.Length = 150.0f;
+	DirectSegment.EndRadius = 40.0f;
+	DirectVisual->ApplyLightBeamSegment_Implementation(DirectSegment);
+	const FVector ShortenedDirectScale = DirectLayer->GetRelativeScale3D();
+	TestTrue(
+		TEXT("Shortening a Static Ray preserves its X scale"),
+		FMath::IsNearlyEqual(ShortenedDirectScale.X, InitialDirectScale.X));
+	TestTrue(
+		TEXT("Shortening a Static Ray preserves its Y scale"),
+		FMath::IsNearlyEqual(ShortenedDirectScale.Y, InitialDirectScale.Y));
+	TestFalse(
+		TEXT("Shortening a Static Ray changes its Z scale"),
+		FMath::IsNearlyEqual(ShortenedDirectScale.Z, InitialDirectScale.Z));
+
+	ReflectionVisual->CopyVisualWidthFrom(DirectVisual);
+	FUOULightBeamVisualSegmentData ReflectionSegment = DirectSegment;
+	ReflectionSegment.bReflected = true;
+	ReflectionSegment.Length = 450.0f;
+	ReflectionSegment.EndRadius = 120.0f;
+	ReflectionVisual->ApplyLightBeamSegment_Implementation(ReflectionSegment);
+	UStaticMeshComponent* ReflectionLayer = FindFirstVisibleLayer(ReflectionVisual);
+	TestNotNull(TEXT("Activate a Static Ray layer for the reflected segment"), ReflectionLayer);
+	if (ReflectionLayer != nullptr)
+	{
+		const FVector ReflectionScale = ReflectionLayer->GetRelativeScale3D();
+		TestTrue(
+			TEXT("Reflected Static Ray copies the direct X scale"),
+			FMath::IsNearlyEqual(ReflectionScale.X, ShortenedDirectScale.X));
+		TestTrue(
+			TEXT("Reflected Static Ray copies the direct Y scale"),
+			FMath::IsNearlyEqual(ReflectionScale.Y, ShortenedDirectScale.Y));
+		TestFalse(
+			TEXT("Reflected Static Ray keeps its own Z length scale"),
+			FMath::IsNearlyEqual(ReflectionScale.Z, ShortenedDirectScale.Z));
+	}
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FUOULumenDynamicRayFixedWidthTest,
+	"UnderOneUmbrella.Light.Visual.LumenDynamicRayFixedWidth",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUOULumenDynamicRayFixedWidthTest::RunTest(const FString& Parameters)
+{
+	UWorld* UninitializedWorld = UWorld::CreateWorld(
+		EWorldType::Editor,
+		false,
+		TEXT("UOULumenDynamicRayFixedWidthWorld"),
+		nullptr,
+		false,
+		ERHIFeatureLevel::Num,
+		nullptr,
+		true);
+	FScopedEditorWorld ScopedWorld(
+		UninitializedWorld,
+		UWorld::InitializationValues()
+			.RequiresHitProxies(false)
+			.ShouldSimulatePhysics(false)
+			.EnableTraceCollision(false)
+			.CreateNavigation(false)
+			.CreateAISystem(false)
+			.AllowAudioPlayback(false)
+			.CreatePhysicsScene(false));
+	UWorld* World = ScopedWorld.GetWorld();
+	TestNotNull(TEXT("Create a world for the Dynamic Ray fixed width test"), World);
+	if (World == nullptr)
+	{
+		return false;
+	}
+
+	auto FindFirstVisibleLayer = [](AUOULumenDynamicRayVisualActor* VisualActor)
+		-> UStaticMeshComponent*
+	{
+		if (VisualActor == nullptr)
+		{
+			return nullptr;
+		}
+		TInlineComponentArray<UStaticMeshComponent*> Components(VisualActor);
+		for (UStaticMeshComponent* Component : Components)
+		{
+			if (Component != nullptr && Component->IsVisible())
+			{
+				return Component;
+			}
+		}
+		return nullptr;
+	};
+
+	AUOULumenDynamicRayVisualActor* DirectVisual =
+		World->SpawnActor<AUOULumenDynamicRayVisualActor>();
+	AUOULumenDynamicRayVisualActor* ReflectionVisual =
+		World->SpawnActor<AUOULumenDynamicRayVisualActor>();
+	TestNotNull(TEXT("Spawn a direct Dynamic Ray visual"), DirectVisual);
+	TestNotNull(TEXT("Spawn a reflected Dynamic Ray visual"), ReflectionVisual);
+	if (DirectVisual == nullptr || ReflectionVisual == nullptr)
+	{
+		return false;
+	}
+
+	FUOULightBeamVisualSegmentData DirectSegment;
+	DirectSegment.Direction = FVector::ForwardVector;
+	DirectSegment.Length = 300.0f;
+	DirectSegment.StartRadius = 20.0f;
+	DirectSegment.EndRadius = 80.0f;
+	DirectSegment.Intensity = 1.0f;
+	DirectVisual->ApplyLightBeamSegment_Implementation(DirectSegment);
+
+	UStaticMeshComponent* DirectLayer = FindFirstVisibleLayer(DirectVisual);
+	TestNotNull(TEXT("Activate a Dynamic Ray layer for the direct segment"), DirectLayer);
+	if (DirectLayer == nullptr)
+	{
+		return false;
+	}
+	const FVector InitialDirectScale = DirectLayer->GetRelativeScale3D();
+
+	DirectSegment.Length = 150.0f;
+	DirectSegment.EndRadius = 40.0f;
+	DirectVisual->ApplyLightBeamSegment_Implementation(DirectSegment);
+	const FVector ShortenedDirectScale = DirectLayer->GetRelativeScale3D();
+	TestTrue(
+		TEXT("Shortening a Dynamic Ray preserves its X scale"),
+		FMath::IsNearlyEqual(ShortenedDirectScale.X, InitialDirectScale.X));
+	TestTrue(
+		TEXT("Shortening a Dynamic Ray preserves its Y scale"),
+		FMath::IsNearlyEqual(ShortenedDirectScale.Y, InitialDirectScale.Y));
+	TestFalse(
+		TEXT("Shortening a Dynamic Ray changes its Z scale"),
+		FMath::IsNearlyEqual(ShortenedDirectScale.Z, InitialDirectScale.Z));
+
+	ReflectionVisual->CopyVisualWidthFrom(DirectVisual);
+	FUOULightBeamVisualSegmentData ReflectionSegment = DirectSegment;
+	ReflectionSegment.bReflected = true;
+	ReflectionSegment.Length = 450.0f;
+	ReflectionSegment.EndRadius = 120.0f;
+	ReflectionVisual->ApplyLightBeamSegment_Implementation(ReflectionSegment);
+	UStaticMeshComponent* ReflectionLayer = FindFirstVisibleLayer(ReflectionVisual);
+	TestNotNull(TEXT("Activate a Dynamic Ray layer for the reflected segment"), ReflectionLayer);
+	if (ReflectionLayer != nullptr)
+	{
+		const FVector ReflectionScale = ReflectionLayer->GetRelativeScale3D();
+		TestTrue(
+			TEXT("Reflected Dynamic Ray copies the direct X scale"),
+			FMath::IsNearlyEqual(ReflectionScale.X, ShortenedDirectScale.X));
+		TestTrue(
+			TEXT("Reflected Dynamic Ray copies the direct Y scale"),
+			FMath::IsNearlyEqual(ReflectionScale.Y, ShortenedDirectScale.Y));
+		TestFalse(
+			TEXT("Reflected Dynamic Ray keeps its own Z length scale"),
+			FMath::IsNearlyEqual(ReflectionScale.Z, ShortenedDirectScale.Z));
+	}
+
 	return true;
 }
 

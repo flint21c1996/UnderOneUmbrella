@@ -11,8 +11,11 @@
 #include "NiagaraComponent.h"
 #include "UObject/FieldIterator.h"
 #include "UObject/UnrealType.h"
+#include "World/Light/UOULightBeamMeshVisualActor.h"
 #include "World/Light/UOULightBeamVisualInterface.h"
 #include "World/Light/UOULightExposureSourceComponent.h"
+#include "World/Light/UOULumenDynamicRayVisualActor.h"
+#include "World/Light/UOULumenStaticRayVisualActor.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogUOULightBeamVisual, Log, All);
 
@@ -636,6 +639,48 @@ void UUOULightBeamVisualComponent::UpdateReflectionVFX(
 			if (VFXActor == nullptr)
 			{
 				continue;
+			}
+			if (const AUOULightBeamMeshVisualActor* DirectMeshVFX =
+				Cast<AUOULightBeamMeshVisualActor>(DirectVFXActor))
+			{
+				if (AUOULightBeamMeshVisualActor* ReflectionMeshVFX =
+					Cast<AUOULightBeamMeshVisualActor>(VFXActor))
+				{
+					const FVector DirectBeamScale =
+						DirectMeshVFX->BeamMeshComponent->GetComponentScale();
+					const FVector ReflectionBeamScale =
+						ReflectionMeshVFX->BeamMeshComponent->GetComponentScale();
+					ReflectionMeshVFX->BeamMeshComponent->SetWorldScale3D(FVector(
+						DirectBeamScale.X,
+						DirectBeamScale.Y,
+						ReflectionBeamScale.Z));
+					const FVector DirectCoreScale =
+						DirectMeshVFX->CoreBeamMeshComponent->GetComponentScale();
+					const FVector ReflectionCoreScale =
+						ReflectionMeshVFX->CoreBeamMeshComponent->GetComponentScale();
+					ReflectionMeshVFX->CoreBeamMeshComponent->SetWorldScale3D(FVector(
+						DirectCoreScale.X,
+						DirectCoreScale.Y,
+						ReflectionCoreScale.Z));
+				}
+			}
+			if (const AUOULumenStaticRayVisualActor* DirectStaticRayVFX =
+				Cast<AUOULumenStaticRayVisualActor>(DirectVFXActor))
+			{
+				if (AUOULumenStaticRayVisualActor* ReflectionStaticRayVFX =
+					Cast<AUOULumenStaticRayVisualActor>(VFXActor))
+				{
+					ReflectionStaticRayVFX->CopyVisualWidthFrom(DirectStaticRayVFX);
+				}
+			}
+			if (const AUOULumenDynamicRayVisualActor* DirectDynamicRayVFX =
+				Cast<AUOULumenDynamicRayVisualActor>(DirectVFXActor))
+			{
+				if (AUOULumenDynamicRayVisualActor* ReflectionDynamicRayVFX =
+					Cast<AUOULumenDynamicRayVisualActor>(VFXActor))
+				{
+					ReflectionDynamicRayVFX->CopyVisualWidthFrom(DirectDynamicRayVFX);
+				}
 			}
 
 			const FUOULightPathSegmentData* NextReflectedSegment =
