@@ -52,6 +52,9 @@ struct UNDERONEUMBRELLA_API FUOULightBeamVisualSegmentData
 	int32 LumenDynamicRayPresetOverride = 0;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Visual")
+	int32 LumenStaticRayPresetOverride = 0;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Visual")
 	FLinearColor Color = FLinearColor::White;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Visual")

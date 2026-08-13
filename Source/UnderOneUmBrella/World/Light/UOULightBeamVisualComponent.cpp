@@ -958,6 +958,7 @@ FUOULightBeamVisualSegmentData UUOULightBeamVisualComponent::BuildVisualSegment(
 	VisualData.VisualBrightnessMultiplier = FMath::Max(0.0f, VisualBrightnessMultiplier);
 	VisualData.VisualOpacityMultiplier = FMath::Max(0.0f, VisualOpacityMultiplier);
 	VisualData.LumenDynamicRayPresetOverride = FMath::Clamp(LumenDynamicRayPreset, 0, 8);
+	VisualData.LumenStaticRayPresetOverride = FMath::Clamp(LumenStaticRayPreset, 0, 19);
 	VisualData.Direction = SegmentData.Direction.GetSafeNormal();
 	const float VisibleEndDistance = FMath::Max(
 		0.0f,
