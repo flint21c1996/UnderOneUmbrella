@@ -23,6 +23,7 @@
 #include "World/Light/UOULightReflectionPathTypes.h"
 #include "World/Light/UOULightReflectionSpotLightComponent.h"
 #include "World/Light/UOULightSourceActor.h"
+#include "World/Light/UOURotatableMirrorActor.h"
 
 namespace
 {
@@ -154,6 +155,30 @@ bool FUOULightMirrorReflectionTest::RunTest(const FString& Parameters)
 	TestTrue(
 		TEXT("45도 거울은 +X 입사광을 +Y 방향으로 반사한다"),
 		ReflectedDirection.Equals(FVector::RightVector, KINDA_SMALL_NUMBER));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FUOURotatableMirrorStableNormalTest,
+	"UnderOneUmbrella.Light.Reflection.RotatableMirrorUsesStableComponentNormal",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUOURotatableMirrorStableNormalTest::RunTest(const FString& Parameters)
+{
+	const AUOURotatableMirrorActor* MirrorDefaults = GetDefault<AUOURotatableMirrorActor>();
+	TestNotNull(TEXT("회전 거울 기본 오브젝트가 존재한다"), MirrorDefaults);
+	TestNotNull(
+		TEXT("회전 거울에 빛 상호작용 표면이 존재한다"),
+		MirrorDefaults != nullptr ? MirrorDefaults->LightInteractionSurface.Get() : nullptr);
+	if (MirrorDefaults == nullptr || MirrorDefaults->LightInteractionSurface == nullptr)
+	{
+		return false;
+	}
+
+	TestEqual(
+		TEXT("회전 거울은 Box 옆면 HitNormal 대신 컴포넌트 앞 방향을 반사 법선으로 사용한다"),
+		MirrorDefaults->LightInteractionSurface->ReflectionNormalMode,
+		EUOULightReflectionNormalMode::ComponentForward);
 	return true;
 }
 
