@@ -73,6 +73,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light|Visual", meta = (ClampMin = "0.0", Units = "cm", ToolTip = "벽이나 거울 표면과 빛줄기가 겹쳐 보이지 않도록 끝점을 앞당기는 거리입니다."))
 	float EndPadding = 2.0f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light|Visual", meta = (ClampMin = "0.0", Units = "cm", ToolTip = "비스듬한 반사면 뒤로 빛줄기 시작 단면이 튀어나오지 않도록 시작점을 전진시키는 최대 거리입니다. 큰 값은 완만한 입사각에서 시작점이 옆으로 밀려 보일 수 있으며, 0이면 추가 보정을 사용하지 않습니다."))
+	float MaximumReflectedStartClearance = 4.0f;
+
 	UPROPERTY(BlueprintReadOnly, Category = "Light|Visual", meta = (DeprecatedProperty, DeprecationMessage = "VFX는 계산된 LightPath 종료점을 사용하므로 별도 충돌 채널을 사용하지 않습니다."))
 	TEnumAsByte<ECollisionChannel> OcclusionTraceChannel = ECC_Visibility;
 

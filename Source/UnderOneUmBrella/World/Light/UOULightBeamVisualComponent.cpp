@@ -61,16 +61,19 @@ namespace
 
 	float CalculateReflectedJunctionClearance(
 		const FUOULightPathSegmentData& SegmentData,
-		const float VisibleEndDistance)
+		const float VisibleEndDistance,
+		const float MaximumClearance)
 	{
 		const FVector IncomingDirection = SegmentData.IncomingDirection.GetSafeNormal();
 		const FVector ReflectedDirection = SegmentData.Direction.GetSafeNormal();
 		const float StartRadius = FMath::Max(0.0f, SegmentData.StartRadius);
+		const float SafeMaximumClearance = FMath::Max(0.0f, MaximumClearance);
 		if (!SegmentData.bReflected ||
 			IncomingDirection.IsNearlyZero() ||
 			ReflectedDirection.IsNearlyZero() ||
 			StartRadius <= KINDA_SMALL_NUMBER ||
-			VisibleEndDistance <= KINDA_SMALL_NUMBER)
+			VisibleEndDistance <= KINDA_SMALL_NUMBER ||
+			SafeMaximumClearance <= KINDA_SMALL_NUMBER)
 		{
 			return 0.0f;
 		}
@@ -105,7 +108,10 @@ namespace
 			? StartRadius * LateralAlignment / ClearanceDenominator
 			: VisibleEndDistance * 0.5f;
 
-		return FMath::Clamp(DesiredClearance, 0.0f, VisibleEndDistance * 0.5f);
+		return FMath::Clamp(
+			DesiredClearance,
+			0.0f,
+			FMath::Min(VisibleEndDistance * 0.5f, SafeMaximumClearance));
 	}
 
 	float CalculateIncomingJunctionClearance(
@@ -966,7 +972,8 @@ FUOULightBeamVisualSegmentData UUOULightBeamVisualComponent::BuildVisualSegment(
 			FMath::Max(0.0f, AdditionalEndPadding));
 	const float StartClearance = CalculateReflectedJunctionClearance(
 		SegmentData,
-		VisibleEndDistance);
+		VisibleEndDistance,
+		MaximumReflectedStartClearance);
 	VisualData.Start = SegmentData.Start + VisualData.Direction * StartClearance;
 	VisualData.Length = FMath::Max(0.0f, VisibleEndDistance - StartClearance);
 	VisualData.End = VisualData.Start + VisualData.Direction * VisualData.Length;
