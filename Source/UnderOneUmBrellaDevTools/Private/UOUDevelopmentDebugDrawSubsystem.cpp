@@ -2744,7 +2744,10 @@ void UUOUDevelopmentDebugDrawSubsystem::GetSelectableDebugActors(
 			|| Actor->IsA<AUOUPlayerBlockingWallActor>()
 			|| Actor->FindComponentByClass<UUOUWeightedButtonComponent>() != nullptr
 			|| Actor->FindComponentByClass<UUOUWaterBasinTargetComponent>() != nullptr
-			|| Actor->FindComponentByClass<UUOUWaterBasinReactionComponentBase>() != nullptr;
+			|| Actor->FindComponentByClass<UUOUWaterBasinReactionComponentBase>() != nullptr
+			|| Actor->FindComponentByClass<UUOULightExposureSourceComponent>() != nullptr
+			|| Actor->FindComponentByClass<UUOULightExposureReceiverComponent>() != nullptr
+			|| Actor->FindComponentByClass<UUOURotatableMirrorComponent>() != nullptr;
 		if (!bPuzzleActor
 			&& Actor->GetClass()->ImplementsInterface(UUOUDebugProvider::StaticClass()))
 		{
