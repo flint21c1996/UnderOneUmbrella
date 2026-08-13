@@ -88,6 +88,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light|Visual|Appearance", meta = (ClampMin = "0", ClampMax = "8", DisplayName = "Lumen Dynamic Ray Preset", ToolTip = "원본 Lumen Dynamic Ray 표시 액터를 사용할 때 적용할 프리셋입니다. 0은 표시 액터 기본값, 1~8은 원본 프리셋 번호입니다."))
 	int32 LumenDynamicRayPreset = 0;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light|Visual|Appearance", meta = (ClampMin = "0", ClampMax = "19", DisplayName = "Lumen Static Ray Preset", ToolTip = "원본 Lumen Static Ray 표시 액터를 사용할 때 적용할 프리셋입니다. 0은 표시 액터 기본값, 1~19는 원본 프리셋 번호입니다."))
+	int32 LumenStaticRayPreset = 0;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Visual|Runtime")
 	int32 ActiveReflectionVFXCount = 0;
 
