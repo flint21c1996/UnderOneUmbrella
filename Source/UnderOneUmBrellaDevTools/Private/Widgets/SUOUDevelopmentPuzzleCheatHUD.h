@@ -58,6 +58,7 @@ private:
 	FReply HandleRefreshClicked();
 	FReply HandleCancelClicked();
 	void HandleGraphNodeClicked(int32 TargetNodeIndex);
+	void HandleExternalInputClicked(int32 NodeIndex, int32 ExternalInputIndex);
 	EVisibility GetPanelVisibility() const;
 	EVisibility GetConditionPageVisibility() const;
 	EVisibility GetDebugPageVisibility() const;

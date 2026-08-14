@@ -18,7 +18,7 @@ namespace UOUDevelopmentPuzzleGraphViewPrivate
 	constexpr float CanvasPadding = 18.0f;
 	constexpr float DepthHeaderHeight = 24.0f;
 	constexpr float NodeWidth = 260.0f;
-	constexpr float NodeHeight = 132.0f;
+	constexpr float NodeHeight = 196.0f;
 	constexpr float HorizontalGap = 130.0f;
 	constexpr float VerticalGap = 24.0f;
 	constexpr float EdgeThickness = 2.0f;
@@ -28,6 +28,7 @@ void SUOUDevelopmentPuzzleGraphView::Construct(const FArguments& InArgs)
 {
 	PuzzleCheatSubsystem = InArgs._PuzzleCheatSubsystem;
 	OnNodeClicked = InArgs._OnNodeClicked;
+	OnExternalInputClicked = InArgs._OnExternalInputClicked;
 	SetVisibility(EVisibility::SelfHitTestInvisible);
 
 	ChildSlot
@@ -209,6 +210,69 @@ void SUOUDevelopmentPuzzleGraphView::RebuildLayout()
 		for (int32 RowIndex = 0; RowIndex < NodeIndices.Num(); ++RowIndex)
 		{
 			const int32 NodeIndex = NodeIndices[RowIndex];
+			const FUOUDevelopmentPuzzleCheatGraphNode* Node = FindNode(NodeIndex);
+			TSharedRef<SVerticalBox> ExternalInputButtons = SNew(SVerticalBox);
+			if (Node != nullptr && !Node->ExternalInputs.IsEmpty())
+			{
+				ExternalInputButtons->AddSlot()
+				.AutoHeight()
+				.Padding(0.0f, 5.0f, 0.0f, 2.0f)
+				[
+					SNew(STextBlock)
+					.Text(FText::FromString(TEXT("외부 입력")))
+					.ColorAndOpacity(FLinearColor(0.72f, 0.78f, 0.88f, 1.0f))
+				];
+
+				for (int32 ExternalInputIndex = 0;
+					ExternalInputIndex < Node->ExternalInputs.Num();
+					++ExternalInputIndex)
+				{
+					ExternalInputButtons->AddSlot()
+					.AutoHeight()
+					.Padding(0.0f, 2.0f, 0.0f, 0.0f)
+					[
+						SNew(SButton)
+						.IsFocusable(false)
+						.OnClicked(
+							this,
+							&SUOUDevelopmentPuzzleGraphView::HandleExternalInputClicked,
+							NodeIndex,
+							ExternalInputIndex)
+						.IsEnabled(
+							this,
+							&SUOUDevelopmentPuzzleGraphView::IsExternalInputActionEnabled,
+							NodeIndex,
+							ExternalInputIndex)
+						.ButtonColorAndOpacity(
+							this,
+							&SUOUDevelopmentPuzzleGraphView::GetExternalInputButtonColor,
+							NodeIndex,
+							ExternalInputIndex)
+						.ContentPadding(FMargin(5.0f, 2.0f))
+						[
+							SNew(STextBlock)
+							.Text(
+								this,
+								&SUOUDevelopmentPuzzleGraphView::GetExternalInputButtonText,
+								NodeIndex,
+								ExternalInputIndex)
+							.Justification(ETextJustify::Center)
+						]
+					];
+				}
+			}
+			else
+			{
+				ExternalInputButtons->AddSlot()
+				.AutoHeight()
+				.Padding(0.0f, 5.0f, 0.0f, 0.0f)
+				[
+					SNew(STextBlock)
+					.Text(FText::FromString(TEXT("외부 입력: 없음")))
+					.ColorAndOpacity(FLinearColor(0.55f, 0.55f, 0.55f, 1.0f))
+				];
+			}
+
 			const FVector2D NodePosition(
 				ColumnX,
 				CanvasPadding + DepthHeaderHeight + 10.0f + RowIndex * (NodeHeight + VerticalGap));
@@ -218,34 +282,39 @@ void SUOUDevelopmentPuzzleGraphView::RebuildLayout()
 			.Position(NodePosition)
 			.Size(FVector2D(NodeWidth, NodeHeight))
 			[
-				SNew(SButton)
-				.IsFocusable(false)
-				.OnClicked(this, &SUOUDevelopmentPuzzleGraphView::HandleNodeClicked, NodeIndex)
-				.IsEnabled(this, &SUOUDevelopmentPuzzleGraphView::IsNodeActionEnabled)
-				.ContentPadding(0.0f)
+				SNew(SBorder)
+				.BorderImage(FCoreStyle::Get().GetBrush(TEXT("GenericWhiteBox")))
+				.BorderBackgroundColor(FLinearColor(0.055f, 0.06f, 0.075f, 0.98f))
+				.Padding(8.0f)
 				[
-					SNew(SBorder)
-					.BorderImage(FCoreStyle::Get().GetBrush(TEXT("GenericWhiteBox")))
-					.BorderBackgroundColor(FLinearColor(0.055f, 0.06f, 0.075f, 0.98f))
-					.Padding(8.0f)
+					SNew(SVerticalBox)
+					+ SVerticalBox::Slot()
+					.AutoHeight()
 					[
-						SNew(SVerticalBox)
-						+ SVerticalBox::Slot()
-						.AutoHeight()
+						SNew(SButton)
+						.IsFocusable(false)
+						.OnClicked(this, &SUOUDevelopmentPuzzleGraphView::HandleNodeClicked, NodeIndex)
+						.IsEnabled(this, &SUOUDevelopmentPuzzleGraphView::IsNodeActionEnabled)
+						.ContentPadding(FMargin(4.0f, 3.0f))
 						[
 							SNew(STextBlock)
 							.Text(this, &SUOUDevelopmentPuzzleGraphView::GetNodeTitleText, NodeIndex)
 							.ColorAndOpacity(this, &SUOUDevelopmentPuzzleGraphView::GetNodeTitleColor, NodeIndex)
 						]
-						+ SVerticalBox::Slot()
-						.AutoHeight()
-						.Padding(0.0f, 6.0f, 0.0f, 0.0f)
-						[
-							SNew(STextBlock)
-							.Text(BuildNodeDetailText(NodeIndex))
-							.AutoWrapText(true)
-							.ColorAndOpacity(FLinearColor(0.78f, 0.78f, 0.78f, 1.0f))
-						]
+					]
+					+ SVerticalBox::Slot()
+					.AutoHeight()
+					.Padding(0.0f, 6.0f, 0.0f, 0.0f)
+					[
+						SNew(STextBlock)
+						.Text(BuildNodeDetailText(NodeIndex))
+						.AutoWrapText(true)
+						.ColorAndOpacity(FLinearColor(0.78f, 0.78f, 0.78f, 1.0f))
+					]
+					+ SVerticalBox::Slot()
+					.AutoHeight()
+					[
+						ExternalInputButtons
 					]
 				]
 			];
@@ -305,30 +374,20 @@ FReply SUOUDevelopmentPuzzleGraphView::HandleNodeClicked(int32 NodeIndex)
 	return FReply::Handled();
 }
 
+FReply SUOUDevelopmentPuzzleGraphView::HandleExternalInputClicked(
+	int32 NodeIndex,
+	int32 ExternalInputIndex)
+{
+	OnExternalInputClicked.ExecuteIfBound(NodeIndex, ExternalInputIndex);
+	return FReply::Handled();
+}
+
 FText SUOUDevelopmentPuzzleGraphView::BuildNodeDetailText(int32 NodeIndex) const
 {
 	const FUOUDevelopmentPuzzleCheatGraphNode* Node = FindNode(NodeIndex);
 	if (Node == nullptr)
 	{
 		return FText::GetEmpty();
-	}
-
-	TSet<const AActor*> IncomingRelationActors;
-	for (const FUOUDevelopmentPuzzleCheatGraphEdge& Edge : GraphEdges)
-	{
-		if (Edge.TargetNodeIndex == NodeIndex && IsValid(Edge.RelationActor.Get()))
-		{
-			IncomingRelationActors.Add(Edge.RelationActor.Get());
-		}
-	}
-
-	TArray<FString> ExternalInputNames;
-	for (const TObjectPtr<AActor>& InputActor : Node->InputActors)
-	{
-		if (IsValid(InputActor.Get()) && !IncomingRelationActors.Contains(InputActor.Get()))
-		{
-			ExternalInputNames.AddUnique(InputActor->GetName());
-		}
 	}
 
 	TArray<FString> ResultNames;
@@ -340,16 +399,10 @@ FText SUOUDevelopmentPuzzleGraphView::BuildNodeDetailText(int32 NodeIndex) const
 		}
 	}
 
-	const FString ExternalInputText = ExternalInputNames.IsEmpty()
-		? TEXT("없음")
-		: FString::Join(ExternalInputNames, TEXT(", "));
 	const FString ResultText = ResultNames.IsEmpty()
 		? TEXT("없음")
 		: FString::Join(ResultNames, TEXT(", "));
-	return FText::FromString(FString::Printf(
-		TEXT("외부 입력: %s\n결과: %s"),
-		*ExternalInputText,
-		*ResultText));
+	return FText::FromString(FString::Printf(TEXT("결과: %s"), *ResultText));
 }
 
 FText SUOUDevelopmentPuzzleGraphView::GetNodeTitleText(int32 NodeIndex) const
@@ -387,6 +440,63 @@ FSlateColor SUOUDevelopmentPuzzleGraphView::GetNodeTitleColor(int32 NodeIndex) c
 	return FSlateColor(IsValid(PuzzleGroup) && PuzzleGroup->IsSatisfied()
 		? FLinearColor(0.25f, 1.0f, 0.35f, 1.0f)
 		: FLinearColor::White);
+}
+
+FText SUOUDevelopmentPuzzleGraphView::GetExternalInputButtonText(
+	int32 NodeIndex,
+	int32 ExternalInputIndex) const
+{
+	const FUOUDevelopmentPuzzleCheatGraphNode* Node = FindNode(NodeIndex);
+	if (Node == nullptr || !Node->ExternalInputs.IsValidIndex(ExternalInputIndex))
+	{
+		return FText::FromString(TEXT("[오류] 유효하지 않은 외부 입력"));
+	}
+
+	const FUOUDevelopmentPuzzleCheatExternalInput& ExternalInput =
+		Node->ExternalInputs[ExternalInputIndex];
+	const UUOUDevelopmentPuzzleCheatSubsystem* Subsystem = PuzzleCheatSubsystem.Get();
+	const bool bSatisfied = Subsystem != nullptr
+		&& Subsystem->IsExternalInputSatisfied(NodeIndex, ExternalInputIndex);
+	const FString InputName = ExternalInput.DisplayName.IsEmpty()
+		? GetNameSafe(ExternalInput.InputActor.Get())
+		: ExternalInput.DisplayName.ToString();
+	return FText::FromString(FString::Printf(
+		TEXT("[%s] %s"),
+		bSatisfied ? TEXT("완료") : TEXT("해결"),
+		*InputName));
+}
+
+FSlateColor SUOUDevelopmentPuzzleGraphView::GetExternalInputButtonColor(
+	int32 NodeIndex,
+	int32 ExternalInputIndex) const
+{
+	const UUOUDevelopmentPuzzleCheatSubsystem* Subsystem = PuzzleCheatSubsystem.Get();
+	const bool bSatisfied = Subsystem != nullptr
+		&& Subsystem->IsExternalInputSatisfied(NodeIndex, ExternalInputIndex);
+	return FSlateColor(bSatisfied
+		? FLinearColor(0.12f, 0.55f, 0.20f, 1.0f)
+		: FLinearColor(0.16f, 0.32f, 0.52f, 1.0f));
+}
+
+bool SUOUDevelopmentPuzzleGraphView::IsExternalInputActionEnabled(
+	int32 NodeIndex,
+	int32 ExternalInputIndex) const
+{
+	const UUOUDevelopmentPuzzleCheatSubsystem* Subsystem = PuzzleCheatSubsystem.Get();
+	const FUOUDevelopmentPuzzleCheatGraphNode* Node = FindNode(NodeIndex);
+	if (Subsystem == nullptr
+		|| Subsystem->IsGraphExecutionActive()
+		|| Node == nullptr
+		|| !Node->ExternalInputs.IsValidIndex(ExternalInputIndex))
+	{
+		return false;
+	}
+
+	const FUOUDevelopmentPuzzleCheatExternalInput& ExternalInput =
+		Node->ExternalInputs[ExternalInputIndex];
+	return IsValid(ExternalInput.InputActor.Get())
+		&& !ExternalInput.ConditionSources.IsEmpty()
+		&& !Subsystem->IsExternalInputSatisfied(NodeIndex, ExternalInputIndex);
 }
 
 bool SUOUDevelopmentPuzzleGraphView::IsNodeActionEnabled() const

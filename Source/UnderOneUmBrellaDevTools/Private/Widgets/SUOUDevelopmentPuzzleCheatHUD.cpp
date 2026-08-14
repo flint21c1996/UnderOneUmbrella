@@ -186,6 +186,9 @@ void SUOUDevelopmentPuzzleCheatHUD::Construct(const FArguments& InArgs)
 												SAssignNew(PuzzleGraphView, SUOUDevelopmentPuzzleGraphView)
 												.PuzzleCheatSubsystem(PuzzleCheatSubsystem)
 												.OnNodeClicked(this, &SUOUDevelopmentPuzzleCheatHUD::HandleGraphNodeClicked)
+												.OnExternalInputClicked(
+													this,
+													&SUOUDevelopmentPuzzleCheatHUD::HandleExternalInputClicked)
 											]
 										]
 									]
@@ -754,6 +757,16 @@ void SUOUDevelopmentPuzzleCheatHUD::HandleGraphNodeClicked(int32 TargetNodeIndex
 	if (UUOUDevelopmentPuzzleCheatSubsystem* Subsystem = PuzzleCheatSubsystem.Get())
 	{
 		Subsystem->AdvanceThroughGraphNode(TargetNodeIndex);
+	}
+}
+
+void SUOUDevelopmentPuzzleCheatHUD::HandleExternalInputClicked(
+	int32 NodeIndex,
+	int32 ExternalInputIndex)
+{
+	if (UUOUDevelopmentPuzzleCheatSubsystem* Subsystem = PuzzleCheatSubsystem.Get())
+	{
+		Subsystem->ResolveExternalInput(NodeIndex, ExternalInputIndex);
 	}
 }
 

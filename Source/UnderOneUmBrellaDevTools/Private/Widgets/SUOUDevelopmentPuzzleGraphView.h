@@ -10,6 +10,7 @@ class SCanvas;
 class UUOUDevelopmentPuzzleCheatSubsystem;
 
 DECLARE_DELEGATE_OneParam(FOnUOUPuzzleGraphNodeClicked, int32);
+DECLARE_DELEGATE_TwoParams(FOnUOUPuzzleExternalInputClicked, int32, int32);
 
 // ConditionGroup 노드와 실제 Result 연결을 열 기반 그래프로 표시하는 개발 전용 Slate 위젯입니다.
 class SUOUDevelopmentPuzzleGraphView final : public SCompoundWidget
@@ -20,6 +21,7 @@ public:
 	}
 		SLATE_ARGUMENT(TWeakObjectPtr<UUOUDevelopmentPuzzleCheatSubsystem>, PuzzleCheatSubsystem)
 		SLATE_EVENT(FOnUOUPuzzleGraphNodeClicked, OnNodeClicked)
+		SLATE_EVENT(FOnUOUPuzzleExternalInputClicked, OnExternalInputClicked)
 	SLATE_END_ARGS()
 
 	void Construct(const FArguments& InArgs);
@@ -40,9 +42,13 @@ public:
 private:
 	void RebuildLayout();
 	FReply HandleNodeClicked(int32 NodeIndex);
+	FReply HandleExternalInputClicked(int32 NodeIndex, int32 ExternalInputIndex);
 	FText BuildNodeDetailText(int32 NodeIndex) const;
 	FText GetNodeTitleText(int32 NodeIndex) const;
 	FSlateColor GetNodeTitleColor(int32 NodeIndex) const;
+	FText GetExternalInputButtonText(int32 NodeIndex, int32 ExternalInputIndex) const;
+	FSlateColor GetExternalInputButtonColor(int32 NodeIndex, int32 ExternalInputIndex) const;
+	bool IsExternalInputActionEnabled(int32 NodeIndex, int32 ExternalInputIndex) const;
 	bool IsNodeActionEnabled() const;
 	const FUOUDevelopmentPuzzleCheatGraphNode* FindNode(int32 NodeIndex) const;
 
@@ -51,6 +57,9 @@ private:
 
 	// 노드 카드 클릭 시 실행 책임을 가진 상위 HUD에 노드 인덱스를 전달합니다.
 	FOnUOUPuzzleGraphNodeClicked OnNodeClicked;
+
+	// 외부 입력 버튼 클릭을 실제 실행 책임을 가진 상위 HUD에 전달합니다.
+	FOnUOUPuzzleExternalInputClicked OnExternalInputClicked;
 
 	// 마지막 RefreshGraph 시점의 표시용 노드 스냅샷입니다.
 	TArray<FUOUDevelopmentPuzzleCheatGraphNode> GraphNodes;
