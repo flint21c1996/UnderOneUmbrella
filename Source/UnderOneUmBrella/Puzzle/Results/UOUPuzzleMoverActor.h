@@ -4,7 +4,6 @@
 
 #include "CoreMinimal.h"
 #include "Debug/UOUDebugProvider.h"
-#include "Debug/UOUPuzzleDebugInfoProvider.h"
 #include "GameFramework/Actor.h"
 #include "Puzzle/Core/UOUPuzzleResultReceiver.h"
 #include "UOUPuzzleMoverActor.generated.h"
@@ -17,7 +16,6 @@ UCLASS(meta=(DisplayName="UOU Puzzle Mover Actor"))
 class AUOUPuzzleMoverActor
 	: public AActor
 	, public IUOUPuzzleResultReceiver
-	, public IUOUPuzzleDebugInfoProvider
 	, public IUOUDebugProvider
 {
 	GENERATED_BODY()
@@ -98,7 +96,6 @@ public:
 
 	// 인터페이스로 받은 결과 액션을 내부 이동 상태 함수로 연결합니다.
 	virtual void ApplyPuzzleResult_Implementation(EOUUPuzzleResultAction Action) override;
-	virtual TArray<FString> GetPuzzleDebugInfo_Implementation() const override;
 	virtual EUOUDebugCategory GetDebugCategory_Implementation() const override;
 	virtual FText GetDebugSummaryText_Implementation() const override;
 

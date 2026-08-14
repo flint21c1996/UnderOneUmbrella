@@ -389,13 +389,13 @@ void AUOUFlyingSwarmEffectActor::ApplyPuzzleResult_Implementation(EOUUPuzzleResu
 	}
 }
 
-TArray<FString> AUOUFlyingSwarmEffectActor::GetPuzzleDebugInfo_Implementation() const
+FText AUOUFlyingSwarmEffectActor::GetDebugSummaryText_Implementation() const
 {
 	const FTransform SourceTransform = GetCurrentStartTransform();
 	const FTransform TargetTransform = GetCurrentTargetTransform();
 	const bool bHasSystem = SwarmEffect != nullptr && SwarmEffect->GetAsset() != nullptr;
 
-	return {
+	const TArray<FString> DebugLines = {
 		FString::Printf(TEXT("Paper Plane Swarm: %s"), bIsEffectActive ? TEXT("Active") : TEXT("Inactive")),
 		FString::Printf(TEXT("Render Mode: %s"), RenderMode == EUOUPaperPlaneSwarmRenderMode::CodeDrivenMesh ? TEXT("Code Driven Mesh") : TEXT("Niagara")),
 		FString::Printf(TEXT("Niagara System: %s"), bHasSystem ? TEXT("Yes") : TEXT("No")),
@@ -405,22 +405,13 @@ TArray<FString> AUOUFlyingSwarmEffectActor::GetPuzzleDebugInfo_Implementation() 
 		FString::Printf(TEXT("Target: %.0f %.0f %.0f"), TargetTransform.GetLocation().X, TargetTransform.GetLocation().Y, TargetTransform.GetLocation().Z),
 		FString::Printf(TEXT("Follow Target: %s"), bFollowTarget ? TEXT("Yes") : TEXT("No"))
 	};
+
+	return FText::FromString(FString::Join(DebugLines, LINE_TERMINATOR));
 }
 
 EUOUDebugCategory AUOUFlyingSwarmEffectActor::GetDebugCategory_Implementation() const
 {
 	return EUOUDebugCategory::Puzzle;
-}
-
-FText AUOUFlyingSwarmEffectActor::GetDebugSummaryText_Implementation() const
-{
-	const TArray<FString> DebugLines =
-		IUOUPuzzleDebugInfoProvider::Execute_GetPuzzleDebugInfo(
-			const_cast<AUOUFlyingSwarmEffectActor*>(this));
-
-	return DebugLines.IsEmpty()
-		? FText::GetEmpty()
-		: FText::FromString(FString::Join(DebugLines, LINE_TERMINATOR));
 }
 
 #if WITH_EDITOR

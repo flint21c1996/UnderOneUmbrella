@@ -96,7 +96,7 @@ void AUOUPuzzleMoverActor::ApplyPuzzleResult_Implementation(EOUUPuzzleResultActi
 	}
 }
 
-TArray<FString> AUOUPuzzleMoverActor::GetPuzzleDebugInfo_Implementation() const
+FText AUOUPuzzleMoverActor::GetDebugSummaryText_Implementation() const
 {
 	const FVector CurrentLocation = MovingTarget != nullptr ? MovingTarget->GetComponentLocation() : FVector::ZeroVector;
 	const USceneComponent* TargetPoint = bActivated ? ActivePoint.Get() : InactivePoint.Get();
@@ -105,27 +105,18 @@ TArray<FString> AUOUPuzzleMoverActor::GetPuzzleDebugInfo_Implementation() const
 		? FVector::Distance(CurrentLocation, TargetLocation)
 		: 0.0f;
 
-	return {
+	const TArray<FString> DebugLines = {
 		FString::Printf(TEXT("Mover: %s"), bActivated ? TEXT("Active") : TEXT("Inactive")),
 		FString::Printf(TEXT("Paused: %s"), bPaused ? TEXT("Yes") : TEXT("No")),
 		FString::Printf(TEXT("Distance To Target: %.1f"), DistanceToTarget)
 	};
+
+	return FText::FromString(FString::Join(DebugLines, LINE_TERMINATOR));
 }
 
 EUOUDebugCategory AUOUPuzzleMoverActor::GetDebugCategory_Implementation() const
 {
 	return EUOUDebugCategory::Puzzle;
-}
-
-FText AUOUPuzzleMoverActor::GetDebugSummaryText_Implementation() const
-{
-	const TArray<FString> DebugLines =
-		IUOUPuzzleDebugInfoProvider::Execute_GetPuzzleDebugInfo(
-			const_cast<AUOUPuzzleMoverActor*>(this));
-
-	return DebugLines.IsEmpty()
-		? FText::GetEmpty()
-		: FText::FromString(FString::Join(DebugLines, LINE_TERMINATOR));
 }
 
 void AUOUPuzzleMoverActor::MoveTarget(float DeltaSeconds)

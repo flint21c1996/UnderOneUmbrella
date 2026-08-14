@@ -5,7 +5,6 @@
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
 #include "Debug/UOUDebugProvider.h"
-#include "Debug/UOUPuzzleDebugInfoProvider.h"
 #include "Engine/EngineTypes.h"
 #include "World/Light/UOULightExposureTypes.h"
 #include "World/Light/UOULightReceivableInterface.h"
@@ -22,7 +21,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnUOULightTemperatureChangedSignat
 
 // 게임플레이용 빛 노출을 받아 온도 값으로 변환하는 컴포넌트입니다.
 UCLASS(ClassGroup=(Light), meta=(BlueprintSpawnableComponent, DisplayName="UOU Light Exposure Receiver", ToolTip = "게임플레이용 빛 노출을 받아 온도를 갱신합니다."))
-class UNDERONEUMBRELLA_API UUOULightExposureReceiverComponent : public UActorComponent, public IUOULightReceivableInterface, public IUOUPuzzleDebugInfoProvider, public IUOUDebugProvider
+class UNDERONEUMBRELLA_API UUOULightExposureReceiverComponent : public UActorComponent, public IUOULightReceivableInterface, public IUOUDebugProvider
 {
 	GENERATED_BODY()
 
@@ -31,8 +30,8 @@ public:
 
 	virtual void BeginPlay() override;
 	virtual void TickComponent(float DeltaTime, enum ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
-	virtual TArray<FString> GetPuzzleDebugInfo_Implementation() const override;
 	virtual EUOUDebugCategory GetDebugCategory_Implementation() const override;
+	virtual FText GetDebugSummaryText_Implementation() const override;
 
 #if UOU_WITH_DEVELOPMENT_TOOLS
 	virtual bool ShouldDrawDevelopmentDebugLabel() const override { return false; }

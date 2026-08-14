@@ -5,7 +5,6 @@
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
 #include "Debug/UOUDebugProvider.h"
-#include "Debug/UOUPuzzleDebugInfoProvider.h"
 #include "Engine/EngineTypes.h"
 #include "World/Light/UOULightExposureTypes.h"
 #include "World/Light/UOULightReflectionPathTypes.h"
@@ -39,7 +38,6 @@ enum class EUOULightBeamShape : uint8
 UCLASS(ClassGroup=(Light), meta=(BlueprintSpawnableComponent, DisplayName="UOU Light Exposure Source", ToolTip = "선택한 광원 형상 안의 수신체에 게임플레이용 빛 노출을 전달합니다."))
 class UNDERONEUMBRELLA_API UUOULightExposureSourceComponent
 	: public UActorComponent
-	, public IUOUPuzzleDebugInfoProvider
 	, public IUOUDebugProvider
 {
 	GENERATED_BODY()
@@ -49,8 +47,8 @@ public:
 
 	virtual void BeginPlay() override;
 	virtual void TickComponent(float DeltaTime, enum ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
-	virtual TArray<FString> GetPuzzleDebugInfo_Implementation() const override;
 	virtual EUOUDebugCategory GetDebugCategory_Implementation() const override;
+	virtual FText GetDebugSummaryText_Implementation() const override;
 
 #if UOU_WITH_DEVELOPMENT_TOOLS
 	virtual bool ShouldDrawDevelopmentDebugLabel() const override { return false; }

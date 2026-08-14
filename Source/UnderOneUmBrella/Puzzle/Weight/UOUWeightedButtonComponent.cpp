@@ -102,7 +102,10 @@ FText UUOUWeightedButtonComponent::GetDebugDisplayName_Implementation() const
 
 FText UUOUWeightedButtonComponent::GetDebugSummaryText_Implementation() const
 {
-	return FText::GetEmpty();
+	const TArray<FString> DebugLines = GetPuzzleDebugInfo_Implementation();
+	return DebugLines.IsEmpty()
+		? FText::GetEmpty()
+		: FText::FromString(FString::Join(DebugLines, LINE_TERMINATOR));
 }
 
 FVector UUOUWeightedButtonComponent::GetDebugWorldLocation_Implementation() const

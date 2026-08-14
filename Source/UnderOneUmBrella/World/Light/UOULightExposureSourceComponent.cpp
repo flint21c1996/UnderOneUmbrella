@@ -202,9 +202,9 @@ void UUOULightExposureSourceComponent::TickComponent(
 	PendingDeltaTime = 0.0f;
 }
 
-TArray<FString> UUOULightExposureSourceComponent::GetPuzzleDebugInfo_Implementation() const
+FText UUOULightExposureSourceComponent::GetDebugSummaryText_Implementation() const
 {
-	return {
+	const TArray<FString> DebugLines = {
 		FString::Printf(TEXT("Light Source: %s"), bEmitLight ? TEXT("On") : TEXT("Off")),
 		FString::Printf(
 			TEXT("Beam Shape: %s"),
@@ -219,6 +219,8 @@ TArray<FString> UUOULightExposureSourceComponent::GetPuzzleDebugInfo_Implementat
 		FString::Printf(TEXT("Reflection Path: %s"), *LastReflectionPath),
 		FString::Printf(TEXT("Last Lit: %s"), *LastLitTargetName)
 	};
+
+	return FText::FromString(FString::Join(DebugLines, LINE_TERMINATOR));
 }
 
 EUOUDebugCategory UUOULightExposureSourceComponent::GetDebugCategory_Implementation() const

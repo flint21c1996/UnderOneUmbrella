@@ -5,7 +5,6 @@
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
 #include "Debug/UOUDebugProvider.h"
-#include "Debug/UOUPuzzleDebugInfoProvider.h"
 #include "Engine/EngineTypes.h"
 #include "UOURotatableMirrorComponent.generated.h"
 
@@ -35,7 +34,6 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
 UCLASS(ClassGroup=(Light), meta=(BlueprintSpawnableComponent, DisplayName="UOU Rotatable Mirror", ToolTip = "플레이어가 Push Volume 안에서 거울을 밀면 지정한 축을 중심으로 회전시킵니다."))
 class UNDERONEUMBRELLA_API UUOURotatableMirrorComponent
 	: public UActorComponent
-	, public IUOUPuzzleDebugInfoProvider
 	, public IUOUDebugProvider
 {
 	GENERATED_BODY()
@@ -49,8 +47,8 @@ public:
 		float DeltaTime,
 		ELevelTick TickType,
 		FActorComponentTickFunction* ThisTickFunction) override;
-	virtual TArray<FString> GetPuzzleDebugInfo_Implementation() const override;
 	virtual EUOUDebugCategory GetDebugCategory_Implementation() const override;
+	virtual FText GetDebugSummaryText_Implementation() const override;
 
 #if UOU_WITH_DEVELOPMENT_TOOLS
 	virtual bool ShouldDrawDevelopmentDebugLabel() const override { return false; }

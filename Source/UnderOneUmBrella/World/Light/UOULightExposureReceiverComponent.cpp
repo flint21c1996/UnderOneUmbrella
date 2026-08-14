@@ -46,13 +46,15 @@ void UUOULightExposureReceiverComponent::TickComponent(
 	RecoverTemperature(DeltaTime);
 }
 
-TArray<FString> UUOULightExposureReceiverComponent::GetPuzzleDebugInfo_Implementation() const
+FText UUOULightExposureReceiverComponent::GetDebugSummaryText_Implementation() const
 {
-	return {
+	const TArray<FString> DebugLines = {
 		FString::Printf(TEXT("Light Receiver: %s"), bIsReceivingLight ? TEXT("Lit") : TEXT("Not Lit")),
 		FString::Printf(TEXT("Temp: %.1f C"), CurrentTemperature),
 		FString::Printf(TEXT("Exposure: %.2f from %s"), LastExposureIntensity, *LastExposureSourceName)
 	};
+
+	return FText::FromString(FString::Join(DebugLines, LINE_TERMINATOR));
 }
 
 EUOUDebugCategory UUOULightExposureReceiverComponent::GetDebugCategory_Implementation() const

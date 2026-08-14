@@ -112,9 +112,9 @@ void AUOUWindEmitterActor::ApplyPuzzleResult_Implementation(EOUUPuzzleResultActi
 	}
 }
 
-TArray<FString> AUOUWindEmitterActor::GetPuzzleDebugInfo_Implementation() const
+FText AUOUWindEmitterActor::GetDebugSummaryText_Implementation() const
 {
-	return {
+	const TArray<FString> DebugLines = {
 		FString::Printf(TEXT("Wind Enabled: %s"), bWindEnabled ? TEXT("true") : TEXT("false")),
 		FString::Printf(
 			TEXT("Blowing: %s / Pulse: %s / Remaining: %.2fs"),
@@ -137,22 +137,13 @@ TArray<FString> AUOUWindEmitterActor::GetPuzzleDebugInfo_Implementation() const
 			InitialWindVelocityBoost,
 			FallingMomentumConversion)
 	};
+
+	return FText::FromString(FString::Join(DebugLines, LINE_TERMINATOR));
 }
 
 EUOUDebugCategory AUOUWindEmitterActor::GetDebugCategory_Implementation() const
 {
 	return EUOUDebugCategory::Puzzle;
-}
-
-FText AUOUWindEmitterActor::GetDebugSummaryText_Implementation() const
-{
-	const TArray<FString> DebugLines =
-		IUOUPuzzleDebugInfoProvider::Execute_GetPuzzleDebugInfo(
-			const_cast<AUOUWindEmitterActor*>(this));
-
-	return DebugLines.IsEmpty()
-		? FText::GetEmpty()
-		: FText::FromString(FString::Join(DebugLines, LINE_TERMINATOR));
 }
 
 void AUOUWindEmitterActor::SetWindEnabled(bool bNewEnabled)

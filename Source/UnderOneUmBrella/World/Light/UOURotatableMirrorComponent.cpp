@@ -69,14 +69,16 @@ void UUOURotatableMirrorComponent::TickComponent(
 	}
 }
 
-TArray<FString> UUOURotatableMirrorComponent::GetPuzzleDebugInfo_Implementation() const
+FText UUOURotatableMirrorComponent::GetDebugSummaryText_Implementation() const
 {
-	return {
+	const TArray<FString> DebugLines = {
 		FString::Printf(TEXT("Rotatable Mirror: %s"), bRotationEnabled ? TEXT("Enabled") : TEXT("Disabled")),
 		FString::Printf(TEXT("Angle: %.1f / %.1f ~ %.1f"), CurrentAngle, MinimumAngle, MaximumAngle),
 		FString::Printf(TEXT("Rotating Component: %s"), *GetNameSafe(RotatingComponent.Get())),
 		FString::Printf(TEXT("Push Volume: %s"), *GetNameSafe(PushVolume.Get()))
 	};
+
+	return FText::FromString(FString::Join(DebugLines, LINE_TERMINATOR));
 }
 
 EUOUDebugCategory UUOURotatableMirrorComponent::GetDebugCategory_Implementation() const
