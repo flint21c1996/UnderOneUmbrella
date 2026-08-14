@@ -83,6 +83,26 @@ void UUOUWeightedButtonComponent::GetPuzzleDebugInputActors_Implementation(TArra
 		Sensor->GetOverlappingActors(OutInputActors);
 	}
 }
+
+#if UOU_WITH_PUZZLE_CHEATS
+bool UUOUWeightedButtonComponent::TryResolveInputForCheat(AActor* InputActor)
+{
+	if (!IsValid(InputActor) || InputActor != GetOwner())
+	{
+		return false;
+	}
+
+	bCheatForcePressed = true;
+	bInsufficientWeightFeedbackActive = false;
+	if (SetSatisfiedState(true, true))
+	{
+		PlayButtonAudioCue(PressedAudioCueId, PressedAudioEventId);
+	}
+
+	return IsSatisfied();
+}
+#endif
+
 bool UUOUWeightedButtonComponent::IsPressed() const
 {
 	return IsSatisfied();
@@ -228,6 +248,15 @@ void UUOUWeightedButtonComponent::ResolveReferences()
 void UUOUWeightedButtonComponent::RefreshPressedState(bool bPlayFeedbackAudio)
 {
 	CurrentWeight = Sensor != nullptr ? Sensor->CurrentWeight : 0.0f;
+
+#if UOU_WITH_PUZZLE_CHEATS
+	if (bCheatForcePressed)
+	{
+		bInsufficientWeightFeedbackActive = false;
+		SetSatisfiedState(true, true);
+		return;
+	}
+#endif
 
 	if (!bIsSatisfied && CurrentWeight >= PressWeight)
 	{

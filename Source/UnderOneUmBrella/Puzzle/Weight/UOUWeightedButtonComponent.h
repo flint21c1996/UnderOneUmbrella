@@ -33,6 +33,11 @@ public:
 	virtual TArray<FString> GetPuzzleDebugInfo_Implementation() const override;
 	virtual void GetPuzzleDebugInputActors_Implementation(TArray<AActor*>& OutInputActors) const override;
 
+#if UOU_WITH_PUZZLE_CHEATS
+	// 치트 HUD에서 이 버튼을 외부 입력으로 실행하면 실제 무게와 무관하게 눌림 상태를 유지합니다.
+	virtual bool TryResolveInputForCheat(AActor* InputActor) override;
+#endif
+
 	// 같은 액터 안에서 센서 컴포넌트를 자동으로 찾을지 결정합니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Puzzle|Weight")
 	bool bAutoFindSensor = true;
@@ -142,6 +147,11 @@ protected:
 	FVector GetButtonAudioLocation() const;
 
 	bool bInsufficientWeightFeedbackActive = false;
+
+#if UOU_WITH_PUZZLE_CHEATS
+	// 치트 HUD가 실행한 뒤 물리 무게 판정이 눌림 상태를 다시 해제하지 못하도록 유지하는 런타임 값입니다.
+	bool bCheatForcePressed = false;
+#endif
 
 	// 버튼 비주얼을 현재 상태에 맞는 기준점 쪽으로 이동합니다.
 	void MoveButtonVisual(float DeltaTime);
