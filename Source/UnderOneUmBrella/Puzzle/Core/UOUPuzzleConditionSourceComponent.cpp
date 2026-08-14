@@ -20,6 +20,7 @@ bool UUOUPuzzleConditionSourceComponent::TryResolveInputForCheat(AActor* InputAc
 		return false;
 	}
 
+	bCheatForceSatisfied = true;
 	SetSatisfiedState(true, true);
 	return IsSatisfied();
 }
@@ -40,6 +41,13 @@ void UUOUPuzzleConditionSourceComponent::GetPuzzleDebugInputActors_Implementatio
 
 bool UUOUPuzzleConditionSourceComponent::SetSatisfiedState(bool bNewSatisfied, bool bBroadcastChange)
 {
+#if UOU_WITH_PUZZLE_CHEATS
+	if (bCheatForceSatisfied && !bNewSatisfied)
+	{
+		return false;
+	}
+#endif
+
 	if (bIsSatisfied == bNewSatisfied)
 	{
 		return false;

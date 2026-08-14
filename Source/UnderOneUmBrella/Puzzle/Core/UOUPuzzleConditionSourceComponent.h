@@ -45,6 +45,11 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Puzzle|Condition")
 	bool bIsSatisfied = false;
 
+#if UOU_WITH_PUZZLE_CHEATS
+	// 치트 HUD가 이 조건을 만족시킨 뒤 정상 판정 로직이 다시 해제하지 못하도록 유지하는 런타임 값입니다.
+	bool bCheatForceSatisfied = false;
+#endif
+
 	// 만족 상태를 바꾸고 필요하면 변화 이벤트를 방송합니다.
 	bool SetSatisfiedState(bool bNewSatisfied, bool bBroadcastChange = true);
 };
