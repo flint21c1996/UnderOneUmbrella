@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Debug/UOUDebugProvider.h"
 #include "Engine/EngineTypes.h"
 #include "Puzzle/Core/UOUPuzzleConditionSourceComponent.h"
 #include "Puzzle/Core/UOUPuzzleWeightSource.h"
@@ -15,7 +16,10 @@ class UUOUWeightSensorComponent;
 // 센서가 읽은 무게를 바탕으로 버튼 눌림 상태를 계산하는 버튼 핵심 컴포넌트입니다.
 // 조건 소스와 무게 소스 역할을 동시에 맡아 퍼즐 그룹과 저울에 함께 연결할 수 있습니다.
 UCLASS(ClassGroup=(Puzzle), meta=(BlueprintSpawnableComponent))
-class UNDERONEUMBRELLA_API UUOUWeightedButtonComponent : public UUOUPuzzleConditionSourceComponent, public IUOUPuzzleWeightSource
+class UNDERONEUMBRELLA_API UUOUWeightedButtonComponent
+	: public UUOUPuzzleConditionSourceComponent
+	, public IUOUPuzzleWeightSource
+	, public IUOUDebugProvider
 {
 	GENERATED_BODY()
 
@@ -32,10 +36,21 @@ public:
 	virtual float GetPuzzleWeight() const override;
 	virtual TArray<FString> GetPuzzleDebugInfo_Implementation() const override;
 	virtual void GetPuzzleDebugInputActors_Implementation(TArray<AActor*>& OutInputActors) const override;
+	virtual EUOUDebugCategory GetDebugCategory_Implementation() const override;
+	virtual bool IsDebugProviderEnabled_Implementation() const override;
+	virtual FText GetDebugDisplayName_Implementation() const override;
+	virtual FText GetDebugSummaryText_Implementation() const override;
+	virtual FVector GetDebugWorldLocation_Implementation() const override;
+	virtual void GetDebugConnections_Implementation(TArray<FUOUDebugConnection>& OutConnections) const override;
 
 #if UOU_WITH_PUZZLE_CHEATS
 	// 치트 HUD에서 이 버튼을 외부 입력으로 실행하면 실제 무게와 무관하게 눌림 상태를 유지합니다.
 	virtual bool TryResolveInputForCheat(AActor* InputActor) override;
+#endif
+
+#if UOU_WITH_DEVELOPMENT_TOOLS
+	virtual bool ShouldDrawDevelopmentDebugLabel() const override { return false; }
+	virtual void GatherDevelopmentDebugDraw(IUOUDevelopmentDebugDrawContext& Context) const override;
 #endif
 
 	// 같은 액터 안에서 센서 컴포넌트를 자동으로 찾을지 결정합니다.
