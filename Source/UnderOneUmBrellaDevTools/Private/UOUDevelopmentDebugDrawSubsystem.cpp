@@ -602,7 +602,6 @@ void UUOUDevelopmentDebugDrawSubsystem::Tick(float DeltaTime)
 	}
 
 	DrawWaterBasinDebug();
-	DrawRotatableMirrorDebug();
 	DrawUmbrellaLightReflectorDebug();
 	DrawLightExposureSourceDebug();
 	DrawSelectedPuzzleInfo();
@@ -1986,108 +1985,6 @@ void UUOUDevelopmentDebugDrawSubsystem::DrawWaterBasinDebug() const
 				0.0f,
 				true,
 				0.85f);
-		}
-	}
-}
-
-void UUOUDevelopmentDebugDrawSubsystem::DrawRotatableMirrorDebug() const
-{
-	UWorld* World = GetWorld();
-	const UUOUDevelopmentDebugControlSubsystem* ControlSubsystem = DebugControlSubsystem.Get();
-	const TArray<AActor*> SelectedActors = ControlSubsystem != nullptr
-		? ControlSubsystem->GetSelectedDebugActors()
-		: TArray<AActor*>();
-	if (World == nullptr || SelectedActors.IsEmpty())
-	{
-		return;
-	}
-
-	for (AActor* SelectedActor : SelectedActors)
-	{
-		if (!IsValid(SelectedActor))
-		{
-			continue;
-		}
-
-		TArray<UUOURotatableMirrorComponent*> MirrorComponents;
-		SelectedActor->GetComponents<UUOURotatableMirrorComponent>(MirrorComponents);
-		for (const UUOURotatableMirrorComponent* MirrorComponent : MirrorComponents)
-		{
-			if (!IsValid(MirrorComponent))
-			{
-				continue;
-			}
-
-			const USceneComponent* RotatingComponent = MirrorComponent->GetRotatingComponent();
-			if (!IsValid(RotatingComponent))
-			{
-				continue;
-			}
-
-			const FTransform& RotatingTransform = RotatingComponent->GetComponentTransform();
-			const FVector PivotLocation =
-				RotatingTransform.TransformPosition(MirrorComponent->LocalPivotOffset);
-			FVector RotationAxisWorld = RotatingTransform
-				.TransformVectorNoScale(MirrorComponent->LocalRotationAxis)
-				.GetSafeNormal();
-			if (RotationAxisWorld.IsNearlyZero())
-			{
-				RotationAxisWorld = FVector::UpVector;
-			}
-
-			DrawDebugLine(
-				World,
-				PivotLocation - RotationAxisWorld * 75.0f,
-				PivotLocation + RotationAxisWorld * 75.0f,
-				FColor::Magenta,
-				false,
-				0.0f,
-				0,
-				3.0f);
-			DrawDebugString(
-				World,
-				PivotLocation + RotationAxisWorld * 85.0f,
-				FString::Printf(TEXT("Mirror %.1f deg"), MirrorComponent->CurrentAngle),
-				nullptr,
-				FColor::Magenta,
-				0.0f,
-				false);
-
-			const UPrimitiveComponent* PushVolume = MirrorComponent->GetPushVolume();
-			if (!IsValid(PushVolume))
-			{
-				continue;
-			}
-
-			TArray<AActor*> OverlappingPushers;
-			PushVolume->GetOverlappingActors(OverlappingPushers, APawn::StaticClass());
-			for (const AActor* Pusher : OverlappingPushers)
-			{
-				if (!IsValid(Pusher))
-				{
-					continue;
-				}
-
-				DrawDebugLine(
-					World,
-					PivotLocation,
-					Pusher->GetActorLocation(),
-					FColor::Cyan,
-					false,
-					0.0f,
-					0,
-					1.5f);
-				DrawDebugDirectionalArrow(
-					World,
-					Pusher->GetActorLocation(),
-					Pusher->GetActorLocation() + Pusher->GetVelocity() * 0.15f,
-					20.0f,
-					FColor::Green,
-					false,
-					0.0f,
-					0,
-					1.5f);
-			}
 		}
 	}
 }

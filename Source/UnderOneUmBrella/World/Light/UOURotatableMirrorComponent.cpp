@@ -5,6 +5,7 @@
 #include "Animation/AnimMontage.h"
 #include "Components/PrimitiveComponent.h"
 #include "Components/SceneComponent.h"
+#include "Debug/UOUDevelopmentDebugDrawContext.h"
 #include "GameFramework/Actor.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/Pawn.h"
@@ -77,6 +78,71 @@ TArray<FString> UUOURotatableMirrorComponent::GetPuzzleDebugInfo_Implementation(
 		FString::Printf(TEXT("Push Volume: %s"), *GetNameSafe(PushVolume.Get()))
 	};
 }
+
+EUOUDebugCategory UUOURotatableMirrorComponent::GetDebugCategory_Implementation() const
+{
+	return EUOUDebugCategory::Puzzle;
+}
+
+#if UOU_WITH_DEVELOPMENT_TOOLS
+void UUOURotatableMirrorComponent::GatherDevelopmentDebugDraw(
+	IUOUDevelopmentDebugDrawContext& Context) const
+{
+	const USceneComponent* RotatingComponentPtr = GetRotatingComponent();
+	if (!IsValid(RotatingComponentPtr))
+	{
+		return;
+	}
+
+	const FTransform& RotatingTransform = RotatingComponentPtr->GetComponentTransform();
+	const FVector PivotLocation = RotatingTransform.TransformPosition(LocalPivotOffset);
+	FVector RotationAxisWorld = RotatingTransform
+		.TransformVectorNoScale(LocalRotationAxis)
+		.GetSafeNormal();
+	if (RotationAxisWorld.IsNearlyZero())
+	{
+		RotationAxisWorld = FVector::UpVector;
+	}
+
+	Context.DrawLine(
+		PivotLocation - RotationAxisWorld * 75.0f,
+		PivotLocation + RotationAxisWorld * 75.0f,
+		FColor::Magenta,
+		3.0f);
+	Context.DrawString(
+		PivotLocation + RotationAxisWorld * 85.0f,
+		FString::Printf(TEXT("Mirror %.1f deg"), CurrentAngle),
+		FColor::Magenta);
+
+	const UPrimitiveComponent* PushVolumePtr = GetPushVolume();
+	if (!IsValid(PushVolumePtr))
+	{
+		return;
+	}
+
+	TArray<AActor*> OverlappingPushers;
+	PushVolumePtr->GetOverlappingActors(OverlappingPushers, APawn::StaticClass());
+	for (const AActor* Pusher : OverlappingPushers)
+	{
+		if (!IsValid(Pusher))
+		{
+			continue;
+		}
+
+		Context.DrawLine(
+			PivotLocation,
+			Pusher->GetActorLocation(),
+			FColor::Cyan,
+			1.5f);
+		Context.DrawArrow(
+			Pusher->GetActorLocation(),
+			Pusher->GetActorLocation() + Pusher->GetVelocity() * 0.15f,
+			20.0f,
+			FColor::Green,
+			1.5f);
+	}
+}
+#endif
 
 #if WITH_EDITOR
 void UUOURotatableMirrorComponent::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent)

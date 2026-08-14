@@ -66,7 +66,6 @@ private:
 	void ResetVFXDebugState();
 	void TryAddPuzzleDebugProvider(UObject* ProviderObject);
 	void DrawWaterBasinDebug() const;
-	void DrawRotatableMirrorDebug() const;
 	void DrawUmbrellaLightReflectorDebug() const;
 	void DrawLightExposureSourceDebug() const;
 	void DrawSelectedPuzzleInfo() const;

@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "Debug/UOUDebugProvider.h"
 #include "Debug/UOUPuzzleDebugInfoProvider.h"
 #include "Engine/EngineTypes.h"
 #include "UOURotatableMirrorComponent.generated.h"
@@ -35,6 +36,7 @@ UCLASS(ClassGroup=(Light), meta=(BlueprintSpawnableComponent, DisplayName="UOU R
 class UNDERONEUMBRELLA_API UUOURotatableMirrorComponent
 	: public UActorComponent
 	, public IUOUPuzzleDebugInfoProvider
+	, public IUOUDebugProvider
 {
 	GENERATED_BODY()
 
@@ -48,6 +50,12 @@ public:
 		ELevelTick TickType,
 		FActorComponentTickFunction* ThisTickFunction) override;
 	virtual TArray<FString> GetPuzzleDebugInfo_Implementation() const override;
+	virtual EUOUDebugCategory GetDebugCategory_Implementation() const override;
+
+#if UOU_WITH_DEVELOPMENT_TOOLS
+	virtual bool ShouldDrawDevelopmentDebugLabel() const override { return false; }
+	virtual void GatherDevelopmentDebugDraw(IUOUDevelopmentDebugDrawContext& Context) const override;
+#endif
 
 #if WITH_EDITOR
 	virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
