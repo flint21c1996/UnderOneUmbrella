@@ -135,9 +135,11 @@ UUOUDevelopmentPuzzleCheatSubsystem::GetPuzzleGraphEdges() const
 
 void UUOUDevelopmentPuzzleCheatSubsystem::CollectConditionDependencyActors(
 	AUOUPuzzleConditionGroupActor& PuzzleGroup,
-	TArray<AActor*>& OutDependencyActors) const
+	TArray<AActor*>& OutDependencyActors,
+	TMap<AActor*, TArray<UUOUPuzzleConditionSourceComponent*>>& OutConditionSourcesByActor) const
 {
 	OutDependencyActors.Reset();
+	OutConditionSourcesByActor.Reset();
 
 	for (AActor* ConditionActor : PuzzleGroup.ConditionActors)
 	{
@@ -158,13 +160,14 @@ void UUOUDevelopmentPuzzleCheatSubsystem::CollectConditionDependencyActors(
 		}
 	}
 
-	for (const UUOUPuzzleConditionSourceComponent* ResolvedConditionSource : PuzzleGroup.ResolvedConditionSources)
+	for (UUOUPuzzleConditionSourceComponent* ResolvedConditionSource : PuzzleGroup.ResolvedConditionSources)
 	{
 		if (ResolvedConditionSource != nullptr)
 		{
 			if (AActor* ConditionOwner = ResolvedConditionSource->GetOwner(); IsValid(ConditionOwner))
 			{
 				OutDependencyActors.AddUnique(ConditionOwner);
+				OutConditionSourcesByActor.FindOrAdd(ConditionOwner).AddUnique(ResolvedConditionSource);
 			}
 		}
 	}
@@ -174,6 +177,8 @@ void UUOUDevelopmentPuzzleCheatSubsystem::BuildPuzzleGraphConnections()
 {
 	TMap<AActor*, TArray<int32>> ConsumerNodeIndicesByActor;
 	TMap<AUOUPuzzleConditionGroupActor*, int32> NodeIndexByGroup;
+	TArray<TMap<AActor*, TArray<UUOUPuzzleConditionSourceComponent*>>> ConditionSourcesByInputActorByNode;
+	ConditionSourcesByInputActorByNode.SetNum(PuzzleGraphNodes.Num());
 
 	for (FUOUDevelopmentPuzzleCheatGraphNode& Node : PuzzleGraphNodes)
 	{
@@ -186,7 +191,12 @@ void UUOUDevelopmentPuzzleCheatSubsystem::BuildPuzzleGraphConnections()
 		NodeIndexByGroup.Add(PuzzleGroup, Node.NodeIndex);
 
 		TArray<AActor*> DependencyActors;
-		CollectConditionDependencyActors(*PuzzleGroup, DependencyActors);
+		TMap<AActor*, TArray<UUOUPuzzleConditionSourceComponent*>>& ConditionSourcesByInputActor =
+			ConditionSourcesByInputActorByNode[Node.NodeIndex];
+		CollectConditionDependencyActors(
+			*PuzzleGroup,
+			DependencyActors,
+			ConditionSourcesByInputActor);
 		for (AActor* DependencyActor : DependencyActors)
 		{
 			Node.InputActors.AddUnique(DependencyActor);
@@ -234,6 +244,52 @@ void UUOUDevelopmentPuzzleCheatSubsystem::BuildPuzzleGraphConnections()
 				for (const int32 TargetNodeIndex : *ConsumerNodeIndices)
 				{
 					AddPuzzleGraphEdge(SourceNode.NodeIndex, TargetNodeIndex, RelationActor);
+				}
+			}
+		}
+	}
+
+	for (FUOUDevelopmentPuzzleCheatGraphNode& Node : PuzzleGraphNodes)
+	{
+		TSet<AActor*> IncomingRelationActors;
+		for (const FUOUDevelopmentPuzzleCheatGraphEdge& Edge : PuzzleGraphEdges)
+		{
+			if (Edge.TargetNodeIndex == Node.NodeIndex && IsValid(Edge.RelationActor.Get()))
+			{
+				IncomingRelationActors.Add(Edge.RelationActor.Get());
+			}
+		}
+
+		Node.ExternalInputs.Reset();
+		for (AActor* InputActor : Node.InputActors)
+		{
+			if (!IsValid(InputActor) || IncomingRelationActors.Contains(InputActor))
+			{
+				continue;
+			}
+
+			FUOUDevelopmentPuzzleCheatExternalInput& ExternalInput =
+				Node.ExternalInputs.AddDefaulted_GetRef();
+			ExternalInput.InputActor = InputActor;
+			ExternalInput.DisplayName = UOUDevelopmentPuzzleCheatPrivate::ResolveDisplayName(*InputActor);
+
+			if (!ConditionSourcesByInputActorByNode.IsValidIndex(Node.NodeIndex))
+			{
+				continue;
+			}
+
+			const TMap<AActor*, TArray<UUOUPuzzleConditionSourceComponent*>>& ConditionSourcesByInputActor =
+				ConditionSourcesByInputActorByNode[Node.NodeIndex];
+			if (const TArray<UUOUPuzzleConditionSourceComponent*>* ConditionSources =
+				ConditionSourcesByInputActor.Find(InputActor))
+			{
+				for (UUOUPuzzleConditionSourceComponent* ConditionSource : *ConditionSources)
+				{
+					if (IsValid(ConditionSource))
+					{
+						ExternalInput.ConditionSources.AddUnique(
+							TWeakObjectPtr<UUOUPuzzleConditionSourceComponent>(ConditionSource));
+					}
 				}
 			}
 		}

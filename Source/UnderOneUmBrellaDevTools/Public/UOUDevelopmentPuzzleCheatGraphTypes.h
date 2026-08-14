@@ -7,6 +7,26 @@
 
 class AActor;
 class AUOUPuzzleConditionGroupActor;
+class UUOUPuzzleConditionSourceComponent;
+
+// ConditionGroup 입력 중 다른 ConditionGroup의 Result로 생산되지 않는 외부 입력 액터 캐시입니다.
+USTRUCT(BlueprintType)
+struct UNDERONEUMBRELLADEVTOOLS_API FUOUDevelopmentPuzzleCheatExternalInput
+{
+	GENERATED_BODY()
+
+	// HUD에서 직접 해결할 외부 퍼즐 입력 액터입니다.
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Puzzle Cheat|Graph")
+	TObjectPtr<AActor> InputActor = nullptr;
+
+	// 외부 입력 버튼에 표시할 액터 이름입니다.
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Puzzle Cheat|Graph")
+	FText DisplayName;
+
+	// 이 외부 입력 액터에 속하며 현재 ConditionGroup이 평가하는 조건 소스 목록입니다.
+	// 실제 소유권은 ConditionGroup의 ResolvedConditionSources에 있고 이 배열은 HUD 동작을 위한 약한 참조입니다.
+	TArray<TWeakObjectPtr<UUOUPuzzleConditionSourceComponent>> ConditionSources;
+};
 
 // ConditionGroup 하나와 그래프에서 계산된 선행/후속 관계를 보관하는 런타임 캐시입니다.
 USTRUCT(BlueprintType)
@@ -26,6 +46,10 @@ struct UNDERONEUMBRELLADEVTOOLS_API FUOUDevelopmentPuzzleCheatGraphNode
 	// ConditionActors와 ConditionSource 참조에서 해석한 실제 입력 액터 캐시입니다.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Puzzle Cheat|Graph")
 	TArray<TObjectPtr<AActor>> InputActors;
+
+	// InputActors 중 선행 ConditionGroup의 Result로 생산되지 않아 HUD에서 직접 해결할 수 있는 입력입니다.
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Puzzle Cheat|Graph")
+	TArray<FUOUDevelopmentPuzzleCheatExternalInput> ExternalInputs;
 
 	// 만족 시 실행되는 유효한 Result 대상 액터 캐시입니다.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Puzzle Cheat|Graph")

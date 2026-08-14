@@ -11,6 +11,7 @@
 class AUOUPuzzleConditionGroupActor;
 class SUOUDevelopmentPuzzleCheatHUD;
 class UGameViewportClient;
+class UUOUPuzzleConditionSourceComponent;
 
 // Development 및 Internal Shipping 빌드에서만 존재하는 퍼즐 관계 그래프 진행 도구입니다.
 UCLASS()
@@ -73,7 +74,8 @@ public:
 private:
 	void CollectConditionDependencyActors(
 		AUOUPuzzleConditionGroupActor& PuzzleGroup,
-		TArray<AActor*>& OutDependencyActors) const;
+		TArray<AActor*>& OutDependencyActors,
+		TMap<AActor*, TArray<UUOUPuzzleConditionSourceComponent*>>& OutConditionSourcesByActor) const;
 	void BuildPuzzleGraphConnections();
 	void AddPuzzleGraphEdge(int32 SourceNodeIndex, int32 TargetNodeIndex, AActor* RelationActor);
 	bool ValidateAndAssignPuzzleGraphDepths();
