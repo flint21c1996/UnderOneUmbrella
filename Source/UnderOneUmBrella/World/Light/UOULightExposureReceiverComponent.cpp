@@ -340,7 +340,9 @@ void UUOULightExposureReceiverComponent::RecoverTemperature(float DeltaTime)
 
 void UUOULightExposureReceiverComponent::DrawTemperatureDebug() const
 {
-	if (!bDrawTemperatureDebug || !UUOUDebugSubsystem::IsDebugWorldLabelEnabled(this, EUOUDebugCategory::Puzzle))
+	if (!bDrawTemperatureDebug
+		|| !bDrawTemperatureDebugLabel
+		|| !UUOUDebugSubsystem::IsDebugWorldLabelEnabled(this, EUOUDebugCategory::Puzzle))
 	{
 		return;
 	}
