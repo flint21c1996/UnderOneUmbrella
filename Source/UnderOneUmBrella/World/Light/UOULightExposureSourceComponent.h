@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "Debug/UOUDebugProvider.h"
 #include "Debug/UOUPuzzleDebugInfoProvider.h"
 #include "Engine/EngineTypes.h"
 #include "World/Light/UOULightExposureTypes.h"
@@ -36,7 +37,10 @@ enum class EUOULightBeamShape : uint8
 
 // 원뿔 또는 원기둥 형태의 광원에서 주변 수신체로 게임플레이용 빛 노출을 전달합니다.
 UCLASS(ClassGroup=(Light), meta=(BlueprintSpawnableComponent, DisplayName="UOU Light Exposure Source", ToolTip = "선택한 광원 형상 안의 수신체에 게임플레이용 빛 노출을 전달합니다."))
-class UNDERONEUMBRELLA_API UUOULightExposureSourceComponent : public UActorComponent, public IUOUPuzzleDebugInfoProvider
+class UNDERONEUMBRELLA_API UUOULightExposureSourceComponent
+	: public UActorComponent
+	, public IUOUPuzzleDebugInfoProvider
+	, public IUOUDebugProvider
 {
 	GENERATED_BODY()
 
@@ -46,6 +50,12 @@ public:
 	virtual void BeginPlay() override;
 	virtual void TickComponent(float DeltaTime, enum ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 	virtual TArray<FString> GetPuzzleDebugInfo_Implementation() const override;
+	virtual EUOUDebugCategory GetDebugCategory_Implementation() const override;
+
+#if UOU_WITH_DEVELOPMENT_TOOLS
+	virtual bool ShouldDrawDevelopmentDebugLabel() const override { return false; }
+	virtual void GatherDevelopmentDebugDraw(IUOUDevelopmentDebugDrawContext& Context) const override;
+#endif
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Source", meta = (ToolTip = "이 광원에서 게임플레이용 빛을 발사할지 여부입니다."))
 	bool bEmitLight = true;

@@ -6,6 +6,7 @@
 #include "Components/PrimitiveComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/SpotLightComponent.h"
+#include "Debug/UOUDevelopmentDebugDrawContext.h"
 #include "Engine/EngineTypes.h"
 #include "Engine/OverlapResult.h"
 #include "Engine/World.h"
@@ -89,6 +90,67 @@ namespace
 			: nullptr;
 		return ActorShade != nullptr && ActorShade->CanShadeLight();
 	}
+
+#if UOU_WITH_DEVELOPMENT_TOOLS
+	void DrawDevelopmentLightPathSegment(
+		IUOUDevelopmentDebugDrawContext& Context,
+		const FUOULightPathSegmentData& Segment,
+		const FColor& Color)
+	{
+		const FVector Start = Segment.Start;
+		FVector End = Segment.End;
+		FVector Direction = (End - Start).GetSafeNormal();
+		if (Direction.IsNearlyZero())
+		{
+			Direction = Segment.Direction.GetSafeNormal();
+			End = Start + Direction * FMath::Max(0.0f, Segment.Length);
+		}
+		if (Direction.IsNearlyZero())
+		{
+			return;
+		}
+
+		Context.DrawLine(Start, End, Color, 2.0f);
+		Context.DrawPoint(End, 8.0f, Color);
+
+		const float StartRadius = FMath::Max(0.0f, Segment.StartRadius);
+		const float EndRadius = FMath::Max(0.0f, Segment.EndRadius);
+		if (StartRadius <= KINDA_SMALL_NUMBER && EndRadius <= KINDA_SMALL_NUMBER)
+		{
+			return;
+		}
+
+		FVector RadiusAxisX = FVector::ZeroVector;
+		FVector RadiusAxisY = FVector::ZeroVector;
+		Direction.FindBestAxisVectors(RadiusAxisX, RadiusAxisY);
+		constexpr int32 SegmentCount = 12;
+		for (int32 Index = 0; Index < SegmentCount; ++Index)
+		{
+			const float Angle = UE_TWO_PI * static_cast<float>(Index)
+				/ static_cast<float>(SegmentCount);
+			const float NextAngle = UE_TWO_PI * static_cast<float>(Index + 1)
+				/ static_cast<float>(SegmentCount);
+			const FVector RadiusDirection =
+				RadiusAxisX * FMath::Cos(Angle) + RadiusAxisY * FMath::Sin(Angle);
+			const FVector NextRadiusDirection =
+				RadiusAxisX * FMath::Cos(NextAngle) + RadiusAxisY * FMath::Sin(NextAngle);
+			const FVector StartPoint = Start + RadiusDirection * StartRadius;
+			const FVector NextStartPoint = Start + NextRadiusDirection * StartRadius;
+			const FVector EndPoint = End + RadiusDirection * EndRadius;
+			const FVector NextEndPoint = End + NextRadiusDirection * EndRadius;
+
+			Context.DrawLine(StartPoint, EndPoint, Color, 1.0f);
+			if (StartRadius > KINDA_SMALL_NUMBER)
+			{
+				Context.DrawLine(StartPoint, NextStartPoint, Color, 1.0f);
+			}
+			if (EndRadius > KINDA_SMALL_NUMBER)
+			{
+				Context.DrawLine(EndPoint, NextEndPoint, Color, 1.0f);
+			}
+		}
+	}
+#endif
 }
 
 UUOULightExposureSourceComponent::UUOULightExposureSourceComponent()
@@ -158,6 +220,102 @@ TArray<FString> UUOULightExposureSourceComponent::GetPuzzleDebugInfo_Implementat
 		FString::Printf(TEXT("Last Lit: %s"), *LastLitTargetName)
 	};
 }
+
+EUOUDebugCategory UUOULightExposureSourceComponent::GetDebugCategory_Implementation() const
+{
+	return EUOUDebugCategory::Puzzle;
+}
+
+#if UOU_WITH_DEVELOPMENT_TOOLS
+void UUOULightExposureSourceComponent::GatherDevelopmentDebugDraw(
+	IUOUDevelopmentDebugDrawContext& Context) const
+{
+	AActor* Owner = GetOwner();
+	if (!IsValid(Owner))
+	{
+		return;
+	}
+
+	TArray<UUOULightExposureSourceComponent*> SourceComponents;
+	Owner->GetComponents<UUOULightExposureSourceComponent>(SourceComponents);
+	const int32 FoundSourceIndex = SourceComponents.IndexOfByPredicate(
+		[this](const UUOULightExposureSourceComponent* SourceComponent)
+		{
+			return SourceComponent == this;
+		});
+	const int32 SourceIndex = FMath::Max(0, FoundSourceIndex);
+	FVector LabelLocation = Owner->GetActorLocation()
+		+ FVector(0.0f, 0.0f, 180.0f + static_cast<float>(SourceIndex) * 140.0f);
+	bool bHasPathStart = false;
+	for (const FUOULightPathData& Path : LightPaths)
+	{
+		for (const FUOULightPathSegmentData& Segment : Path.Segments)
+		{
+			if (!bHasPathStart)
+			{
+				LabelLocation = Segment.Start
+					+ FVector(
+						0.0f,
+						0.0f,
+						80.0f + static_cast<float>(SourceIndex) * 140.0f);
+				bHasPathStart = true;
+			}
+
+			FColor SegmentColor = Segment.bReflected ? FColor::Cyan : FColor::Yellow;
+			switch (Segment.HitType)
+			{
+			case EUOULightPathHitType::Receiver:
+				SegmentColor = FColor::Green;
+				break;
+			case EUOULightPathHitType::BlockingSurface:
+				SegmentColor = FColor::Red;
+				break;
+			case EUOULightPathHitType::ReflectingSurface:
+				SegmentColor = FColor::Magenta;
+				break;
+			case EUOULightPathHitType::None:
+			default:
+				break;
+			}
+
+			DrawDevelopmentLightPathSegment(Context, Segment, SegmentColor);
+
+			for (UObject* ReceiverObject : Segment.ReachedReceivers)
+			{
+				if (!IsValid(ReceiverObject)
+					|| !ReceiverObject->GetClass()->ImplementsInterface(
+						UUOULightReceivableInterface::StaticClass()))
+				{
+					continue;
+				}
+
+				const FVector ReceiverLocation =
+					IUOULightReceivableInterface::Execute_GetLightReceiverPosition(
+						ReceiverObject);
+				Context.DrawPoint(ReceiverLocation, 12.0f, FColor::Green);
+			}
+		}
+	}
+
+	const FString SummaryText = FString::Printf(
+		TEXT("Light Source: %s\nPaths %d / Reflections %d\nReceivers %d | Lit %d | Reflected %d | Blocked %d\nLast Lit: %s\nLast Blocked: %s\nReflection: %s"),
+		bEmitLight ? TEXT("On") : TEXT("Off"),
+		LightPaths.Num(),
+		ReflectionPaths.Num(),
+		LastReceiverCount,
+		LastLitCount,
+		LastReflectedCount,
+		LastBlockedCount,
+		*LastLitTargetName,
+		*LastBlockedName,
+		*LastReflectionPath);
+	Context.DrawString(
+		LabelLocation,
+		SummaryText,
+		bEmitLight ? FColor::Yellow : FColor::Silver,
+		0.85f);
+}
+#endif
 
 void UUOULightExposureSourceComponent::EmitLight(float DeltaTime)
 {
