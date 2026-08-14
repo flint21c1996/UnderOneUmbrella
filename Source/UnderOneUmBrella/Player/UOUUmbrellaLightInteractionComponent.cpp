@@ -3,6 +3,7 @@
 #include "Player/UOUUmbrellaLightInteractionComponent.h"
 
 #include "Components/SceneComponent.h"
+#include "Debug/UOUDevelopmentDebugDrawContext.h"
 #include "GameFramework/Actor.h"
 #include "Engine/World.h"
 #include "TimerManager.h"
@@ -61,6 +62,72 @@ void UUOUUmbrellaLightInteractionComponent::TickComponent(
 	ApplyRuntimeLightSurfacePlacement();
 	ApplyRuntimeLightShadeVolumePlacement();
 }
+
+EUOUDebugCategory UUOUUmbrellaLightInteractionComponent::GetDebugCategory_Implementation() const
+{
+	return EUOUDebugCategory::Puzzle;
+}
+
+#if UOU_WITH_DEVELOPMENT_TOOLS
+void UUOUUmbrellaLightInteractionComponent::GatherDevelopmentDebugDraw(
+	IUOUDevelopmentDebugDrawContext& Context) const
+{
+	const UUOULightInteractionSurfaceComponent* LightSurface = LightSurfaceComponent;
+	if (!IsValid(LightSurface))
+	{
+		return;
+	}
+
+	constexpr float ReflectorArrowLength = 180.0f;
+	constexpr float ReflectorThickness = 3.0f;
+	const EUOULightInteractionMode InteractionMode = LightSurface->LightInteractionMode;
+	const bool bShadeActive = IsValid(LightShadeVolumeComponent)
+		&& LightShadeVolumeComponent->CanShadeLight();
+	const bool bDebugBlocking = InteractionMode == EUOULightInteractionMode::Blocking
+		|| (InteractionMode == EUOULightInteractionMode::Disabled && bShadeActive);
+	const FColor SurfaceColor = InteractionMode == EUOULightInteractionMode::Reflecting
+		? FColor::Magenta
+		: (bDebugBlocking ? FColor::Yellow : FColor::Silver);
+	const FVector SurfaceLocation = LightSurface->GetComponentLocation();
+	const FVector SurfaceExtent = LightSurface->GetScaledBoxExtent();
+
+	Context.DrawBox(
+		SurfaceLocation,
+		SurfaceExtent,
+		LightSurface->GetComponentQuat(),
+		SurfaceColor,
+		ReflectorThickness);
+
+	const AActor* Owner = GetOwner();
+	const FVector ReflectionDirection = Owner != nullptr
+		? Owner->GetActorForwardVector().GetSafeNormal()
+		: LightSurface->GetForwardVector().GetSafeNormal();
+	if (InteractionMode == EUOULightInteractionMode::Reflecting
+		&& !ReflectionDirection.IsNearlyZero())
+	{
+		Context.DrawArrow(
+			SurfaceLocation,
+			SurfaceLocation + ReflectionDirection * ReflectorArrowLength,
+			24.0f,
+			FColor::Green,
+			ReflectorThickness);
+	}
+
+	const TCHAR* ModeText = InteractionMode == EUOULightInteractionMode::Reflecting
+		? TEXT("Reflecting")
+		: (bDebugBlocking ? TEXT("Blocking") : TEXT("Disabled"));
+	Context.DrawString(
+		SurfaceLocation + FVector(0.0f, 0.0f, SurfaceExtent.Z + 20.0f),
+		FString::Printf(
+			TEXT("Umbrella Reflector: %s\nExtent: %.1f %.1f %.1f"),
+			ModeText,
+			SurfaceExtent.X,
+			SurfaceExtent.Y,
+			SurfaceExtent.Z),
+		SurfaceColor,
+		1.0f);
+}
+#endif
 
 void UUOUUmbrellaLightInteractionComponent::RefreshLightInteractionMode()
 {

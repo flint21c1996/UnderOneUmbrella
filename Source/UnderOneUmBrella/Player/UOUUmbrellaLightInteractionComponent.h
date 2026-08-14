@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "Debug/UOUDebugProvider.h"
 #include "Player/UOUUmbrellaComponent.h"
 #include "UOUUmbrellaLightInteractionComponent.generated.h"
 
@@ -12,7 +13,9 @@ class UUOUUmbrellaLightShadeVolumeComponent;
 class USceneComponent;
 
 UCLASS(ClassGroup=(Gameplay), meta=(BlueprintSpawnableComponent, DisplayName="UOU Umbrella Light Interaction"))
-class UNDERONEUMBRELLA_API UUOUUmbrellaLightInteractionComponent : public UActorComponent
+class UNDERONEUMBRELLA_API UUOUUmbrellaLightInteractionComponent
+	: public UActorComponent
+	, public IUOUDebugProvider
 {
 	GENERATED_BODY()
 
@@ -25,6 +28,12 @@ public:
 		float DeltaTime,
 		ELevelTick TickType,
 		FActorComponentTickFunction* ThisTickFunction) override;
+	virtual EUOUDebugCategory GetDebugCategory_Implementation() const override;
+
+#if UOU_WITH_DEVELOPMENT_TOOLS
+	virtual bool ShouldDrawDevelopmentDebugLabel() const override { return false; }
+	virtual void GatherDevelopmentDebugDraw(IUOUDevelopmentDebugDrawContext& Context) const override;
+#endif
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Light")
 	bool bAutoFindUmbrellaComponent = true;
