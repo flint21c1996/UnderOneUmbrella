@@ -1605,6 +1605,8 @@ bool UUOULightExposureSourceComponent::TryBuildLightInteractionSurfaceHit(
 
 	int32 HitCount = 0;
 	float BestScore = -1.0f;
+	const bool bUseAxisRepresentativePath = BeamShape == EUOULightBeamShape::Cylinder;
+	bool bHasAxisHit = false;
 
 	// 고정 표면 샘플 사이로 빛 중심축이 지나가는 경우도 놓치지 않도록
 	// 실제 빔 중심축과 반사면의 교차점을 가장 먼저 검사합니다.
@@ -1638,6 +1640,7 @@ bool UUOULightExposureSourceComponent::TryBuildLightInteractionSurfaceHit(
 				++HitCount;
 				BestScore = AxisDistanceFactor * AxisShapeFactor;
 				OutSurfaceHit = AxisHit;
+				bHasAxisHit = true;
 				DrawDebugSamplePoint(AxisHit.ImpactPoint, FColor::Cyan);
 			}
 		}
@@ -1693,11 +1696,23 @@ bool UUOULightExposureSourceComponent::TryBuildLightInteractionSurfaceHit(
 		++HitCount;
 		DrawDebugSamplePoint(SampleHit.ImpactPoint, FColor::Cyan);
 		const float SampleScore = DistanceFactor * ShapeFactor;
-		if (SampleScore > BestScore)
+		// A cylinder represents parallel rays. When its center ray reaches the
+		// reflector, keep that hit as the representative path for reflection data
+		// and VFX. Edge samples still contribute to hit/debug validation, but must
+		// not replace the center ray with a different parallel ray.
+		if ((!bUseAxisRepresentativePath || !bHasAxisHit) && SampleScore > BestScore)
 		{
 			BestScore = SampleScore;
 			OutSurfaceHit = SampleHit;
 		}
+	}
+
+	if (bUseAxisRepresentativePath && !bHasAxisHit)
+	{
+		// A single reflection path and a single beam VFX cannot faithfully represent
+		// an edge-only ray of a parallel cylinder. Do not create a mismatched
+		// representative path; the reflected beam ends when its center ray misses.
+		OutSurfaceHit = FHitResult();
 	}
 
 	DrawDebugSampleSummary(
@@ -1825,6 +1840,7 @@ void UUOULightExposureSourceComponent::EmitReflectedLightFromSurface(
 	UUOULightInteractionSurfaceComponent* CurrentSurface = SurfaceComponent;
 	FHitResult CurrentSurfaceHit = SurfaceHit;
 	FVector CurrentRayOrigin = SourcePosition;
+	FVector CurrentRayDirection = InitialIncomingDirection;
 	if (BeamShape == EUOULightBeamShape::Cylinder)
 	{
 		const float AxialDistance = FVector::DotProduct(
@@ -1853,7 +1869,13 @@ void UUOULightExposureSourceComponent::EmitReflectedLightFromSurface(
 			break;
 		}
 
-		const FVector IncomingDirection = (CurrentSurfaceHit.ImpactPoint - CurrentRayOrigin).GetSafeNormal();
+		// 원기둥형 빛과 확산각 0도의 반사광은 모든 광선이 중심축과 평행합니다.
+		// 다음 거울을 면 샘플로 검출했더라도 중심 반사점에서 샘플까지의 사선을
+		// 새 입사 방향으로 사용하면 다중 반사 때마다 각도가 틀어집니다.
+		const bool bHasParallelIncomingRays = CurrentBeamConeAngle <= KINDA_SMALL_NUMBER;
+		const FVector IncomingDirection = bHasParallelIncomingRays
+			? CurrentRayDirection.GetSafeNormal()
+			: (CurrentSurfaceHit.ImpactPoint - CurrentRayOrigin).GetSafeNormal();
 		const FVector ReflectedDirection = CurrentSurface->GetReflectionDirection(
 			IncomingDirection,
 			CurrentSurfaceHit.ImpactNormal);
@@ -2036,7 +2058,19 @@ void UUOULightExposureSourceComponent::EmitReflectedLightFromSurface(
 		IncomingBeamRadius = CurrentBeamStartRadius + NextSurfaceDistance * FMath::Tan(
 			FMath::DegreesToRadians(OutgoingBeamConeAngle));
 		CurrentBeamConeAngle = OutgoingBeamConeAngle;
-		CurrentRayOrigin = ReflectionOrigin;
+		CurrentRayDirection = ReflectedDirection;
+		if (OutgoingBeamConeAngle <= KINDA_SMALL_NUMBER)
+		{
+			const float NextAxialDistance = FVector::DotProduct(
+				NextSurfaceHit.ImpactPoint - ReflectionOrigin,
+				ReflectedDirection);
+			CurrentRayOrigin =
+				NextSurfaceHit.ImpactPoint - ReflectedDirection * NextAxialDistance;
+		}
+		else
+		{
+			CurrentRayOrigin = ReflectionOrigin;
+		}
 		CurrentSurface = NextSurface;
 		CurrentSurfaceHit = NextSurfaceHit;
 		IncomingSurfaceIntensity = NextSurfaceIntensity;
@@ -2206,6 +2240,10 @@ bool UUOULightExposureSourceComponent::TryFindNextReflectionSurface(
 
 	const FVector SafeReflectedDirection = ReflectedDirection.GetSafeNormal();
 	float ClosestHitDistance = TNumericLimits<float>::Max();
+	const bool bPreferAxisHit = BeamConeAngle <= KINDA_SMALL_NUMBER;
+	UUOULightInteractionSurfaceComponent* ClosestAxisSurface = nullptr;
+	FHitResult ClosestAxisSurfaceHit;
+	float ClosestAxisHitDistance = TNumericLimits<float>::Max();
 	TSet<UUOULightInteractionSurfaceComponent*> ProcessedSurfaces;
 
 	for (const FOverlapResult& OverlapResult : OverlapResults)
@@ -2270,7 +2308,13 @@ bool UUOULightExposureSourceComponent::TryFindNextReflectionSurface(
 				++CandidateHitCount;
 				DrawDebugSamplePoint(AxisHit.ImpactPoint, FColor::Cyan);
 				const float AxisHitDistance = FVector::Dist(ReflectionOrigin, AxisHit.ImpactPoint);
-				if (AxisHitDistance < ClosestHitDistance)
+				if (bPreferAxisHit && AxisHitDistance < ClosestAxisHitDistance)
+				{
+					ClosestAxisHitDistance = AxisHitDistance;
+					ClosestAxisSurface = CandidateSurface;
+					ClosestAxisSurfaceHit = AxisHit;
+				}
+				else if (!bPreferAxisHit && AxisHitDistance < ClosestHitDistance)
 				{
 					ClosestHitDistance = AxisHitDistance;
 					OutSurface = CandidateSurface;
@@ -2351,6 +2395,17 @@ bool UUOULightExposureSourceComponent::TryFindNextReflectionSurface(
 				1,
 				CandidateHitCount > 0);
 		}
+	}
+
+	if (bPreferAxisHit)
+	{
+		// Keep chained cylinder paths on one representative center ray. If the
+		// center ray misses, an edge sample alone cannot define a connected path
+		// from the previous reflection point, so it must not create a VFX segment.
+		OutSurface = ClosestAxisSurface;
+		OutSurfaceHit = ClosestAxisSurfaceHit;
+		OutDistance = ClosestAxisSurface != nullptr ? ClosestAxisHitDistance : 0.0f;
+		OutAngle = 0.0f;
 	}
 
 	return OutSurface != nullptr;
