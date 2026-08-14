@@ -3,9 +3,14 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Debug/UOUDevelopmentToolsBuild.h"
 #include "UObject/Interface.h"
 #include "Debug/UOUDebugTypes.h"
 #include "UOUDebugProvider.generated.h"
+
+#if UOU_WITH_DEVELOPMENT_TOOLS
+class IUOUDevelopmentDebugDrawContext;
+#endif
 
 // Interface for actors or components that provide data to the integrated debug system.
 UINTERFACE(BlueprintType)
@@ -36,4 +41,11 @@ public:
 
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Debug")
 	void GetDebugConnections(TArray<FUOUDebugConnection>& OutConnections) const;
+
+#if UOU_WITH_DEVELOPMENT_TOOLS
+	// 선택된 네이티브 Provider가 자신에게 필요한 개발용 도형을 공통 Context에 전달합니다.
+	virtual void GatherDevelopmentDebugDraw(IUOUDevelopmentDebugDrawContext& Context) const
+	{
+	}
+#endif
 };
