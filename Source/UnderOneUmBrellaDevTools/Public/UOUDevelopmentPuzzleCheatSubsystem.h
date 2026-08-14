@@ -94,6 +94,7 @@ private:
 	bool ArePuzzleGroupResultsCompleted(const AUOUPuzzleConditionGroupActor* PuzzleGroup) const;
 	float GetDelayBeforeNextGraphWave(const FUOUDevelopmentPuzzleCheatGraphNode& Node) const;
 	void FinishGraphExecution();
+	void InitializePuzzleGraphAfterActorsBeginPlay();
 	void EnsureCheatHUDCreated();
 	void RemoveCheatHUD();
 
@@ -121,6 +122,7 @@ private:
 	UPROPERTY(Transient)
 	bool bGraphExecutionActive = false;
 
+	FTimerHandle InitialGraphRefreshTimerHandle;
 	FTimerHandle GraphCompletionTimerHandle;
 
 	TSharedPtr<SUOUDevelopmentPuzzleCheatHUD> CheatHUDWidget;

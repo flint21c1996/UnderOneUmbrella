@@ -43,6 +43,14 @@ bool UUOUDevelopmentPuzzleCheatSubsystem::ShouldCreateSubsystem(UObject* Outer) 
 void UUOUDevelopmentPuzzleCheatSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 {
 	Super::OnWorldBeginPlay(InWorld);
+	InitialGraphRefreshTimerHandle = InWorld.GetTimerManager().SetTimerForNextTick(
+		this,
+		&UUOUDevelopmentPuzzleCheatSubsystem::InitializePuzzleGraphAfterActorsBeginPlay);
+}
+
+void UUOUDevelopmentPuzzleCheatSubsystem::InitializePuzzleGraphAfterActorsBeginPlay()
+{
+	InitialGraphRefreshTimerHandle.Invalidate();
 	RefreshPuzzleGraph();
 	if (!PuzzleGraphNodes.IsEmpty())
 	{
@@ -56,6 +64,7 @@ void UUOUDevelopmentPuzzleCheatSubsystem::Deinitialize()
 
 	if (UWorld* World = GetWorld())
 	{
+		World->GetTimerManager().ClearTimer(InitialGraphRefreshTimerHandle);
 		World->GetTimerManager().ClearTimer(GraphCompletionTimerHandle);
 	}
 

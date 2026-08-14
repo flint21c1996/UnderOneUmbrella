@@ -462,7 +462,7 @@ FText SUOUDevelopmentPuzzleGraphView::GetExternalInputButtonText(
 		: ExternalInput.DisplayName.ToString();
 	return FText::FromString(FString::Printf(
 		TEXT("[%s] %s"),
-		bSatisfied ? TEXT("완료") : TEXT("해결"),
+		bSatisfied ? TEXT("완료") : TEXT("대기"),
 		*InputName));
 }
 
