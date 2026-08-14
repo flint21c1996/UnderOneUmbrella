@@ -49,7 +49,6 @@
 #include "Puzzle/HeatWire/UOUHeatWireActor.h"
 #include "Puzzle/HeatWire/UOUHeatWireComponent.h"
 #include "Puzzle/Weight/UOUWeightedButtonComponent.h"
-#include "Puzzle/Weight/UOUWeightSensorComponent.h"
 #include "RHICommandList.h"
 #include "RHIStats.h"
 #include "RenderCounters.h"
@@ -604,7 +603,6 @@ void UUOUDevelopmentDebugDrawSubsystem::Tick(float DeltaTime)
 	}
 
 	DrawHeatWireDebug();
-	DrawWeightedButtonDebug();
 	DrawPlayerBlockingWallDebug();
 	DrawWaterBasinDebug();
 	DrawRotatableMirrorDebug();
@@ -1967,56 +1965,6 @@ void UUOUDevelopmentDebugDrawSubsystem::DrawHeatWireDebug() const
 	}
 }
 
-void UUOUDevelopmentDebugDrawSubsystem::DrawWeightedButtonDebug() const
-{
-	UWorld* World = GetWorld();
-	if (World == nullptr || GEngine == nullptr)
-	{
-		return;
-	}
-
-	for (TActorIterator<AActor> It(World); It; ++It)
-	{
-		AActor* Owner = *It;
-		if (!IsValid(Owner) || !ShouldDrawActor(Owner))
-		{
-			continue;
-		}
-
-		TArray<UUOUWeightedButtonComponent*> ButtonComponents;
-		Owner->GetComponents<UUOUWeightedButtonComponent>(ButtonComponents);
-		for (const UUOUWeightedButtonComponent* Button : ButtonComponents)
-		{
-			if (!IsValid(Button))
-			{
-				continue;
-			}
-
-			const UUOUWeightSensorComponent* Sensor = Button->Sensor;
-			const int32 OverlapCount = Sensor != nullptr ? Sensor->OverlappingActorCount : 0;
-			const FString DebugText = FString::Printf(
-				TEXT("Button: %s\nPressed: %s\nCurrent Weight: %.2f\nPress / Release: %.2f / %.2f\nOverlap Count: %d\nSensor: %s\nSensor Volume: %s"),
-				*GetNameSafe(Owner),
-				Button->IsPressed() ? TEXT("Yes") : TEXT("No"),
-				Button->CurrentWeight,
-				Button->PressWeight,
-				Button->ReleaseWeight,
-				OverlapCount,
-				*GetNameSafe(Sensor),
-				Sensor != nullptr ? *GetNameSafe(Sensor->SensorVolume) : TEXT("None"));
-			const uint64 OwnerId = reinterpret_cast<uint64>(Owner);
-			const int32 MessageKey = static_cast<int32>(0x554F4200u + (OwnerId & 0xFFu));
-			GEngine->AddOnScreenDebugMessage(
-				MessageKey,
-				0.0f,
-				Button->IsPressed() ? FColor::Green : FColor::Yellow,
-				DebugText,
-				false,
-				FVector2D(1.0f, 1.0f));
-		}
-	}
-}
-
 void UUOUDevelopmentDebugDrawSubsystem::DrawPlayerBlockingWallDebug() const
 {
 	UWorld* World = GetWorld();
@@ -2950,6 +2898,12 @@ void UUOUDevelopmentDebugDrawSubsystem::DrawPuzzleProviderLabels() const
 
 		const FString LabelText =
 			UOUDevelopmentDebugDrawPrivate::BuildPuzzleProviderLabelText(ProviderObject);
+		if (const IUOUDebugProvider* NativeProvider = Cast<IUOUDebugProvider>(ProviderObject);
+			NativeProvider != nullptr && !NativeProvider->ShouldDrawDevelopmentDebugLabel())
+		{
+			continue;
+		}
+
 		if (LabelText.IsEmpty())
 		{
 			continue;
