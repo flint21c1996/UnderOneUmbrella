@@ -4,7 +4,6 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
-#include "Engine/EngineTypes.h"
 #include "World/Light/UOULightBeamVisualTypes.h"
 #include "World/Light/UOULightReflectionPathTypes.h"
 #include "UOULightBeamVisualComponent.generated.h"
@@ -68,14 +67,11 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light|Visual", meta = (ClampMin = "0", ClampMax = "64", ToolTip = "동시에 표시할 수 있는 반사 빛줄기 VFX의 최대 개수입니다."))
 	int32 MaxReflectionVFXCount = 16;
 
-	UPROPERTY(BlueprintReadOnly, Category = "Light|Visual", meta = (DeprecatedProperty, DeprecationMessage = "빛줄기 VFX는 OnLightPathsUpdated 이벤트로 갱신되므로 별도 갱신 간격을 사용하지 않습니다."))
-	float DirectVFXUpdateInterval = 0.05f;
-
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light|Visual", meta = (ClampMin = "0.0", Units = "cm", ToolTip = "벽이나 거울 표면과 빛줄기가 겹쳐 보이지 않도록 끝점을 앞당기는 거리입니다."))
 	float EndPadding = 2.0f;
 
-	UPROPERTY(BlueprintReadOnly, Category = "Light|Visual", meta = (DeprecatedProperty, DeprecationMessage = "VFX는 계산된 LightPath 종료점을 사용하므로 별도 충돌 채널을 사용하지 않습니다."))
-	TEnumAsByte<ECollisionChannel> OcclusionTraceChannel = ECC_Visibility;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light|Visual", meta = (ClampMin = "0.0", Units = "cm", ToolTip = "비스듬한 반사면 뒤로 빛줄기 시작 단면이 튀어나오지 않도록 시작점을 전진시키는 최대 거리입니다. 큰 값은 완만한 입사각에서 시작점이 옆으로 밀려 보일 수 있으며, 0이면 추가 보정을 사용하지 않습니다."))
+	float MaximumReflectedStartClearance = 4.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light|Visual", meta = (ToolTip = "VFX BP 내부에 포함된 Light 컴포넌트를 끄고 통합 광원 액터의 SpotLight만 사용합니다."))
 	bool bDisableEmbeddedVFXLights = true;
