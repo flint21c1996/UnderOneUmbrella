@@ -4,6 +4,7 @@
 
 #include "Components/SceneComponent.h"
 #include "Components/SplineComponent.h"
+#include "Debug/UOUDevelopmentDebugDrawContext.h"
 #include "Debug/UOUPuzzleDebugInfoProvider.h"
 #include "Engine/StaticMesh.h"
 #include "Materials/MaterialInstanceDynamic.h"
@@ -261,6 +262,87 @@ void AUOUHeatWireActor::GetDebugConnections_Implementation(TArray<FUOUDebugConne
 {
 	OutConnections.Reset();
 }
+
+#if UOU_WITH_DEVELOPMENT_TOOLS
+void AUOUHeatWireActor::GatherDevelopmentDebugDraw(
+	IUOUDevelopmentDebugDrawContext& Context) const
+{
+	if (HeatWirePath == nullptr)
+	{
+		return;
+	}
+
+	constexpr float SphereRadius = 18.0f;
+	constexpr int32 SphereSegments = 16;
+	constexpr float Thickness = 2.0f;
+	const FVector LabelOffset(0.0f, 0.0f, 36.0f);
+	const int32 SplinePointCount = HeatWirePath->GetNumberOfSplinePoints();
+	const float SplineLength = HeatWirePath->GetSplineLength();
+	const float BurnProgress = HeatWireComponent != nullptr
+		? FMath::Clamp(HeatWireComponent->BurnProgress, 0.0f, 1.0f)
+		: 0.0f;
+
+	for (int32 PointIndex = 0; PointIndex < SplinePointCount; ++PointIndex)
+	{
+		const FVector PointLocation = HeatWirePath->GetLocationAtSplinePoint(
+			PointIndex,
+			ESplineCoordinateSpace::World);
+		const float PointProgress = SplineLength > KINDA_SMALL_NUMBER
+			? FMath::Clamp(
+				HeatWirePath->GetDistanceAlongSplineAtSplinePoint(PointIndex) / SplineLength,
+				0.0f,
+				1.0f)
+			: (SplinePointCount > 1
+				? static_cast<float>(PointIndex) / static_cast<float>(SplinePointCount - 1)
+				: 0.0f);
+		const bool bReachedByHeat = HeatWireComponent != nullptr
+			&& BurnProgress + KINDA_SMALL_NUMBER >= PointProgress;
+		const FColor PointColor = PointIndex == 0
+			? FColor::Blue
+			: (PointIndex == SplinePointCount - 1 ? FColor::Red : FColor::Green);
+
+		Context.DrawSphere(
+			PointLocation,
+			SphereRadius,
+			SphereSegments,
+			PointColor,
+			Thickness);
+		Context.DrawSphere(
+			PointLocation,
+			SphereRadius * 0.45f,
+			SphereSegments,
+			bReachedByHeat ? FColor::Orange : FColor::White,
+			Thickness + 1.0f);
+		Context.DrawString(
+			PointLocation + LabelOffset,
+			FString::Printf(
+				TEXT("P%d %.0f%% %s"),
+				PointIndex,
+				PointProgress * 100.0f,
+				bReachedByHeat ? TEXT("Reached") : TEXT("Pending")),
+			bReachedByHeat ? FColor::Orange : FColor::White,
+			0.8f);
+	}
+
+	if (HeatWireComponent == nullptr)
+	{
+		return;
+	}
+
+	const FVector HeatFrontLocation = HeatWireComponent->GetFireWorldLocation();
+	Context.DrawSphere(
+		HeatFrontLocation,
+		12.0f,
+		SphereSegments,
+		FColor::Yellow,
+		Thickness + 1.0f);
+	Context.DrawString(
+		HeatFrontLocation + LabelOffset,
+		FString::Printf(TEXT("Heat %.0f%%"), BurnProgress * 100.0f),
+		FColor::Yellow,
+		0.85f);
+}
+#endif
 
 void AUOUHeatWireActor::ValidateVisualSettings()
 {

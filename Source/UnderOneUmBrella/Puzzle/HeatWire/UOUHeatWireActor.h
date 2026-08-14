@@ -43,6 +43,10 @@ public:
 	virtual FVector GetDebugWorldLocation_Implementation() const override;
 	virtual void GetDebugConnections_Implementation(TArray<FUOUDebugConnection>& OutConnections) const override;
 
+#if UOU_WITH_DEVELOPMENT_TOOLS
+	virtual void GatherDevelopmentDebugDraw(IUOUDevelopmentDebugDrawContext& Context) const override;
+#endif
+
 	UFUNCTION(BlueprintCallable, CallInEditor, Category = "Heat Wire", meta = (ToolTip = "Heat Wire Path를 따라 열선 Spline Mesh 조각을 다시 생성합니다."))
 	void RebuildHeatWireVisualSegments();
 

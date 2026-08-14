@@ -47,7 +47,6 @@
 #include "Player/UOUWaterContainerComponent.h"
 #include "Puzzle/PushPull/UOUPushPullObjectComponent.h"
 #include "Puzzle/HeatWire/UOUHeatWireActor.h"
-#include "Puzzle/HeatWire/UOUHeatWireComponent.h"
 #include "Puzzle/Weight/UOUWeightedButtonComponent.h"
 #include "RHICommandList.h"
 #include "RHIStats.h"
@@ -602,7 +601,6 @@ void UUOUDevelopmentDebugDrawSubsystem::Tick(float DeltaTime)
 		return;
 	}
 
-	DrawHeatWireDebug();
 	DrawPlayerBlockingWallDebug();
 	DrawWaterBasinDebug();
 	DrawRotatableMirrorDebug();
@@ -1850,119 +1848,6 @@ void UUOUDevelopmentDebugDrawSubsystem::ResetVFXDebugState()
 TStatId UUOUDevelopmentDebugDrawSubsystem::GetStatId() const
 {
 	RETURN_QUICK_DECLARE_CYCLE_STAT(UUOUDevelopmentDebugDrawSubsystem, STATGROUP_Tickables);
-}
-
-void UUOUDevelopmentDebugDrawSubsystem::DrawHeatWireDebug() const
-{
-	UWorld* World = GetWorld();
-	if (World == nullptr)
-	{
-		return;
-	}
-
-	constexpr float SphereRadius = 18.0f;
-	constexpr int32 SphereSegments = 16;
-	constexpr float Thickness = 2.0f;
-	const FVector LabelOffset(0.0f, 0.0f, 36.0f);
-	for (TActorIterator<AUOUHeatWireActor> It(World); It; ++It)
-	{
-		const AUOUHeatWireActor* HeatWireActor = *It;
-		const USplineComponent* HeatWirePath = IsValid(HeatWireActor)
-			? HeatWireActor->GetHeatWirePathComponent()
-			: nullptr;
-		const UUOUHeatWireComponent* HeatWireComponent = IsValid(HeatWireActor)
-			? HeatWireActor->GetHeatWireComponent()
-			: nullptr;
-		if (!ShouldDrawActor(HeatWireActor) || HeatWirePath == nullptr)
-		{
-			continue;
-		}
-
-		const int32 SplinePointCount = HeatWirePath->GetNumberOfSplinePoints();
-		const float SplineLength = HeatWirePath->GetSplineLength();
-		const float BurnProgress = HeatWireComponent != nullptr
-			? FMath::Clamp(HeatWireComponent->BurnProgress, 0.0f, 1.0f)
-			: 0.0f;
-		for (int32 PointIndex = 0; PointIndex < SplinePointCount; ++PointIndex)
-		{
-			const FVector PointLocation = HeatWirePath->GetLocationAtSplinePoint(
-				PointIndex,
-				ESplineCoordinateSpace::World);
-			const float PointProgress = SplineLength > KINDA_SMALL_NUMBER
-				? FMath::Clamp(
-					HeatWirePath->GetDistanceAlongSplineAtSplinePoint(PointIndex) / SplineLength,
-					0.0f,
-					1.0f)
-				: (SplinePointCount > 1
-					? static_cast<float>(PointIndex) / static_cast<float>(SplinePointCount - 1)
-					: 0.0f);
-			const bool bReachedByHeat = HeatWireComponent != nullptr
-				&& BurnProgress + KINDA_SMALL_NUMBER >= PointProgress;
-			const FColor PointColor = PointIndex == 0
-				? FColor::Blue
-				: (PointIndex == SplinePointCount - 1 ? FColor::Red : FColor::Green);
-
-			DrawDebugSphere(
-				World,
-				PointLocation,
-				SphereRadius,
-				SphereSegments,
-				PointColor,
-				false,
-				0.0f,
-				0,
-				Thickness);
-			DrawDebugSphere(
-				World,
-				PointLocation,
-				SphereRadius * 0.45f,
-				SphereSegments,
-				bReachedByHeat ? FColor::Orange : FColor::White,
-				false,
-				0.0f,
-				0,
-				Thickness + 1.0f);
-			DrawDebugString(
-				World,
-				PointLocation + LabelOffset,
-				FString::Printf(
-					TEXT("P%d %.0f%% %s"),
-					PointIndex,
-					PointProgress * 100.0f,
-					bReachedByHeat ? TEXT("Reached") : TEXT("Pending")),
-				nullptr,
-				bReachedByHeat ? FColor::Orange : FColor::White,
-				0.0f,
-				true,
-				0.8f);
-		}
-
-		if (HeatWireComponent == nullptr)
-		{
-			continue;
-		}
-
-		const FVector HeatFrontLocation = HeatWireComponent->GetFireWorldLocation();
-		DrawDebugSphere(
-			World,
-			HeatFrontLocation,
-			12.0f,
-			SphereSegments,
-			FColor::Yellow,
-			false,
-			0.0f,
-			0,
-			Thickness + 1.0f);
-		DrawDebugString(
-			World,
-			HeatFrontLocation + LabelOffset,
-			FString::Printf(TEXT("Heat %.0f%%"), BurnProgress * 100.0f),
-			nullptr,
-			FColor::Yellow,
-			0.0f,
-			true,
-			0.85f);
-	}
 }
 
 void UUOUDevelopmentDebugDrawSubsystem::DrawPlayerBlockingWallDebug() const
