@@ -92,14 +92,15 @@ bool UUOUWeightedButtonComponent::TryResolveInputForCheat(AActor* InputActor)
 		return false;
 	}
 
-	bCheatForcePressed = true;
+	const bool bWasSatisfied = IsSatisfied();
 	bInsufficientWeightFeedbackActive = false;
-	if (SetSatisfiedState(true, true))
+	const bool bResolved = Super::TryResolveInputForCheat(InputActor);
+	if (bResolved && !bWasSatisfied)
 	{
 		PlayButtonAudioCue(PressedAudioCueId, PressedAudioEventId);
 	}
 
-	return IsSatisfied();
+	return bResolved;
 }
 #endif
 
@@ -248,15 +249,6 @@ void UUOUWeightedButtonComponent::ResolveReferences()
 void UUOUWeightedButtonComponent::RefreshPressedState(bool bPlayFeedbackAudio)
 {
 	CurrentWeight = Sensor != nullptr ? Sensor->CurrentWeight : 0.0f;
-
-#if UOU_WITH_PUZZLE_CHEATS
-	if (bCheatForcePressed)
-	{
-		bInsufficientWeightFeedbackActive = false;
-		SetSatisfiedState(true, true);
-		return;
-	}
-#endif
 
 	if (!bIsSatisfied && CurrentWeight >= PressWeight)
 	{

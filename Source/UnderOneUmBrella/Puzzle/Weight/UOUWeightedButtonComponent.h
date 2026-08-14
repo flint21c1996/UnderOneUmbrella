@@ -148,11 +148,6 @@ protected:
 
 	bool bInsufficientWeightFeedbackActive = false;
 
-#if UOU_WITH_PUZZLE_CHEATS
-	// 치트 HUD가 실행한 뒤 물리 무게 판정이 눌림 상태를 다시 해제하지 못하도록 유지하는 런타임 값입니다.
-	bool bCheatForcePressed = false;
-#endif
-
 	// 버튼 비주얼을 현재 상태에 맞는 기준점 쪽으로 이동합니다.
 	void MoveButtonVisual(float DeltaTime);
 
