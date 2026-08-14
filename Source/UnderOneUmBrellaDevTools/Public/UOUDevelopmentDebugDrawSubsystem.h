@@ -65,7 +65,6 @@ private:
 	void DrawEnvironmentVisualDebug() const;
 	void ResetVFXDebugState();
 	void TryAddPuzzleDebugProvider(UObject* ProviderObject);
-	void DrawWaterBasinDebug() const;
 	void DrawUmbrellaLightReflectorDebug() const;
 	void DrawLightExposureSourceDebug() const;
 	void DrawSelectedPuzzleInfo() const;

@@ -2,6 +2,7 @@
 
 #include "World/WaterTarget/UOUWaterBasinReactionComponentBase.h"
 
+#include "Debug/UOUDevelopmentDebugDrawContext.h"
 #include "GameFramework/Actor.h"
 #include "World/WaterTarget/UOUWaterBasinPlatformComponent.h"
 #include "World/WaterTarget/UOUWaterBasinTargetComponent.h"
@@ -136,6 +137,41 @@ TArray<FString> UUOUWaterBasinReactionComponentBase::GetPuzzleDebugInfo_Implemen
 	DebugInfo.Add(FString::Printf(TEXT("Reaction Events: +%d / -%d"), SatisfiedEventCount, UnsatisfiedEventCount));
 	return DebugInfo;
 }
+
+EUOUDebugCategory UUOUWaterBasinReactionComponentBase::GetDebugCategory_Implementation() const
+{
+	return EUOUDebugCategory::Puzzle;
+}
+
+#if UOU_WITH_DEVELOPMENT_TOOLS
+void UUOUWaterBasinReactionComponentBase::GatherDevelopmentDebugDraw(
+	IUOUDevelopmentDebugDrawContext& Context) const
+{
+	AActor* Owner = GetOwner();
+	if (!IsValid(Owner))
+	{
+		return;
+	}
+
+	TArray<UUOUWaterBasinReactionComponentBase*> ReactionComponents;
+	Owner->GetComponents<UUOUWaterBasinReactionComponentBase>(ReactionComponents);
+	const int32 FoundReactionIndex = ReactionComponents.IndexOfByPredicate(
+		[this](const UUOUWaterBasinReactionComponentBase* ReactionComponent)
+		{
+			return ReactionComponent == this;
+		});
+	const int32 ReactionIndex = FMath::Max(0, FoundReactionIndex);
+	const TArray<FString> DebugLines = GetPuzzleDebugInfo_Implementation();
+	const FString DebugText = FString::Join(DebugLines, LINE_TERMINATOR);
+	const FVector DebugLocation = Owner->GetActorLocation()
+		+ FVector(0.0f, 0.0f, 280.0f + static_cast<float>(ReactionIndex) * 140.0f);
+	const FColor DebugColor = bHasEvaluated
+		? (bIsConditionSatisfied ? FColor::Green : FColor::Red)
+		: FColor::Yellow;
+
+	Context.DrawString(DebugLocation, DebugText, DebugColor, 0.85f);
+}
+#endif
 
 void UUOUWaterBasinReactionComponentBase::OnWaterBasinReactionStateUpdated_Implementation(const FUOUWaterBasinReactionContext& /*Context*/)
 {

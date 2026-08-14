@@ -601,7 +601,6 @@ void UUOUDevelopmentDebugDrawSubsystem::Tick(float DeltaTime)
 		return;
 	}
 
-	DrawWaterBasinDebug();
 	DrawUmbrellaLightReflectorDebug();
 	DrawLightExposureSourceDebug();
 	DrawSelectedPuzzleInfo();
@@ -1845,53 +1844,6 @@ void UUOUDevelopmentDebugDrawSubsystem::ResetVFXDebugState()
 TStatId UUOUDevelopmentDebugDrawSubsystem::GetStatId() const
 {
 	RETURN_QUICK_DECLARE_CYCLE_STAT(UUOUDevelopmentDebugDrawSubsystem, STATGROUP_Tickables);
-}
-
-void UUOUDevelopmentDebugDrawSubsystem::DrawWaterBasinDebug() const
-{
-	UWorld* World = GetWorld();
-	const UUOUDevelopmentDebugControlSubsystem* ControlSubsystem = DebugControlSubsystem.Get();
-	const TArray<AActor*> SelectedActors = ControlSubsystem != nullptr
-		? ControlSubsystem->GetSelectedDebugActors()
-		: TArray<AActor*>();
-	if (World == nullptr || SelectedActors.IsEmpty())
-	{
-		return;
-	}
-
-	for (AActor* SelectedActor : SelectedActors)
-	{
-		if (!IsValid(SelectedActor))
-		{
-			continue;
-		}
-
-		TArray<UUOUWaterBasinReactionComponentBase*> ReactionComponents;
-		SelectedActor->GetComponents<UUOUWaterBasinReactionComponentBase>(ReactionComponents);
-		for (int32 Index = 0; Index < ReactionComponents.Num(); ++Index)
-		{
-			const UUOUWaterBasinReactionComponentBase* ReactionComponent = ReactionComponents[Index];
-			if (!IsValid(ReactionComponent))
-			{
-				continue;
-			}
-
-			const TArray<FString> DebugLines = ReactionComponent->GetPuzzleDebugInfo_Implementation();
-			const FString DebugText = FString::Join(DebugLines, LINE_TERMINATOR);
-			DrawDebugString(
-				World,
-				SelectedActor->GetActorLocation()
-					+ FVector(0.0f, 0.0f, 280.0f + static_cast<float>(Index) * 140.0f),
-				DebugText,
-				nullptr,
-				ReactionComponent->bHasEvaluated
-					? (ReactionComponent->bIsConditionSatisfied ? FColor::Green : FColor::Red)
-					: FColor::Yellow,
-				0.0f,
-				true,
-				0.85f);
-		}
-	}
 }
 
 void UUOUDevelopmentDebugDrawSubsystem::DrawUmbrellaLightReflectorDebug() const
