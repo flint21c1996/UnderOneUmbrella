@@ -107,6 +107,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Mirror|Push|Grab", meta = (ClampMin = "0.0", Units = "cm", ToolTip = "잡는 순간 플레이어 중심을 손잡이에서 떨어뜨릴 거리입니다."))
 	float PlayerAttachDistance = 65.0f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Mirror|Push|Grab", meta = (ClampMin = "0.0", Units = "cm", DisplayName = "거울 표면 최대 간격", ToolTip = "플레이어 캡슐과 거울 메시 표면 사이의 허용 간격입니다. 거울에 붙어 있는 상태에서만 잡히도록 제한합니다."))
+	float MaximumGrabSurfaceGap = 15.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Mirror|Push|Grab", meta = (ClampMin = "0.0", ClampMax = "180.0", Units = "deg", DisplayName = "잡기 시작 최대 방향 보정각", ToolTip = "플레이어가 거울을 바라보도록 상호작용 시작 시 보정할 수 있는 최대 각도입니다. 이보다 크게 돌아야 하면 잡기를 시작하지 않습니다."))
+	float MaximumGrabFacingCorrectionAngle = 60.0f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Mirror|Push|Grab", meta = (ToolTip = "잡는 순간 플레이어를 손잡이 앞 위치로 정렬합니다."))
 	bool bSnapPlayerOnGrab = true;
 
@@ -184,6 +190,8 @@ protected:
 	FVector GetRotationAxisWorld() const;
 	void DrawDebugState(const TArray<AActor*>& OverlappingPushers) const;
 	USceneComponent* FindNearestPushHandle(const AActor* Interactor) const;
+	bool FindClosestGrabSurfacePoint(const APawn* Pusher, FVector& OutClosestPoint, float& OutSurfaceGap) const;
+	float CalculateGrabSurfaceGap(const APawn* Pusher) const;
 	bool UpdateAttachedPlayerTransform(bool bSweepMovement);
 	void ApplyPusherFacing() const;
 
@@ -200,6 +208,7 @@ protected:
 	TObjectPtr<USceneComponent> ActivePushHandle = nullptr;
 
 	FVector AttachedPlayerLocalLocation = FVector::ZeroVector;
+	FQuat AttachedPlayerLocalRotation = FQuat::Identity;
 
 	FQuat InitialRelativeRotation = FQuat::Identity;
 	FVector InitialRelativeLocation = FVector::ZeroVector;

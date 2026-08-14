@@ -56,6 +56,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Lumen Static Ray|Appearance", meta = (ClampMin = "0.01", DisplayName = "광선 폭 배율", ToolTip = "계산된 원뿔 반지름에 적용되는 시각적 폭 배율입니다."))
 	float BeamWidthScale = 0.75f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Lumen Static Ray|Appearance", meta = (ClampMin = "0.0", Units = "cm", DisplayName = "반사 연결부 보강 길이", ToolTip = "반사면 직전의 메시 끝 페이드를 메우는 짧은 보강 레이어 길이입니다. 0이면 사용하지 않습니다."))
+	float ReflectionJunctionFillLength = 120.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Lumen Static Ray|Appearance", meta = (ClampMin = "0.0", ClampMax = "1.0", DisplayName = "반사 연결부 보강 투명도", ToolTip = "반사면 직전 보강 레이어의 투명도 배율입니다."))
+	float ReflectionJunctionFillOpacity = 0.65f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Lumen Static Ray|Variation", meta = (DisplayName = "노이즈 변화 사용"))
 	bool bUseVariation = true;
 
@@ -86,13 +92,20 @@ private:
 	UPROPERTY(VisibleAnywhere, Category = "Lumen Static Ray|Components")
 	TArray<TObjectPtr<UStaticMeshComponent>> LayerComponents;
 
+	UPROPERTY(VisibleAnywhere, Category = "Lumen Static Ray|Components")
+	TArray<TObjectPtr<UStaticMeshComponent>> JunctionFillLayerComponents;
+
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UMaterialInstanceDynamic>> DynamicMaterials;
+
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UMaterialInstanceDynamic>> JunctionFillDynamicMaterials;
 
 	UPROPERTY()
 	TArray<TObjectPtr<UStaticMesh>> ShapeMeshes;
 
 	TArray<float> LayerBaseOpacities;
+	TArray<float> JunctionFillBaseOpacities;
 
 	FLinearColor CurrentColor = FLinearColor::White;
 	float CurrentIntensity = 1.0f;

@@ -107,6 +107,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Debug", meta = (ToolTip = "수신체 위에 온도와 빛 노출 상태를 디버그 텍스트로 표시합니다."))
 	bool bDrawTemperatureDebug = false;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Debug", meta = (ToolTip = "온도, 빛 수신 여부, 강도 상태 문자열을 월드에 표시합니다. 기존 디버그 설정과 함께 켜야 표시됩니다."))
+	bool bDrawTemperatureDebugLabel = false;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Debug", meta = (ToolTip = "디버그 텍스트 위치에 더할 월드 오프셋입니다."))
 	FVector TemperatureDebugOffset = FVector(0.0f, 0.0f, 100.0f);
 

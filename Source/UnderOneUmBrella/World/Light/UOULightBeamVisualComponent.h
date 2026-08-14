@@ -12,6 +12,7 @@ class AActor;
 class ULightComponent;
 class USpotLightComponent;
 class UUOULightExposureSourceComponent;
+class UUOULightInteractionSurfaceComponent;
 
 // 게임플레이 빛 경로 데이터를 외부 VFX BP에 전달하고 직접광·반사광 VFX 풀을 관리합니다.
 UCLASS(
@@ -128,7 +129,8 @@ protected:
 	FUOULightBeamVisualSegmentData BuildVisualSegment(
 		const FUOULightPathSegmentData& SegmentData,
 		int32 VisualSegmentIndex,
-		float AdditionalEndPadding = 0.0f) const;
+		float AdditionalEndPadding = 0.0f,
+		const UUOULightInteractionSurfaceComponent* StartReflectionSurface = nullptr) const;
 	FLinearColor ResolveLightColor() const;
 	void DestroyVFXActors();
 };

@@ -1700,23 +1700,27 @@ void UUOUUmbrellaComponent::DrawRainBlockerDebug() const
 		0,
 		Thickness);
 
-	DrawDebugString(
-		World,
-		BlockerWorldCenter + BlockerWorldRotation.Quaternion().GetAxisZ() * (BlockerHalfExtent.Z + 18.0f),
-		FString::Printf(
-			TEXT("Gameplay RainBlocker %s Half %.1f %.1f %.1f Offset %.1f %.1f %.1f"),
-			bIsActiveBlocker ? TEXT("Active") : TEXT("Inactive"),
-			BlockerHalfExtent.X,
-			BlockerHalfExtent.Y,
-			BlockerHalfExtent.Z,
-			RainBlockerLocalOffset.X,
-			RainBlockerLocalOffset.Y,
-			RainBlockerLocalOffset.Z),
-		nullptr,
-		PlayerDebugColor,
-		LifeTime,
-		false,
-		1.0f);
+	if (bDrawRainBlockerDebugLabel
+		&& UUOUDebugSubsystem::IsDebugWorldLabelEnabled(this, EUOUDebugCategory::Player))
+	{
+		DrawDebugString(
+			World,
+			BlockerWorldCenter + BlockerWorldRotation.Quaternion().GetAxisZ() * (BlockerHalfExtent.Z + 18.0f),
+			FString::Printf(
+				TEXT("Gameplay RainBlocker %s Half %.1f %.1f %.1f Offset %.1f %.1f %.1f"),
+				bIsActiveBlocker ? TEXT("Active") : TEXT("Inactive"),
+				BlockerHalfExtent.X,
+				BlockerHalfExtent.Y,
+				BlockerHalfExtent.Z,
+				RainBlockerLocalOffset.X,
+				RainBlockerLocalOffset.Y,
+				RainBlockerLocalOffset.Z),
+			nullptr,
+			PlayerDebugColor,
+			LifeTime,
+			false,
+			1.0f);
+	}
 }
 
 // 물 붓기 라인트레이스의 마지막 결과를 월드에 그려 어느 대상에 닿았는지 확인합니다.

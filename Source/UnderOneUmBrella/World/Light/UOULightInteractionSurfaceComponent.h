@@ -98,6 +98,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection", meta = (ClampMin = "0.0", ToolTip = "반사광 시작 위치를 충돌 지점에서 살짝 띄우는 거리입니다."))
 	float ReflectionStartPadding = 4.0f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection|Visual", meta = (ClampMin = "0.0", ClampMax = "1.0", ToolTip = "반사점에서 입사광과 반사광 메시가 반사면을 뚫지 않도록 비우는 시각적 여백의 배율입니다. 0이면 반사점까지 끊김 없이 연결합니다."))
+	float VisualJunctionClearanceScale = 1.0f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection|Aperture", meta = (ToolTip = "반사되는 빛의 시작 폭을 이 Box 컴포넌트의 실제 크기로 제한합니다."))
 	bool bLimitReflectionBySurfaceAperture = true;
 

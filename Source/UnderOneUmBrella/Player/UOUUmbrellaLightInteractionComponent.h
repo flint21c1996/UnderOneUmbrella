@@ -71,6 +71,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Light|Debug", meta = (DisplayName = "Draw Reflector Debug", ToolTip = "Puzzle 월드 디버그가 켜져 있을 때 우산 반사판 박스와 반사 방향을 표시합니다."))
 	bool bDrawReflectorDebug = true;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Light|Debug", meta = (EditCondition = "bDrawReflectorDebug", DisplayName = "Draw Reflector Debug Label", ToolTip = "우산 반사면의 상태와 크기를 월드 글자로 표시합니다. HUD 갱신에 따른 깜빡임을 피하기 위해 기본적으로 끕니다."))
+	bool bDrawReflectorDebugLabel = false;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Light|Debug", meta = (ClampMin = "0.0", DisplayName = "Reflector Debug Arrow Length", ToolTip = "우산 반사판에서 표시하는 반사 방향 화살표의 길이입니다."))
 	float ReflectorDebugArrowLength = 180.0f;
 

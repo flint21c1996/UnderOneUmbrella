@@ -208,6 +208,7 @@ void UUOULightInteractionSurfaceComponent::ValidateSettings()
 	ReflectionConeAngle = FMath::Clamp(ReflectionConeAngle, 0.0f, 89.0f);
 	ReflectionIntensityMultiplier = FMath::Max(0.0f, ReflectionIntensityMultiplier);
 	ReflectionStartPadding = FMath::Max(0.0f, ReflectionStartPadding);
+	VisualJunctionClearanceScale = FMath::Clamp(VisualJunctionClearanceScale, 0.0f, 1.0f);
 	MaximumReflectionIncidenceAngle = FMath::Clamp(MaximumReflectionIncidenceAngle, 0.0f, 89.9f);
 	ReflectionApertureScale = FMath::Max(0.0f, ReflectionApertureScale);
 	SurfaceSampleInset = FMath::Clamp(SurfaceSampleInset, 0.0f, 1.0f);

@@ -19,6 +19,9 @@ struct UNDERONEUMBRELLA_API FUOULightBeamVisualSegmentData
 	bool bReflected = false;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Visual")
+	bool bEndsAtReflection = false;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Visual")
 	FVector Start = FVector::ZeroVector;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Visual")

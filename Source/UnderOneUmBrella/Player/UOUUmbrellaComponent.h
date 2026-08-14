@@ -278,6 +278,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, AdvancedDisplay, Category = "Umbrella|Debug", meta = (ToolTip = "이 값은 더 이상 비 차단 월드 디버그 표시 여부를 결정하지 않습니다. Debug Controller의 Player World Debug 옵션을 사용합니다."))
 	bool bDrawRainBlockerDebug = true;
 
+	// 비 차단 범위의 박스와 선은 유지하면서 상태 문자열만 별도로 표시할 때 사용합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Debug", meta = (ToolTip = "Gameplay RainBlocker 상태 문자열을 표시합니다. 디버그 박스와 선의 표시 여부에는 영향을 주지 않습니다."))
+	bool bDrawRainBlockerDebugLabel = false;
+
 	// 비 차단 디버그 선과 중심점의 두께입니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Debug", meta = (ClampMin = "0.0", ToolTip = "비 차단 디버그 선과 중심점의 두께입니다."))
 	float RainBlockerDebugThickness = 2.0f;
