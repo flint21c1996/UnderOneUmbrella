@@ -10,6 +10,7 @@
 #include "GameFramework/Actor.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/Pawn.h"
+#include "Components/CapsuleComponent.h"
 
 UUOURotatableMirrorComponent::UUOURotatableMirrorComponent()
 {
@@ -121,9 +122,34 @@ bool UUOURotatableMirrorComponent::CanBeginMirrorPush(const APawn* Pusher) const
 	}
 
 	const USceneComponent* PushHandle = FindNearestPushHandle(Pusher);
-	return PushHandle != nullptr &&
-		FVector::DistSquared2D(Pusher->GetActorLocation(), PushHandle->GetComponentLocation()) <=
-		FMath::Square(FMath::Max(0.0f, MaximumGrabDistance));
+	if (PushHandle == nullptr)
+	{
+		return false;
+	}
+
+	const float HandleDistance = FVector::Dist2D(
+		Pusher->GetActorLocation(),
+		PushHandle->GetComponentLocation());
+	FVector ClosestSurfacePoint;
+	float SurfaceGap = TNumericLimits<float>::Max();
+	if (!FindClosestGrabSurfacePoint(Pusher, ClosestSurfacePoint, SurfaceGap))
+	{
+		return false;
+	}
+
+	FVector ToSurface = ClosestSurfacePoint - Pusher->GetActorLocation();
+	ToSurface.Z = 0.0f;
+	if (ToSurface.IsNearlyZero())
+	{
+		return false;
+	}
+	const float FacingCorrectionAngle = FMath::Abs(FMath::FindDeltaAngleDegrees(
+		Pusher->GetActorRotation().Yaw,
+		ToSurface.Rotation().Yaw));
+	return HandleDistance <= FMath::Max(0.0f, MaximumGrabDistance) &&
+		SurfaceGap <= FMath::Max(0.0f, MaximumGrabSurfaceGap) &&
+		(!bFacePushHandle ||
+			FacingCorrectionAngle <= FMath::Clamp(MaximumGrabFacingCorrectionAngle, 0.0f, 180.0f));
 }
 
 bool UUOURotatableMirrorComponent::TryBeginMirrorPush(APawn* Pusher)
@@ -143,30 +169,27 @@ bool UUOURotatableMirrorComponent::TryBeginMirrorPush(APawn* Pusher)
 		return false;
 	}
 
-	const FVector HandleLocation = ActivePushHandle->GetComponentLocation();
-	FVector HandleToPlayer = Pusher->GetActorLocation() - HandleLocation;
-	HandleToPlayer.Z = 0.0f;
-	if (HandleToPlayer.IsNearlyZero())
+	FVector ClosestSurfacePoint;
+	float SurfaceGap = 0.0f;
+	if (!FindClosestGrabSurfacePoint(Pusher, ClosestSurfacePoint, SurfaceGap))
 	{
-		HandleToPlayer = RotatingComponent->GetForwardVector();
-		HandleToPlayer.Z = 0.0f;
-	}
-	HandleToPlayer.Normalize();
-
-	FVector AttachLocation = HandleLocation + HandleToPlayer * FMath::Max(0.0f, PlayerAttachDistance);
-	AttachLocation.Z = Pusher->GetActorLocation().Z;
-	AttachedPlayerLocalLocation =
-		RotatingComponent->GetComponentTransform().InverseTransformPosition(AttachLocation);
-	CurrentPusher = Pusher;
-
-	if (bSnapPlayerOnGrab && !UpdateAttachedPlayerTransform(true))
-	{
-		CurrentPusher = nullptr;
 		ActivePushHandle = nullptr;
 		return false;
 	}
+	FVector ToSurface = ClosestSurfacePoint - Pusher->GetActorLocation();
+	ToSurface.Z = 0.0f;
+	if (bFacePushHandle && !ToSurface.IsNearlyZero())
+	{
+		Pusher->SetActorRotation(FRotator(0.0f, ToSurface.Rotation().Yaw, 0.0f));
+	}
 
-	ApplyPusherFacing();
+	// 잡기 시작 시 캐릭터를 정해진 위치와 방향으로 순간 정렬하지 않습니다.
+	// 현재 Transform을 거울의 로컬 공간에 저장해 이후 거울 회전만 자연스럽게 따라가게 합니다.
+	AttachedPlayerLocalLocation =
+		RotatingComponent->GetComponentTransform().InverseTransformPosition(Pusher->GetActorLocation());
+	AttachedPlayerLocalRotation =
+		RotatingComponent->GetComponentQuat().Inverse() * Pusher->GetActorQuat();
+	CurrentPusher = Pusher;
 	if (ACharacter* Character = Cast<ACharacter>(Pusher); Character != nullptr && PushMontage != nullptr)
 	{
 		Character->PlayAnimMontage(PushMontage, FMath::Max(0.01f, PushMontagePlayRate));
@@ -286,6 +309,8 @@ void UUOURotatableMirrorComponent::ValidateSettings()
 	MinimumPushSpeed = FMath::Max(0.0f, MinimumPushSpeed);
 	MaximumGrabDistance = FMath::Max(0.0f, MaximumGrabDistance);
 	PlayerAttachDistance = FMath::Max(0.0f, PlayerAttachDistance);
+	MaximumGrabSurfaceGap = FMath::Max(0.0f, MaximumGrabSurfaceGap);
+	MaximumGrabFacingCorrectionAngle = FMath::Clamp(MaximumGrabFacingCorrectionAngle, 0.0f, 180.0f);
 	PushMontagePlayRate = FMath::Max(0.01f, PushMontagePlayRate);
 	MinimumLeverArm = FMath::Max(0.0f, MinimumLeverArm);
 	FullTorqueLeverArm = FMath::Max(MinimumLeverArm + 1.0f, FullTorqueLeverArm);
@@ -466,6 +491,69 @@ USceneComponent* UUOURotatableMirrorComponent::FindNearestPushHandle(const AActo
 	return NearestHandle;
 }
 
+bool UUOURotatableMirrorComponent::FindClosestGrabSurfacePoint(
+	const APawn* Pusher,
+	FVector& OutClosestPoint,
+	float& OutSurfaceGap) const
+{
+	OutClosestPoint = FVector::ZeroVector;
+	OutSurfaceGap = TNumericLimits<float>::Max();
+	if (Pusher == nullptr || GetOwner() == nullptr || RotatingComponent == nullptr)
+	{
+		return false;
+	}
+
+	float PusherRadius = 0.0f;
+	if (const ACharacter* Character = Cast<ACharacter>(Pusher))
+	{
+		if (const UCapsuleComponent* Capsule = Character->GetCapsuleComponent())
+		{
+			PusherRadius = Capsule->GetScaledCapsuleRadius();
+		}
+	}
+
+	float ClosestCenterDistance = TNumericLimits<float>::Max();
+	TInlineComponentArray<UPrimitiveComponent*> PrimitiveComponents(GetOwner());
+	for (UPrimitiveComponent* Primitive : PrimitiveComponents)
+	{
+		if (Primitive == nullptr || Primitive == PushVolume ||
+			(Primitive != RotatingComponent && !Primitive->IsAttachedTo(RotatingComponent)))
+		{
+			continue;
+		}
+
+		FVector ClosestPoint;
+		const float CollisionDistance = Primitive->GetClosestPointOnCollision(
+			Pusher->GetActorLocation(),
+			ClosestPoint);
+		const bool bHasCollisionPoint = CollisionDistance >= 0.0f;
+		const FVector CandidatePoint = bHasCollisionPoint
+			? ClosestPoint
+			: Primitive->Bounds.GetBox().GetClosestPointTo(Pusher->GetActorLocation());
+		const float CenterDistance = FVector::Dist(Pusher->GetActorLocation(), CandidatePoint);
+		if (CenterDistance < ClosestCenterDistance)
+		{
+			ClosestCenterDistance = CenterDistance;
+			OutClosestPoint = CandidatePoint;
+		}
+	}
+
+	if (!FMath::IsFinite(ClosestCenterDistance))
+	{
+		return false;
+	}
+	OutSurfaceGap = FMath::Max(0.0f, ClosestCenterDistance - PusherRadius);
+	return true;
+}
+
+float UUOURotatableMirrorComponent::CalculateGrabSurfaceGap(const APawn* Pusher) const
+{
+	FVector ClosestPoint;
+	float SurfaceGap = TNumericLimits<float>::Max();
+	FindClosestGrabSurfacePoint(Pusher, ClosestPoint, SurfaceGap);
+	return SurfaceGap;
+}
+
 bool UUOURotatableMirrorComponent::UpdateAttachedPlayerTransform(bool bSweepMovement)
 {
 	if (CurrentPusher == nullptr || RotatingComponent == nullptr)
@@ -475,19 +563,18 @@ bool UUOURotatableMirrorComponent::UpdateAttachedPlayerTransform(bool bSweepMove
 
 	const FVector DesiredLocation =
 		RotatingComponent->GetComponentTransform().TransformPosition(AttachedPlayerLocalLocation);
+	const FQuat DesiredRotation =
+		RotatingComponent->GetComponentQuat() * AttachedPlayerLocalRotation;
 	FHitResult MoveHit;
-	CurrentPusher->SetActorLocation(
+	CurrentPusher->SetActorLocationAndRotation(
 		DesiredLocation,
+		DesiredRotation,
 		bSweepMovement,
 		&MoveHit,
 		ETeleportType::None);
 	const bool bReachedDesiredLocation = FVector::DistSquared(
 		CurrentPusher->GetActorLocation(),
 		DesiredLocation) <= FMath::Square(2.0f);
-	if (bReachedDesiredLocation)
-	{
-		ApplyPusherFacing();
-	}
 	return bReachedDesiredLocation;
 }
 
