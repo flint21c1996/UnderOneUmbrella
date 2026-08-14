@@ -13,6 +13,7 @@
 #include "UObject/UnrealType.h"
 #include "World/Light/UOULightBeamVisualInterface.h"
 #include "World/Light/UOULightExposureSourceComponent.h"
+#include "World/Light/UOULightInteractionSurfaceComponent.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogUOULightBeamVisual, Log, All);
 
@@ -61,7 +62,8 @@ namespace
 
 	float CalculateReflectedJunctionClearance(
 		const FUOULightPathSegmentData& SegmentData,
-		const float VisibleEndDistance)
+		const float VisibleEndDistance,
+		const UUOULightInteractionSurfaceComponent* StartReflectionSurface)
 	{
 		const FVector IncomingDirection = SegmentData.IncomingDirection.GetSafeNormal();
 		const FVector ReflectedDirection = SegmentData.Direction.GetSafeNormal();
@@ -105,7 +107,10 @@ namespace
 			? StartRadius * LateralAlignment / ClearanceDenominator
 			: VisibleEndDistance * 0.5f;
 
-		return FMath::Clamp(DesiredClearance, 0.0f, VisibleEndDistance * 0.5f);
+		const float ClearanceScale = StartReflectionSurface != nullptr
+			? FMath::Clamp(StartReflectionSurface->VisualJunctionClearanceScale, 0.0f, 1.0f)
+			: 1.0f;
+		return FMath::Clamp(DesiredClearance, 0.0f, VisibleEndDistance * 0.5f) * ClearanceScale;
 	}
 
 	float CalculateIncomingJunctionClearance(
@@ -162,10 +167,16 @@ namespace
 				KINDA_SMALL_NUMBER,
 				NormalAlignment + RadiusGrowthPerUnit * LateralAlignment);
 
+		const float ClearanceScale = IncomingSegment.InteractionSurface != nullptr
+			? FMath::Clamp(
+				IncomingSegment.InteractionSurface->VisualJunctionClearanceScale,
+				0.0f,
+				1.0f)
+			: 1.0f;
 		return FMath::Clamp(
 			RequiredAdditionalClearance,
 			0.0f,
-			VisibleEndDistance * 0.5f);
+			VisibleEndDistance * 0.5f) * ClearanceScale;
 	}
 
 	FString NormalizeBlueprintMemberText(FString MemberText)
@@ -652,10 +663,15 @@ void UUOULightBeamVisualComponent::UpdateReflectionVFX(
 					*NextReflectedSegment,
 					VisibleEndDistance)
 				: 0.0f;
+			const FUOULightPathSegmentData* PreviousSegment =
+				PathData.Segments.IsValidIndex(SegmentIndex - 1)
+					? &PathData.Segments[SegmentIndex - 1]
+					: nullptr;
 			FUOULightBeamVisualSegmentData VisualData = BuildVisualSegment(
 				SegmentData,
 				VFXIndex + 1,
-				JunctionEndClearance);
+				JunctionEndClearance,
+				PreviousSegment != nullptr ? PreviousSegment->InteractionSurface.Get() : nullptr);
 			VisualData.Color = LightColor;
 			ApplySegmentToVFX(VFXActor, VisualData);
 			++VFXIndex;
@@ -948,11 +964,13 @@ void UUOULightBeamVisualComponent::SetVFXActive(AActor* VFXActor, bool bActive) 
 FUOULightBeamVisualSegmentData UUOULightBeamVisualComponent::BuildVisualSegment(
 	const FUOULightPathSegmentData& SegmentData,
 	int32 VisualSegmentIndex,
-	float AdditionalEndPadding) const
+	float AdditionalEndPadding,
+	const UUOULightInteractionSurfaceComponent* StartReflectionSurface) const
 {
 	FUOULightBeamVisualSegmentData VisualData;
 	VisualData.SegmentIndex = VisualSegmentIndex;
 	VisualData.bReflected = SegmentData.bReflected;
+	VisualData.bEndsAtReflection = SegmentData.HitType == EUOULightPathHitType::ReflectingSurface;
 	VisualData.Color = ResolveLightColor();
 	VisualData.Intensity = SegmentData.Intensity;
 	VisualData.VisualBrightnessMultiplier = FMath::Max(0.0f, VisualBrightnessMultiplier);
@@ -966,7 +984,8 @@ FUOULightBeamVisualSegmentData UUOULightBeamVisualComponent::BuildVisualSegment(
 			FMath::Max(0.0f, AdditionalEndPadding));
 	const float StartClearance = CalculateReflectedJunctionClearance(
 		SegmentData,
-		VisibleEndDistance);
+		VisibleEndDistance,
+		StartReflectionSurface);
 	VisualData.Start = SegmentData.Start + VisualData.Direction * StartClearance;
 	VisualData.Length = FMath::Max(0.0f, VisibleEndDistance - StartClearance);
 	VisualData.End = VisualData.Start + VisualData.Direction * VisualData.Length;

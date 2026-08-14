@@ -264,7 +264,13 @@ void UUOUUmbrellaLightInteractionComponent::ApplyRuntimeLightSurfacePlacement() 
 		HalfExtent);
 	LightSurfaceComponent->SetBoxExtent(
 		bUseRainBlockerPlacement ? HalfExtent : RuntimeSurfaceBoxExtent);
-	LightSurfaceComponent->ReflectionDirectionMode = EUOULightReflectionDirectionMode::OwnerForward;
+	// 캐릭터가 바라보는 방향이 아니라 입사 방향과 우산 면의 법선으로 반사 방향을 계산합니다.
+	LightSurfaceComponent->ReflectionDirectionMode = EUOULightReflectionDirectionMode::MirrorByNormal;
+	// 우산은 얇은 박스이므로 가장자리 충돌 노멀 대신 실제 우산 면인 로컬 Up을 반사 법선으로 고정합니다.
+	LightSurfaceComponent->ReflectionNormalMode = EUOULightReflectionNormalMode::ComponentUp;
+	// 우산 메시가 반사점을 가리므로 거울용 시각 여백을 적용하지 않고 입사광과 반사광을 바로 연결합니다.
+	LightSurfaceComponent->ReflectionStartPadding = 0.0f;
+	LightSurfaceComponent->VisualJunctionClearanceScale = 0.0f;
 	// 차단 박스와 동일한 회전을 사용하므로 로컬 Up이 실제 우산 면의 앞면입니다.
 	LightSurfaceComponent->ReflectionFrontNormalMode = EUOULightReflectionFrontNormalMode::ComponentUp;
 	LightSurfaceComponent->bPassThroughWhenReflectionRejected =
@@ -407,14 +413,25 @@ void UUOUUmbrellaLightInteractionComponent::DrawReflectorDebug() const
 		0,
 		SafeThickness);
 
-	const AActor* Owner = GetOwner();
-	const FVector ReflectionDirection = Owner != nullptr
-		? Owner->GetActorForwardVector().GetSafeNormal()
-		: LightSurfaceComponent->GetForwardVector().GetSafeNormal();
-	if (InteractionMode == EUOULightInteractionMode::Reflecting && !ReflectionDirection.IsNearlyZero())
+	// 법선 반사는 입사광마다 출사 방향이 달라 고정 화살표로 표현할 수 없습니다.
+	// Component/Owner Forward 모드에서만 고정 반사 방향 화살표를 표시합니다.
+	FVector FixedReflectionDirection = FVector::ZeroVector;
+	if (LightSurfaceComponent->ReflectionDirectionMode == EUOULightReflectionDirectionMode::ComponentForward)
+	{
+		FixedReflectionDirection = LightSurfaceComponent->GetForwardVector().GetSafeNormal();
+	}
+	else if (LightSurfaceComponent->ReflectionDirectionMode == EUOULightReflectionDirectionMode::OwnerForward)
+	{
+		const AActor* Owner = GetOwner();
+		FixedReflectionDirection = Owner != nullptr
+			? Owner->GetActorForwardVector().GetSafeNormal()
+			: LightSurfaceComponent->GetForwardVector().GetSafeNormal();
+	}
+
+	if (InteractionMode == EUOULightInteractionMode::Reflecting && !FixedReflectionDirection.IsNearlyZero())
 	{
 		const FVector ArrowEnd =
-			SurfaceLocation + ReflectionDirection * FMath::Max(0.0f, ReflectorDebugArrowLength);
+			SurfaceLocation + FixedReflectionDirection * FMath::Max(0.0f, ReflectorDebugArrowLength);
 		DrawDebugDirectionalArrow(
 			World,
 			SurfaceLocation,
@@ -427,7 +444,8 @@ void UUOUUmbrellaLightInteractionComponent::DrawReflectorDebug() const
 			SafeThickness);
 	}
 
-	if (UUOUDebugSubsystem::IsDebugWorldLabelEnabled(this, EUOUDebugCategory::Puzzle))
+	if (bDrawReflectorDebugLabel &&
+		UUOUDebugSubsystem::IsDebugWorldLabelEnabled(this, EUOUDebugCategory::Puzzle))
 	{
 		const TCHAR* ModeText = InteractionMode == EUOULightInteractionMode::Reflecting
 			? TEXT("Reflecting")
