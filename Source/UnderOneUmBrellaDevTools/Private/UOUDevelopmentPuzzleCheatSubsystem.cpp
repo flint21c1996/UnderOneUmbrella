@@ -446,6 +446,126 @@ bool UUOUDevelopmentPuzzleCheatSubsystem::AdvanceThroughGraphNode(int32 TargetNo
 	return true;
 }
 
+bool UUOUDevelopmentPuzzleCheatSubsystem::ResolveExternalInput(
+	int32 NodeIndex,
+	int32 ExternalInputIndex)
+{
+	if (bGraphExecutionActive)
+	{
+		LastStatusMessage = TEXT("그래프 실행 중에는 외부 입력을 개별 실행할 수 없습니다.");
+		return false;
+	}
+
+	if (!PuzzleGraphNodes.IsValidIndex(NodeIndex))
+	{
+		LastStatusMessage = FString::Printf(
+			TEXT("외부 입력 실행 실패: 그래프 노드 %d을(를) 찾지 못했습니다."),
+			NodeIndex);
+		return false;
+	}
+
+	const FUOUDevelopmentPuzzleCheatGraphNode& Node = PuzzleGraphNodes[NodeIndex];
+	if (!Node.ExternalInputs.IsValidIndex(ExternalInputIndex))
+	{
+		LastStatusMessage = FString::Printf(
+			TEXT("외부 입력 실행 실패: 노드 %d에 외부 입력 %d이(가) 없습니다."),
+			NodeIndex,
+			ExternalInputIndex);
+		return false;
+	}
+
+	const FUOUDevelopmentPuzzleCheatExternalInput& ExternalInput =
+		Node.ExternalInputs[ExternalInputIndex];
+	AActor* InputActor = ExternalInput.InputActor.Get();
+	if (!IsValid(InputActor))
+	{
+		LastStatusMessage = FString::Printf(
+			TEXT("외부 입력 실행 실패: 노드 %d의 입력 액터가 유효하지 않습니다."),
+			NodeIndex);
+		return false;
+	}
+
+	if (ExternalInput.ConditionSources.IsEmpty())
+	{
+		LastStatusMessage = FString::Printf(
+			TEXT("외부 입력 '%s'에 연결된 ConditionSource가 없습니다."),
+			*ExternalInput.DisplayName.ToString());
+		return false;
+	}
+
+	int32 ValidSourceCount = 0;
+	int32 AcceptedSourceCount = 0;
+	for (const TWeakObjectPtr<UUOUPuzzleConditionSourceComponent>& ConditionSourceReference :
+		ExternalInput.ConditionSources)
+	{
+		UUOUPuzzleConditionSourceComponent* ConditionSource = ConditionSourceReference.Get();
+		if (!IsValid(ConditionSource))
+		{
+			continue;
+		}
+
+		++ValidSourceCount;
+		if (ConditionSource->IsSatisfied()
+			|| ConditionSource->TryResolveInputForCheat(InputActor))
+		{
+			++AcceptedSourceCount;
+		}
+	}
+
+	const bool bAllSourcesAccepted = ValidSourceCount == ExternalInput.ConditionSources.Num()
+		&& AcceptedSourceCount == ValidSourceCount;
+	if (!bAllSourcesAccepted)
+	{
+		LastStatusMessage = FString::Printf(
+			TEXT("외부 입력 '%s' 해결 요청 일부 실패: %d/%d Source 처리."),
+			*ExternalInput.DisplayName.ToString(),
+			AcceptedSourceCount,
+			ExternalInput.ConditionSources.Num());
+		return false;
+	}
+
+	LastStatusMessage = FString::Printf(
+		TEXT("외부 입력 '%s' 해결 요청 완료: %d개 Source 처리."),
+		*ExternalInput.DisplayName.ToString(),
+		AcceptedSourceCount);
+	return true;
+}
+
+bool UUOUDevelopmentPuzzleCheatSubsystem::IsExternalInputSatisfied(
+	int32 NodeIndex,
+	int32 ExternalInputIndex) const
+{
+	if (!PuzzleGraphNodes.IsValidIndex(NodeIndex))
+	{
+		return false;
+	}
+
+	const FUOUDevelopmentPuzzleCheatGraphNode& Node = PuzzleGraphNodes[NodeIndex];
+	if (!Node.ExternalInputs.IsValidIndex(ExternalInputIndex))
+	{
+		return false;
+	}
+
+	const FUOUDevelopmentPuzzleCheatExternalInput& ExternalInput =
+		Node.ExternalInputs[ExternalInputIndex];
+	if (!IsValid(ExternalInput.InputActor.Get()) || ExternalInput.ConditionSources.IsEmpty())
+	{
+		return false;
+	}
+
+	for (const TWeakObjectPtr<UUOUPuzzleConditionSourceComponent>& ConditionSourceReference :
+		ExternalInput.ConditionSources)
+	{
+		const UUOUPuzzleConditionSourceComponent* ConditionSource = ConditionSourceReference.Get();
+		if (!IsValid(ConditionSource) || !ConditionSource->IsSatisfied())
+		{
+			return false;
+		}
+	}
+
+	return true;
+}
+
 bool UUOUDevelopmentPuzzleCheatSubsystem::IsGraphNodeActive(int32 NodeIndex) const
 {
 	return bGraphExecutionActive && ActiveGraphNodes.ContainsByPredicate(

@@ -51,6 +51,14 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Puzzle Cheat|Graph")
 	bool AdvanceThroughGraphNode(int32 TargetNodeIndex);
 
+	// 지정한 그래프 노드의 외부 입력 액터를 해당 ConditionSource의 개발용 해결 경로로 진행합니다.
+	UFUNCTION(BlueprintCallable, Category = "Puzzle Cheat|External Input")
+	bool ResolveExternalInput(int32 NodeIndex, int32 ExternalInputIndex);
+
+	// 외부 입력에 연결된 모든 ConditionSource가 현재 만족 상태인지 확인합니다.
+	UFUNCTION(BlueprintPure, Category = "Puzzle Cheat|External Input")
+	bool IsExternalInputSatisfied(int32 NodeIndex, int32 ExternalInputIndex) const;
+
 	UFUNCTION(BlueprintPure, Category = "Puzzle Cheat|Graph")
 	bool IsGraphExecutionActive() const { return bGraphExecutionActive; }
 
