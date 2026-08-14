@@ -3,6 +3,7 @@
 #include "World/WaterTarget/UOUWaterBasinTargetComponent.h"
 
 #include "Components/PrimitiveComponent.h"
+#include "Debug/UOUDevelopmentDebugDrawContext.h"
 #include "GameFramework/Actor.h"
 #include "UObject/UObjectIterator.h"
 
@@ -69,6 +70,93 @@ void UUOUWaterBasinTargetComponent::TickComponent(float DeltaTime, ELevelTick Ti
 
 	ApplyPassiveDrain(DeltaTime);
 }
+
+EUOUDebugCategory UUOUWaterBasinTargetComponent::GetDebugCategory_Implementation() const
+{
+	return EUOUDebugCategory::Puzzle;
+}
+
+#if UOU_WITH_DEVELOPMENT_TOOLS
+void UUOUWaterBasinTargetComponent::GatherDevelopmentDebugDraw(
+	IUOUDevelopmentDebugDrawContext& Context) const
+{
+	const AActor* Owner = GetOwner();
+	if (!IsValid(Owner))
+	{
+		return;
+	}
+
+	const FBox OwnerBounds = Owner->GetComponentsBoundingBox(true);
+	const FVector OwnerCenter = OwnerBounds.IsValid
+		? OwnerBounds.GetCenter()
+		: Owner->GetActorLocation();
+	const FVector OwnerExtent = OwnerBounds.IsValid
+		? OwnerBounds.GetExtent()
+		: FVector(50.0f);
+	const float BottomWorldZ = GetBottomWorldZ();
+	const float TopWorldZ = GetTopWorldZ();
+	const float HalfHeight = FMath::Max(1.0f, (TopWorldZ - BottomWorldZ) * 0.5f);
+	FVector CapacityCenter = OwnerCenter;
+	CapacityCenter.Z = BottomWorldZ + HalfHeight;
+	const FVector CapacityExtent(
+		FMath::Max(1.0f, OwnerExtent.X),
+		FMath::Max(1.0f, OwnerExtent.Y),
+		HalfHeight);
+	Context.DrawBox(
+		CapacityCenter,
+		CapacityExtent,
+		FQuat::Identity,
+		FColor::Blue,
+		3.0f);
+
+	FVector SurfaceCenter = OwnerCenter;
+	SurfaceCenter.Z = WaterSurfaceWorldZ;
+	Context.DrawBox(
+		SurfaceCenter,
+		FVector(CapacityExtent.X, CapacityExtent.Y, 2.0f),
+		FQuat::Identity,
+		FColor::Cyan,
+		2.0f);
+
+	const FUOUWaterBasinGroupDebugData GroupData = GetConnectedGroupDebugData();
+	const FString DebugText = FString::Printf(
+		TEXT("Water Basin: %s\nTarget %.2f / %.2f (%.1f%%)\nDepth %.2f / Surface Z %.1f\nGroup %d targets / %.2f / %.2f (%.1f%%)"),
+		*Owner->GetName(),
+		CurrentWaterVolume,
+		GetCapacity(),
+		CurrentFillRatio * 100.0f,
+		CurrentWaterDepth,
+		WaterSurfaceWorldZ,
+		GroupData.TargetCount,
+		GroupData.TotalVolume,
+		GroupData.TotalCapacity,
+		GroupData.FillRatio * 100.0f);
+	Context.DrawString(
+		FVector(OwnerCenter.X, OwnerCenter.Y, TopWorldZ + 100.0f),
+		DebugText,
+		FColor::Cyan,
+		0.9f);
+
+	for (const AActor* ConnectedActor : ConnectedTargets)
+	{
+		if (!IsValid(ConnectedActor))
+		{
+			continue;
+		}
+
+		const FBox ConnectedBounds = ConnectedActor->GetComponentsBoundingBox(true);
+		const FVector ConnectedCenter = ConnectedBounds.IsValid
+			? ConnectedBounds.GetCenter()
+			: ConnectedActor->GetActorLocation();
+		Context.DrawArrow(
+			OwnerCenter,
+			ConnectedCenter,
+			50.0f,
+			FColor::Yellow,
+			3.0f);
+	}
+}
+#endif
 
 //에디터에서 속성 변경시 호출되는 함수
 #if WITH_EDITOR
