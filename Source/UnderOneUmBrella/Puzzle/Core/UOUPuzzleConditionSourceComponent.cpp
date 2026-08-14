@@ -39,6 +39,29 @@ void UUOUPuzzleConditionSourceComponent::GetPuzzleDebugInputActors_Implementatio
 {
 }
 
+EUOUDebugCategory UUOUPuzzleConditionSourceComponent::GetDebugCategory_Implementation() const
+{
+	return EUOUDebugCategory::Puzzle;
+}
+
+FText UUOUPuzzleConditionSourceComponent::GetDebugSummaryText_Implementation() const
+{
+	const TArray<FString> DebugLines =
+		IUOUPuzzleDebugInfoProvider::Execute_GetPuzzleDebugInfo(
+			const_cast<UUOUPuzzleConditionSourceComponent*>(this));
+
+	return DebugLines.IsEmpty()
+		? FText::GetEmpty()
+		: FText::FromString(FString::Join(DebugLines, LINE_TERMINATOR));
+}
+
+#if UOU_WITH_DEVELOPMENT_TOOLS
+bool UUOUPuzzleConditionSourceComponent::ShouldDrawDevelopmentDebugLabel() const
+{
+	return false;
+}
+#endif
+
 bool UUOUPuzzleConditionSourceComponent::SetSatisfiedState(bool bNewSatisfied, bool bBroadcastChange)
 {
 #if UOU_WITH_PUZZLE_CHEATS
