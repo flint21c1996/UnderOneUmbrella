@@ -603,7 +603,6 @@ void UUOUDevelopmentDebugDrawSubsystem::Tick(float DeltaTime)
 
 	DrawWaterBasinDebug();
 	DrawRotatableMirrorDebug();
-	DrawLightExposureReceiverDebug();
 	DrawUmbrellaLightReflectorDebug();
 	DrawLightExposureSourceDebug();
 	DrawSelectedPuzzleInfo();
@@ -2089,61 +2088,6 @@ void UUOUDevelopmentDebugDrawSubsystem::DrawRotatableMirrorDebug() const
 					0,
 					1.5f);
 			}
-		}
-	}
-}
-
-void UUOUDevelopmentDebugDrawSubsystem::DrawLightExposureReceiverDebug() const
-{
-	UWorld* World = GetWorld();
-	const UUOUDevelopmentDebugControlSubsystem* ControlSubsystem = DebugControlSubsystem.Get();
-	const TArray<AActor*> SelectedActors = ControlSubsystem != nullptr
-		? ControlSubsystem->GetSelectedDebugActors()
-		: TArray<AActor*>();
-	if (World == nullptr || SelectedActors.IsEmpty())
-	{
-		return;
-	}
-
-	const FVector DebugOffset(0.0f, 0.0f, 100.0f);
-	for (AActor* SelectedActor : SelectedActors)
-	{
-		if (!IsValid(SelectedActor))
-		{
-			continue;
-		}
-
-		TArray<UUOULightExposureReceiverComponent*> ReceiverComponents;
-		SelectedActor->GetComponents<UUOULightExposureReceiverComponent>(ReceiverComponents);
-		for (UUOULightExposureReceiverComponent* ReceiverComponent : ReceiverComponents)
-		{
-			if (!IsValid(ReceiverComponent))
-			{
-				continue;
-			}
-
-			const FVector DebugLocation =
-				IUOULightReceivableInterface::Execute_GetLightReceiverPosition(
-					ReceiverComponent)
-				+ DebugOffset;
-			const FString DebugText = FString::Printf(
-				TEXT("Temp: %.1f C\nLight: %s\nIntensity: %.2f"),
-				ReceiverComponent->CurrentTemperature,
-				ReceiverComponent->bIsReceivingLight ? TEXT("On") : TEXT("Off"),
-				ReceiverComponent->LastExposureIntensity);
-			const FColor TextColor = ReceiverComponent->bIsReceivingLight
-				? FColor::Orange
-				: FColor::Cyan;
-
-			DrawDebugString(
-				World,
-				DebugLocation,
-				DebugText,
-				nullptr,
-				TextColor,
-				0.0f,
-				true,
-				1.0f);
 		}
 	}
 }

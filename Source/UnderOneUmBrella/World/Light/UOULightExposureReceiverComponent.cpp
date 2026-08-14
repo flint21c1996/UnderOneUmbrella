@@ -4,6 +4,7 @@
 
 #include "Components/PrimitiveComponent.h"
 #include "Components/SceneComponent.h"
+#include "Debug/UOUDevelopmentDebugDrawContext.h"
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
 
@@ -53,6 +54,30 @@ TArray<FString> UUOULightExposureReceiverComponent::GetPuzzleDebugInfo_Implement
 		FString::Printf(TEXT("Exposure: %.2f from %s"), LastExposureIntensity, *LastExposureSourceName)
 	};
 }
+
+EUOUDebugCategory UUOULightExposureReceiverComponent::GetDebugCategory_Implementation() const
+{
+	return EUOUDebugCategory::Puzzle;
+}
+
+#if UOU_WITH_DEVELOPMENT_TOOLS
+void UUOULightExposureReceiverComponent::GatherDevelopmentDebugDraw(
+	IUOUDevelopmentDebugDrawContext& Context) const
+{
+	const FVector DebugLocation =
+		IUOULightReceivableInterface::Execute_GetLightReceiverPosition(
+			const_cast<UUOULightExposureReceiverComponent*>(this))
+		+ FVector(0.0f, 0.0f, 100.0f);
+	const FString DebugText = FString::Printf(
+		TEXT("Temp: %.1f C\nLight: %s\nIntensity: %.2f"),
+		CurrentTemperature,
+		bIsReceivingLight ? TEXT("On") : TEXT("Off"),
+		LastExposureIntensity);
+	const FColor TextColor = bIsReceivingLight ? FColor::Orange : FColor::Cyan;
+
+	Context.DrawString(DebugLocation, DebugText, TextColor, 1.0f);
+}
+#endif
 
 FVector UUOULightExposureReceiverComponent::GetLightReceiverPosition_Implementation() const
 {
