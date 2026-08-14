@@ -5,7 +5,6 @@
 #include "Components/SceneComponent.h"
 #include "Components/SplineComponent.h"
 #include "Debug/UOUDevelopmentDebugDrawContext.h"
-#include "Debug/UOUPuzzleDebugInfoProvider.h"
 #include "Engine/StaticMesh.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
@@ -249,8 +248,7 @@ FText AUOUHeatWireActor::GetDebugSummaryText_Implementation() const
 		return FText::FromString(TEXT("HeatWire: Missing Component"));
 	}
 
-	const TArray<FString> DebugLines = IUOUPuzzleDebugInfoProvider::Execute_GetPuzzleDebugInfo(HeatWireComponent);
-	return FText::FromString(FString::Join(DebugLines, LINE_TERMINATOR));
+	return IUOUDebugProvider::Execute_GetDebugSummaryText(HeatWireComponent);
 }
 
 FVector AUOUHeatWireActor::GetDebugWorldLocation_Implementation() const

@@ -3,7 +3,6 @@
 #include "Puzzle/Timer/UOUTimerConditionActor.h"
 
 #include "Components/SceneComponent.h"
-#include "Debug/UOUPuzzleDebugInfoProvider.h"
 #include "Puzzle/Timer/UOUTimerConditionComponent.h"
 
 AUOUTimerConditionActor::AUOUTimerConditionActor()
@@ -82,8 +81,7 @@ FText AUOUTimerConditionActor::GetDebugSummaryText_Implementation() const
 		return FText::FromString(TEXT("Timer Condition: Missing Component"));
 	}
 
-	const TArray<FString> DebugLines = IUOUPuzzleDebugInfoProvider::Execute_GetPuzzleDebugInfo(TimerConditionComponent);
-	return FText::FromString(FString::Join(DebugLines, LINE_TERMINATOR));
+	return IUOUDebugProvider::Execute_GetDebugSummaryText(TimerConditionComponent);
 }
 
 FVector AUOUTimerConditionActor::GetDebugWorldLocation_Implementation() const

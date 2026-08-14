@@ -26,15 +26,6 @@ bool UUOUPuzzleConditionSourceComponent::TryResolveInputForCheat(AActor* InputAc
 }
 #endif
 
-TArray<FString> UUOUPuzzleConditionSourceComponent::GetPuzzleDebugInfo_Implementation() const
-{
-	return {
-		FString::Printf(
-			TEXT("Condition: %s"),
-			bIsSatisfied ? TEXT("Satisfied") : TEXT("Unsatisfied"))
-	};
-}
-
 void UUOUPuzzleConditionSourceComponent::GetPuzzleDebugInputActors_Implementation(TArray<AActor*>& OutInputActors) const
 {
 }
@@ -46,13 +37,9 @@ EUOUDebugCategory UUOUPuzzleConditionSourceComponent::GetDebugCategory_Implement
 
 FText UUOUPuzzleConditionSourceComponent::GetDebugSummaryText_Implementation() const
 {
-	const TArray<FString> DebugLines =
-		IUOUPuzzleDebugInfoProvider::Execute_GetPuzzleDebugInfo(
-			const_cast<UUOUPuzzleConditionSourceComponent*>(this));
-
-	return DebugLines.IsEmpty()
-		? FText::GetEmpty()
-		: FText::FromString(FString::Join(DebugLines, LINE_TERMINATOR));
+	return FText::FromString(FString::Printf(
+		TEXT("Condition: %s"),
+		bIsSatisfied ? TEXT("Satisfied") : TEXT("Unsatisfied")));
 }
 
 #if UOU_WITH_DEVELOPMENT_TOOLS

@@ -6,7 +6,6 @@
 #include "Components/ActorComponent.h"
 #include "Debug/UOUDevelopmentCheatBuild.h"
 #include "Debug/UOUDebugProvider.h"
-#include "Debug/UOUPuzzleDebugInfoProvider.h"
 #include "UOUPuzzleConditionSourceComponent.generated.h"
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnPuzzleConditionChangedSignature, bool, bIsSatisfied);
@@ -16,7 +15,6 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnPuzzleConditionChangedSignature, 
 UCLASS(Abstract, BlueprintType, Blueprintable, ClassGroup=(Puzzle), meta=(BlueprintSpawnableComponent))
 class UNDERONEUMBRELLA_API UUOUPuzzleConditionSourceComponent
 	: public UActorComponent
-	, public IUOUPuzzleDebugInfoProvider
 	, public IUOUDebugProvider
 {
 	GENERATED_BODY()
@@ -41,7 +39,6 @@ public:
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Puzzle|Debug")
 	void GetPuzzleDebugInputActors(TArray<AActor*>& OutInputActors) const;
 
-	virtual TArray<FString> GetPuzzleDebugInfo_Implementation() const override;
 	virtual void GetPuzzleDebugInputActors_Implementation(TArray<AActor*>& OutInputActors) const;
 
 	virtual EUOUDebugCategory GetDebugCategory_Implementation() const override;

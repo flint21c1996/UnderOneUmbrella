@@ -32,14 +32,16 @@ void UUOUOverlapConditionComponent::EndPlay(const EEndPlayReason::Type EndPlayRe
 	Super::EndPlay(EndPlayReason);
 }
 
-TArray<FString> UUOUOverlapConditionComponent::GetPuzzleDebugInfo_Implementation() const
+FText UUOUOverlapConditionComponent::GetDebugSummaryText_Implementation() const
 {
-	return {
+	const TArray<FString> DebugLines = {
 		FString::Printf(TEXT("Overlap Condition: %s"), IsSatisfied() ? TEXT("Satisfied") : TEXT("Unsatisfied")),
 		FString::Printf(TEXT("Mode: %s"), *StaticEnum<EUOUOverlapConditionMode>()->GetNameStringByValue(static_cast<int64>(ConditionMode))),
 		FString::Printf(TEXT("Targets: %d / Required: %d"), OverlappingTargetCount, RequiredOverlapCount),
 		FString::Printf(TEXT("Last Entered: %s"), *GetNameSafe(LastEnteredActor))
 	};
+
+	return FText::FromString(FString::Join(DebugLines, LINE_TERMINATOR));
 }
 
 void UUOUOverlapConditionComponent::GetPuzzleDebugInputActors_Implementation(TArray<AActor*>& OutInputActors) const

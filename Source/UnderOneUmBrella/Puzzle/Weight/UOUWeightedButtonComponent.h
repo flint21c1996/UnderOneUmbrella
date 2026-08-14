@@ -19,7 +19,6 @@ UCLASS(ClassGroup=(Puzzle), meta=(BlueprintSpawnableComponent))
 class UNDERONEUMBRELLA_API UUOUWeightedButtonComponent
 	: public UUOUPuzzleConditionSourceComponent
 	, public IUOUPuzzleWeightSource
-	, public IUOUDebugProvider
 {
 	GENERATED_BODY()
 
@@ -34,7 +33,6 @@ public:
 
 	// 현재 버튼이 퍼즐 무게 소스로 제공할 값을 반환합니다.
 	virtual float GetPuzzleWeight() const override;
-	virtual TArray<FString> GetPuzzleDebugInfo_Implementation() const override;
 	virtual void GetPuzzleDebugInputActors_Implementation(TArray<AActor*>& OutInputActors) const override;
 	virtual EUOUDebugCategory GetDebugCategory_Implementation() const override;
 	virtual bool IsDebugProviderEnabled_Implementation() const override;

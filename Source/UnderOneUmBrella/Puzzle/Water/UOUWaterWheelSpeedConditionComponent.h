@@ -35,7 +35,7 @@ public:
 
 	virtual void BeginPlay() override;
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
-	virtual TArray<FString> GetPuzzleDebugInfo_Implementation() const override;
+	virtual FText GetDebugSummaryText_Implementation() const override;
 	virtual void GetPuzzleDebugInputActors_Implementation(TArray<AActor*>& OutInputActors) const override;
 
 	UPROPERTY(EditInstanceOnly, BlueprintReadWrite, Category = "Water Wheel|Source", meta = (ToolTip = "속도를 관찰할 물레방아 조건 컴포넌트입니다."))

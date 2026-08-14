@@ -48,35 +48,6 @@ float UUOUWeightedButtonComponent::GetPuzzleWeight() const
 	return CurrentWeight;
 }
 
-TArray<FString> UUOUWeightedButtonComponent::GetPuzzleDebugInfo_Implementation() const
-{
-	const int32 OverlapCount = Sensor != nullptr ? Sensor->OverlappingActorCount : 0;
-	const USceneComponent* TargetPoint = bIsSatisfied ? PressedPoint : ReleasedPoint;
-	const float VisualRelativeZ = ButtonVisual != nullptr ? ButtonVisual->GetRelativeLocation().Z : 0.0f;
-	const float TargetRelativeZ = TargetPoint != nullptr ? TargetPoint->GetRelativeLocation().Z : 0.0f;
-
-	return {
-		FString::Printf(
-			TEXT("Weighted Button: %s"),
-			IsPressed() ? TEXT("Pressed") : TEXT("Released")),
-		FString::Printf(
-			TEXT("Weight: %.2f (Press %.2f / Release %.2f)"),
-			CurrentWeight,
-			PressWeight,
-			ReleaseWeight),
-		FString::Printf(TEXT("Sensor Overlaps: %d"), OverlapCount),
-		FString::Printf(
-			TEXT("Motion: Tick %s / Active %s / Speed %.1f / %s -> %s / RelZ %.1f -> %.1f"),
-			IsComponentTickEnabled() ? TEXT("On") : TEXT("Off"),
-			IsActive() ? TEXT("On") : TEXT("Off"),
-			MoveSpeed,
-			*GetNameSafe(ButtonVisual),
-			*GetNameSafe(TargetPoint),
-			VisualRelativeZ,
-			TargetRelativeZ)
-	};
-}
-
 void UUOUWeightedButtonComponent::GetPuzzleDebugInputActors_Implementation(TArray<AActor*>& OutInputActors) const
 {
 	if (Sensor != nullptr)
@@ -102,10 +73,32 @@ FText UUOUWeightedButtonComponent::GetDebugDisplayName_Implementation() const
 
 FText UUOUWeightedButtonComponent::GetDebugSummaryText_Implementation() const
 {
-	const TArray<FString> DebugLines = GetPuzzleDebugInfo_Implementation();
-	return DebugLines.IsEmpty()
-		? FText::GetEmpty()
-		: FText::FromString(FString::Join(DebugLines, LINE_TERMINATOR));
+	const int32 OverlapCount = Sensor != nullptr ? Sensor->OverlappingActorCount : 0;
+	const USceneComponent* TargetPoint = bIsSatisfied ? PressedPoint : ReleasedPoint;
+	const float VisualRelativeZ = ButtonVisual != nullptr ? ButtonVisual->GetRelativeLocation().Z : 0.0f;
+	const float TargetRelativeZ = TargetPoint != nullptr ? TargetPoint->GetRelativeLocation().Z : 0.0f;
+	const TArray<FString> DebugLines = {
+		FString::Printf(
+			TEXT("Weighted Button: %s"),
+			IsPressed() ? TEXT("Pressed") : TEXT("Released")),
+		FString::Printf(
+			TEXT("Weight: %.2f (Press %.2f / Release %.2f)"),
+			CurrentWeight,
+			PressWeight,
+			ReleaseWeight),
+		FString::Printf(TEXT("Sensor Overlaps: %d"), OverlapCount),
+		FString::Printf(
+			TEXT("Motion: Tick %s / Active %s / Speed %.1f / %s -> %s / RelZ %.1f -> %.1f"),
+			IsComponentTickEnabled() ? TEXT("On") : TEXT("Off"),
+			IsActive() ? TEXT("On") : TEXT("Off"),
+			MoveSpeed,
+			*GetNameSafe(ButtonVisual),
+			*GetNameSafe(TargetPoint),
+			VisualRelativeZ,
+			TargetRelativeZ)
+	};
+
+	return FText::FromString(FString::Join(DebugLines, LINE_TERMINATOR));
 }
 
 FVector UUOUWeightedButtonComponent::GetDebugWorldLocation_Implementation() const

@@ -61,9 +61,9 @@ void UUOUWaterWheelRainConditionComponent::TickComponent(float DeltaTime, ELevel
 	RefreshStoppedCondition(SafeDeltaTime);
 }
 
-TArray<FString> UUOUWaterWheelRainConditionComponent::GetPuzzleDebugInfo_Implementation() const
+FText UUOUWaterWheelRainConditionComponent::GetDebugSummaryText_Implementation() const
 {
-	return {
+	const TArray<FString> DebugLines = {
 		FString::Printf(
 			TEXT("Water Wheel Stop: %s"),
 			IsSatisfied() ? TEXT("Satisfied") : TEXT("Unsatisfied")),
@@ -84,6 +84,8 @@ TArray<FString> UUOUWaterWheelRainConditionComponent::GetPuzzleDebugInfo_Impleme
 			bHasWaterInputRecently ? TEXT("Y") : TEXT("N"),
 			bHasEverSpun ? TEXT("Y") : TEXT("N"))
 	};
+
+	return FText::FromString(FString::Join(DebugLines, LINE_TERMINATOR));
 }
 
 void UUOUWaterWheelRainConditionComponent::ReceiveRainInput(const FUOUWaterWheelRainInputContext& InputContext)

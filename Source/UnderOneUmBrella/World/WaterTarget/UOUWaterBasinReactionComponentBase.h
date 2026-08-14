@@ -104,7 +104,6 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FUOUWaterBasinReactionEvent, const F
 UCLASS(Abstract, ClassGroup=(Puzzle), meta=(BlueprintSpawnableComponent, DisplayName="UOU Water Basin Reaction Base"))
 class UNDERONEUMBRELLA_API UUOUWaterBasinReactionComponentBase
 	: public UUOUPuzzleConditionSourceComponent
-	, public IUOUDebugProvider
 {
 	GENERATED_BODY()
 
@@ -219,7 +218,7 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Water Basin Reaction")
 	FUOUWaterBasinReactionContext GetLastReactionContext() const;
 
-	virtual TArray<FString> GetPuzzleDebugInfo_Implementation() const override;
+	virtual FText GetDebugSummaryText_Implementation() const override;
 	virtual EUOUDebugCategory GetDebugCategory_Implementation() const override;
 
 #if UOU_WITH_DEVELOPMENT_TOOLS

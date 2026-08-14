@@ -14,7 +14,6 @@
 #include "Components/SplineComponent.h"
 #include "Debug/UOUPuzzleDebugProviderComponent.h"
 #include "Debug/UOUDebugProvider.h"
-#include "Debug/UOUPuzzleDebugInfoProvider.h"
 #include "Debug/UOUDevelopmentToolsBuild.h"
 #include "DrawDebugHelpers.h"
 #include "DynamicRHI.h"
@@ -30,6 +29,7 @@
 #include "HAL/PlatformMemory.h"
 #include "InputCoreTypes.h"
 #include "NiagaraComponent.h"
+#include "Puzzle/Core/UOUPuzzleConditionSourceComponent.h"
 #include "NiagaraParameterStore.h"
 #include "NiagaraSystem.h"
 #include "NiagaraTypes.h"
@@ -1784,11 +1784,6 @@ void UUOUDevelopmentDebugDrawSubsystem::DrawSelectedPuzzleInfo() const
 		}
 
 		TArray<UObject*> InfoProviders;
-		if (SelectedActor->GetClass()->ImplementsInterface(UUOUPuzzleDebugInfoProvider::StaticClass()))
-		{
-			InfoProviders.Add(SelectedActor);
-		}
-
 		TInlineComponentArray<UActorComponent*> Components(SelectedActor);
 		for (UActorComponent* Component : Components)
 		{
@@ -1797,8 +1792,7 @@ void UUOUDevelopmentDebugDrawSubsystem::DrawSelectedPuzzleInfo() const
 				|| Component->IsA<UUOULightExposureSourceComponent>()
 				|| Component->IsA<UUOURotatableMirrorComponent>()
 				|| Component->IsA<UUOUWaterBasinReactionComponentBase>()
-				|| !Component->GetClass()->ImplementsInterface(
-					UUOUPuzzleDebugInfoProvider::StaticClass()))
+				|| !Component->IsA<UUOUPuzzleConditionSourceComponent>())
 			{
 				continue;
 			}
@@ -1818,9 +1812,13 @@ void UUOUDevelopmentDebugDrawSubsystem::DrawSelectedPuzzleInfo() const
 				continue;
 			}
 
-			const TArray<FString> DebugLines =
-				IUOUPuzzleDebugInfoProvider::Execute_GetPuzzleDebugInfo(Provider);
-			if (DebugLines.IsEmpty())
+			if (!IUOUDebugProvider::Execute_IsDebugProviderEnabled(Provider))
+			{
+				continue;
+			}
+
+			const FText SummaryText = IUOUDebugProvider::Execute_GetDebugSummaryText(Provider);
+			if (SummaryText.IsEmpty())
 			{
 				continue;
 			}
@@ -1828,7 +1826,7 @@ void UUOUDevelopmentDebugDrawSubsystem::DrawSelectedPuzzleInfo() const
 			const FString DebugText = FString::Printf(
 				TEXT("%s\n%s"),
 				*Provider->GetName(),
-				*FString::Join(DebugLines, LINE_TERMINATOR));
+				*SummaryText.ToString());
 			FVector DrawLocation = SelectedActor->GetActorLocation();
 			DrawLocation.Z = BaseWorldZ + static_cast<float>(Index) * 150.0f;
 			DrawDebugString(
@@ -1969,34 +1967,6 @@ void UUOUDevelopmentDebugDrawSubsystem::GetSelectableDebugActors(
 				}
 			}
 		}
-		if (!bPuzzleActor
-			&& Actor->GetClass()->ImplementsInterface(
-				UUOUPuzzleDebugInfoProvider::StaticClass()))
-		{
-			bPuzzleActor = true;
-		}
-		if (!bPuzzleActor)
-		{
-			TInlineComponentArray<UActorComponent*> Components(Actor);
-			for (UActorComponent* Component : Components)
-			{
-				if (!IsValid(Component)
-					|| Component->IsA<UUOULightExposureReceiverComponent>()
-					|| Component->IsA<UUOULightExposureSourceComponent>()
-					|| Component->IsA<UUOURotatableMirrorComponent>())
-				{
-					continue;
-				}
-
-				if (Component->GetClass()->ImplementsInterface(
-					UUOUPuzzleDebugInfoProvider::StaticClass()))
-				{
-					bPuzzleActor = true;
-					break;
-				}
-			}
-		}
-
 		if (bPuzzleActor)
 		{
 			AddActor(Actor, EUOUDebugCategory::Puzzle);

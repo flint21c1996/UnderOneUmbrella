@@ -20,7 +20,7 @@ public:
 
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void Interact_Implementation(AActor* Interactor) override;
-	virtual TArray<FString> GetPuzzleDebugInfo_Implementation() const override;
+	virtual FText GetDebugSummaryText_Implementation() const override;
 	virtual void GetPuzzleDebugInputActors_Implementation(TArray<AActor*>& OutInputActors) const override;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Puzzle|Interaction", meta = (ToolTip = "상호작용이 유효할 때 플레이어에게 요청할 공통 연출 정보입니다."))

@@ -30,9 +30,9 @@ void UUOULightTemperatureConditionComponent::EndPlay(const EEndPlayReason::Type 
 	Super::EndPlay(EndPlayReason);
 }
 
-TArray<FString> UUOULightTemperatureConditionComponent::GetPuzzleDebugInfo_Implementation() const
+FText UUOULightTemperatureConditionComponent::GetDebugSummaryText_Implementation() const
 {
-	return {
+	const TArray<FString> DebugLines = {
 		FString::Printf(
 			TEXT("Light Temperature: %s"),
 			IsSatisfied() ? TEXT("Satisfied") : TEXT("Unsatisfied")),
@@ -43,6 +43,8 @@ TArray<FString> UUOULightTemperatureConditionComponent::GetPuzzleDebugInfo_Imple
 			DeactivateTemperature),
 		FString::Printf(TEXT("Receiver: %s"), *GetNameSafe(LightReceiver))
 	};
+
+	return FText::FromString(FString::Join(DebugLines, LINE_TERMINATOR));
 }
 
 void UUOULightTemperatureConditionComponent::GetPuzzleDebugInputActors_Implementation(TArray<AActor*>& OutInputActors) const
