@@ -26,21 +26,27 @@ class UNDERONEUMBRELLA_API IUOUDebugProvider
 public:
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Debug")
 	EUOUDebugCategory GetDebugCategory() const;
+	virtual EUOUDebugCategory GetDebugCategory_Implementation() const;
 
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Debug")
 	bool IsDebugProviderEnabled() const;
+	virtual bool IsDebugProviderEnabled_Implementation() const;
 
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Debug")
 	FText GetDebugDisplayName() const;
+	virtual FText GetDebugDisplayName_Implementation() const;
 
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Debug")
 	FText GetDebugSummaryText() const;
+	virtual FText GetDebugSummaryText_Implementation() const;
 
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Debug")
 	FVector GetDebugWorldLocation() const;
+	virtual FVector GetDebugWorldLocation_Implementation() const;
 
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Debug")
 	void GetDebugConnections(TArray<FUOUDebugConnection>& OutConnections) const;
+	virtual void GetDebugConnections_Implementation(TArray<FUOUDebugConnection>& OutConnections) const;
 
 #if UOU_WITH_DEVELOPMENT_TOOLS
 	// Provider 공통 월드 라벨을 표시할지 결정합니다. 별도 정보 표시가 있는 Provider는 false를 반환할 수 있습니다.
