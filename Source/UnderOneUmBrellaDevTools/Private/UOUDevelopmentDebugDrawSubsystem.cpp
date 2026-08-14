@@ -601,7 +601,6 @@ void UUOUDevelopmentDebugDrawSubsystem::Tick(float DeltaTime)
 		return;
 	}
 
-	DrawPlayerBlockingWallDebug();
 	DrawWaterBasinDebug();
 	DrawRotatableMirrorDebug();
 	DrawLightExposureReceiverDebug();
@@ -1848,42 +1847,6 @@ void UUOUDevelopmentDebugDrawSubsystem::ResetVFXDebugState()
 TStatId UUOUDevelopmentDebugDrawSubsystem::GetStatId() const
 {
 	RETURN_QUICK_DECLARE_CYCLE_STAT(UUOUDevelopmentDebugDrawSubsystem, STATGROUP_Tickables);
-}
-
-void UUOUDevelopmentDebugDrawSubsystem::DrawPlayerBlockingWallDebug() const
-{
-	UWorld* World = GetWorld();
-	if (World == nullptr)
-	{
-		return;
-	}
-
-	for (TActorIterator<AUOUPlayerBlockingWallActor> It(World); It; ++It)
-	{
-		const AUOUPlayerBlockingWallActor* WallActor = *It;
-		const UBoxComponent* BlockingVolume = IsValid(WallActor)
-			? WallActor->BlockingVolume
-			: nullptr;
-		if (!ShouldDrawActor(WallActor) || BlockingVolume == nullptr)
-		{
-			continue;
-		}
-
-		const FColor StateColor = (
-			WallActor->IsWallEnabled()
-				? WallActor->EnabledPreviewColor
-				: WallActor->DisabledPreviewColor).ToFColor(true);
-		DrawDebugBox(
-			World,
-			BlockingVolume->GetComponentLocation(),
-			BlockingVolume->GetScaledBoxExtent(),
-			BlockingVolume->GetComponentQuat(),
-			StateColor,
-			false,
-			0.0f,
-			0,
-			4.0f);
-	}
 }
 
 void UUOUDevelopmentDebugDrawSubsystem::DrawWaterBasinDebug() const

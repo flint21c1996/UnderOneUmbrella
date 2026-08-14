@@ -5,6 +5,7 @@
 #include "Components/BoxComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Debug/UOUDevelopmentDebugDrawContext.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
 #include "Materials/MaterialInstanceDynamic.h"
@@ -90,6 +91,33 @@ bool AUOUPlayerBlockingWallActor::IsWallEnabled() const
 {
 	return bWallEnabled;
 }
+
+EUOUDebugCategory AUOUPlayerBlockingWallActor::GetDebugCategory_Implementation() const
+{
+	return EUOUDebugCategory::Puzzle;
+}
+
+#if UOU_WITH_DEVELOPMENT_TOOLS
+void AUOUPlayerBlockingWallActor::GatherDevelopmentDebugDraw(
+	IUOUDevelopmentDebugDrawContext& Context) const
+{
+	if (BlockingVolume == nullptr)
+	{
+		return;
+	}
+
+	const FColor StateColor = (
+		IsWallEnabled()
+			? EnabledPreviewColor
+			: DisabledPreviewColor).ToFColor(true);
+	Context.DrawBox(
+		BlockingVolume->GetComponentLocation(),
+		BlockingVolume->GetScaledBoxExtent(),
+		BlockingVolume->GetComponentQuat(),
+		StateColor,
+		4.0f);
+}
+#endif
 
 void AUOUPlayerBlockingWallActor::ApplyPuzzleResult_Implementation(EOUUPuzzleResultAction Action)
 {
