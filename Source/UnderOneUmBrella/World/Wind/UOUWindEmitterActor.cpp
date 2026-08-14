@@ -139,6 +139,22 @@ TArray<FString> AUOUWindEmitterActor::GetPuzzleDebugInfo_Implementation() const
 	};
 }
 
+EUOUDebugCategory AUOUWindEmitterActor::GetDebugCategory_Implementation() const
+{
+	return EUOUDebugCategory::Puzzle;
+}
+
+FText AUOUWindEmitterActor::GetDebugSummaryText_Implementation() const
+{
+	const TArray<FString> DebugLines =
+		IUOUPuzzleDebugInfoProvider::Execute_GetPuzzleDebugInfo(
+			const_cast<AUOUWindEmitterActor*>(this));
+
+	return DebugLines.IsEmpty()
+		? FText::GetEmpty()
+		: FText::FromString(FString::Join(DebugLines, LINE_TERMINATOR));
+}
+
 void AUOUWindEmitterActor::SetWindEnabled(bool bNewEnabled)
 {
 	if (bWindEnabled == bNewEnabled)

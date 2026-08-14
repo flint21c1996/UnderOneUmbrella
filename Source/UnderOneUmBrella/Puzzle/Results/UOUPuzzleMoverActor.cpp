@@ -112,6 +112,22 @@ TArray<FString> AUOUPuzzleMoverActor::GetPuzzleDebugInfo_Implementation() const
 	};
 }
 
+EUOUDebugCategory AUOUPuzzleMoverActor::GetDebugCategory_Implementation() const
+{
+	return EUOUDebugCategory::Puzzle;
+}
+
+FText AUOUPuzzleMoverActor::GetDebugSummaryText_Implementation() const
+{
+	const TArray<FString> DebugLines =
+		IUOUPuzzleDebugInfoProvider::Execute_GetPuzzleDebugInfo(
+			const_cast<AUOUPuzzleMoverActor*>(this));
+
+	return DebugLines.IsEmpty()
+		? FText::GetEmpty()
+		: FText::FromString(FString::Join(DebugLines, LINE_TERMINATOR));
+}
+
 void AUOUPuzzleMoverActor::MoveTarget(float DeltaSeconds)
 {
 	if (MovingTarget == nullptr)

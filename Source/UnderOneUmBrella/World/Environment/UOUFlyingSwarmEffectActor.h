@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Debug/UOUDebugProvider.h"
 #include "Debug/UOUPuzzleDebugInfoProvider.h"
 #include "GameFramework/Actor.h"
 #include "Puzzle/Core/UOUPuzzleResultReceiver.h"
@@ -342,6 +343,7 @@ class UNDERONEUMBRELLA_API AUOUFlyingSwarmEffectActor
 	: public AActor
 	, public IUOUPuzzleResultReceiver
 	, public IUOUPuzzleDebugInfoProvider
+	, public IUOUDebugProvider
 {
 	GENERATED_BODY()
 
@@ -656,6 +658,8 @@ public:
 
 	virtual void ApplyPuzzleResult_Implementation(EOUUPuzzleResultAction Action) override;
 	virtual TArray<FString> GetPuzzleDebugInfo_Implementation() const override;
+	virtual EUOUDebugCategory GetDebugCategory_Implementation() const override;
+	virtual FText GetDebugSummaryText_Implementation() const override;
 
 protected:
 	virtual void BeginPlay() override;

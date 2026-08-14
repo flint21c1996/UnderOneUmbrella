@@ -407,6 +407,22 @@ TArray<FString> AUOUFlyingSwarmEffectActor::GetPuzzleDebugInfo_Implementation() 
 	};
 }
 
+EUOUDebugCategory AUOUFlyingSwarmEffectActor::GetDebugCategory_Implementation() const
+{
+	return EUOUDebugCategory::Puzzle;
+}
+
+FText AUOUFlyingSwarmEffectActor::GetDebugSummaryText_Implementation() const
+{
+	const TArray<FString> DebugLines =
+		IUOUPuzzleDebugInfoProvider::Execute_GetPuzzleDebugInfo(
+			const_cast<AUOUFlyingSwarmEffectActor*>(this));
+
+	return DebugLines.IsEmpty()
+		? FText::GetEmpty()
+		: FText::FromString(FString::Join(DebugLines, LINE_TERMINATOR));
+}
+
 #if WITH_EDITOR
 void AUOUFlyingSwarmEffectActor::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent)
 {
