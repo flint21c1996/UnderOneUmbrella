@@ -183,6 +183,118 @@ bool FUOURotatableMirrorStableNormalTest::RunTest(const FString& Parameters)
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FUOUCylinderMultiReflectionDirectionTest,
+	"UnderOneUmbrella.Light.Reflection.CylinderMultiBouncePreservesParallelDirection",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUOUCylinderMultiReflectionDirectionTest::RunTest(const FString& Parameters)
+{
+	UWorld* UninitializedWorld = UWorld::CreateWorld(
+		EWorldType::Editor,
+		false,
+		TEXT("UOUCylinderMultiReflectionDirectionWorld"),
+		nullptr,
+		false,
+		ERHIFeatureLevel::Num,
+		nullptr,
+		true);
+	FScopedEditorWorld ScopedWorld(
+		UninitializedWorld,
+		UWorld::InitializationValues()
+			.RequiresHitProxies(false)
+			.ShouldSimulatePhysics(false)
+			.EnableTraceCollision(true)
+			.CreateNavigation(false)
+			.CreateAISystem(false)
+			.AllowAudioPlayback(false)
+			.CreatePhysicsScene(true));
+	UWorld* World = ScopedWorld.GetWorld();
+	TestNotNull(TEXT("실린더 다중 반사 테스트 월드를 생성한다"), World);
+	if (World == nullptr)
+	{
+		return false;
+	}
+
+	AUOULightSourceActor* SourceActor = World->SpawnActor<AUOULightSourceActor>();
+	TestNotNull(TEXT("실린더 광원을 생성한다"), SourceActor);
+	if (SourceActor == nullptr || SourceActor->ExposureSource == nullptr || SourceActor->SourceSpotLight == nullptr)
+	{
+		return false;
+	}
+
+	SourceActor->SetActorLocationAndRotation(FVector::ZeroVector, FRotator(0.0f, 90.0f, 0.0f));
+	SourceActor->SourceSpotLight->SetAttenuationRadius(1500.0f);
+	SourceActor->ExposureSource->BeamShape = EUOULightBeamShape::Cylinder;
+	SourceActor->ExposureSource->CylinderRadius = 50.0f;
+	SourceActor->ExposureSource->CylinderLength = 1500.0f;
+	SourceActor->ExposureSource->Intensity = 1.0f;
+	SourceActor->ExposureSource->SampleInterval = 0.0f;
+	SourceActor->ExposureSource->bEnableReflectedLight = true;
+	SourceActor->ExposureSource->MaxReflectionBouncesPerPath = 4;
+	SourceActor->ExposureSource->ReflectionPathLossGraceTime = 0.0f;
+
+	auto SpawnMirror = [World](const FVector& Location)
+	{
+		AUOURotatableMirrorActor* Mirror = World->SpawnActor<AUOURotatableMirrorActor>();
+		if (Mirror == nullptr || Mirror->LightInteractionSurface == nullptr)
+		{
+			return Mirror;
+		}
+
+		Mirror->SetActorLocationAndRotation(Location, FRotator(0.0f, 135.0f, 0.0f));
+		Mirror->LightInteractionSurface->SetLightInteractionMode(EUOULightInteractionMode::Reflecting);
+		Mirror->LightInteractionSurface->bUseSurfaceAreaSampling = true;
+		Mirror->LightInteractionSurface->bReflectFrontFaceOnly = false;
+		Mirror->LightInteractionSurface->ReflectionDirectionMode =
+			EUOULightReflectionDirectionMode::MirrorByNormal;
+		Mirror->LightInteractionSurface->ReflectionRange = 900.0f;
+		return Mirror;
+	};
+
+	AUOURotatableMirrorActor* FirstMirror = SpawnMirror(FVector(0.0f, 600.0f, 10.0f));
+	AUOURotatableMirrorActor* SecondMirror = SpawnMirror(FVector(600.0f, 600.0f, 10.0f));
+	TestNotNull(TEXT("첫 번째 거울을 생성한다"), FirstMirror);
+	TestNotNull(TEXT("두 번째 거울을 생성한다"), SecondMirror);
+	if (FirstMirror == nullptr || SecondMirror == nullptr)
+	{
+		return false;
+	}
+
+	SourceActor->ExposureSource->EmitLight(0.1f);
+	const TArray<FUOULightPathData> LightPaths = SourceActor->ExposureSource->GetLightPaths();
+	const FUOULightPathData* DoubleReflectionPath = LightPaths.FindByPredicate(
+		[](const FUOULightPathData& Path)
+		{
+			return Path.Segments.Num() >= 3;
+		});
+	TestNotNull(TEXT("두 번 반사되는 실린더 경로를 계산한다"), DoubleReflectionPath);
+	if (DoubleReflectionPath == nullptr)
+	{
+		return false;
+	}
+
+	const FUOULightPathSegmentData& FirstReflection = DoubleReflectionPath->Segments[1];
+	const FUOULightPathSegmentData& SecondReflection = DoubleReflectionPath->Segments[2];
+	TestTrue(
+		TEXT("면 샘플을 맞힌 뒤에도 두 번째 입사 방향은 첫 반사의 평행 진행 방향을 유지한다"),
+		SecondReflection.IncomingDirection.Equals(FirstReflection.Direction, 0.001f));
+	TestTrue(
+		TEXT("두 번째 반사는 수직·수평 오차 없이 +Y 방향으로 진행한다"),
+		SecondReflection.Direction.Equals(FVector::RightVector, 0.001f));
+	TestTrue(
+		TEXT("첫 번째 반사 구간의 종점은 방향과 길이로 재구성한 종점과 일치한다"),
+		FirstReflection.End.Equals(
+			FirstReflection.Start + FirstReflection.Direction * FirstReflection.Length,
+			0.01f));
+	TestTrue(
+		TEXT("두 번째 반사 구간의 종점은 방향과 길이로 재구성한 종점과 일치한다"),
+		SecondReflection.End.Equals(
+			SecondReflection.Start + SecondReflection.Direction * SecondReflection.Length,
+			0.01f));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FUOULightInteractionModeTest,
 	"UnderOneUmbrella.Light.Reflection.InteractionModes",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
