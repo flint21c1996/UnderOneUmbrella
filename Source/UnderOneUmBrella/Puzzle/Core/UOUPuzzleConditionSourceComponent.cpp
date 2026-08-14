@@ -12,6 +12,19 @@ bool UUOUPuzzleConditionSourceComponent::IsSatisfied() const
 	return bIsSatisfied;
 }
 
+#if UOU_WITH_PUZZLE_CHEATS
+bool UUOUPuzzleConditionSourceComponent::TryResolveInputForCheat(AActor* InputActor)
+{
+	if (!IsValid(InputActor))
+	{
+		return false;
+	}
+
+	SetSatisfiedState(true, true);
+	return IsSatisfied();
+}
+#endif
+
 TArray<FString> UUOUPuzzleConditionSourceComponent::GetPuzzleDebugInfo_Implementation() const
 {
 	return {

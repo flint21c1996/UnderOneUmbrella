@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "Debug/UOUDevelopmentCheatBuild.h"
 #include "Debug/UOUPuzzleDebugInfoProvider.h"
 #include "UOUPuzzleConditionSourceComponent.generated.h"
 
@@ -12,7 +13,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnPuzzleConditionChangedSignature, 
 // 개별 퍼즐 조건의 만족 여부를 공통 방식으로 다루는 기반 컴포넌트입니다.
 // 버튼, 물, 저울 같은 조건 소스는 이 클래스를 상속받아 상태를 노출합니다.
 UCLASS(Abstract, BlueprintType, Blueprintable, ClassGroup=(Puzzle), meta=(BlueprintSpawnableComponent))
-class UUOUPuzzleConditionSourceComponent : public UActorComponent, public IUOUPuzzleDebugInfoProvider
+class UNDERONEUMBRELLA_API UUOUPuzzleConditionSourceComponent : public UActorComponent, public IUOUPuzzleDebugInfoProvider
 {
 	GENERATED_BODY()
 
@@ -26,6 +27,12 @@ public:
 	// 현재 조건이 만족 상태인지 반환합니다.
 	UFUNCTION(BlueprintPure, Category = "Puzzle|Condition")
 	bool IsSatisfied() const;
+
+#if UOU_WITH_PUZZLE_CHEATS
+	// HUD에서 선택한 외부 입력 액터를 해결하고 이 ConditionSource가 정상 이벤트 경로로 만족되게 합니다.
+	// 특수한 퍼즐 동작이나 연출이 필요한 ConditionSource는 이 함수를 재정의합니다.
+	virtual bool TryResolveInputForCheat(AActor* InputActor);
+#endif
 
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Puzzle|Debug")
 	void GetPuzzleDebugInputActors(TArray<AActor*>& OutInputActors) const;
