@@ -55,6 +55,7 @@
 #include "RenderCounters.h"
 #include "RenderTimer.h"
 #include "UOUDevelopmentDebugControlSubsystem.h"
+#include "UOUDevelopmentDebugDrawContext.h"
 #include "UnrealClient.h"
 #include "World/Environment/UOUEnvironmentVisualComponent.h"
 #include "World/Environment/UOUPlayerBlockingWallActor.h"
@@ -620,6 +621,7 @@ void UUOUDevelopmentDebugDrawSubsystem::Tick(float DeltaTime)
 			UOUDevelopmentDebugDrawPrivate::PuzzleProviderRefreshIntervalSeconds;
 	}
 
+	DrawPuzzleProviderCustomDebug();
 	DrawPuzzleProviderConnections();
 	DrawPuzzleProviderLabels();
 }
@@ -2845,6 +2847,34 @@ void UUOUDevelopmentDebugDrawSubsystem::TryAddPuzzleDebugProvider(UObject* Provi
 	}
 
 	PuzzleDebugProviders.AddUnique(TWeakObjectPtr<UObject>(ProviderObject));
+}
+
+void UUOUDevelopmentDebugDrawSubsystem::DrawPuzzleProviderCustomDebug() const
+{
+	UWorld* World = GetWorld();
+	if (World == nullptr)
+	{
+		return;
+	}
+
+	FUOUDevelopmentDebugDrawContext DrawContext(*World);
+	for (const TWeakObjectPtr<UObject>& WeakProviderObject : PuzzleDebugProviders)
+	{
+		UObject* ProviderObject = WeakProviderObject.Get();
+		if (!IsValid(ProviderObject)
+			|| !ShouldDrawActor(
+				UOUDevelopmentDebugDrawPrivate::GetDebugObjectOwnerActor(ProviderObject))
+			|| !ProviderObject->GetClass()->ImplementsInterface(UUOUDebugProvider::StaticClass())
+			|| !IUOUDebugProvider::Execute_IsDebugProviderEnabled(ProviderObject))
+		{
+			continue;
+		}
+
+		if (const IUOUDebugProvider* NativeProvider = Cast<IUOUDebugProvider>(ProviderObject))
+		{
+			NativeProvider->GatherDevelopmentDebugDraw(DrawContext);
+		}
+	}
 }
 
 void UUOUDevelopmentDebugDrawSubsystem::DrawPuzzleProviderConnections() const

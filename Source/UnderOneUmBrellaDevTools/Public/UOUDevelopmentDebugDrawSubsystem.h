@@ -74,6 +74,7 @@ private:
 	void DrawUmbrellaLightReflectorDebug() const;
 	void DrawLightExposureSourceDebug() const;
 	void DrawSelectedPuzzleInfo() const;
+	void DrawPuzzleProviderCustomDebug() const;
 	void DrawPuzzleProviderConnections() const;
 	void DrawPuzzleProviderLabels() const;
 	bool ShouldDrawActor(const AActor* Actor) const;
