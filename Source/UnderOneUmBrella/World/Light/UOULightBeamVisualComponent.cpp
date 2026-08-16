@@ -976,6 +976,8 @@ FUOULightBeamVisualSegmentData UUOULightBeamVisualComponent::BuildVisualSegment(
 	FUOULightBeamVisualSegmentData VisualData;
 	VisualData.SegmentIndex = VisualSegmentIndex;
 	VisualData.bReflected = SegmentData.bReflected;
+	// Static Ray 메시의 끝 페이드 때문에 반사점이 흐려지지 않도록 연결부 채움 메시를 사용합니다.
+	// 거울 뒤 관통은 반사 시작 여백 계산으로 별도 방지합니다.
 	VisualData.bEndsAtReflection = SegmentData.HitType == EUOULightPathHitType::ReflectingSurface;
 	VisualData.Color = ResolveLightColor();
 	VisualData.Intensity = SegmentData.Intensity;

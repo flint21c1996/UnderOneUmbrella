@@ -60,7 +60,7 @@ public:
 	float ReflectionJunctionFillLength = 120.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Lumen Static Ray|Appearance", meta = (ClampMin = "0.0", ClampMax = "1.0", DisplayName = "반사 연결부 보강 투명도", ToolTip = "반사면 직전 보강 레이어의 투명도 배율입니다."))
-	float ReflectionJunctionFillOpacity = 0.65f;
+	float ReflectionJunctionFillOpacity = 1.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Lumen Static Ray|Variation", meta = (DisplayName = "노이즈 변화 사용"))
 	bool bUseVariation = true;

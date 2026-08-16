@@ -71,7 +71,7 @@ public:
 	float EndPadding = 2.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light|Visual", meta = (ClampMin = "0.0", Units = "cm", ToolTip = "비스듬한 반사면 뒤로 빛줄기 시작 단면이 튀어나오지 않도록 시작점을 전진시키는 최대 거리입니다. 큰 값은 완만한 입사각에서 시작점이 옆으로 밀려 보일 수 있으며, 0이면 추가 보정을 사용하지 않습니다."))
-	float MaximumReflectedStartClearance = 4.0f;
+	float MaximumReflectedStartClearance = 24.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light|Visual", meta = (ToolTip = "VFX BP 내부에 포함된 Light 컴포넌트를 끄고 통합 광원 액터의 SpotLight만 사용합니다."))
 	bool bDisableEmbeddedVFXLights = true;
