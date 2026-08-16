@@ -103,7 +103,8 @@ bool UUOULightInteractionSurfaceComponent::ShouldPassThroughIncomingLight(
 float UUOULightInteractionSurfaceComponent::ClampReflectionBeamRadius(
 	float IncomingBeamRadius,
 	const FVector& IncomingDirection,
-	const FVector& HitNormal) const
+	const FVector& HitNormal,
+	const FVector& ImpactPoint) const
 {
 	const float SafeIncomingRadius = FMath::Max(0.0f, IncomingBeamRadius);
 	if (!bLimitReflectionBySurfaceAperture)
@@ -122,7 +123,40 @@ float UUOULightInteractionSurfaceComponent::ClampReflectionBeamRadius(
 		: FMath::Abs(FVector::DotProduct(-SafeIncomingDirection, FrontNormal));
 	const float EffectiveApertureRadius =
 		GetReflectionApertureRadius() * FMath::Clamp(IncidenceProjection, 0.0f, 1.0f);
-	return FMath::Min(SafeIncomingRadius, EffectiveApertureRadius);
+	float AvailableApertureRadius = EffectiveApertureRadius;
+	if (bLimitReflectionByImpactOffset && !FrontNormal.IsNearlyZero())
+	{
+		const FVector CenterToImpact = ImpactPoint - GetComponentLocation();
+		const float ImpactOffset = FVector::VectorPlaneProject(
+			CenterToImpact,
+			FrontNormal).Size();
+		AvailableApertureRadius = FMath::Max(
+			0.0f,
+			EffectiveApertureRadius - ImpactOffset - ReflectionImpactEdgeInset);
+	}
+
+	return FMath::Min(SafeIncomingRadius, AvailableApertureRadius);
+}
+
+bool UUOULightInteractionSurfaceComponent::HasSufficientReflectionCoverage(
+	float IncomingBeamRadius,
+	const FVector& IncomingDirection,
+	const FVector& HitNormal,
+	const FVector& ImpactPoint) const
+{
+	const float SafeIncomingRadius = FMath::Max(0.0f, IncomingBeamRadius);
+	if (!bLimitReflectionByImpactOffset || SafeIncomingRadius <= KINDA_SMALL_NUMBER)
+	{
+		return true;
+	}
+
+	const float ReflectedRadius = ClampReflectionBeamRadius(
+		SafeIncomingRadius,
+		IncomingDirection,
+		HitNormal,
+		ImpactPoint);
+	const float CoverageRatio = ReflectedRadius / SafeIncomingRadius;
+	return CoverageRatio >= FMath::Clamp(MinimumReflectionCoverageRatio, 0.0f, 1.0f);
 }
 
 float UUOULightInteractionSurfaceComponent::ResolveReflectionConeAngle(float IncomingConeAngle) const
@@ -208,6 +242,8 @@ void UUOULightInteractionSurfaceComponent::ValidateSettings()
 	ReflectionStartPadding = FMath::Max(0.0f, ReflectionStartPadding);
 	MaximumReflectionIncidenceAngle = FMath::Clamp(MaximumReflectionIncidenceAngle, 0.0f, 89.9f);
 	ReflectionApertureScale = FMath::Max(0.0f, ReflectionApertureScale);
+	ReflectionImpactEdgeInset = FMath::Max(0.0f, ReflectionImpactEdgeInset);
+	MinimumReflectionCoverageRatio = FMath::Clamp(MinimumReflectionCoverageRatio, 0.0f, 1.0f);
 	SurfaceSampleInset = FMath::Clamp(SurfaceSampleInset, 0.0f, 1.0f);
 }
 

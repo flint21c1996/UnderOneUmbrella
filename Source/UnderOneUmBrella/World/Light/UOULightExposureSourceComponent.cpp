@@ -1692,6 +1692,26 @@ bool UUOULightExposureSourceComponent::TryBuildLightInteractionSurfaceHit(
 		// representative path; the reflected beam ends when its center ray misses.
 		OutSurfaceHit = FHitResult();
 	}
+	else if (OutSurfaceHit.bBlockingHit)
+	{
+		const float ImpactDistance = FVector::Dist(SourcePosition, OutSurfaceHit.ImpactPoint);
+		const float IncomingBeamRadius = BeamShape == EUOULightBeamShape::Cylinder
+			? FMath::Max(0.0f, CylinderRadius)
+			: ImpactDistance * FMath::Tan(FMath::DegreesToRadians(
+				FMath::Clamp(GetEffectiveOuterConeAngle(), 1.0f, 89.0f)));
+		const FVector IncomingDirection = BeamShape == EUOULightBeamShape::Cylinder
+			? SourceForward
+			: (OutSurfaceHit.ImpactPoint - SourcePosition).GetSafeNormal();
+		if (!SurfaceComponent->HasSufficientReflectionCoverage(
+			IncomingBeamRadius,
+			IncomingDirection,
+			OutSurfaceHit.ImpactNormal,
+			OutSurfaceHit.ImpactPoint))
+		{
+			DrawDebugSamplePoint(OutSurfaceHit.ImpactPoint, FColor::Orange);
+			OutSurfaceHit = FHitResult();
+		}
+	}
 
 	DrawDebugSampleSummary(
 		SurfaceComponent->GetComponentLocation(),
@@ -1881,7 +1901,8 @@ void UUOULightExposureSourceComponent::EmitReflectedLightFromSurface(
 		const float CurrentBeamStartRadius = CurrentSurface->ClampReflectionBeamRadius(
 			IncomingBeamRadius,
 			IncomingDirection,
-			CurrentSurfaceHit.ImpactNormal);
+			CurrentSurfaceHit.ImpactNormal,
+			CurrentSurfaceHit.ImpactPoint);
 		const float OutgoingBeamConeAngle =
 			CurrentSurface->ResolveReflectionConeAngle(CurrentBeamConeAngle);
 
@@ -2295,7 +2316,7 @@ bool UUOULightExposureSourceComponent::TryFindNextReflectionSurface(
 
 			// 반사 빔의 중심축이 표면 샘플 사이를 통과해도 다음 거울을 검출합니다.
 			FHitResult AxisHit;
-			const bool bAxisHitCandidate = TraceLightPathSingle(
+			bool bAxisHitCandidate = TraceLightPathSingle(
 				AxisHit,
 				ReflectionOrigin,
 				ReflectionOrigin + SafeReflectedDirection * SearchRange,
@@ -2305,11 +2326,27 @@ bool UUOULightExposureSourceComponent::TryFindNextReflectionSurface(
 				CandidateSurface->CanReflectIncomingLight(
 					SafeReflectedDirection,
 					AxisHit.ImpactNormal);
+			float AxisHitDistance = 0.0f;
+			if (bAxisHitCandidate)
+			{
+				AxisHitDistance = FVector::Dist(ReflectionOrigin, AxisHit.ImpactPoint);
+				const float IncomingRadiusAtAxisHit = FMath::Max(0.0f, BeamStartRadius) +
+					AxisHitDistance * FMath::Tan(FMath::DegreesToRadians(
+						FMath::Clamp(BeamConeAngle, 0.0f, 89.0f)));
+				bAxisHitCandidate = CandidateSurface->HasSufficientReflectionCoverage(
+					IncomingRadiusAtAxisHit,
+					SafeReflectedDirection,
+					AxisHit.ImpactNormal,
+					AxisHit.ImpactPoint);
+				if (!bAxisHitCandidate)
+				{
+					DrawDebugSamplePoint(AxisHit.ImpactPoint, FColor::Orange);
+				}
+			}
 			if (bAxisHitCandidate)
 			{
 				++CandidateHitCount;
 				DrawDebugSamplePoint(AxisHit.ImpactPoint, FColor::Cyan);
-				const float AxisHitDistance = FVector::Dist(ReflectionOrigin, AxisHit.ImpactPoint);
 				if (bPreferAxisHit && AxisHitDistance < ClosestAxisHitDistance)
 				{
 					ClosestAxisHitDistance = AxisHitDistance;
@@ -2359,7 +2396,7 @@ bool UUOULightExposureSourceComponent::TryFindNextReflectionSurface(
 				FHitResult CandidateHit;
 				const FVector TraceEnd = CandidateSamplePosition +
 					DirectionToCandidate * CandidateSurface->ReflectionStartPadding;
-				const bool bHitCandidate = TraceLightPathSingle(
+				bool bHitCandidate = TraceLightPathSingle(
 					CandidateHit,
 					ReflectionOrigin,
 					TraceEnd,
@@ -2369,6 +2406,21 @@ bool UUOULightExposureSourceComponent::TryFindNextReflectionSurface(
 					CandidateSurface->CanReflectIncomingLight(
 						SafeReflectedDirection,
 						CandidateHit.ImpactNormal);
+				const float HitDistance = FVector::Dist(ReflectionOrigin, CandidateHit.ImpactPoint);
+				if (bHitCandidate)
+				{
+					const float IncomingRadiusAtHit = FMath::Max(0.0f, BeamStartRadius) +
+						HitDistance * FMath::Tan(ConeAngleRadians);
+					bHitCandidate = CandidateSurface->HasSufficientReflectionCoverage(
+						IncomingRadiusAtHit,
+						SafeReflectedDirection,
+						CandidateHit.ImpactNormal,
+						CandidateHit.ImpactPoint);
+					if (!bHitCandidate)
+					{
+						DrawDebugSamplePoint(CandidateHit.ImpactPoint, FColor::Orange);
+					}
+				}
 				if (!bHitCandidate)
 				{
 					DrawDebugSamplePoint(
@@ -2379,7 +2431,6 @@ bool UUOULightExposureSourceComponent::TryFindNextReflectionSurface(
 
 				++CandidateHitCount;
 				DrawDebugSamplePoint(CandidateHit.ImpactPoint, FColor::Cyan);
-				const float HitDistance = FVector::Dist(ReflectionOrigin, CandidateHit.ImpactPoint);
 				if (HitDistance < ClosestHitDistance)
 				{
 					ClosestHitDistance = HitDistance;

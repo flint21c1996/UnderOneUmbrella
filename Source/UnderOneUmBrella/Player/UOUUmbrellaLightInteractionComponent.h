@@ -53,6 +53,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Light", meta = (ClampMin = "0.0", ClampMax = "89.9", Units = "deg", DisplayName = "최대 우산 빛 차단 입사각", ToolTip = "펼친 우산이 차단할 수 있는 최대 입사각입니다. 기본 75도에서는 위와 대각선 상단광을 막고 수평 측면광은 통과시킵니다."))
 	float MaximumUmbrellaBlockingIncidenceAngle = 75.0f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Light|Reflection Coverage", meta = (ClampMin = "0.0", Units = "cm", DisplayName = "반사 가장자리 여백", ToolTip = "우산 가장자리에서 반사 폭 계산에 제외할 안전 여백입니다."))
+	float UmbrellaReflectionEdgeInset = 4.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Light|Reflection Coverage", meta = (ClampMin = "0.0", ClampMax = "1.0", DisplayName = "최소 반사 걸침 비율", ToolTip = "입사광 반지름 대비 우산에 남은 반사 반지름의 최소 비율입니다. 이 값보다 적게 걸치면 반사광을 만들지 않습니다."))
+	float MinimumUmbrellaReflectionCoverageRatio = 0.3f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Light")
 	bool bCreateRuntimeLightSurfaceWhenMissing = true;
 

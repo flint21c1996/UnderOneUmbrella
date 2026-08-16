@@ -159,6 +159,62 @@ bool FUOULightMirrorReflectionTest::RunTest(const FString& Parameters)
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FUOUReflectionImpactCoverageTest,
+	"UnderOneUmbrella.Light.Reflection.ImpactOffsetLimitsCoverage",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUOUReflectionImpactCoverageTest::RunTest(const FString& Parameters)
+{
+	UUOULightInteractionSurfaceComponent* Surface =
+		NewObject<UUOULightInteractionSurfaceComponent>();
+	TestNotNull(TEXT("충돌 위치 기반 반사 폭 테스트 표면을 생성한다"), Surface);
+	if (Surface == nullptr)
+	{
+		return false;
+	}
+
+	Surface->SetBoxExtent(FVector(70.0f, 70.0f, 6.0f));
+	Surface->bLimitReflectionBySurfaceAperture = true;
+	Surface->bLimitReflectionByImpactOffset = true;
+	Surface->ReflectionImpactEdgeInset = 4.0f;
+	Surface->MinimumReflectionCoverageRatio = 0.3f;
+
+	const FVector IncomingDirection = -FVector::UpVector;
+	const FVector HitNormal = FVector::UpVector;
+	const float IncomingRadius = 50.0f;
+	const float CenterRadius = Surface->ClampReflectionBeamRadius(
+		IncomingRadius,
+		IncomingDirection,
+		HitNormal,
+		FVector::ZeroVector);
+	const FVector MiddleImpact(30.0f, 0.0f, 0.0f);
+	const float MiddleRadius = Surface->ClampReflectionBeamRadius(
+		IncomingRadius,
+		IncomingDirection,
+		HitNormal,
+		MiddleImpact);
+	const FVector EdgeImpact(60.0f, 0.0f, 0.0f);
+
+	TestEqual(TEXT("중앙 충돌은 원래 반사광 굵기를 유지한다"), CenterRadius, IncomingRadius);
+	TestEqual(TEXT("가장자리로 이동하면 남은 반사 폭만 사용한다"), MiddleRadius, 36.0f);
+	TestTrue(
+		TEXT("충분히 걸친 충돌은 반사를 허용한다"),
+		Surface->HasSufficientReflectionCoverage(
+			IncomingRadius,
+			IncomingDirection,
+			HitNormal,
+			MiddleImpact));
+	TestFalse(
+		TEXT("가장자리에 조금만 걸친 충돌은 반사를 거부한다"),
+		Surface->HasSufficientReflectionCoverage(
+			IncomingRadius,
+			IncomingDirection,
+			HitNormal,
+			EdgeImpact));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FUOURotatableMirrorStableNormalTest,
 	"UnderOneUmbrella.Light.Reflection.RotatableMirrorUsesStableComponentNormal",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)

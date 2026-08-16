@@ -286,6 +286,16 @@ void UUOUUmbrellaLightInteractionComponent::ApplyRuntimeLightSurfacePlacement() 
 		MaximumUmbrellaReflectionIncidenceAngle,
 		0.0f,
 		89.9f);
+	// 우산 가장자리에 빛 중심축이 조금만 걸렸을 때 전체 굵기의 반사광이 생기지 않도록
+	// 충돌 위치에 남은 유효 반사 폭을 사용합니다.
+	LightSurfaceComponent->bLimitReflectionByImpactOffset = true;
+	LightSurfaceComponent->ReflectionImpactEdgeInset = FMath::Max(
+		0.0f,
+		UmbrellaReflectionEdgeInset);
+	LightSurfaceComponent->MinimumReflectionCoverageRatio = FMath::Clamp(
+		MinimumUmbrellaReflectionCoverageRatio,
+		0.0f,
+		1.0f);
 	if (bUseRainBlockerPlacement)
 	{
 		LightSurfaceComponent->SetWorldLocationAndRotation(WorldCenter, WorldRotation);
