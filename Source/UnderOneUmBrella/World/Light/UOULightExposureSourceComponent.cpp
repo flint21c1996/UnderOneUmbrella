@@ -332,9 +332,8 @@ void UUOULightExposureSourceComponent::ValidateSettings()
 {
 	FallbackOuterConeAngle = FMath::Clamp(FallbackOuterConeAngle, 1.0f, 89.0f);
 	FallbackInnerConeRatio = FMath::Clamp(FallbackInnerConeRatio, 0.0f, 1.0f);
-	FallbackRange = FMath::Max(0.0f, FallbackRange);
 	CylinderRadius = FMath::Max(0.0f, CylinderRadius);
-	CylinderLength = FMath::Max(0.0f, CylinderLength);
+	BeamLength = FMath::Max(0.0f, BeamLength);
 	CylinderInnerRadiusRatio = FMath::Clamp(CylinderInnerRadiusRatio, 0.0f, 1.0f);
 	Intensity = FMath::Max(0.0f, Intensity);
 	SampleInterval = FMath::Max(0.0f, SampleInterval);
@@ -836,7 +835,7 @@ FVector UUOULightExposureSourceComponent::GetSourceForwardVector() const
 
 float UUOULightExposureSourceComponent::GetExposureRange() const
 {
-	return FMath::Max(0.0f, CylinderLength);
+	return FMath::Max(0.0f, BeamLength);
 }
 
 float UUOULightExposureSourceComponent::GetReceiverSearchRadius() const
@@ -844,7 +843,7 @@ float UUOULightExposureSourceComponent::GetReceiverSearchRadius() const
 	if (BeamShape == EUOULightBeamShape::Cylinder)
 	{
 		return FMath::Sqrt(
-			FMath::Square(FMath::Max(0.0f, CylinderLength)) +
+			FMath::Square(FMath::Max(0.0f, BeamLength)) +
 			FMath::Square(FMath::Max(0.0f, CylinderRadius)));
 	}
 
@@ -894,7 +893,7 @@ bool UUOULightExposureSourceComponent::TryEvaluateSourceBeamPoint(
 	OutDistance = ToPoint.Size();
 	if (BeamShape == EUOULightBeamShape::Cylinder)
 	{
-		const float SafeLength = FMath::Max(0.0f, CylinderLength);
+		const float SafeLength = FMath::Max(0.0f, BeamLength);
 		const float SafeRadius = FMath::Max(0.0f, CylinderRadius);
 		const float AxialDistance = FVector::DotProduct(ToPoint, SourceForward);
 		if (SafeLength <= 0.0f || SafeRadius <= 0.0f ||

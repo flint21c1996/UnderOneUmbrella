@@ -82,9 +82,6 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection|Facing", meta = (ToolTip = "반사 각도 조건을 만족하지 못한 빛을 막지 않고 통과시킵니다. 우산처럼 유효한 각도에서만 빛과 상호작용해야 하는 표면에 사용합니다."))
 	bool bPassThroughWhenReflectionRejected = false;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, AdvancedDisplay, Category = "Light|Reflection", meta = (ClampMin = "0.0", DisplayName = "반사 거리 (레거시)", ToolTip = "이전 에셋 호환용 값입니다. 현재 반사광의 거리는 광원의 빛 총 길이로 결정됩니다."))
-	float ReflectionRange = 600.0f;
-
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection", meta = (ToolTip = "입사 광원의 확산각을 유지할지, 이 반사면의 각도를 사용할지 결정합니다."))
 	EUOULightReflectionConeAngleMode ReflectionConeAngleMode =
 		EUOULightReflectionConeAngleMode::PreserveIncoming;
@@ -97,9 +94,6 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection", meta = (ClampMin = "0.0", ToolTip = "반사광 시작 위치를 충돌 지점에서 살짝 띄우는 거리입니다."))
 	float ReflectionStartPadding = 4.0f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection|Visual", meta = (ClampMin = "0.0", ClampMax = "1.0", ToolTip = "반사점에서 입사광과 반사광 메시가 반사면을 뚫지 않도록 비우는 시각적 여백의 배율입니다. 0이면 반사점까지 끊김 없이 연결합니다."))
-	float VisualJunctionClearanceScale = 1.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection|Aperture", meta = (ToolTip = "반사되는 빛의 시작 폭을 이 Box 컴포넌트의 실제 크기로 제한합니다."))
 	bool bLimitReflectionBySurfaceAperture = true;

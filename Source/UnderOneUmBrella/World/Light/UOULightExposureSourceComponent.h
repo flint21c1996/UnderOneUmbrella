@@ -64,12 +64,8 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Shape|Cone", meta = (ClampMin = "0.0", ClampMax = "1.0", EditCondition = "BeamShape == EUOULightBeamShape::Cone", EditConditionHides, ToolTip = "SpotLight 컴포넌트를 찾지 못했을 때 사용할 내부 원뿔 비율입니다."))
 	float FallbackInnerConeRatio = 0.55f;
 
-	// 기존 에셋 역직렬화 호환용입니다. 실제 길이는 CylinderLength를 공용으로 사용합니다.
-	UPROPERTY()
-	float FallbackRange = 1000.0f;
-
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Shape", meta = (ClampMin = "0.0", Units = "cm", DisplayName = "빛 총 길이", ToolTip = "원뿔과 원기둥 모두에서 직접광과 모든 반사 구간을 합친 최대 경로 길이입니다."))
-	float CylinderLength = 800.0f;
+	float BeamLength = 800.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Shape|Cylinder", meta = (ClampMin = "0.0", Units = "cm", EditCondition = "BeamShape == EUOULightBeamShape::Cylinder", EditConditionHides, ToolTip = "원기둥형 빛의 반지름입니다."))
 	float CylinderRadius = 100.0f;

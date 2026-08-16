@@ -32,13 +32,13 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Lumen Dynamic Ray|Components")
 	TObjectPtr<USceneComponent> RootScene;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Lumen Dynamic Ray|Style", meta = (ClampMin = "1", ClampMax = "8", ToolTip = "원본 Unity Lumen Dynamic Ray 프리셋 번호입니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, AdvancedDisplay, Category = "Lumen Dynamic Ray|Renderer Defaults", meta = (ClampMin = "1", ClampMax = "8", DisplayName = "기본 Dynamic Ray 프리셋", ToolTip = "Beam Visual 컴포넌트의 프리셋 Override가 0일 때 사용할 렌더러 기본값입니다."))
 	int32 Preset = 3;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Lumen Dynamic Ray|Style", meta = (ClampMin = "0.0", ToolTip = "원본 프리셋 밝기에 추가로 적용되는 배율입니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, AdvancedDisplay, Category = "Lumen Dynamic Ray|Renderer Defaults", meta = (ClampMin = "0.0", DisplayName = "렌더러 기본 밝기 배율", ToolTip = "원본 프리셋 밝기와 Beam Visual의 개별 밝기 배율에 추가로 곱하는 렌더러 기본값입니다."))
 	float EmissiveIntensityScale = 5.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Lumen Dynamic Ray|Style", meta = (ClampMin = "0.0", ClampMax = "1.0", ToolTip = "원본 프리셋 투명도에 추가로 적용되는 값입니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, AdvancedDisplay, Category = "Lumen Dynamic Ray|Renderer Defaults", meta = (ClampMin = "0.0", ClampMax = "1.0", DisplayName = "렌더러 기본 투명도 배율", ToolTip = "Beam Visual의 개별 투명도 배율에 추가로 곱하는 렌더러 기본값입니다."))
 	float OpacityScale = 1.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Lumen Dynamic Ray|Material")

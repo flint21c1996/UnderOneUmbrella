@@ -278,7 +278,6 @@ void UUOUUmbrellaLightInteractionComponent::ApplyRuntimeLightSurfacePlacement() 
 	LightSurfaceComponent->ReflectionNormalMode = EUOULightReflectionNormalMode::ComponentUp;
 	// 우산 메시가 반사점을 가리므로 거울용 시각 여백을 적용하지 않고 입사광과 반사광을 바로 연결합니다.
 	LightSurfaceComponent->ReflectionStartPadding = 0.0f;
-	LightSurfaceComponent->VisualJunctionClearanceScale = 0.0f;
 	// 차단 박스와 동일한 회전을 사용하므로 로컬 Up이 실제 우산 면의 앞면입니다.
 	LightSurfaceComponent->ReflectionFrontNormalMode = EUOULightReflectionFrontNormalMode::ComponentUp;
 	LightSurfaceComponent->bPassThroughWhenReflectionRejected =

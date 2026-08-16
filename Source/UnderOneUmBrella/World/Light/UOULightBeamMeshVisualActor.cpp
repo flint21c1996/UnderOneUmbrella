@@ -16,6 +16,31 @@ namespace
 	const FName BeamColorParameter(TEXT("BeamColor"));
 	const FName EmissiveIntensityParameter(TEXT("EmissiveIntensity"));
 	const FName OpacityParameter(TEXT("Opacity"));
+	const FName JunctionClipStartEnabledParameter(TEXT("JunctionClipStartEnabled"));
+	const FName JunctionClipStartPositionParameter(TEXT("JunctionClipStartPosition"));
+	const FName JunctionClipStartNormalParameter(TEXT("JunctionClipStartNormal"));
+	const FName JunctionClipEndEnabledParameter(TEXT("JunctionClipEndEnabled"));
+	const FName JunctionClipEndPositionParameter(TEXT("JunctionClipEndPosition"));
+	const FName JunctionClipEndNormalParameter(TEXT("JunctionClipEndNormal"));
+	const FName JunctionClipFeatherParameter(TEXT("JunctionClipFeather"));
+
+	void ApplyJunctionClipParameters(
+		UMaterialInstanceDynamic* Material,
+		const FUOULightBeamVisualSegmentData& SegmentData)
+	{
+		if (Material == nullptr)
+		{
+			return;
+		}
+
+		Material->SetScalarParameterValue(JunctionClipStartEnabledParameter, SegmentData.bUseStartJunctionClip ? 1.0f : 0.0f);
+		Material->SetVectorParameterValue(JunctionClipStartPositionParameter, FLinearColor(SegmentData.StartJunctionPlanePosition));
+		Material->SetVectorParameterValue(JunctionClipStartNormalParameter, FLinearColor(SegmentData.StartJunctionPlaneNormal));
+		Material->SetScalarParameterValue(JunctionClipEndEnabledParameter, SegmentData.bUseEndJunctionClip ? 1.0f : 0.0f);
+		Material->SetVectorParameterValue(JunctionClipEndPositionParameter, FLinearColor(SegmentData.EndJunctionPlanePosition));
+		Material->SetVectorParameterValue(JunctionClipEndNormalParameter, FLinearColor(SegmentData.EndJunctionPlaneNormal));
+		Material->SetScalarParameterValue(JunctionClipFeatherParameter, FMath::Max(0.0f, SegmentData.JunctionClipFeather));
+	}
 }
 
 AUOULightBeamMeshVisualActor::AUOULightBeamMeshVisualActor()
@@ -189,6 +214,8 @@ void AUOULightBeamMeshVisualActor::ApplyMaterialParameters(
 	DynamicCoreMaterial->SetScalarParameterValue(
 		OpacityParameter,
 		FMath::Clamp(InstanceOpacity * CoreOpacityMultiplier, 0.0f, 1.0f));
+	ApplyJunctionClipParameters(DynamicBeamMaterial, SegmentData);
+	ApplyJunctionClipParameters(DynamicCoreMaterial, SegmentData);
 	UpdateAnimatedMaterialParameters(GetWorld() != nullptr ? GetWorld()->GetTimeSeconds() : 0.0f);
 }
 

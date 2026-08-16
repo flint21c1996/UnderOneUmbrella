@@ -226,7 +226,7 @@ bool FUOUCylinderMultiReflectionDirectionTest::RunTest(const FString& Parameters
 	SourceActor->SourceSpotLight->SetAttenuationRadius(1500.0f);
 	SourceActor->ExposureSource->BeamShape = EUOULightBeamShape::Cylinder;
 	SourceActor->ExposureSource->CylinderRadius = 50.0f;
-	SourceActor->ExposureSource->CylinderLength = 1500.0f;
+	SourceActor->ExposureSource->BeamLength = 1500.0f;
 	SourceActor->ExposureSource->Intensity = 1.0f;
 	SourceActor->ExposureSource->SampleInterval = 0.0f;
 	SourceActor->ExposureSource->bEnableReflectedLight = true;
@@ -247,7 +247,6 @@ bool FUOUCylinderMultiReflectionDirectionTest::RunTest(const FString& Parameters
 		Mirror->LightInteractionSurface->bReflectFrontFaceOnly = false;
 		Mirror->LightInteractionSurface->ReflectionDirectionMode =
 			EUOULightReflectionDirectionMode::MirrorByNormal;
-		Mirror->LightInteractionSurface->ReflectionRange = 900.0f;
 		return Mirror;
 	};
 
@@ -726,7 +725,6 @@ bool FUOUUmbrellaShadePathOcclusionTest::RunTest(const FString& Parameters)
 		EUOULightReflectionFrontNormalMode::OwnerForward;
 	MirrorSurface->ReflectionNormalMode = EUOULightReflectionNormalMode::HitNormal;
 	MirrorSurface->ReflectionDirectionMode = EUOULightReflectionDirectionMode::MirrorByNormal;
-	MirrorSurface->ReflectionRange = 500.0f;
 	MirrorSurface->RegisterComponent();
 	// 중심은 원뿔 밖에 있지만 넓은 면이 광원 중심축을 가로지르는 배치입니다.
 	// 우산이 중심축을 막을 때 가장자리 샘플만으로 반사되지 않아야 합니다.
@@ -780,7 +778,6 @@ bool FUOUUmbrellaShadePathOcclusionTest::RunTest(const FString& Parameters)
 		UmbrellaSurface->ReflectionFrontNormalMode =
 			EUOULightReflectionFrontNormalMode::OwnerForward;
 		UmbrellaSurface->ReflectionDirectionMode = EUOULightReflectionDirectionMode::OwnerForward;
-		UmbrellaSurface->ReflectionRange = 500.0f;
 		UmbrellaSurface->RegisterComponent();
 		UmbrellaSurface->SetLightInteractionMode(EUOULightInteractionMode::Reflecting);
 		ShadeVolume->SetShadeEnabled(true);
@@ -998,7 +995,6 @@ bool FUOULightWorldPathIntegrationTest::RunTest(const FString& Parameters)
 	Surface->ReflectionFrontNormalMode = EUOULightReflectionFrontNormalMode::ComponentForward;
 	Surface->ReflectionNormalMode = EUOULightReflectionNormalMode::HitNormal;
 	Surface->ReflectionDirectionMode = EUOULightReflectionDirectionMode::MirrorByNormal;
-	Surface->ReflectionRange = 800.0f;
 	Surface->RegisterComponent();
 	SurfaceActor->SetActorLocation(FVector(400.0f, 0.0f, 0.0f));
 
@@ -1083,7 +1079,7 @@ bool FUOULightWorldPathIntegrationTest::RunTest(const FString& Parameters)
 
 	SourceActor->ExposureSource->BeamShape = EUOULightBeamShape::Cylinder;
 	SourceActor->ExposureSource->CylinderRadius = 50.0f;
-	SourceActor->ExposureSource->CylinderLength = 1000.0f;
+	SourceActor->ExposureSource->BeamLength = 1000.0f;
 	SourceActor->ExposureSource->EmitLight(0.1f);
 	LightPaths = SourceActor->ExposureSource->GetLightPaths();
 
@@ -1152,7 +1148,7 @@ bool FUOULightWorldPathIntegrationTest::RunTest(const FString& Parameters)
 	FallbackSourceActor->AddInstanceComponent(FallbackSource);
 	FallbackSource->bAutoFindSourceSpotLight = false;
 	FallbackSource->BeamShape = EUOULightBeamShape::Cone;
-	FallbackSource->FallbackRange = 321.0f;
+	FallbackSource->BeamLength = 321.0f;
 	FallbackSource->bEnableReflectedLight = false;
 	FallbackSource->SampleInterval = 0.0f;
 	FallbackSource->RegisterComponent();
@@ -1163,7 +1159,7 @@ bool FUOULightWorldPathIntegrationTest::RunTest(const FString& Parameters)
 	if (!FallbackLightPaths.IsEmpty() && !FallbackLightPaths[0].Segments.IsEmpty())
 	{
 		TestEqual(
-			TEXT("LocalLight가 없으면 Fallback Range를 사용한다"),
+			TEXT("LocalLight가 없어도 빛 총 길이를 사용한다"),
 			FallbackLightPaths[0].Segments[0].Length,
 			321.0f);
 	}

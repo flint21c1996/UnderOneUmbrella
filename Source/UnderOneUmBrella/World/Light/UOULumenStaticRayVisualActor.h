@@ -44,23 +44,17 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Lumen Static Ray|Components")
 	TObjectPtr<USceneComponent> CameraFacingRoot;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Lumen Static Ray|Preset", meta = (ClampMin = "1", ClampMax = "19", DisplayName = "Static Ray 프리셋"))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, AdvancedDisplay, Category = "Lumen Static Ray|Renderer Defaults", meta = (ClampMin = "1", ClampMax = "19", DisplayName = "기본 Static Ray 프리셋", ToolTip = "Beam Visual 컴포넌트의 프리셋 Override가 0일 때 사용할 렌더러 기본값입니다."))
 	int32 Preset = 8;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Lumen Static Ray|Appearance", meta = (ClampMin = "0.0", DisplayName = "밝기 배율"))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, AdvancedDisplay, Category = "Lumen Static Ray|Renderer Defaults", meta = (ClampMin = "0.0", DisplayName = "렌더러 기본 밝기 배율", ToolTip = "게임플레이 광량과 Beam Visual의 개별 밝기 배율에 추가로 곱하는 Static Ray 렌더러 기본값입니다."))
 	float EmissiveIntensityScale = 2.2f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Lumen Static Ray|Appearance", meta = (ClampMin = "0.0", ClampMax = "1.0", DisplayName = "투명도 배율"))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, AdvancedDisplay, Category = "Lumen Static Ray|Renderer Defaults", meta = (ClampMin = "0.0", ClampMax = "4.0", DisplayName = "렌더러 기본 투명도 배율", ToolTip = "Beam Visual의 개별 투명도 배율에 추가로 곱하는 Static Ray 렌더러 기본값입니다. 최종 투명도는 0~1 범위로 제한됩니다."))
 	float OpacityScale = 1.6f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Lumen Static Ray|Appearance", meta = (ClampMin = "0.01", DisplayName = "광선 폭 배율", ToolTip = "계산된 원뿔 반지름에 적용되는 시각적 폭 배율입니다."))
 	float BeamWidthScale = 0.75f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Lumen Static Ray|Appearance", meta = (ClampMin = "0.0", Units = "cm", DisplayName = "반사 연결부 보강 길이", ToolTip = "반사면 직전의 메시 끝 페이드를 메우는 짧은 보강 레이어 길이입니다. 0이면 사용하지 않습니다."))
-	float ReflectionJunctionFillLength = 120.0f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Lumen Static Ray|Appearance", meta = (ClampMin = "0.0", ClampMax = "1.0", DisplayName = "반사 연결부 보강 투명도", ToolTip = "반사면 직전 보강 레이어의 투명도 배율입니다."))
-	float ReflectionJunctionFillOpacity = 1.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Lumen Static Ray|Variation", meta = (DisplayName = "노이즈 변화 사용"))
 	bool bUseVariation = true;
@@ -92,20 +86,13 @@ private:
 	UPROPERTY(VisibleAnywhere, Category = "Lumen Static Ray|Components")
 	TArray<TObjectPtr<UStaticMeshComponent>> LayerComponents;
 
-	UPROPERTY(VisibleAnywhere, Category = "Lumen Static Ray|Components")
-	TArray<TObjectPtr<UStaticMeshComponent>> JunctionFillLayerComponents;
-
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UMaterialInstanceDynamic>> DynamicMaterials;
-
-	UPROPERTY(Transient)
-	TArray<TObjectPtr<UMaterialInstanceDynamic>> JunctionFillDynamicMaterials;
 
 	UPROPERTY()
 	TArray<TObjectPtr<UStaticMesh>> ShapeMeshes;
 
 	TArray<float> LayerBaseOpacities;
-	TArray<float> JunctionFillBaseOpacities;
 
 	FLinearColor CurrentColor = FLinearColor::White;
 	float CurrentIntensity = 1.0f;
