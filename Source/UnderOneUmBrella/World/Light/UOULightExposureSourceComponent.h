@@ -11,7 +11,6 @@
 #include "UOULightExposureSourceComponent.generated.h"
 
 class UPrimitiveComponent;
-class ULocalLightComponent;
 class USceneComponent;
 class USpotLightComponent;
 class UUOULightInteractionSurfaceComponent;
@@ -50,7 +49,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Source", meta = (ToolTip = "이 광원에서 게임플레이용 빛을 발사할지 여부입니다."))
 	bool bEmitLight = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Source", meta = (UseComponentPicker, AllowedClasses = "/Script/Engine.SceneComponent", DisplayName = "Source Transform", ToolTip = "광원의 위치와 방향을 가져올 Scene Component입니다. 원뿔형에서 SpotLight를 선택하면 거리와 원뿔 각도도 함께 사용합니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Source", meta = (UseComponentPicker, AllowedClasses = "/Script/Engine.SceneComponent", DisplayName = "Source Transform", ToolTip = "광원의 위치와 방향을 가져올 Scene Component입니다. 원뿔형에서 SpotLight를 선택하면 원뿔 각도도 함께 사용합니다."))
 	FComponentReference SourceTransformReference;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Source", meta = (ToolTip = "Source Transform이 비어 있으면 소유 액터의 첫 번째 SpotLight 컴포넌트를 위치와 방향 기준으로 자동 사용합니다."))
@@ -65,14 +64,15 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Shape|Cone", meta = (ClampMin = "0.0", ClampMax = "1.0", EditCondition = "BeamShape == EUOULightBeamShape::Cone", EditConditionHides, ToolTip = "SpotLight 컴포넌트를 찾지 못했을 때 사용할 내부 원뿔 비율입니다."))
 	float FallbackInnerConeRatio = 0.55f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Shape|Cone", meta = (ClampMin = "0.0", Units = "cm", EditCondition = "BeamShape == EUOULightBeamShape::Cone", EditConditionHides, DisplayName = "Fallback Range", ToolTip = "LocalLight 컴포넌트를 찾지 못했을 때 원뿔형 게임플레이 빛에 사용할 사거리입니다."))
+	// 기존 에셋 역직렬화 호환용입니다. 실제 길이는 CylinderLength를 공용으로 사용합니다.
+	UPROPERTY()
 	float FallbackRange = 1000.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Shape", meta = (ClampMin = "0.0", Units = "cm", DisplayName = "빛 총 길이", ToolTip = "원뿔과 원기둥 모두에서 직접광과 모든 반사 구간을 합친 최대 경로 길이입니다."))
+	float CylinderLength = 800.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Shape|Cylinder", meta = (ClampMin = "0.0", Units = "cm", EditCondition = "BeamShape == EUOULightBeamShape::Cylinder", EditConditionHides, ToolTip = "원기둥형 빛의 반지름입니다."))
 	float CylinderRadius = 100.0f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Shape|Cylinder", meta = (ClampMin = "0.0", Units = "cm", EditCondition = "BeamShape == EUOULightBeamShape::Cylinder", EditConditionHides, ToolTip = "원기둥형 빛이 도달하는 길이입니다."))
-	float CylinderLength = 800.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Shape|Cylinder", meta = (ClampMin = "0.0", ClampMax = "1.0", EditCondition = "BeamShape == EUOULightBeamShape::Cylinder && bUseAngleFalloff", EditConditionHides, ToolTip = "원기둥 반지름 중 최대 광량을 유지하는 내부 영역의 비율입니다."))
 	float CylinderInnerRadiusRatio = 0.75f;
@@ -239,7 +239,6 @@ protected:
 		const TArray<FUOULightReflectionPathData>& CurrentPaths);
 	USceneComponent* GetReferencedSourceTransform() const;
 	USpotLightComponent* GetSourceSpotLightComponent() const;
-	ULocalLightComponent* GetSourceLocalLightComponent() const;
 	FVector GetSourceLocation() const;
 	FVector GetSourceForwardVector() const;
 	float GetExposureRange() const;
@@ -304,6 +303,7 @@ protected:
 		UUOULightInteractionSurfaceComponent* SurfaceComponent,
 		const FVector& ReflectionOrigin,
 		const FVector& ReflectedDirection,
+		float MaximumDistance,
 		float BeamStartRadius,
 		float BeamConeAngle,
 		float SurfaceIntensity,
@@ -315,6 +315,7 @@ protected:
 		const UUOULightInteractionSurfaceComponent* CurrentSurface,
 		const FVector& ReflectionOrigin,
 		const FVector& ReflectedDirection,
+		float MaximumDistance,
 		float BeamStartRadius,
 		float BeamConeAngle,
 		const TSet<const UUOULightInteractionSurfaceComponent*>& VisitedSurfaces,
@@ -325,6 +326,7 @@ protected:
 	float CalculateReflectedSegmentIntensity(
 		const UUOULightInteractionSurfaceComponent* SurfaceComponent,
 		float IncomingIntensity,
+		float MaximumDistance,
 		float Distance,
 		float Angle,
 		float BeamConeAngle) const;
@@ -333,6 +335,7 @@ protected:
 		const UUOULightInteractionSurfaceComponent* SurfaceComponent,
 		const FVector& ReflectionOrigin,
 		const FVector& ReflectedDirection,
+		float MaximumDistance,
 		float BeamStartRadius,
 		float BeamConeAngle,
 		float SurfaceIntensity,
@@ -345,6 +348,7 @@ protected:
 		const UUOULightInteractionSurfaceComponent* SurfaceComponent,
 		const FVector& ReflectionOrigin,
 		const FVector& ReflectedDirection,
+		float MaximumDistance,
 		float BeamStartRadius,
 		float BeamConeAngle,
 		float SurfaceIntensity,

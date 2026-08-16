@@ -46,7 +46,6 @@ bool UUOULightInteractionSurfaceComponent::CanBlockLight() const
 bool UUOULightInteractionSurfaceComponent::CanReflectLight() const
 {
 	return LightInteractionMode == EUOULightInteractionMode::Reflecting &&
-		ReflectionRange > 0.0f &&
 		ReflectionIntensityMultiplier > 0.0f &&
 		(!bLimitReflectionBySurfaceAperture || GetReflectionApertureRadius() > KINDA_SMALL_NUMBER);
 }
