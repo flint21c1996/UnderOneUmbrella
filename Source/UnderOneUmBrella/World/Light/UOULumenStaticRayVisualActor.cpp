@@ -19,15 +19,15 @@ namespace
 	const FName StaticRayVariationAmountParameter(TEXT("VariationAmount"));
 	const FName StaticRayVariationSpeedParameter(TEXT("VariationSpeed"));
 	const FName StaticRayVariationScaleParameter(TEXT("VariationScale"));
-	const FName JunctionClipStartEnabledParameter(TEXT("JunctionClipStartEnabled"));
-	const FName JunctionClipStartPositionParameter(TEXT("JunctionClipStartPosition"));
-	const FName JunctionClipStartNormalParameter(TEXT("JunctionClipStartNormal"));
-	const FName JunctionClipEndEnabledParameter(TEXT("JunctionClipEndEnabled"));
-	const FName JunctionClipEndPositionParameter(TEXT("JunctionClipEndPosition"));
-	const FName JunctionClipEndNormalParameter(TEXT("JunctionClipEndNormal"));
-	const FName JunctionClipFeatherParameter(TEXT("JunctionClipFeather"));
+	const FName StaticRayJunctionClipStartEnabledParameter(TEXT("JunctionClipStartEnabled"));
+	const FName StaticRayJunctionClipStartPositionParameter(TEXT("JunctionClipStartPosition"));
+	const FName StaticRayJunctionClipStartNormalParameter(TEXT("JunctionClipStartNormal"));
+	const FName StaticRayJunctionClipEndEnabledParameter(TEXT("JunctionClipEndEnabled"));
+	const FName StaticRayJunctionClipEndPositionParameter(TEXT("JunctionClipEndPosition"));
+	const FName StaticRayJunctionClipEndNormalParameter(TEXT("JunctionClipEndNormal"));
+	const FName StaticRayJunctionClipFeatherParameter(TEXT("JunctionClipFeather"));
 
-	void ApplyJunctionClipParameters(
+	void ApplyStaticRayJunctionClipParameters(
 		UMaterialInstanceDynamic* Material,
 		const FUOULightBeamVisualSegmentData& SegmentData)
 	{
@@ -37,25 +37,25 @@ namespace
 		}
 
 		Material->SetScalarParameterValue(
-			JunctionClipStartEnabledParameter,
+			StaticRayJunctionClipStartEnabledParameter,
 			SegmentData.bUseStartJunctionClip ? 1.0f : 0.0f);
 		Material->SetVectorParameterValue(
-			JunctionClipStartPositionParameter,
+			StaticRayJunctionClipStartPositionParameter,
 			FLinearColor(SegmentData.StartJunctionPlanePosition));
 		Material->SetVectorParameterValue(
-			JunctionClipStartNormalParameter,
+			StaticRayJunctionClipStartNormalParameter,
 			FLinearColor(SegmentData.StartJunctionPlaneNormal));
 		Material->SetScalarParameterValue(
-			JunctionClipEndEnabledParameter,
+			StaticRayJunctionClipEndEnabledParameter,
 			SegmentData.bUseEndJunctionClip ? 1.0f : 0.0f);
 		Material->SetVectorParameterValue(
-			JunctionClipEndPositionParameter,
+			StaticRayJunctionClipEndPositionParameter,
 			FLinearColor(SegmentData.EndJunctionPlanePosition));
 		Material->SetVectorParameterValue(
-			JunctionClipEndNormalParameter,
+			StaticRayJunctionClipEndNormalParameter,
 			FLinearColor(SegmentData.EndJunctionPlaneNormal));
 		Material->SetScalarParameterValue(
-			JunctionClipFeatherParameter,
+			StaticRayJunctionClipFeatherParameter,
 			FMath::Max(0.0f, SegmentData.JunctionClipFeather));
 	}
 
@@ -304,7 +304,7 @@ void AUOULumenStaticRayVisualActor::ApplyPreset(const FUOULightBeamVisualSegment
 			DynamicMaterials[Index]->SetScalarParameterValue(StaticRayVariationAmountParameter, bUseVariation && Selected.bUseVariation ? 1.0f : 0.0f);
 			DynamicMaterials[Index]->SetScalarParameterValue(StaticRayVariationSpeedParameter, Selected.VariationSpeed);
 			DynamicMaterials[Index]->SetScalarParameterValue(StaticRayVariationScaleParameter, Selected.VariationScale);
-			ApplyJunctionClipParameters(DynamicMaterials[Index], SegmentData);
+			ApplyStaticRayJunctionClipParameters(DynamicMaterials[Index], SegmentData);
 		}
 	}
 	UpdateCameraFacing();

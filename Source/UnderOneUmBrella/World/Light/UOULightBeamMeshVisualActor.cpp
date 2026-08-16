@@ -16,15 +16,15 @@ namespace
 	const FName BeamColorParameter(TEXT("BeamColor"));
 	const FName EmissiveIntensityParameter(TEXT("EmissiveIntensity"));
 	const FName OpacityParameter(TEXT("Opacity"));
-	const FName JunctionClipStartEnabledParameter(TEXT("JunctionClipStartEnabled"));
-	const FName JunctionClipStartPositionParameter(TEXT("JunctionClipStartPosition"));
-	const FName JunctionClipStartNormalParameter(TEXT("JunctionClipStartNormal"));
-	const FName JunctionClipEndEnabledParameter(TEXT("JunctionClipEndEnabled"));
-	const FName JunctionClipEndPositionParameter(TEXT("JunctionClipEndPosition"));
-	const FName JunctionClipEndNormalParameter(TEXT("JunctionClipEndNormal"));
-	const FName JunctionClipFeatherParameter(TEXT("JunctionClipFeather"));
+	const FName BeamMeshJunctionClipStartEnabledParameter(TEXT("JunctionClipStartEnabled"));
+	const FName BeamMeshJunctionClipStartPositionParameter(TEXT("JunctionClipStartPosition"));
+	const FName BeamMeshJunctionClipStartNormalParameter(TEXT("JunctionClipStartNormal"));
+	const FName BeamMeshJunctionClipEndEnabledParameter(TEXT("JunctionClipEndEnabled"));
+	const FName BeamMeshJunctionClipEndPositionParameter(TEXT("JunctionClipEndPosition"));
+	const FName BeamMeshJunctionClipEndNormalParameter(TEXT("JunctionClipEndNormal"));
+	const FName BeamMeshJunctionClipFeatherParameter(TEXT("JunctionClipFeather"));
 
-	void ApplyJunctionClipParameters(
+	void ApplyBeamMeshJunctionClipParameters(
 		UMaterialInstanceDynamic* Material,
 		const FUOULightBeamVisualSegmentData& SegmentData)
 	{
@@ -33,13 +33,13 @@ namespace
 			return;
 		}
 
-		Material->SetScalarParameterValue(JunctionClipStartEnabledParameter, SegmentData.bUseStartJunctionClip ? 1.0f : 0.0f);
-		Material->SetVectorParameterValue(JunctionClipStartPositionParameter, FLinearColor(SegmentData.StartJunctionPlanePosition));
-		Material->SetVectorParameterValue(JunctionClipStartNormalParameter, FLinearColor(SegmentData.StartJunctionPlaneNormal));
-		Material->SetScalarParameterValue(JunctionClipEndEnabledParameter, SegmentData.bUseEndJunctionClip ? 1.0f : 0.0f);
-		Material->SetVectorParameterValue(JunctionClipEndPositionParameter, FLinearColor(SegmentData.EndJunctionPlanePosition));
-		Material->SetVectorParameterValue(JunctionClipEndNormalParameter, FLinearColor(SegmentData.EndJunctionPlaneNormal));
-		Material->SetScalarParameterValue(JunctionClipFeatherParameter, FMath::Max(0.0f, SegmentData.JunctionClipFeather));
+		Material->SetScalarParameterValue(BeamMeshJunctionClipStartEnabledParameter, SegmentData.bUseStartJunctionClip ? 1.0f : 0.0f);
+		Material->SetVectorParameterValue(BeamMeshJunctionClipStartPositionParameter, FLinearColor(SegmentData.StartJunctionPlanePosition));
+		Material->SetVectorParameterValue(BeamMeshJunctionClipStartNormalParameter, FLinearColor(SegmentData.StartJunctionPlaneNormal));
+		Material->SetScalarParameterValue(BeamMeshJunctionClipEndEnabledParameter, SegmentData.bUseEndJunctionClip ? 1.0f : 0.0f);
+		Material->SetVectorParameterValue(BeamMeshJunctionClipEndPositionParameter, FLinearColor(SegmentData.EndJunctionPlanePosition));
+		Material->SetVectorParameterValue(BeamMeshJunctionClipEndNormalParameter, FLinearColor(SegmentData.EndJunctionPlaneNormal));
+		Material->SetScalarParameterValue(BeamMeshJunctionClipFeatherParameter, FMath::Max(0.0f, SegmentData.JunctionClipFeather));
 	}
 }
 
@@ -214,8 +214,8 @@ void AUOULightBeamMeshVisualActor::ApplyMaterialParameters(
 	DynamicCoreMaterial->SetScalarParameterValue(
 		OpacityParameter,
 		FMath::Clamp(InstanceOpacity * CoreOpacityMultiplier, 0.0f, 1.0f));
-	ApplyJunctionClipParameters(DynamicBeamMaterial, SegmentData);
-	ApplyJunctionClipParameters(DynamicCoreMaterial, SegmentData);
+	ApplyBeamMeshJunctionClipParameters(DynamicBeamMaterial, SegmentData);
+	ApplyBeamMeshJunctionClipParameters(DynamicCoreMaterial, SegmentData);
 	UpdateAnimatedMaterialParameters(GetWorld() != nullptr ? GetWorld()->GetTimeSeconds() : 0.0f);
 }
 
