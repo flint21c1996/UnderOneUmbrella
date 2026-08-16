@@ -68,6 +68,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Light|Placement", meta = (EditCondition = "bAlignLightInteractionToRainBlocker", DisplayName = "빛 반사 상태 추가 위치 오프셋", ToolTip = "회전된 빛 판정 박스에 추가할 플레이어 로컬 위치 오프셋입니다."))
 	FVector LightReflectingBlockerAdditionalLocalOffset = FVector::ZeroVector;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Light|Placement", meta = (ClampMin = "0.0", Units = "cm", EditCondition = "bAlignLightInteractionToRainBlocker", DisplayName = "빛 반사 판정 전방 거리", ToolTip = "빛 반사 상태에서 판정면 중심을 플레이어 앞쪽에 고정할 거리입니다. 우산 메시 애니메이션은 따라가지 않습니다."))
+	float LightReflectingSurfaceDistanceFromOwner = 70.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Light|Placement", meta = (Units = "cm", EditCondition = "bAlignLightInteractionToRainBlocker", DisplayName = "빛 반사 판정 높이", ToolTip = "빛 반사 상태에서 판정면 중심에 적용할 플레이어 기준 높이입니다."))
+	float LightReflectingSurfaceHeightFromOwner = 30.0f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Light|Debug", meta = (DisplayName = "Draw Reflector Debug", ToolTip = "Puzzle 월드 디버그가 켜져 있을 때 우산 반사판 박스와 반사 방향을 표시합니다."))
 	bool bDrawReflectorDebug = true;
 
