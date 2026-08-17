@@ -188,7 +188,7 @@ void UUOULadderClimbComponent::HandleCapsuleBeginOverlap(
 {
 	if (AUOULadderActor* Ladder = Cast<AUOULadderActor>(OtherActor))
 	{
-		if (OtherComp == Ladder->GetDetectionVolume())
+		if (Ladder->IsEntryVolume(OtherComp))
 		{
 			NearbyLadders.AddUnique(Ladder);
 		}
@@ -203,9 +203,18 @@ void UUOULadderClimbComponent::HandleCapsuleEndOverlap(
 {
 	if (AUOULadderActor* Ladder = Cast<AUOULadderActor>(OtherActor))
 	{
-		if (OtherComp == Ladder->GetDetectionVolume())
+		if (Ladder->IsEntryVolume(OtherComp))
 		{
-			NearbyLadders.Remove(Ladder);
+			const UCapsuleComponent* CapsuleComponent = OwnerCharacter != nullptr
+				? OwnerCharacter->GetCapsuleComponent()
+				: nullptr;
+			const bool bStillOverlappingEntryVolume = CapsuleComponent != nullptr &&
+				(CapsuleComponent->IsOverlappingComponent(Ladder->GetBottomEntryVolume()) ||
+				 CapsuleComponent->IsOverlappingComponent(Ladder->GetTopEntryVolume()));
+			if (!bStillOverlappingEntryVolume)
+			{
+				NearbyLadders.Remove(Ladder);
+			}
 		}
 	}
 }
@@ -230,9 +239,11 @@ AUOULadderActor* UUOULadderClimbComponent::FindEntryLadder(
 			continue;
 		}
 
-		const FVector LocalCharacterLocation = Ladder->GetActorTransform().InverseTransformPosition(OwnerCharacter->GetActorLocation());
-		const bool bNearBottom = LocalCharacterLocation.Z <= Ladder->GetBottomClimbHeight() + Ladder->GetBottomEntryTolerance();
-		const bool bNearTop = LocalCharacterLocation.Z >= Ladder->GetTopClimbHeight() - Ladder->GetTopEntryTolerance();
+		const UCapsuleComponent* CapsuleComponent = OwnerCharacter->GetCapsuleComponent();
+		const bool bNearBottom = CapsuleComponent != nullptr &&
+			CapsuleComponent->IsOverlappingComponent(Ladder->GetBottomEntryVolume());
+		const bool bNearTop = CapsuleComponent != nullptr &&
+			CapsuleComponent->IsOverlappingComponent(Ladder->GetTopEntryVolume());
 		if (!bNearBottom && !bNearTop)
 		{
 			continue;
@@ -324,12 +335,12 @@ void UUOULadderClimbComponent::BeginExit(bool bExitAtTop)
 
 	TransitionStartLocation = OwnerCharacter->GetActorLocation();
 	TransitionTargetLocation = bExitAtTop
-		? CurrentLadder->GetTopStandingLocation()
-		: CurrentLadder->GetBottomStandingLocation();
+		? CurrentLadder->GetTopExitLocation()
+		: CurrentLadder->GetBottomExitLocation();
 	TransitionStartRotation = OwnerCharacter->GetActorRotation();
 	TransitionTargetRotation = bExitAtTop
-		? CurrentLadder->GetTopStandingRotation()
-		: CurrentLadder->GetBottomStandingRotation();
+		? CurrentLadder->GetTopExitRotation()
+		: CurrentLadder->GetBottomExitRotation();
 	TransitionElapsed = 0.0f;
 	TransitionDuration = ExitTransitionDuration;
 	CurrentClimbInput = 0.0f;
