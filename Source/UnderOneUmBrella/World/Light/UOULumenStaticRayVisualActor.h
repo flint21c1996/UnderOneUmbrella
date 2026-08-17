@@ -28,6 +28,7 @@ public:
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void ApplyLightBeamSegment_Implementation(const FUOULightBeamVisualSegmentData& SegmentData) override;
 	virtual void SetLightBeamVisualActive_Implementation(bool bActive) override;
+	void CopyVisualWidthFrom(const AUOULumenStaticRayVisualActor* SourceVisual);
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Lumen Static Ray|Preview", meta = (DisplayName = "에디터 프리뷰", ToolTip = "레벨에 직접 배치했을 때 지정한 길이와 굵기로 Static Ray를 미리 표시합니다."))
 	bool bPreviewInEditor = false;
@@ -44,13 +45,13 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Lumen Static Ray|Components")
 	TObjectPtr<USceneComponent> CameraFacingRoot;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Lumen Static Ray|Preset", meta = (ClampMin = "1", ClampMax = "19", DisplayName = "Static Ray 프리셋"))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, AdvancedDisplay, Category = "Lumen Static Ray|Renderer Defaults", meta = (ClampMin = "1", ClampMax = "19", DisplayName = "기본 Static Ray 프리셋", ToolTip = "Beam Visual 컴포넌트의 프리셋 Override가 0일 때 사용할 렌더러 기본값입니다."))
 	int32 Preset = 8;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Lumen Static Ray|Appearance", meta = (ClampMin = "0.0", DisplayName = "밝기 배율"))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, AdvancedDisplay, Category = "Lumen Static Ray|Renderer Defaults", meta = (ClampMin = "0.0", DisplayName = "렌더러 기본 밝기 배율", ToolTip = "게임플레이 광량과 Beam Visual의 개별 밝기 배율에 추가로 곱하는 Static Ray 렌더러 기본값입니다."))
 	float EmissiveIntensityScale = 2.2f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Lumen Static Ray|Appearance", meta = (ClampMin = "0.0", ClampMax = "1.0", DisplayName = "투명도 배율"))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, AdvancedDisplay, Category = "Lumen Static Ray|Renderer Defaults", meta = (ClampMin = "0.0", ClampMax = "4.0", DisplayName = "렌더러 기본 투명도 배율", ToolTip = "Beam Visual의 개별 투명도 배율에 추가로 곱하는 Static Ray 렌더러 기본값입니다. 최종 투명도는 0~1 범위로 제한됩니다."))
 	float OpacityScale = 1.6f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Lumen Static Ray|Appearance", meta = (ClampMin = "0.01", DisplayName = "광선 폭 배율", ToolTip = "계산된 원뿔 반지름에 적용되는 시각적 폭 배율입니다."))
@@ -80,6 +81,19 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Lumen Static Ray|Material")
 	TObjectPtr<UMaterialInterface> RayMaterial;
 
+protected:
+	virtual float ResolveVisualLength(
+		const FUOULightBeamVisualSegmentData& SegmentData) const;
+	virtual float ResolveLayerCenterOffset(
+		const FUOULightBeamVisualSegmentData& SegmentData,
+		float FullLayerLength) const;
+	virtual void ApplySegmentClipParameters(
+		UMaterialInstanceDynamic* Material,
+		const FUOULightBeamVisualSegmentData& SegmentData,
+		const FBoxSphereBounds& MeshBounds,
+		const FVector& AppliedLayerScale,
+		float FullLayerLength) const;
+
 private:
 	static constexpr int32 MaxLayerCount = 5;
 
@@ -97,6 +111,7 @@ private:
 	FLinearColor CurrentColor = FLinearColor::White;
 	float CurrentIntensity = 1.0f;
 	float CurrentOpacity = 1.0f;
+	bool bHasAppliedVisualWidth = false;
 
 	void ConfigureComponents();
 	void EnsureDynamicMaterials();

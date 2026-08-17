@@ -20,8 +20,6 @@ class UNDERONEUMBRELLA_API AUOUTimerConditionActor : public AActor, public IUOUP
 public:
 	AUOUTimerConditionActor();
 
-	virtual void BeginPlay() override;
-	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void ApplyPuzzleResult_Implementation(EOUUPuzzleResultAction Action) override;
 	virtual EUOUDebugCategory GetDebugCategory_Implementation() const override;
 	virtual bool IsDebugProviderEnabled_Implementation() const override;

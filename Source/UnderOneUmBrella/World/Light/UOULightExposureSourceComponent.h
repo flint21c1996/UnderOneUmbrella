@@ -4,14 +4,13 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
-#include "Debug/UOUPuzzleDebugInfoProvider.h"
+#include "Debug/UOUDebugProvider.h"
 #include "Engine/EngineTypes.h"
 #include "World/Light/UOULightExposureTypes.h"
 #include "World/Light/UOULightReflectionPathTypes.h"
 #include "UOULightExposureSourceComponent.generated.h"
 
 class UPrimitiveComponent;
-class ULocalLightComponent;
 class USceneComponent;
 class USpotLightComponent;
 class UUOULightInteractionSurfaceComponent;
@@ -36,7 +35,9 @@ enum class EUOULightBeamShape : uint8
 
 // 원뿔 또는 원기둥 형태의 광원에서 주변 수신체로 게임플레이용 빛 노출을 전달합니다.
 UCLASS(ClassGroup=(Light), meta=(BlueprintSpawnableComponent, DisplayName="UOU Light Exposure Source", ToolTip = "선택한 광원 형상 안의 수신체에 게임플레이용 빛 노출을 전달합니다."))
-class UUOULightExposureSourceComponent : public UActorComponent, public IUOUPuzzleDebugInfoProvider
+class UNDERONEUMBRELLA_API UUOULightExposureSourceComponent
+	: public UActorComponent
+	, public IUOUDebugProvider
 {
 	GENERATED_BODY()
 
@@ -45,12 +46,18 @@ public:
 
 	virtual void BeginPlay() override;
 	virtual void TickComponent(float DeltaTime, enum ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
-	virtual TArray<FString> GetPuzzleDebugInfo_Implementation() const override;
+	virtual EUOUDebugCategory GetDebugCategory_Implementation() const override;
+	virtual FText GetDebugSummaryText_Implementation() const override;
+
+#if UOU_WITH_DEVELOPMENT_TOOLS
+	virtual bool ShouldDrawDevelopmentDebugLabel() const override { return false; }
+	virtual void GatherDevelopmentDebugDraw(IUOUDevelopmentDebugDrawContext& Context) const override;
+#endif
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Source", meta = (ToolTip = "이 광원에서 게임플레이용 빛을 발사할지 여부입니다."))
 	bool bEmitLight = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Source", meta = (UseComponentPicker, AllowedClasses = "/Script/Engine.SceneComponent", DisplayName = "Source Transform", ToolTip = "광원의 위치와 방향을 가져올 Scene Component입니다. 원뿔형에서 SpotLight를 선택하면 거리와 원뿔 각도도 함께 사용합니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Source", meta = (UseComponentPicker, AllowedClasses = "/Script/Engine.SceneComponent", DisplayName = "Source Transform", ToolTip = "광원의 위치와 방향을 가져올 Scene Component입니다. 원뿔형에서 SpotLight를 선택하면 원뿔 각도도 함께 사용합니다."))
 	FComponentReference SourceTransformReference;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Source", meta = (ToolTip = "Source Transform이 비어 있으면 소유 액터의 첫 번째 SpotLight 컴포넌트를 위치와 방향 기준으로 자동 사용합니다."))
@@ -65,14 +72,11 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Shape|Cone", meta = (ClampMin = "0.0", ClampMax = "1.0", EditCondition = "BeamShape == EUOULightBeamShape::Cone", EditConditionHides, ToolTip = "SpotLight 컴포넌트를 찾지 못했을 때 사용할 내부 원뿔 비율입니다."))
 	float FallbackInnerConeRatio = 0.55f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Shape|Cone", meta = (ClampMin = "0.0", Units = "cm", EditCondition = "BeamShape == EUOULightBeamShape::Cone", EditConditionHides, DisplayName = "Fallback Range", ToolTip = "LocalLight 컴포넌트를 찾지 못했을 때 원뿔형 게임플레이 빛에 사용할 사거리입니다."))
-	float FallbackRange = 1000.0f;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Shape", meta = (ClampMin = "0.0", Units = "cm", DisplayName = "빛 총 길이", ToolTip = "원뿔과 원기둥 모두에서 직접광과 모든 반사 구간을 합친 최대 경로 길이입니다."))
+	float BeamLength = 800.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Shape|Cylinder", meta = (ClampMin = "0.0", Units = "cm", EditCondition = "BeamShape == EUOULightBeamShape::Cylinder", EditConditionHides, ToolTip = "원기둥형 빛의 반지름입니다."))
 	float CylinderRadius = 100.0f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Shape|Cylinder", meta = (ClampMin = "0.0", Units = "cm", EditCondition = "BeamShape == EUOULightBeamShape::Cylinder", EditConditionHides, ToolTip = "원기둥형 빛이 도달하는 길이입니다."))
-	float CylinderLength = 800.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Shape|Cylinder", meta = (ClampMin = "0.0", ClampMax = "1.0", EditCondition = "BeamShape == EUOULightBeamShape::Cylinder && bUseAngleFalloff", EditConditionHides, ToolTip = "원기둥 반지름 중 최대 광량을 유지하는 내부 영역의 비율입니다."))
 	float CylinderInnerRadiusRatio = 0.75f;
@@ -124,18 +128,6 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection|Stability", meta = (ClampMin = "0.0", Units = "s", ToolTip = "거울 가장자리에서 반사 경로가 순간적으로 줄어들었을 때 직전 경로를 유지하는 시간입니다."))
 	float ReflectionPathLossGraceTime = 0.1f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Debug", meta = (ToolTip = "광원 원뿔, 히트 라인, 반사 디버그 도형을 그립니다."))
-	bool bDrawDebug = false;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Debug", meta = (EditCondition = "bDrawDebug", ToolTip = "거울과 대상의 개별 판정 샘플을 색상으로 표시합니다. 초록/청록은 적중, 빨강은 차단, 노랑은 빛 범위 밖입니다."))
-	bool bDrawSampleDebug = true;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Debug", meta = (ClampMin = "1.0", EditCondition = "bDrawDebug && bDrawSampleDebug", ToolTip = "판정 샘플 점의 화면 표시 크기입니다."))
-	float DebugSamplePointSize = 10.0f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Debug", meta = (ClampMin = "0.0", ToolTip = "디버그 드로우 유지 시간입니다. 0이면 한 프레임만 표시합니다."))
-	float DebugDrawTime = 0.06f;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Runtime", meta = (ToolTip = "마지막 샘플링에서 검사한 수신체 개수입니다."))
 	int32 LastReceiverCount = 0;
@@ -239,7 +231,6 @@ protected:
 		const TArray<FUOULightReflectionPathData>& CurrentPaths);
 	USceneComponent* GetReferencedSourceTransform() const;
 	USpotLightComponent* GetSourceSpotLightComponent() const;
-	ULocalLightComponent* GetSourceLocalLightComponent() const;
 	FVector GetSourceLocation() const;
 	FVector GetSourceForwardVector() const;
 	float GetExposureRange() const;
@@ -304,6 +295,7 @@ protected:
 		UUOULightInteractionSurfaceComponent* SurfaceComponent,
 		const FVector& ReflectionOrigin,
 		const FVector& ReflectedDirection,
+		float MaximumDistance,
 		float BeamStartRadius,
 		float BeamConeAngle,
 		float SurfaceIntensity,
@@ -315,6 +307,7 @@ protected:
 		const UUOULightInteractionSurfaceComponent* CurrentSurface,
 		const FVector& ReflectionOrigin,
 		const FVector& ReflectedDirection,
+		float MaximumDistance,
 		float BeamStartRadius,
 		float BeamConeAngle,
 		const TSet<const UUOULightInteractionSurfaceComponent*>& VisitedSurfaces,
@@ -325,6 +318,7 @@ protected:
 	float CalculateReflectedSegmentIntensity(
 		const UUOULightInteractionSurfaceComponent* SurfaceComponent,
 		float IncomingIntensity,
+		float MaximumDistance,
 		float Distance,
 		float Angle,
 		float BeamConeAngle) const;
@@ -333,6 +327,7 @@ protected:
 		const UUOULightInteractionSurfaceComponent* SurfaceComponent,
 		const FVector& ReflectionOrigin,
 		const FVector& ReflectedDirection,
+		float MaximumDistance,
 		float BeamStartRadius,
 		float BeamConeAngle,
 		float SurfaceIntensity,
@@ -345,6 +340,7 @@ protected:
 		const UUOULightInteractionSurfaceComponent* SurfaceComponent,
 		const FVector& ReflectionOrigin,
 		const FVector& ReflectedDirection,
+		float MaximumDistance,
 		float BeamStartRadius,
 		float BeamConeAngle,
 		float SurfaceIntensity,
@@ -354,23 +350,6 @@ protected:
 	float CalculateIntensity(float Distance, float Angle, float& OutDistanceFactor, float& OutAngleFactor) const;
 	float CalculateConeFactor(float Angle, float ConeAngle) const;
 	float CalculateCylinderFactor(float RadialDistance) const;
-	void DrawDebugSource() const;
-	void DrawDebugResult(const FUOULightExposureData& ExposureData, bool bLit) const;
-	void DrawDebugBlockedHit(const FVector& SourcePosition, const FHitResult& BlockingHit) const;
-	void DrawDebugSamplePoint(const FVector& Position, const FColor& Color) const;
-	void DrawDebugSampleSummary(
-		const FVector& Position,
-		const TCHAR* SampleType,
-		int32 HitCount,
-		int32 RequiredHits,
-		bool bAccepted) const;
-	void DrawDebugReflectionFrustum(
-		const FVector& Start,
-		const FVector& Direction,
-		float Length,
-		float ConeAngleDegrees,
-		float StartRadius,
-		const FColor& Color) const;
 	static void AddActorPrimitiveComponentsToIgnore(
 		const AActor* Actor,
 		FCollisionQueryParams& QueryParams,

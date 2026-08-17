@@ -17,7 +17,7 @@ class UNDERONEUMBRELLA_API UUOUUmbrellaInteractionConditionComponent : public UU
 public:
 	UUOUUmbrellaInteractionConditionComponent();
 
-	virtual TArray<FString> GetPuzzleDebugInfo_Implementation() const override;
+	virtual FText GetDebugSummaryText_Implementation() const override;
 	virtual void GetPuzzleDebugInputActors_Implementation(TArray<AActor*>& OutInputActors) const override;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Puzzle|Umbrella", meta = (ToolTip = "상호작용이 유효하려면 플레이어 우산이 이 상태여야 합니다."))

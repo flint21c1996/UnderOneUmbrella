@@ -17,7 +17,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnPourContentProfileChangedSignatur
 
 // 물 양을 저장하고 퍼즐이나 무게 계산에 넘길 수 있게 관리하는 범용 물 컨테이너다.
 UCLASS(ClassGroup=(Gameplay), meta=(BlueprintSpawnableComponent))
-class UUOUWaterContainerComponent : public UActorComponent, public IUOUPourReceiver
+class UNDERONEUMBRELLA_API UUOUWaterContainerComponent : public UActorComponent, public IUOUPourReceiver
 {
 	GENERATED_BODY()
 

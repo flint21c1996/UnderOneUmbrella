@@ -21,7 +21,7 @@ public:
 
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
-	virtual TArray<FString> GetPuzzleDebugInfo_Implementation() const override;
+	virtual FText GetDebugSummaryText_Implementation() const override;
 	virtual void GetPuzzleDebugInputActors_Implementation(TArray<AActor*>& OutInputActors) const override;
 
 	// 도착 여부를 확인할 플랫폼입니다.

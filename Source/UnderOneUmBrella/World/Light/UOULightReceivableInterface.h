@@ -8,12 +8,12 @@
 #include "UOULightReceivableInterface.generated.h"
 
 UINTERFACE(BlueprintType, meta = (ToolTip = "게임플레이용 빛 노출을 받을 수 있는 오브젝트가 구현하는 인터페이스입니다."))
-class UUOULightReceivableInterface : public UInterface
+class UNDERONEUMBRELLA_API UUOULightReceivableInterface : public UInterface
 {
 	GENERATED_BODY()
 };
 
-class IUOULightReceivableInterface
+class UNDERONEUMBRELLA_API IUOULightReceivableInterface
 {
 	GENERATED_BODY()
 

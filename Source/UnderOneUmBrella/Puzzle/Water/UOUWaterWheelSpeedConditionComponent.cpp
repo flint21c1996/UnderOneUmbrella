@@ -46,14 +46,14 @@ void UUOUWaterWheelSpeedConditionComponent::TickComponent(
 	}
 }
 
-TArray<FString> UUOUWaterWheelSpeedConditionComponent::GetPuzzleDebugInfo_Implementation() const
+FText UUOUWaterWheelSpeedConditionComponent::GetDebugSummaryText_Implementation() const
 {
 	const UUOUWaterWheelRainConditionComponent* WaterWheelCondition = ResolvedWaterWheelCondition.Get();
 	const float CurrentSpeed = WaterWheelCondition != nullptr
 		? WaterWheelCondition->CurrentRotationSpeedDegreesPerSecond
 		: 0.0f;
 
-	return {
+	const TArray<FString> DebugLines = {
 		FString::Printf(
 			TEXT("Water Wheel Speed: %s"),
 			IsSatisfied() ? TEXT("Satisfied") : TEXT("Unsatisfied")),
@@ -68,6 +68,8 @@ TArray<FString> UUOUWaterWheelSpeedConditionComponent::GetPuzzleDebugInfo_Implem
 			*StaticEnum<EUOUWaterWheelSpeedConditionMode>()->GetNameStringByValue(
 				static_cast<int64>(ConditionMode)))
 	};
+
+	return FText::FromString(FString::Join(DebugLines, LINE_TERMINATOR));
 }
 
 void UUOUWaterWheelSpeedConditionComponent::GetPuzzleDebugInputActors_Implementation(

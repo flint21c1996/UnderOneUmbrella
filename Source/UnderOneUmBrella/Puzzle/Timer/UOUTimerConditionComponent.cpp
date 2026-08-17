@@ -31,7 +31,7 @@ void UUOUTimerConditionComponent::EndPlay(const EEndPlayReason::Type EndPlayReas
 	Super::EndPlay(EndPlayReason);
 }
 
-TArray<FString> UUOUTimerConditionComponent::GetPuzzleDebugInfo_Implementation() const
+FText UUOUTimerConditionComponent::GetDebugSummaryText_Implementation() const
 {
 	UWorld* World = GetWorld();
 	const bool bPaused = World != nullptr && World->GetTimerManager().IsTimerPaused(TimerHandle);
@@ -39,12 +39,14 @@ TArray<FString> UUOUTimerConditionComponent::GetPuzzleDebugInfo_Implementation()
 		? TEXT("Paused")
 		: (bTimerRunning ? TEXT("Running") : TEXT("Stopped"));
 
-	return {
+	const TArray<FString> DebugLines = {
 		FString::Printf(TEXT("Timer Condition: %s"), IsSatisfied() ? TEXT("Satisfied") : TEXT("Unsatisfied")),
 		FString::Printf(TEXT("Timer: %s"), TimerState),
 		FString::Printf(TEXT("Duration: %.2f"), TimerDuration),
 		FString::Printf(TEXT("Remaining: %.2f"), GetRemainingTime())
 	};
+
+	return FText::FromString(FString::Join(DebugLines, LINE_TERMINATOR));
 }
 
 void UUOUTimerConditionComponent::StartTimer()

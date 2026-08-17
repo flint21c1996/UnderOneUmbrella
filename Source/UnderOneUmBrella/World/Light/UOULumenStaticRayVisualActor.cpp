@@ -19,6 +19,45 @@ namespace
 	const FName StaticRayVariationAmountParameter(TEXT("VariationAmount"));
 	const FName StaticRayVariationSpeedParameter(TEXT("VariationSpeed"));
 	const FName StaticRayVariationScaleParameter(TEXT("VariationScale"));
+	const FName StaticRayJunctionClipStartEnabledParameter(TEXT("JunctionClipStartEnabled"));
+	const FName StaticRayJunctionClipStartPositionParameter(TEXT("JunctionClipStartPosition"));
+	const FName StaticRayJunctionClipStartNormalParameter(TEXT("JunctionClipStartNormal"));
+	const FName StaticRayJunctionClipEndEnabledParameter(TEXT("JunctionClipEndEnabled"));
+	const FName StaticRayJunctionClipEndPositionParameter(TEXT("JunctionClipEndPosition"));
+	const FName StaticRayJunctionClipEndNormalParameter(TEXT("JunctionClipEndNormal"));
+	const FName StaticRayJunctionClipFeatherParameter(TEXT("JunctionClipFeather"));
+
+	void ApplyStaticRayJunctionClipParameters(
+		UMaterialInstanceDynamic* Material,
+		const FUOULightBeamVisualSegmentData& SegmentData)
+	{
+		if (Material == nullptr)
+		{
+			return;
+		}
+
+		Material->SetScalarParameterValue(
+			StaticRayJunctionClipStartEnabledParameter,
+			SegmentData.bUseStartJunctionClip ? 1.0f : 0.0f);
+		Material->SetVectorParameterValue(
+			StaticRayJunctionClipStartPositionParameter,
+			FLinearColor(SegmentData.StartJunctionPlanePosition));
+		Material->SetVectorParameterValue(
+			StaticRayJunctionClipStartNormalParameter,
+			FLinearColor(SegmentData.StartJunctionPlaneNormal));
+		Material->SetScalarParameterValue(
+			StaticRayJunctionClipEndEnabledParameter,
+			SegmentData.bUseEndJunctionClip ? 1.0f : 0.0f);
+		Material->SetVectorParameterValue(
+			StaticRayJunctionClipEndPositionParameter,
+			FLinearColor(SegmentData.EndJunctionPlanePosition));
+		Material->SetVectorParameterValue(
+			StaticRayJunctionClipEndNormalParameter,
+			FLinearColor(SegmentData.EndJunctionPlaneNormal));
+		Material->SetScalarParameterValue(
+			StaticRayJunctionClipFeatherParameter,
+			FMath::Max(0.0f, SegmentData.JunctionClipFeather));
+	}
 
 	struct FLumenStaticRayLayer
 	{
@@ -118,6 +157,7 @@ AUOULumenStaticRayVisualActor::AUOULumenStaticRayVisualActor()
 void AUOULumenStaticRayVisualActor::OnConstruction(const FTransform& Transform)
 {
 	Super::OnConstruction(Transform);
+	bHasAppliedVisualWidth = false;
 	ConfigureComponents();
 	if (bPreviewInEditor)
 	{
@@ -132,6 +172,36 @@ void AUOULumenStaticRayVisualActor::OnConstruction(const FTransform& Transform)
 		PreviewData.Color = FLinearColor::White;
 		ApplyPreset(PreviewData);
 	}
+}
+
+void AUOULumenStaticRayVisualActor::CopyVisualWidthFrom(
+	const AUOULumenStaticRayVisualActor* SourceVisual)
+{
+	if (SourceVisual == nullptr)
+	{
+		return;
+	}
+
+	const int32 SharedLayerCount = FMath::Min(
+		LayerComponents.Num(),
+		SourceVisual->LayerComponents.Num());
+	for (int32 Index = 0; Index < SharedLayerCount; ++Index)
+	{
+		UStaticMeshComponent* TargetLayer = LayerComponents[Index];
+		const UStaticMeshComponent* SourceLayer = SourceVisual->LayerComponents[Index];
+		if (TargetLayer == nullptr || SourceLayer == nullptr)
+		{
+			continue;
+		}
+
+		const FVector SourceScale = SourceLayer->GetRelativeScale3D();
+		const FVector TargetScale = TargetLayer->GetRelativeScale3D();
+		TargetLayer->SetRelativeScale3D(FVector(
+			SourceScale.X,
+			SourceScale.Y,
+			TargetScale.Z));
+	}
+	bHasAppliedVisualWidth = true;
 }
 
 void AUOULumenStaticRayVisualActor::Tick(const float DeltaSeconds)
@@ -182,6 +252,29 @@ void AUOULumenStaticRayVisualActor::ApplyLightBeamSegment_Implementation(const F
 	SetLightBeamVisualActive_Implementation(true);
 }
 
+float AUOULumenStaticRayVisualActor::ResolveVisualLength(
+	const FUOULightBeamVisualSegmentData& SegmentData) const
+{
+	return FMath::Max(0.0f, SegmentData.Length);
+}
+
+float AUOULumenStaticRayVisualActor::ResolveLayerCenterOffset(
+	const FUOULightBeamVisualSegmentData& SegmentData,
+	const float) const
+{
+	return FMath::Max(0.0f, SegmentData.Length) * 0.5f;
+}
+
+void AUOULumenStaticRayVisualActor::ApplySegmentClipParameters(
+	UMaterialInstanceDynamic* Material,
+	const FUOULightBeamVisualSegmentData& SegmentData,
+	const FBoxSphereBounds&,
+	const FVector&,
+	const float) const
+{
+	ApplyStaticRayJunctionClipParameters(Material, SegmentData);
+}
+
 void AUOULumenStaticRayVisualActor::ApplyPreset(const FUOULightBeamVisualSegmentData& SegmentData)
 {
 	EnsureDynamicMaterials();
@@ -192,6 +285,7 @@ void AUOULumenStaticRayVisualActor::ApplyPreset(const FUOULightBeamVisualSegment
 	const float Radius = FMath::Max(
 		KINDA_SMALL_NUMBER,
 		FMath::Max(SegmentData.StartRadius, SegmentData.EndRadius) * BeamWidthScale);
+	const float VisualLength = ResolveVisualLength(SegmentData);
 	CurrentColor = SegmentData.Color;
 	CurrentIntensity = SegmentData.Intensity * SegmentData.VisualBrightnessMultiplier * EmissiveIntensityScale;
 	CurrentOpacity = FMath::Clamp(OpacityScale * SegmentData.VisualOpacityMultiplier, 0.0f, 1.0f);
@@ -240,16 +334,26 @@ void AUOULumenStaticRayVisualActor::ApplyPreset(const FUOULightBeamVisualSegment
 		const FVector FitScale(
 			Radius / NativeRadius,
 			Radius / NativeRadius,
-			SegmentData.Length / NativeLength);
-		Component->SetRelativeScale3D(FitScale * NormalizedLayerScale);
+			VisualLength / NativeLength);
+		const FVector CalculatedLayerScale = FitScale * NormalizedLayerScale;
+		const FVector CurrentLayerScale = Component->GetRelativeScale3D();
+		const FVector AppliedLayerScale = bHasAppliedVisualWidth
+			? FVector(
+				CurrentLayerScale.X,
+				CurrentLayerScale.Y,
+				CalculatedLayerScale.Z)
+			: CalculatedLayerScale;
+		Component->SetRelativeScale3D(AppliedLayerScale);
+		const float FullLayerLength = NativeLength * FMath::Abs(AppliedLayerScale.Z);
 		// 서브메시가 원본 FBX의 공통 피벗을 유지한 채 분리되어 있으므로,
 		// 바운드 중심의 횡방향 오프셋을 제거하고 시작점에서 광선 구간이 시작되게 맞춥니다.
 		const FVector ScaledBoundsOrigin = MeshBounds.Origin * Component->GetRelativeScale3D();
 		Component->AddRelativeLocation(FVector(
 			-ScaledBoundsOrigin.X,
 			-ScaledBoundsOrigin.Y,
-			-ScaledBoundsOrigin.Z + SegmentData.Length * 0.5f));
-
+			-ScaledBoundsOrigin.Z + ResolveLayerCenterOffset(
+				SegmentData,
+				FullLayerLength)));
 		if (DynamicMaterials.IsValidIndex(Index) && DynamicMaterials[Index] != nullptr)
 		{
 			const FLinearColor LayerColor = CurrentColor * Layer.Color;
@@ -266,8 +370,15 @@ void AUOULumenStaticRayVisualActor::ApplyPreset(const FUOULightBeamVisualSegment
 			DynamicMaterials[Index]->SetScalarParameterValue(StaticRayVariationAmountParameter, bUseVariation && Selected.bUseVariation ? 1.0f : 0.0f);
 			DynamicMaterials[Index]->SetScalarParameterValue(StaticRayVariationSpeedParameter, Selected.VariationSpeed);
 			DynamicMaterials[Index]->SetScalarParameterValue(StaticRayVariationScaleParameter, Selected.VariationScale);
+			ApplySegmentClipParameters(
+				DynamicMaterials[Index],
+				SegmentData,
+				MeshBounds,
+				AppliedLayerScale,
+				FullLayerLength);
 		}
 	}
+	bHasAppliedVisualWidth = true;
 	UpdateCameraFacing();
 	UpdateMaterialParameters(GetWorld() != nullptr ? GetWorld()->GetTimeSeconds() : 0.0f);
 }

@@ -4,8 +4,7 @@
 
 #include "Components/PrimitiveComponent.h"
 #include "Components/SceneComponent.h"
-#include "Debug/UOUDebugSubsystem.h"
-#include "DrawDebugHelpers.h"
+#include "Debug/UOUDevelopmentDebugDrawContext.h"
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
 
@@ -45,17 +44,42 @@ void UUOULightExposureReceiverComponent::TickComponent(
 	}
 
 	RecoverTemperature(DeltaTime);
-	DrawTemperatureDebug();
 }
 
-TArray<FString> UUOULightExposureReceiverComponent::GetPuzzleDebugInfo_Implementation() const
+FText UUOULightExposureReceiverComponent::GetDebugSummaryText_Implementation() const
 {
-	return {
+	const TArray<FString> DebugLines = {
 		FString::Printf(TEXT("Light Receiver: %s"), bIsReceivingLight ? TEXT("Lit") : TEXT("Not Lit")),
 		FString::Printf(TEXT("Temp: %.1f C"), CurrentTemperature),
 		FString::Printf(TEXT("Exposure: %.2f from %s"), LastExposureIntensity, *LastExposureSourceName)
 	};
+
+	return FText::FromString(FString::Join(DebugLines, LINE_TERMINATOR));
 }
+
+EUOUDebugCategory UUOULightExposureReceiverComponent::GetDebugCategory_Implementation() const
+{
+	return EUOUDebugCategory::Puzzle;
+}
+
+#if UOU_WITH_DEVELOPMENT_TOOLS
+void UUOULightExposureReceiverComponent::GatherDevelopmentDebugDraw(
+	IUOUDevelopmentDebugDrawContext& Context) const
+{
+	const FVector DebugLocation =
+		IUOULightReceivableInterface::Execute_GetLightReceiverPosition(
+			const_cast<UUOULightExposureReceiverComponent*>(this))
+		+ FVector(0.0f, 0.0f, 100.0f);
+	const FString DebugText = FString::Printf(
+		TEXT("Temp: %.1f C\nLight: %s\nIntensity: %.2f"),
+		CurrentTemperature,
+		bIsReceivingLight ? TEXT("On") : TEXT("Off"),
+		LastExposureIntensity);
+	const FColor TextColor = bIsReceivingLight ? FColor::Orange : FColor::Cyan;
+
+	Context.DrawString(DebugLocation, DebugText, TextColor, 1.0f);
+}
+#endif
 
 FVector UUOULightExposureReceiverComponent::GetLightReceiverPosition_Implementation() const
 {
@@ -216,8 +240,6 @@ void UUOULightExposureReceiverComponent::ValidateTemperatureSettings()
 	TemperatureRisePerIntensity = FMath::Max(0.0f, TemperatureRisePerIntensity);
 	TemperatureRecoveryRate = FMath::Max(0.0f, TemperatureRecoveryRate);
 	ExposureEndGraceTime = FMath::Max(0.0f, ExposureEndGraceTime);
-	TemperatureDebugDrawTime = FMath::Max(0.0f, TemperatureDebugDrawTime);
-	TemperatureDebugTextScale = FMath::Max(0.1f, TemperatureDebugTextScale);
 }
 
 USceneComponent* UUOULightExposureReceiverComponent::GetReferencedReceiverTransform() const
@@ -336,40 +358,4 @@ void UUOULightExposureReceiverComponent::RecoverTemperature(float DeltaTime)
 		TemperatureRecoveryRate);
 
 	SetTemperature(RecoveredTemperature);
-}
-
-void UUOULightExposureReceiverComponent::DrawTemperatureDebug() const
-{
-	if (!bDrawTemperatureDebug || !UUOUDebugSubsystem::IsDebugWorldLabelEnabled(this, EUOUDebugCategory::Puzzle))
-	{
-		return;
-	}
-
-	UWorld* World = GetWorld();
-	if (World == nullptr)
-	{
-		return;
-	}
-
-	const FVector DebugLocation = GetLightReceiverPosition_Implementation() + TemperatureDebugOffset;
-	const FString DebugText = FString::Printf(
-		TEXT("Temp: %.1f C\nLight: %s\nIntensity: %.2f"),
-		CurrentTemperature,
-		bIsReceivingLight ? TEXT("On") : TEXT("Off"),
-		LastExposureIntensity);
-
-	const FColor TemperatureTextColor = UUOUDebugSubsystem::GetDebugCategoryColor(
-		this,
-		EUOUDebugCategory::Puzzle,
-		bIsReceivingLight ? ExposedTemperatureDebugColor : TemperatureDebugColor);
-
-	DrawDebugString(
-		World,
-		DebugLocation,
-		DebugText,
-		nullptr,
-		TemperatureTextColor,
-		TemperatureDebugDrawTime,
-		true,
-		TemperatureDebugTextScale);
 }

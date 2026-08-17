@@ -3,10 +3,6 @@
 #include "Player/UOUPushPullInteractorComponent.h"
 
 #include "Components/PrimitiveComponent.h"
-#include "Debug/UOUDebugControllerComponent.h"
-#include "Debug/UOUDebugSubsystem.h"
-#include "DrawDebugHelpers.h"
-#include "Engine/Engine.h"
 #include "Engine/OverlapResult.h"
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
@@ -91,7 +87,6 @@ void UUOUPushPullInteractorComponent::TickComponent(float DeltaTime, ELevelTick 
 	}
 
 	UpdateScreenDebug();
-	DrawWorldDebug();
 }
 
 void UUOUPushPullInteractorComponent::HandleGrabPressed()
@@ -525,72 +520,42 @@ void UUOUPushPullInteractorComponent::UpdateScreenDebug() const
 	// 플레이어와 관련된 화면 디버그는 Debug Controller의 Player HUD에서 통합 표시합니다.
 }
 
-void UUOUPushPullInteractorComponent::DrawWorldDebug() const
+bool UUOUPushPullInteractorComponent::TryGetCurrentCandidateReferenceLocation(
+	FVector& OutLocation) const
 {
-	if (!UUOUDebugSubsystem::IsDebugWorldDrawEnabled(this, EUOUDebugCategory::Interaction))
+	if (CurrentCandidateObject != nullptr)
 	{
-		return;
+		OutLocation = CurrentCandidateObject->GetGrabReferenceLocation();
+		return true;
 	}
 
-	UWorld* World = GetWorld();
-	if (World == nullptr)
+	if (CurrentCandidateCrank != nullptr)
 	{
-		return;
+		OutLocation = CurrentCandidateCrank->GetGrabReferenceLocation();
+		return true;
 	}
 
-	const UUOUDebugSubsystem* DebugSubsystem = World->GetSubsystem<UUOUDebugSubsystem>();
-	const UUOUInteractionDebugControllerComponent* InteractionController = DebugSubsystem != nullptr
-		? Cast<UUOUInteractionDebugControllerComponent>(DebugSubsystem->FindDebugControllerComponent(EUOUDebugCategory::Interaction))
-		: nullptr;
-	const bool bShowTrace = InteractionController == nullptr || InteractionController->bShowTrace;
-	const bool bShowCandidate = InteractionController == nullptr || InteractionController->bShowCandidate;
-
-	const FVector DetectionOrigin = GetDetectionOriginLocation();
-	const FColor InteractionDebugColor = UUOUDebugSubsystem::GetDebugCategoryColor(this, EUOUDebugCategory::Interaction, FColor::Orange);
-	const FColor SearchColor = UUOUDebugSubsystem::GetDebugCategoryColor(
-		this,
-		EUOUDebugCategory::Interaction,
-		CurrentCandidateObject != nullptr || CurrentCandidateCrank != nullptr || CurrentCandidateMirror != nullptr
-			? FColor::Green
-			: FColor::Cyan);
-	if (bShowTrace)
+	if (CurrentCandidateMirror != nullptr)
 	{
-		DrawDebugSphere(World, DetectionOrigin, CandidateSearchRadius, 24, SearchColor, false, 0.0f, 0, 1.5f);
+		OutLocation = CurrentCandidateMirror->GetGrabReferenceLocation();
+		return true;
 	}
 
-	if (bShowCandidate && CurrentCandidateObject != nullptr)
+	OutLocation = FVector::ZeroVector;
+	return false;
+}
+
+bool UUOUPushPullInteractorComponent::TryGetCurrentGrabbedReferenceLocation(
+	FVector& OutLocation) const
+{
+	if (!IsGrabbing())
 	{
-		const FVector CandidateLocation = CurrentCandidateObject->GetGrabReferenceLocation();
-		DrawDebugLine(World, DetectionOrigin, CandidateLocation, InteractionDebugColor, false, 0.0f, 0, 2.0f);
-		DrawDebugSphere(World, CandidateLocation, 14.0f, 12, InteractionDebugColor, false, 0.0f, 0, 1.5f);
-	}
-	else if (bShowCandidate && CurrentCandidateCrank != nullptr)
-	{
-		const FVector CandidateLocation = CurrentCandidateCrank->GetGrabReferenceLocation();
-		DrawDebugLine(World, DetectionOrigin, CandidateLocation, InteractionDebugColor, false, 0.0f, 0, 2.0f);
-		DrawDebugSphere(World, CandidateLocation, 14.0f, 12, InteractionDebugColor, false, 0.0f, 0, 1.5f);
-	}
-	else if (bShowCandidate && CurrentCandidateMirror != nullptr)
-	{
-		const FVector CandidateLocation = CurrentCandidateMirror->GetGrabReferenceLocation();
-		DrawDebugLine(World, DetectionOrigin, CandidateLocation, InteractionDebugColor, false, 0.0f, 0, 2.0f);
-		DrawDebugSphere(World, CandidateLocation, 14.0f, 12, InteractionDebugColor, false, 0.0f, 0, 1.5f);
+		OutLocation = FVector::ZeroVector;
+		return false;
 	}
 
-	if (bShowCandidate && (GrabbedObject != nullptr || GrabbedCrank != nullptr || GrabbedMirror != nullptr))
-	{
-		const FVector GrabbedLocation = GetGrabbedReferenceLocation();
-		DrawDebugDirectionalArrow(
-			World,
-			GrabbedLocation,
-			GrabbedLocation + GrabbedMoveAxis * 100.0f,
-			25.0f,
-			InteractionDebugColor,
-			false,
-			0.0f,
-			0,
-			3.0f);
-	}
+	OutLocation = GetGrabbedReferenceLocation();
+	return true;
 }
 
 bool UUOUPushPullInteractorComponent::TryResolveGrabAxis(UUOUPushPullObjectComponent* TargetObject, FVector& OutMoveAxis) const

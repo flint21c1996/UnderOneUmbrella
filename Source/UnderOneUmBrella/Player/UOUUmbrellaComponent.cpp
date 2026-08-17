@@ -14,9 +14,7 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/SphereComponent.h"
 #include "Components/StaticMeshComponent.h"
-#include "Debug/UOUDebugSubsystem.h"
 #include "Engine/GameInstance.h"
-#include "DrawDebugHelpers.h"
 #include "Engine/Engine.h"
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
@@ -149,7 +147,6 @@ void UUOUUmbrellaComponent::TickComponent(float DeltaTime, ELevelTick TickType, 
 		ClearPourAimFacing();
 		ClearPourTraceDebug();
 		DrawScreenDebug();
-		DrawRainBlockerDebug();
 		return;
 	}
 
@@ -158,9 +155,6 @@ void UUOUUmbrellaComponent::TickComponent(float DeltaTime, ELevelTick TickType, 
 	UpdatePouring(DeltaTime);
 	UpdatePouringEffectState();
 	DrawScreenDebug();
-	DrawRainBlockerDebug();
-	DrawPourSocketAndDropSpawnDebug();
-	DrawPourTraceDebug();
 	UpdateRainBlockedAudioState();
 }
 
@@ -292,6 +286,16 @@ void UUOUUmbrellaComponent::BeginLightReflecting()
 	if (!bHasUmbrella || CurrentState != EUOUUmbrellaState::Open)
 	{
 		return;
+	}
+
+	// 점프 또는 낙하 중에는 우산을 빛 반사 상태로 전환하지 않습니다.
+	if (const ACharacter* OwnerCharacter = Cast<ACharacter>(GetOwner()))
+	{
+		const UCharacterMovementComponent* CharacterMovement = OwnerCharacter->GetCharacterMovement();
+		if (CharacterMovement != nullptr && CharacterMovement->IsFalling())
+		{
+			return;
+		}
 	}
 
 	if (AActor* Owner = GetOwner())
@@ -1638,215 +1642,6 @@ void UUOUUmbrellaComponent::DrawScreenDebug() const
 	// 플레이어/우산 화면 디버그는 Debug Controller의 Player HUD에서 통합 표시합니다.
 }
 
-// 우산이 비를 막는 중심과 범위를 월드에 그려 RainArea 판정 위치를 눈으로 확인합니다.
-void UUOUUmbrellaComponent::DrawRainBlockerDebug() const
-{
-	if (!UUOUDebugSubsystem::IsDebugWorldDrawEnabled(this, EUOUDebugCategory::Player))
-	{
-		return;
-	}
-
-	UWorld* World = GetWorld();
-	if (World == nullptr)
-	{
-		return;
-	}
-
-	FVector BlockerWorldCenter = FVector::ZeroVector;
-	FRotator BlockerWorldRotation = FRotator::ZeroRotator;
-	FVector BlockerHalfExtent = FVector::ZeroVector;
-	if (!TryGetGameplayRainBlockerVolumeData(BlockerWorldCenter, BlockerWorldRotation, BlockerHalfExtent))
-	{
-		// 비를 막는 상태가 아니면 그릴 기준 데이터가 없으므로 바로 종료합니다.
-		return;
-	}
-
-	const float Thickness = FMath::Max(0.0f, RainBlockerDebugThickness);
-	const float LifeTime = 0.0f;
-	const bool bIsActiveBlocker = IsBlockingRain();
-	const FColor PlayerDebugColor = bIsActiveBlocker
-		? FColor::Cyan
-		: FColor(90, 90, 90);
-
-	DrawDebugSphere(
-		World,
-		BlockerWorldCenter,
-		8.0f,
-		12,
-		PlayerDebugColor,
-		false,
-		LifeTime,
-		0,
-		Thickness);
-
-	DrawDebugBox(
-		World,
-		BlockerWorldCenter,
-		BlockerHalfExtent,
-		BlockerWorldRotation.Quaternion(),
-		PlayerDebugColor,
-		false,
-		LifeTime,
-		0,
-		Thickness);
-
-	DrawDebugLine(
-		World,
-		BlockerWorldCenter + BlockerWorldRotation.Quaternion().GetAxisZ() * BlockerHalfExtent.Z,
-		BlockerWorldCenter - BlockerWorldRotation.Quaternion().GetAxisZ() * BlockerHalfExtent.Z,
-		PlayerDebugColor,
-		false,
-		LifeTime,
-		0,
-		Thickness);
-
-	DrawDebugString(
-		World,
-		BlockerWorldCenter + BlockerWorldRotation.Quaternion().GetAxisZ() * (BlockerHalfExtent.Z + 18.0f),
-		FString::Printf(
-			TEXT("Gameplay RainBlocker %s Half %.1f %.1f %.1f Offset %.1f %.1f %.1f"),
-			bIsActiveBlocker ? TEXT("Active") : TEXT("Inactive"),
-			BlockerHalfExtent.X,
-			BlockerHalfExtent.Y,
-			BlockerHalfExtent.Z,
-			RainBlockerLocalOffset.X,
-			RainBlockerLocalOffset.Y,
-			RainBlockerLocalOffset.Z),
-		nullptr,
-		PlayerDebugColor,
-		LifeTime,
-		false,
-		1.0f);
-}
-
-// 물 붓기 라인트레이스의 마지막 결과를 월드에 그려 어느 대상에 닿았는지 확인합니다.
-void UUOUUmbrellaComponent::DrawPourTraceDebug() const
-{
-	if (!bHasLastPourTrace
-		|| !UUOUDebugSubsystem::IsDebugWorldDrawEnabled(this, EUOUDebugCategory::Player))
-	{
-		return;
-	}
-
-	UWorld* World = GetWorld();
-	if (World == nullptr)
-	{
-		return;
-	}
-
-	const float LifeTime = FMath::Max(0.0f, PourTraceDebugLifeTime);
-	const float Thickness = FMath::Max(0.0f, PourTraceDebugThickness);
-	const FVector DrawEnd = bLastPourTraceHit ? LastPourTraceImpactPoint : LastPourTraceEnd;
-	const FColor ImpactPointColor = bLastPourCheckedWaterBasinImpactPoint
-		? (bLastPourImpactPointInsideWaterBasin ? FColor::Green : FColor::Red)
-		: FColor::Orange;
-	const FColor TraceColor = UUOUDebugSubsystem::GetDebugCategoryColor(
-		this,
-		EUOUDebugCategory::Player,
-		bLastPourDeliveredWater ? FColor::Green : (bLastPourTraceHit ? FColor::Red : FColor::Cyan));
-
-	DrawDebugLine(
-		World,
-		LastPourTraceStart,
-		DrawEnd,
-		TraceColor,
-		false,
-		LifeTime,
-		0,
-		Thickness);
-
-	DrawDebugSphere(
-		World,
-		LastPourTraceStart,
-		6.0f,
-		12,
-		TraceColor,
-		false,
-		LifeTime,
-		0,
-		Thickness);
-
-	if (bLastPourTraceHit)
-	{
-		DrawDebugSphere(
-			World,
-			LastPourTraceImpactPoint,
-			8.0f,
-			12,
-			ImpactPointColor,
-			false,
-			LifeTime,
-			0,
-			Thickness);
-
-		const float ImpactCrossSize = 18.0f;
-		DrawDebugLine(
-			World,
-			LastPourTraceImpactPoint - FVector(ImpactCrossSize, 0.0f, 0.0f),
-			LastPourTraceImpactPoint + FVector(ImpactCrossSize, 0.0f, 0.0f),
-			ImpactPointColor,
-			false,
-			LifeTime,
-			0,
-			Thickness);
-		DrawDebugLine(
-			World,
-			LastPourTraceImpactPoint - FVector(0.0f, ImpactCrossSize, 0.0f),
-			LastPourTraceImpactPoint + FVector(0.0f, ImpactCrossSize, 0.0f),
-			ImpactPointColor,
-			false,
-			LifeTime,
-			0,
-			Thickness);
-		DrawDebugLine(
-			World,
-			LastPourTraceImpactPoint - FVector(0.0f, 0.0f, ImpactCrossSize),
-			LastPourTraceImpactPoint + FVector(0.0f, 0.0f, ImpactCrossSize),
-			ImpactPointColor,
-			false,
-			LifeTime,
-			0,
-			Thickness);
-	}
-
-	if (UUOUDebugSubsystem::IsDebugWorldLabelEnabled(this, EUOUDebugCategory::Player))
-	{
-		const FVector LabelLocation = DrawEnd + FVector(0.0f, 0.0f, 24.0f);
-		const FString ImpactPointText = bLastPourTraceHit
-			? FString::Printf(
-				TEXT("\nImpactPoint: X %.1f / Y %.1f / Z %.1f"),
-				LastPourTraceImpactPoint.X,
-				LastPourTraceImpactPoint.Y,
-				LastPourTraceImpactPoint.Z)
-			: FString();
-		const FString WaterBasinImpactText = bLastPourCheckedWaterBasinImpactPoint
-			? FString::Printf(
-				TEXT("\nBasin 판정: %s"),
-				bLastPourImpactPointInsideWaterBasin ? TEXT("내부") : TEXT("외부"))
-			: FString();
-		const FString LabelText = FString::Printf(
-			TEXT("Pour Trace\nHit: %s\nTarget: %s\nReceiver: %s\nAmount: %.2f\nStored: %.2f -> %.2f%s%s"),
-			*LastPourHitName,
-			*LastPourTargetName,
-			GetPourReceiverTypeText(LastPourReceiverType),
-			LastPourAmount,
-			LastPourStoredWaterBefore,
-			LastPourStoredWaterAfter,
-			*ImpactPointText,
-			*WaterBasinImpactText);
-
-		DrawDebugString(
-			World,
-			LabelLocation,
-			LabelText,
-			nullptr,
-			TraceColor,
-			LifeTime,
-			true,
-			1.0f);
-	}
-}
-
 // 물 붓기 디버그 기록을 초기 상태로 돌립니다.
 void UUOUUmbrellaComponent::ClearPourTraceDebug()
 {
@@ -1862,61 +1657,6 @@ void UUOUUmbrellaComponent::ClearPourTraceDebug()
 	LastPourStoredWaterBefore = GetCurrentStoredWater();
 	LastPourStoredWaterAfter = GetCurrentStoredWater();
 	LastPourReceiverType = EUOUUmbrellaPourReceiverType::None;
-}
-
-// 물을 붓는 동안 캐릭터 몸 방향을 마우스 조준 방향에 맞춥니다.
-void UUOUUmbrellaComponent::DrawPourSocketAndDropSpawnDebug() const
-{
-	if (!bHasUmbrella || (!bDrawPourSocketDebug && !bDrawPourDropSpawnDebug))
-	{
-		return;
-	}
-
-	if (!UUOUDebugSubsystem::IsDebugWorldDrawEnabled(this, EUOUDebugCategory::Player))
-	{
-		return;
-	}
-
-	UWorld* World = GetWorld();
-	if (World == nullptr)
-	{
-		return;
-	}
-
-	const float Radius = FMath::Max(1.0f, PourSocketDebugRadius);
-	const float LifeTime = 0.0f;
-	const float Thickness = 2.0f;
-
-	FTransform SocketTransform = FTransform::Identity;
-	if (bDrawPourSocketDebug && TryGetPouringPointTransform(SocketTransform))
-	{
-		const FVector SocketLocation = SocketTransform.GetLocation();
-		const USkeletalMeshComponent* SocketSource = ResolvePouringSocketSourceComponent();
-		const FString SocketSourceName = GetNameSafe(SocketSource);
-		const FString SocketMeshName = SocketSource != nullptr ? GetNameSafe(SocketSource->GetSkeletalMeshAsset()) : TEXT("None");
-		const FString SocketDebugText = FString::Printf(
-			TEXT("PourSocket\nComponent: %s\nMesh: %s\nSocket: %s\nOffset: %.1f %.1f %.1f"),
-			*SocketSourceName,
-			*SocketMeshName,
-			*PouringSocketName.ToString(),
-			PouringSocketWorldUnitOffset.X,
-			PouringSocketWorldUnitOffset.Y,
-			PouringSocketWorldUnitOffset.Z);
-		DrawDebugSphere(World, SocketLocation, Radius, 16, FColor::Magenta, false, LifeTime, 0, Thickness);
-		DrawDebugCoordinateSystem(World, SocketLocation, SocketTransform.Rotator(), Radius * 2.5f, false, LifeTime, 0, Thickness);
-		DrawDebugString(World, SocketLocation + FVector(0.0f, 0.0f, Radius + 18.0f), SocketDebugText, nullptr, FColor::Magenta, LifeTime, true);
-	}
-
-	FVector DropLocation = FVector::ZeroVector;
-	FVector DropDirection = FVector::ForwardVector;
-	if (bDrawPourDropSpawnDebug && TryGetPourDropSpawnPlacement(DropLocation, DropDirection))
-	{
-		const FVector SafeDirection = DropDirection.IsNearlyZero() ? FVector::DownVector : DropDirection.GetSafeNormal();
-		DrawDebugSphere(World, DropLocation, Radius * 0.7f, 16, FColor::Yellow, false, LifeTime, 0, Thickness);
-		DrawDebugLine(World, DropLocation, DropLocation + SafeDirection * 120.0f, FColor::Yellow, false, LifeTime, 0, Thickness);
-		DrawDebugLine(World, DropLocation, DropLocation + FVector::DownVector * 120.0f, FColor::Cyan, false, LifeTime, 0, Thickness);
-		DrawDebugString(World, DropLocation + FVector(0.0f, 0.0f, Radius + 36.0f), TEXT("DropSpawn"), nullptr, FColor::Yellow, LifeTime, true);
-	}
 }
 
 void UUOUUmbrellaComponent::UpdateUmbrellaAimFacing(float DeltaTime)
@@ -2056,7 +1796,6 @@ bool UUOUUmbrellaComponent::SpawnPendingPourDrop()
 		DropContext.VisualSettings = ContentProfile->DropVisual;
 	}
 	DropActor->InitializePourDrop(DropContext);
-	DropActor->bDrawDebugCollisionRadius = bDrawPourDropCollisionDebug;
 	if (bOverridePourDropCollisionRadius)
 	{
 		DropActor->CollisionRadius = FMath::Max(0.0f, PourDropCollisionRadiusOverride);

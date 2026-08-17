@@ -10,7 +10,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnRainExposureChangedSignature, fl
 
 // 플레이어가 비를 얼마나 직접 맞고 있는지 저장하고 서서히 말리는 컴포넌트다.
 UCLASS(ClassGroup=(Gameplay), meta=(BlueprintSpawnableComponent))
-class UUOURainReceiverComponent : public UActorComponent
+class UNDERONEUMBRELLA_API UUOURainReceiverComponent : public UActorComponent
 {
 	GENERATED_BODY()
 

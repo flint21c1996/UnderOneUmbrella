@@ -12,6 +12,7 @@
 #include "Components/StaticMeshComponent.h"
 #include "Curves/CurveFloat.h"
 #include "DrawDebugHelpers.h"
+#include "Debug/UOUDevelopmentToolsBuild.h"
 #include "Engine/World.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
@@ -1304,6 +1305,7 @@ void AUOUFloorPlatformActor::UpdateEditorPreviewVisuals()
 
 void AUOUFloorPlatformActor::DrawRuntimeMoveDebug() const
 {
+#if UOU_WITH_DEVELOPMENT_TOOLS
 	if (!bDrawRuntimeMoveDebug)
 	{
 		return;
@@ -1480,6 +1482,7 @@ void AUOUFloorPlatformActor::DrawRuntimeMoveDebug() const
 			DrawDuration,
 			true);
 	}
+#endif
 }
 
 float AUOUFloorPlatformActor::ResolveMoveAlpha(float RawAlpha) const

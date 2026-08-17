@@ -12,7 +12,7 @@ class UPrimitiveComponent;
 // 밀고 당기기 대상 오브젝트의 물리 제약과 잡힘 상태를 관리하는 컴포넌트입니다.
 // 플레이어가 블럭을 잡았을 때만 수평 이동을 허용하고 놓으면 다시 고정합니다.
 UCLASS(ClassGroup=(Puzzle), meta=(BlueprintSpawnableComponent))
-class UUOUPushPullObjectComponent : public UActorComponent
+class UNDERONEUMBRELLA_API UUOUPushPullObjectComponent : public UActorComponent
 {
 	GENERATED_BODY()
 

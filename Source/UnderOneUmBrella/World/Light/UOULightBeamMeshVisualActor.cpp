@@ -16,6 +16,31 @@ namespace
 	const FName BeamColorParameter(TEXT("BeamColor"));
 	const FName EmissiveIntensityParameter(TEXT("EmissiveIntensity"));
 	const FName OpacityParameter(TEXT("Opacity"));
+	const FName BeamMeshJunctionClipStartEnabledParameter(TEXT("JunctionClipStartEnabled"));
+	const FName BeamMeshJunctionClipStartPositionParameter(TEXT("JunctionClipStartPosition"));
+	const FName BeamMeshJunctionClipStartNormalParameter(TEXT("JunctionClipStartNormal"));
+	const FName BeamMeshJunctionClipEndEnabledParameter(TEXT("JunctionClipEndEnabled"));
+	const FName BeamMeshJunctionClipEndPositionParameter(TEXT("JunctionClipEndPosition"));
+	const FName BeamMeshJunctionClipEndNormalParameter(TEXT("JunctionClipEndNormal"));
+	const FName BeamMeshJunctionClipFeatherParameter(TEXT("JunctionClipFeather"));
+
+	void ApplyBeamMeshJunctionClipParameters(
+		UMaterialInstanceDynamic* Material,
+		const FUOULightBeamVisualSegmentData& SegmentData)
+	{
+		if (Material == nullptr)
+		{
+			return;
+		}
+
+		Material->SetScalarParameterValue(BeamMeshJunctionClipStartEnabledParameter, SegmentData.bUseStartJunctionClip ? 1.0f : 0.0f);
+		Material->SetVectorParameterValue(BeamMeshJunctionClipStartPositionParameter, FLinearColor(SegmentData.StartJunctionPlanePosition));
+		Material->SetVectorParameterValue(BeamMeshJunctionClipStartNormalParameter, FLinearColor(SegmentData.StartJunctionPlaneNormal));
+		Material->SetScalarParameterValue(BeamMeshJunctionClipEndEnabledParameter, SegmentData.bUseEndJunctionClip ? 1.0f : 0.0f);
+		Material->SetVectorParameterValue(BeamMeshJunctionClipEndPositionParameter, FLinearColor(SegmentData.EndJunctionPlanePosition));
+		Material->SetVectorParameterValue(BeamMeshJunctionClipEndNormalParameter, FLinearColor(SegmentData.EndJunctionPlaneNormal));
+		Material->SetScalarParameterValue(BeamMeshJunctionClipFeatherParameter, FMath::Max(0.0f, SegmentData.JunctionClipFeather));
+	}
 }
 
 AUOULightBeamMeshVisualActor::AUOULightBeamMeshVisualActor()
@@ -189,6 +214,8 @@ void AUOULightBeamMeshVisualActor::ApplyMaterialParameters(
 	DynamicCoreMaterial->SetScalarParameterValue(
 		OpacityParameter,
 		FMath::Clamp(InstanceOpacity * CoreOpacityMultiplier, 0.0f, 1.0f));
+	ApplyBeamMeshJunctionClipParameters(DynamicBeamMaterial, SegmentData);
+	ApplyBeamMeshJunctionClipParameters(DynamicCoreMaterial, SegmentData);
 	UpdateAnimatedMaterialParameters(GetWorld() != nullptr ? GetWorld()->GetTimeSeconds() : 0.0f);
 }
 
@@ -241,7 +268,11 @@ void AUOULightBeamMeshVisualActor::ApplyMeshTransform(
 	const float LengthScale = SegmentData.Length / MeshLength;
 	const FVector MeshAxis = bUseCone && bReverseConeAxis ? -SafeDirection : SafeDirection;
 	const FRotator MeshRotation = FRotationMatrix::MakeFromZ(MeshAxis).Rotator();
-	const FVector MeshScale(RadiusScale, RadiusScale, LengthScale);
+	const bool bPreserveVisualWidth = bUseCone || SegmentData.bReflected;
+	const FVector CurrentBeamScale = BeamMeshComponent->GetComponentScale();
+	const FVector MeshScale = bPreserveVisualWidth
+		? FVector(CurrentBeamScale.X, CurrentBeamScale.Y, LengthScale)
+		: FVector(RadiusScale, RadiusScale, LengthScale);
 	const FVector BoundsOffset = MeshRotation.RotateVector(MeshBoundsCenter * MeshScale);
 
 	BeamMeshComponent->SetWorldLocationAndRotation(
@@ -251,8 +282,11 @@ void AUOULightBeamMeshVisualActor::ApplyMeshTransform(
 	CoreBeamMeshComponent->SetWorldLocationAndRotation(
 		Midpoint - BoundsOffset,
 		MeshRotation);
-	CoreBeamMeshComponent->SetWorldScale3D(FVector(
-		RadiusScale * CoreRadiusScale,
-		RadiusScale * CoreRadiusScale,
-		LengthScale * 0.98f));
+	const FVector CurrentCoreScale = CoreBeamMeshComponent->GetComponentScale();
+	CoreBeamMeshComponent->SetWorldScale3D(bPreserveVisualWidth
+		? FVector(CurrentCoreScale.X, CurrentCoreScale.Y, LengthScale * 0.98f)
+		: FVector(
+			RadiusScale * CoreRadiusScale,
+			RadiusScale * CoreRadiusScale,
+			LengthScale * 0.98f));
 }

@@ -29,7 +29,7 @@ public:
 
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
-	virtual TArray<FString> GetPuzzleDebugInfo_Implementation() const override;
+	virtual FText GetDebugSummaryText_Implementation() const override;
 	virtual void GetPuzzleDebugInputActors_Implementation(TArray<AActor*>& OutInputActors) const override;
 
 	UPROPERTY(BlueprintAssignable, Category = "Puzzle|Overlap")

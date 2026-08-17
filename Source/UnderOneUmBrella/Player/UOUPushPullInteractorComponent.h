@@ -16,7 +16,7 @@ class UUOURotatableMirrorComponent;
 // 플레이어가 퍼즐 블럭을 잡고 밀고 당기는 전용 흐름을 관리하는 컴포넌트다.
 // 후보 탐색과 잡기 상태, 이동 입력 해석을 모두 이곳에서 맡는다.
 UCLASS(ClassGroup=(Gameplay), meta=(BlueprintSpawnableComponent))
-class UUOUPushPullInteractorComponent : public UActorComponent
+class UNDERONEUMBRELLA_API UUOUPushPullInteractorComponent : public UActorComponent
 {
 	GENERATED_BODY()
 
@@ -123,6 +123,18 @@ public:
 	// 이동 입력을 밀기와 당기기 축으로 바꿔 현재 오브젝트에 전달한다.
 	UFUNCTION(BlueprintCallable, Category = "PushPull")
 	bool HandleMoveInput(const FVector2D& MovementVector, float MovementYaw);
+
+	// 후보 탐색 범위를 사용하는 외부 시스템에 현재 설정된 반경을 제공합니다.
+	float GetCandidateSearchRadius() const { return CandidateSearchRadius; }
+
+	// 현재 플레이어 상태를 반영한 후보 탐색 중심 위치를 반환합니다.
+	FVector GetCandidateDetectionOriginLocation() const { return GetDetectionOriginLocation(); }
+
+	// 현재 후보 종류와 무관하게 잡기 기준 위치를 조회합니다.
+	bool TryGetCurrentCandidateReferenceLocation(FVector& OutLocation) const;
+
+	// 현재 잡은 대상 종류와 무관하게 잡기 기준 위치를 조회합니다.
+	bool TryGetCurrentGrabbedReferenceLocation(FVector& OutLocation) const;
 
 	// 통합 플레이어 디버그 HUD에서 현재 후보를 읽기 위한 접근자입니다.
 	UFUNCTION(BlueprintPure, Category = "PushPull|Debug")
@@ -247,8 +259,6 @@ protected:
 	void UpdateScreenDebug() const;
 
 	// 후보 탐색 반경과 이동 축을 월드에 시각화한다.
-	void DrawWorldDebug() const;
-
 	// 후보 블럭에서 실제로 사용할 수평 이동 축을 계산한다.
 	bool TryResolveGrabAxis(UUOUPushPullObjectComponent* TargetObject, FVector& OutMoveAxis) const;
 

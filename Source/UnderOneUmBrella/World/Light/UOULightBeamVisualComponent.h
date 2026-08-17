@@ -69,22 +69,22 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light|Visual", meta = (ClampMin = "0.0", Units = "cm", ToolTip = "벽이나 거울 표면과 빛줄기가 겹쳐 보이지 않도록 끝점을 앞당기는 거리입니다."))
 	float EndPadding = 2.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light|Visual", meta = (ClampMin = "0.0", Units = "cm", ToolTip = "비스듬한 반사면 뒤로 빛줄기 시작 단면이 튀어나오지 않도록 시작점을 전진시키는 최대 거리입니다. 큰 값은 완만한 입사각에서 시작점이 옆으로 밀려 보일 수 있으며, 0이면 추가 보정을 사용하지 않습니다."))
-	float MaximumReflectedStartClearance = 4.0f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light|Visual", meta = (ClampMin = "0.0", Units = "cm", DisplayName = "반사 연결부 Clip Feather", ToolTip = "반사면 뒤쪽 메시를 평면으로 잘라내고 경계만 부드럽게 만드는 거리입니다. 0이면 경계를 단단하게 자르며, 1~3cm를 권장합니다."))
+	float ReflectionJunctionClipFeather = 2.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light|Visual", meta = (ToolTip = "VFX BP 내부에 포함된 Light 컴포넌트를 끄고 통합 광원 액터의 SpotLight만 사용합니다."))
 	bool bDisableEmbeddedVFXLights = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light|Visual|Appearance", meta = (ClampMin = "0.0", DisplayName = "Visual Brightness Multiplier", ToolTip = "이 액터의 빛줄기 밝기에만 적용되는 배율입니다. 퍼즐 판정용 빛 세기에는 영향을 주지 않습니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light|Visual|Overrides", meta = (ClampMin = "0.0", DisplayName = "개별 밝기 배율", ToolTip = "이 광원 인스턴스의 빛줄기 밝기에만 곱하는 값입니다. VFX 액터 클래스의 기본 밝기와 함께 적용되며 퍼즐 판정용 빛 세기에는 영향을 주지 않습니다."))
 	float VisualBrightnessMultiplier = 1.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light|Visual|Appearance", meta = (ClampMin = "0.0", DisplayName = "Visual Opacity Multiplier", ToolTip = "이 액터의 빛줄기 투명도에만 적용되는 배율입니다. 0이면 완전히 투명하고 1이면 기본 투명도입니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light|Visual|Overrides", meta = (ClampMin = "0.0", DisplayName = "개별 투명도 배율", ToolTip = "이 광원 인스턴스의 빛줄기 투명도에만 곱하는 값입니다. 0이면 완전히 투명하고 1이면 VFX 액터 클래스의 기본 투명도를 그대로 사용합니다."))
 	float VisualOpacityMultiplier = 1.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light|Visual|Appearance", meta = (ClampMin = "0", ClampMax = "8", DisplayName = "Lumen Dynamic Ray Preset", ToolTip = "원본 Lumen Dynamic Ray 표시 액터를 사용할 때 적용할 프리셋입니다. 0은 표시 액터 기본값, 1~8은 원본 프리셋 번호입니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light|Visual|Overrides", meta = (ClampMin = "0", ClampMax = "8", DisplayName = "Dynamic Ray 프리셋 Override", ToolTip = "0이면 VFX 액터 클래스의 기본 프리셋을 사용하고, 1~8이면 이 광원 인스턴스에서 해당 프리셋으로 덮어씁니다."))
 	int32 LumenDynamicRayPreset = 0;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light|Visual|Appearance", meta = (ClampMin = "0", ClampMax = "19", DisplayName = "Lumen Static Ray Preset", ToolTip = "원본 Lumen Static Ray 표시 액터를 사용할 때 적용할 프리셋입니다. 0은 표시 액터 기본값, 1~19는 원본 프리셋 번호입니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light|Visual|Overrides", meta = (ClampMin = "0", ClampMax = "19", DisplayName = "Static Ray 프리셋 Override", ToolTip = "0이면 VFX 액터 클래스의 기본 프리셋을 사용하고, 1~19이면 이 광원 인스턴스에서 해당 프리셋으로 덮어씁니다."))
 	int32 LumenStaticRayPreset = 0;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Visual|Runtime")
@@ -118,8 +118,12 @@ protected:
 	AActor* AcquireReflectionVFXActor(int32 PoolIndex);
 	AActor* SpawnVFXActor();
 	void ConfigureSpawnedVFXActor(AActor* VFXActor) const;
-	void UpdateDirectVFX(const TArray<FUOULightPathData>& LightPaths);
-	void UpdateReflectionVFX(const TArray<FUOULightPathData>& LightPaths);
+	void UpdateDirectVFX(
+		const TArray<FUOULightPathData>& LightPaths,
+		float ReferenceVisualLength);
+	void UpdateReflectionVFX(
+		const TArray<FUOULightPathData>& LightPaths,
+		float ReferenceVisualLength);
 	void HideUnusedReflectionVFX(int32 FirstUnusedIndex);
 	void ApplySegmentToVFX(AActor* VFXActor, const FUOULightBeamVisualSegmentData& SegmentData);
 	bool ApplySegmentToLazyGodray(AActor* VFXActor, const FUOULightBeamVisualSegmentData& SegmentData);
@@ -128,7 +132,9 @@ protected:
 	FUOULightBeamVisualSegmentData BuildVisualSegment(
 		const FUOULightPathSegmentData& SegmentData,
 		int32 VisualSegmentIndex,
-		float AdditionalEndPadding = 0.0f) const;
+		float ReferenceVisualLength,
+		const FUOULightPathSegmentData* PreviousSegment = nullptr,
+		const FUOULightPathSegmentData* NextReflectedSegment = nullptr) const;
 	FLinearColor ResolveLightColor() const;
 	void DestroyVFXActors();
 };

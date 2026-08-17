@@ -3,7 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Debug/UOUPuzzleDebugInfoProvider.h"
+#include "Debug/UOUDebugProvider.h"
 #include "GameFramework/Actor.h"
 #include "Puzzle/Core/UOUPuzzleResultReceiver.h"
 #include "UOUFlyingSwarmEffectActor.generated.h"
@@ -341,7 +341,7 @@ UCLASS(Blueprintable, meta=(DisplayName="UOU Paper Plane Swarm Effect Actor"))
 class UNDERONEUMBRELLA_API AUOUFlyingSwarmEffectActor
 	: public AActor
 	, public IUOUPuzzleResultReceiver
-	, public IUOUPuzzleDebugInfoProvider
+	, public IUOUDebugProvider
 {
 	GENERATED_BODY()
 
@@ -655,7 +655,8 @@ public:
 	static FUOUPaperPlaneSwarmParticleRandom MakePaperPlaneSwarmParticleRandom(int32 ParticleIndex, int32 InRandomSeed, const FUOUPaperPlaneSwarmRandomRanges& RandomRanges);
 
 	virtual void ApplyPuzzleResult_Implementation(EOUUPuzzleResultAction Action) override;
-	virtual TArray<FString> GetPuzzleDebugInfo_Implementation() const override;
+	virtual EUOUDebugCategory GetDebugCategory_Implementation() const override;
+	virtual FText GetDebugSummaryText_Implementation() const override;
 
 protected:
 	virtual void BeginPlay() override;

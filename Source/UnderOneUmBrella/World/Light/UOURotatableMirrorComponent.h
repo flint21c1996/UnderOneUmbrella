@@ -4,7 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
-#include "Debug/UOUPuzzleDebugInfoProvider.h"
+#include "Debug/UOUDebugProvider.h"
 #include "Engine/EngineTypes.h"
 #include "UOURotatableMirrorComponent.generated.h"
 
@@ -34,7 +34,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
 UCLASS(ClassGroup=(Light), meta=(BlueprintSpawnableComponent, DisplayName="UOU Rotatable Mirror", ToolTip = "플레이어가 Push Volume 안에서 거울을 밀면 지정한 축을 중심으로 회전시킵니다."))
 class UNDERONEUMBRELLA_API UUOURotatableMirrorComponent
 	: public UActorComponent
-	, public IUOUPuzzleDebugInfoProvider
+	, public IUOUDebugProvider
 {
 	GENERATED_BODY()
 
@@ -47,7 +47,13 @@ public:
 		float DeltaTime,
 		ELevelTick TickType,
 		FActorComponentTickFunction* ThisTickFunction) override;
-	virtual TArray<FString> GetPuzzleDebugInfo_Implementation() const override;
+	virtual EUOUDebugCategory GetDebugCategory_Implementation() const override;
+	virtual FText GetDebugSummaryText_Implementation() const override;
+
+#if UOU_WITH_DEVELOPMENT_TOOLS
+	virtual bool ShouldDrawDevelopmentDebugLabel() const override { return false; }
+	virtual void GatherDevelopmentDebugDraw(IUOUDevelopmentDebugDrawContext& Context) const override;
+#endif
 
 #if WITH_EDITOR
 	virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
@@ -107,6 +113,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Mirror|Push|Grab", meta = (ClampMin = "0.0", Units = "cm", ToolTip = "잡는 순간 플레이어 중심을 손잡이에서 떨어뜨릴 거리입니다."))
 	float PlayerAttachDistance = 65.0f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Mirror|Push|Grab", meta = (ClampMin = "0.0", Units = "cm", DisplayName = "거울 표면 최대 간격", ToolTip = "플레이어 캡슐과 거울 메시 표면 사이의 허용 간격입니다. 거울에 붙어 있는 상태에서만 잡히도록 제한합니다."))
+	float MaximumGrabSurfaceGap = 15.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Mirror|Push|Grab", meta = (ClampMin = "0.0", ClampMax = "180.0", Units = "deg", DisplayName = "잡기 시작 최대 방향 보정각", ToolTip = "플레이어가 거울을 바라보도록 상호작용 시작 시 보정할 수 있는 최대 각도입니다. 이보다 크게 돌아야 하면 잡기를 시작하지 않습니다."))
+	float MaximumGrabFacingCorrectionAngle = 60.0f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Mirror|Push|Grab", meta = (ToolTip = "잡는 순간 플레이어를 손잡이 앞 위치로 정렬합니다."))
 	bool bSnapPlayerOnGrab = true;
 
@@ -124,9 +136,6 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Mirror|Push", meta = (ClampMin = "1.0", Units = "cm", ToolTip = "이 거리 이상 가장자리를 밀면 최대 회전력이 적용됩니다."))
 	float FullTorqueLeverArm = 100.0f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Mirror|Debug", meta = (ToolTip = "회전축, 플레이어의 밀기 방향 및 현재 각도를 표시합니다."))
-	bool bDrawDebug = false;
 
 	UPROPERTY(BlueprintReadOnly, Transient, Category = "Mirror|Runtime", meta = (Units = "deg", ToolTip = "초기 배치 각도를 기준으로 한 현재 회전각입니다."))
 	float CurrentAngle = 0.0f;
@@ -182,8 +191,9 @@ protected:
 	float CalculatePushInput(const APawn* Pusher) const;
 	FVector GetPivotWorldLocation() const;
 	FVector GetRotationAxisWorld() const;
-	void DrawDebugState(const TArray<AActor*>& OverlappingPushers) const;
 	USceneComponent* FindNearestPushHandle(const AActor* Interactor) const;
+	bool FindClosestGrabSurfacePoint(const APawn* Pusher, FVector& OutClosestPoint, float& OutSurfaceGap) const;
+	float CalculateGrabSurfaceGap(const APawn* Pusher) const;
 	bool UpdateAttachedPlayerTransform(bool bSweepMovement);
 	void ApplyPusherFacing() const;
 
@@ -200,6 +210,7 @@ protected:
 	TObjectPtr<USceneComponent> ActivePushHandle = nullptr;
 
 	FVector AttachedPlayerLocalLocation = FVector::ZeroVector;
+	FQuat AttachedPlayerLocalRotation = FQuat::Identity;
 
 	FQuat InitialRelativeRotation = FQuat::Identity;
 	FVector InitialRelativeLocation = FVector::ZeroVector;
