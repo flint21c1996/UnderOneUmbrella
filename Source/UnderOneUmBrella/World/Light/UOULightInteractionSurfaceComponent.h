@@ -82,9 +82,6 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection|Facing", meta = (ToolTip = "반사 각도 조건을 만족하지 못한 빛을 막지 않고 통과시킵니다. 우산처럼 유효한 각도에서만 빛과 상호작용해야 하는 표면에 사용합니다."))
 	bool bPassThroughWhenReflectionRejected = false;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection", meta = (ClampMin = "0.0", ToolTip = "반사된 게임플레이 빛이 도달할 수 있는 최대 거리입니다."))
-	float ReflectionRange = 600.0f;
-
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection", meta = (ToolTip = "입사 광원의 확산각을 유지할지, 이 반사면의 각도를 사용할지 결정합니다."))
 	EUOULightReflectionConeAngleMode ReflectionConeAngleMode =
 		EUOULightReflectionConeAngleMode::PreserveIncoming;
@@ -98,14 +95,20 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection", meta = (ClampMin = "0.0", ToolTip = "반사광 시작 위치를 충돌 지점에서 살짝 띄우는 거리입니다."))
 	float ReflectionStartPadding = 4.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection|Visual", meta = (ClampMin = "0.0", ClampMax = "1.0", ToolTip = "반사점에서 입사광과 반사광 메시가 반사면을 뚫지 않도록 비우는 시각적 여백의 배율입니다. 0이면 반사점까지 끊김 없이 연결합니다."))
-	float VisualJunctionClearanceScale = 1.0f;
-
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection|Aperture", meta = (ToolTip = "반사되는 빛의 시작 폭을 이 Box 컴포넌트의 실제 크기로 제한합니다."))
 	bool bLimitReflectionBySurfaceAperture = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection|Aperture", meta = (ClampMin = "0.0", ToolTip = "Box 크기에서 계산한 반사 유효 반지름에 곱할 값입니다."))
 	float ReflectionApertureScale = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection|Aperture", meta = (ToolTip = "켜면 반사면 중심에서 벗어난 충돌일수록 반사광의 유효 반지름을 줄입니다. 우산 가장자리에 빛이 조금만 걸렸을 때 굵은 반사광이 생기는 현상을 방지합니다."))
+	bool bLimitReflectionByImpactOffset = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection|Aperture", meta = (ClampMin = "0.0", Units = "cm", EditCondition = "bLimitReflectionByImpactOffset", ToolTip = "반사면 가장자리에서 추가로 제외할 안전 여백입니다."))
+	float ReflectionImpactEdgeInset = 4.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection|Aperture", meta = (ClampMin = "0.0", ClampMax = "1.0", EditCondition = "bLimitReflectionByImpactOffset", ToolTip = "입사광 반지름 대비 남은 반사 반지름의 최소 비율입니다. 이 값보다 적게 걸친 빛은 반사하지 않습니다."))
+	float MinimumReflectionCoverageRatio = 0.3f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection|Sampling", meta = (ToolTip = "중심점 하나가 아니라 반사면의 중앙과 상하좌우를 빛 적중 후보로 사용합니다."))
 	bool bUseSurfaceAreaSampling = true;
@@ -135,7 +138,15 @@ public:
 	float ClampReflectionBeamRadius(
 		float IncomingBeamRadius,
 		const FVector& IncomingDirection,
-		const FVector& HitNormal) const;
+		const FVector& HitNormal,
+		const FVector& ImpactPoint) const;
+
+	UFUNCTION(BlueprintPure, Category = "Light|Reflection", meta = (ToolTip = "충돌 위치에 남은 반사 폭이 최소 반사 비율을 만족하면 true를 반환합니다."))
+	bool HasSufficientReflectionCoverage(
+		float IncomingBeamRadius,
+		const FVector& IncomingDirection,
+		const FVector& HitNormal,
+		const FVector& ImpactPoint) const;
 
 	UFUNCTION(BlueprintPure, Category = "Light|Reflection", meta = (ToolTip = "입사 확산각과 반사면 설정을 바탕으로 실제 반사 확산각을 반환합니다."))
 	float ResolveReflectionConeAngle(float IncomingConeAngle) const;

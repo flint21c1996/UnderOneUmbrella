@@ -53,6 +53,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Light", meta = (ClampMin = "0.0", ClampMax = "89.9", Units = "deg", DisplayName = "최대 우산 빛 차단 입사각", ToolTip = "펼친 우산이 차단할 수 있는 최대 입사각입니다. 기본 75도에서는 위와 대각선 상단광을 막고 수평 측면광은 통과시킵니다."))
 	float MaximumUmbrellaBlockingIncidenceAngle = 75.0f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Light|Reflection Coverage", meta = (ClampMin = "0.0", Units = "cm", DisplayName = "반사 가장자리 여백", ToolTip = "우산 가장자리에서 반사 폭 계산에 제외할 안전 여백입니다."))
+	float UmbrellaReflectionEdgeInset = 4.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Light|Reflection Coverage", meta = (ClampMin = "0.0", ClampMax = "1.0", DisplayName = "최소 반사 걸침 비율", ToolTip = "입사광 반지름 대비 우산에 남은 반사 반지름의 최소 비율입니다. 이 값보다 적게 걸치면 반사광을 만들지 않습니다."))
+	float MinimumUmbrellaReflectionCoverageRatio = 0.3f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Light")
 	bool bCreateRuntimeLightSurfaceWhenMissing = true;
 
@@ -67,6 +73,12 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Light|Placement", meta = (EditCondition = "bAlignLightInteractionToRainBlocker", DisplayName = "빛 반사 상태 추가 위치 오프셋", ToolTip = "회전된 빛 판정 박스에 추가할 플레이어 로컬 위치 오프셋입니다."))
 	FVector LightReflectingBlockerAdditionalLocalOffset = FVector::ZeroVector;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Light|Placement", meta = (ClampMin = "0.0", Units = "cm", EditCondition = "bAlignLightInteractionToRainBlocker", DisplayName = "빛 반사 판정 전방 거리", ToolTip = "빛 반사 상태에서 판정면 중심을 플레이어 앞쪽에 고정할 거리입니다. 우산 메시 애니메이션은 따라가지 않습니다."))
+	float LightReflectingSurfaceDistanceFromOwner = 70.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Light|Placement", meta = (Units = "cm", EditCondition = "bAlignLightInteractionToRainBlocker", DisplayName = "빛 반사 판정 높이", ToolTip = "빛 반사 상태에서 판정면 중심에 적용할 플레이어 기준 높이입니다."))
+	float LightReflectingSurfaceHeightFromOwner = 30.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Light|Debug", meta = (DisplayName = "Draw Reflector Debug", ToolTip = "Puzzle 월드 디버그가 켜져 있을 때 우산 반사판 박스와 반사 방향을 표시합니다."))
 	bool bDrawReflectorDebug = true;

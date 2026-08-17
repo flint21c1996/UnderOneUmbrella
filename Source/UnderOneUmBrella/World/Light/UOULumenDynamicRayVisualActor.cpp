@@ -15,7 +15,32 @@ namespace
 	const FName LumenRayEmissiveIntensityParameter(TEXT("EmissiveIntensity"));
 	const FName LumenRayOpacityParameter(TEXT("Opacity"));
 	const FName LumenRayLengthParameter(TEXT("RayLength"));
+	const FName DynamicRayJunctionClipStartEnabledParameter(TEXT("JunctionClipStartEnabled"));
+	const FName DynamicRayJunctionClipStartPositionParameter(TEXT("JunctionClipStartPosition"));
+	const FName DynamicRayJunctionClipStartNormalParameter(TEXT("JunctionClipStartNormal"));
+	const FName DynamicRayJunctionClipEndEnabledParameter(TEXT("JunctionClipEndEnabled"));
+	const FName DynamicRayJunctionClipEndPositionParameter(TEXT("JunctionClipEndPosition"));
+	const FName DynamicRayJunctionClipEndNormalParameter(TEXT("JunctionClipEndNormal"));
+	const FName DynamicRayJunctionClipFeatherParameter(TEXT("JunctionClipFeather"));
 	constexpr float SourcePresetLength = 15.0f;
+
+	void ApplyDynamicRayJunctionClipParameters(
+		UMaterialInstanceDynamic* Material,
+		const FUOULightBeamVisualSegmentData& SegmentData)
+	{
+		if (Material == nullptr)
+		{
+			return;
+		}
+
+		Material->SetScalarParameterValue(DynamicRayJunctionClipStartEnabledParameter, SegmentData.bUseStartJunctionClip ? 1.0f : 0.0f);
+		Material->SetVectorParameterValue(DynamicRayJunctionClipStartPositionParameter, FLinearColor(SegmentData.StartJunctionPlanePosition));
+		Material->SetVectorParameterValue(DynamicRayJunctionClipStartNormalParameter, FLinearColor(SegmentData.StartJunctionPlaneNormal));
+		Material->SetScalarParameterValue(DynamicRayJunctionClipEndEnabledParameter, SegmentData.bUseEndJunctionClip ? 1.0f : 0.0f);
+		Material->SetVectorParameterValue(DynamicRayJunctionClipEndPositionParameter, FLinearColor(SegmentData.EndJunctionPlanePosition));
+		Material->SetVectorParameterValue(DynamicRayJunctionClipEndNormalParameter, FLinearColor(SegmentData.EndJunctionPlaneNormal));
+		Material->SetScalarParameterValue(DynamicRayJunctionClipFeatherParameter, FMath::Max(0.0f, SegmentData.JunctionClipFeather));
+	}
 
 	struct FLumenRayLayer
 	{
@@ -204,6 +229,7 @@ void AUOULumenDynamicRayVisualActor::ApplyPreset(
 			LumenRayOpacityParameter,
 			FMath::Clamp(OpacityScale * SegmentData.VisualOpacityMultiplier, 0.0f, 1.0f));
 		DynamicMaterials[Index]->SetScalarParameterValue(LumenRayLengthParameter, LayerLength);
+		ApplyDynamicRayJunctionClipParameters(DynamicMaterials[Index], SegmentData);
 	}
 }
 

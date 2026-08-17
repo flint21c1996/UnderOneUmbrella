@@ -19,6 +19,45 @@ namespace
 	const FName StaticRayVariationAmountParameter(TEXT("VariationAmount"));
 	const FName StaticRayVariationSpeedParameter(TEXT("VariationSpeed"));
 	const FName StaticRayVariationScaleParameter(TEXT("VariationScale"));
+	const FName StaticRayJunctionClipStartEnabledParameter(TEXT("JunctionClipStartEnabled"));
+	const FName StaticRayJunctionClipStartPositionParameter(TEXT("JunctionClipStartPosition"));
+	const FName StaticRayJunctionClipStartNormalParameter(TEXT("JunctionClipStartNormal"));
+	const FName StaticRayJunctionClipEndEnabledParameter(TEXT("JunctionClipEndEnabled"));
+	const FName StaticRayJunctionClipEndPositionParameter(TEXT("JunctionClipEndPosition"));
+	const FName StaticRayJunctionClipEndNormalParameter(TEXT("JunctionClipEndNormal"));
+	const FName StaticRayJunctionClipFeatherParameter(TEXT("JunctionClipFeather"));
+
+	void ApplyStaticRayJunctionClipParameters(
+		UMaterialInstanceDynamic* Material,
+		const FUOULightBeamVisualSegmentData& SegmentData)
+	{
+		if (Material == nullptr)
+		{
+			return;
+		}
+
+		Material->SetScalarParameterValue(
+			StaticRayJunctionClipStartEnabledParameter,
+			SegmentData.bUseStartJunctionClip ? 1.0f : 0.0f);
+		Material->SetVectorParameterValue(
+			StaticRayJunctionClipStartPositionParameter,
+			FLinearColor(SegmentData.StartJunctionPlanePosition));
+		Material->SetVectorParameterValue(
+			StaticRayJunctionClipStartNormalParameter,
+			FLinearColor(SegmentData.StartJunctionPlaneNormal));
+		Material->SetScalarParameterValue(
+			StaticRayJunctionClipEndEnabledParameter,
+			SegmentData.bUseEndJunctionClip ? 1.0f : 0.0f);
+		Material->SetVectorParameterValue(
+			StaticRayJunctionClipEndPositionParameter,
+			FLinearColor(SegmentData.EndJunctionPlanePosition));
+		Material->SetVectorParameterValue(
+			StaticRayJunctionClipEndNormalParameter,
+			FLinearColor(SegmentData.EndJunctionPlaneNormal));
+		Material->SetScalarParameterValue(
+			StaticRayJunctionClipFeatherParameter,
+			FMath::Max(0.0f, SegmentData.JunctionClipFeather));
+	}
 
 	struct FLumenStaticRayLayer
 	{
@@ -99,9 +138,6 @@ AUOULumenStaticRayVisualActor::AUOULumenStaticRayVisualActor()
 		UStaticMeshComponent* Layer = CreateDefaultSubobject<UStaticMeshComponent>(*FString::Printf(TEXT("StaticRayLayer%d"), Index + 1));
 		Layer->SetupAttachment(CameraFacingRoot);
 		LayerComponents.Add(Layer);
-		UStaticMeshComponent* JunctionFillLayer = CreateDefaultSubobject<UStaticMeshComponent>(*FString::Printf(TEXT("JunctionFillLayer%d"), Index + 1));
-		JunctionFillLayer->SetupAttachment(CameraFacingRoot);
-		JunctionFillLayerComponents.Add(JunctionFillLayer);
 	}
 
 	for (const TCHAR* ShapeName : StaticShapeNames)
@@ -147,7 +183,6 @@ void AUOULumenStaticRayVisualActor::Tick(const float DeltaSeconds)
 void AUOULumenStaticRayVisualActor::ConfigureComponents()
 {
 	DynamicMaterials.SetNum(MaxLayerCount);
-	JunctionFillDynamicMaterials.SetNum(MaxLayerCount);
 	for (int32 Index = 0; Index < LayerComponents.Num(); ++Index)
 	{
 		UStaticMeshComponent* Layer = LayerComponents[Index];
@@ -158,34 +193,18 @@ void AUOULumenStaticRayVisualActor::ConfigureComponents()
 		Layer->SetTranslucentSortPriority(30 + Index);
 		Layer->SetMaterial(0, RayMaterial);
 		DynamicMaterials[Index] = nullptr;
-
-		UStaticMeshComponent* JunctionFillLayer = JunctionFillLayerComponents[Index];
-		JunctionFillLayer->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-		JunctionFillLayer->SetGenerateOverlapEvents(false);
-		JunctionFillLayer->SetCastShadow(false);
-		JunctionFillLayer->bReceivesDecals = false;
-		JunctionFillLayer->SetTranslucentSortPriority(35 + Index);
-		JunctionFillLayer->SetMaterial(0, RayMaterial);
-		JunctionFillLayer->SetVisibility(false, true);
-		JunctionFillDynamicMaterials[Index] = nullptr;
 	}
 }
 
 void AUOULumenStaticRayVisualActor::EnsureDynamicMaterials()
 {
 	DynamicMaterials.SetNum(MaxLayerCount);
-	JunctionFillDynamicMaterials.SetNum(MaxLayerCount);
 	for (int32 Index = 0; Index < LayerComponents.Num(); ++Index)
 	{
 		if (DynamicMaterials[Index] == nullptr && RayMaterial != nullptr)
 		{
 			DynamicMaterials[Index] = UMaterialInstanceDynamic::Create(RayMaterial, this);
 			LayerComponents[Index]->SetMaterial(0, DynamicMaterials[Index]);
-		}
-		if (JunctionFillDynamicMaterials[Index] == nullptr && RayMaterial != nullptr)
-		{
-			JunctionFillDynamicMaterials[Index] = UMaterialInstanceDynamic::Create(RayMaterial, this);
-			JunctionFillLayerComponents[Index]->SetMaterial(0, JunctionFillDynamicMaterials[Index]);
 		}
 	}
 }
@@ -216,10 +235,6 @@ void AUOULumenStaticRayVisualActor::ApplyPreset(const FUOULightBeamVisualSegment
 	CurrentIntensity = SegmentData.Intensity * SegmentData.VisualBrightnessMultiplier * EmissiveIntensityScale;
 	CurrentOpacity = FMath::Clamp(OpacityScale * SegmentData.VisualOpacityMultiplier, 0.0f, 1.0f);
 	LayerBaseOpacities.SetNumZeroed(MaxLayerCount);
-	JunctionFillBaseOpacities.SetNumZeroed(MaxLayerCount);
-	const float JunctionFillLength = SegmentData.bEndsAtReflection
-		? FMath::Clamp(ReflectionJunctionFillLength, 0.0f, SegmentData.Length)
-		: 0.0f;
 	float MaxLayerRadiusScale = KINDA_SMALL_NUMBER;
 	float MaxLayerLengthScale = KINDA_SMALL_NUMBER;
 	for (const FLumenStaticRayLayer& Layer : Selected.Layers)
@@ -235,9 +250,6 @@ void AUOULumenStaticRayVisualActor::ApplyPreset(const FUOULightBeamVisualSegment
 		UStaticMeshComponent* Component = LayerComponents[Index];
 		const bool bActive = Selected.Layers.IsValidIndex(Index);
 		Component->SetVisibility(bActive, true);
-		UStaticMeshComponent* JunctionFillComponent = JunctionFillLayerComponents[Index];
-		const bool bJunctionFillActive = bActive && JunctionFillLength > KINDA_SMALL_NUMBER;
-		JunctionFillComponent->SetVisibility(bJunctionFillActive, true);
 		if (!bActive)
 		{
 			continue;
@@ -276,23 +288,6 @@ void AUOULumenStaticRayVisualActor::ApplyPreset(const FUOULightBeamVisualSegment
 			-ScaledBoundsOrigin.X,
 			-ScaledBoundsOrigin.Y,
 			-ScaledBoundsOrigin.Z + SegmentData.Length * 0.5f));
-
-		if (bJunctionFillActive)
-		{
-			JunctionFillComponent->SetStaticMesh(Mesh);
-			JunctionFillComponent->SetRelativeRotation(FRotator::ZeroRotator);
-			const FVector JunctionFillScale(
-				FitScale.X * NormalizedLayerScale.X,
-				FitScale.Y * NormalizedLayerScale.Y,
-				-JunctionFillLength / NativeLength * NormalizedLayerScale.Z);
-			JunctionFillComponent->SetRelativeScale3D(JunctionFillScale);
-			const FVector JunctionScaledBoundsOrigin = MeshBounds.Origin * JunctionFillScale;
-			JunctionFillComponent->SetRelativeLocation(FVector(
-				-JunctionScaledBoundsOrigin.X,
-				-JunctionScaledBoundsOrigin.Y,
-				-JunctionScaledBoundsOrigin.Z + SegmentData.Length - JunctionFillLength * 0.5f));
-		}
-
 		if (DynamicMaterials.IsValidIndex(Index) && DynamicMaterials[Index] != nullptr)
 		{
 			const FLinearColor LayerColor = CurrentColor * Layer.Color;
@@ -309,20 +304,7 @@ void AUOULumenStaticRayVisualActor::ApplyPreset(const FUOULightBeamVisualSegment
 			DynamicMaterials[Index]->SetScalarParameterValue(StaticRayVariationAmountParameter, bUseVariation && Selected.bUseVariation ? 1.0f : 0.0f);
 			DynamicMaterials[Index]->SetScalarParameterValue(StaticRayVariationSpeedParameter, Selected.VariationSpeed);
 			DynamicMaterials[Index]->SetScalarParameterValue(StaticRayVariationScaleParameter, Selected.VariationScale);
-		}
-
-		if (bJunctionFillActive && JunctionFillDynamicMaterials.IsValidIndex(Index) && JunctionFillDynamicMaterials[Index] != nullptr)
-		{
-			UMaterialInstanceDynamic* JunctionMaterial = JunctionFillDynamicMaterials[Index];
-			const FLinearColor LayerColor = CurrentColor * Layer.Color;
-			JunctionMaterial->SetVectorParameterValue(StaticRayBeamColorParameter, LayerColor);
-			JunctionMaterial->SetVectorParameterValue(StaticRayVariationColorParameter, LayerColor);
-			JunctionMaterial->SetScalarParameterValue(StaticRayEmissiveIntensityParameter, CurrentIntensity * Selected.GlobalBrightness * Layer.Brightness);
-			JunctionFillBaseOpacities[Index] = LayerBaseOpacities[Index] * FMath::Clamp(ReflectionJunctionFillOpacity, 0.0f, 1.0f);
-			JunctionMaterial->SetScalarParameterValue(StaticRayOpacityParameter, JunctionFillBaseOpacities[Index]);
-			JunctionMaterial->SetScalarParameterValue(StaticRayVariationAmountParameter, bUseVariation && Selected.bUseVariation ? 1.0f : 0.0f);
-			JunctionMaterial->SetScalarParameterValue(StaticRayVariationSpeedParameter, Selected.VariationSpeed);
-			JunctionMaterial->SetScalarParameterValue(StaticRayVariationScaleParameter, Selected.VariationScale);
+			ApplyStaticRayJunctionClipParameters(DynamicMaterials[Index], SegmentData);
 		}
 	}
 	UpdateCameraFacing();
@@ -394,16 +376,6 @@ void AUOULumenStaticRayVisualActor::UpdateMaterialParameters(const float TimeSec
 			const float BaseOpacity = LayerBaseOpacities.IsValidIndex(Index) ? LayerBaseOpacities[Index] : CurrentOpacity;
 			Material->SetScalarParameterValue(StaticRayOpacityParameter, BaseOpacity * Fade);
 		}
-		UMaterialInstanceDynamic* JunctionMaterial = JunctionFillDynamicMaterials.IsValidIndex(Index)
-			? JunctionFillDynamicMaterials[Index]
-			: nullptr;
-		if (JunctionMaterial != nullptr)
-		{
-			const float BaseOpacity = JunctionFillBaseOpacities.IsValidIndex(Index)
-				? JunctionFillBaseOpacities[Index]
-				: 0.0f;
-			JunctionMaterial->SetScalarParameterValue(StaticRayOpacityParameter, BaseOpacity * Fade);
-		}
 	}
 }
 
@@ -413,10 +385,6 @@ void AUOULumenStaticRayVisualActor::SetLightBeamVisualActive_Implementation(cons
 	if (!bActive)
 	{
 		for (UStaticMeshComponent* Component : LayerComponents)
-		{
-			Component->SetVisibility(false, true);
-		}
-		for (UStaticMeshComponent* Component : JunctionFillLayerComponents)
 		{
 			Component->SetVisibility(false, true);
 		}

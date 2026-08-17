@@ -294,6 +294,16 @@ void UUOUUmbrellaComponent::BeginLightReflecting()
 		return;
 	}
 
+	// 점프 또는 낙하 중에는 우산을 빛 반사 상태로 전환하지 않습니다.
+	if (const ACharacter* OwnerCharacter = Cast<ACharacter>(GetOwner()))
+	{
+		const UCharacterMovementComponent* CharacterMovement = OwnerCharacter->GetCharacterMovement();
+		if (CharacterMovement != nullptr && CharacterMovement->IsFalling())
+		{
+			return;
+		}
+	}
+
 	if (AActor* Owner = GetOwner())
 	{
 		PourAimWorldDirection = SnapPourDirectionToAngleStep(Owner->GetActorForwardVector());
