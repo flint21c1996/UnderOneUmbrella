@@ -4,6 +4,7 @@
 
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Player/UOUCharacter.h"
+#include "Player/UOUPushPullInteractorComponent.h"
 #include "Player/UOUUmbrellaComponent.h"
 
 void UUOUPlayerAnimInstance::NativeInitializeAnimation()
@@ -21,6 +22,7 @@ void UUOUPlayerAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 	UpdateMovementVariables();
 	UpdateUmbrellaVariables();
 	UpdateLadderVariables();
+	UpdatePushPullVariables();
 	UpdateDerivedAnimationVariables();
 }
 
@@ -33,6 +35,7 @@ void UUOUPlayerAnimInstance::CacheOwnerIfNeeded()
 		OwnerCharacter = CurrentOwner;
 		UmbrellaComponent = nullptr;
 		LadderClimbComponent = nullptr;
+		PushPullInteractorComponent = nullptr;
 	}
 
 	if (OwnerCharacter != nullptr && UmbrellaComponent == nullptr)
@@ -43,6 +46,11 @@ void UUOUPlayerAnimInstance::CacheOwnerIfNeeded()
 	if (OwnerCharacter != nullptr && LadderClimbComponent == nullptr)
 	{
 		LadderClimbComponent = OwnerCharacter->FindComponentByClass<UUOULadderClimbComponent>();
+	}
+
+	if (OwnerCharacter != nullptr && PushPullInteractorComponent == nullptr)
+	{
+		PushPullInteractorComponent = OwnerCharacter->FindComponentByClass<UUOUPushPullInteractorComponent>();
 	}
 }
 
@@ -79,6 +87,7 @@ void UUOUPlayerAnimInstance::UpdateUmbrellaVariables()
 	IsUmbrellaOpen = UmbrellaComponent->IsOpen();
 	IsUmbrellaUpsideDown = UmbrellaComponent->IsUpsideDown();
 	IsPouring = UmbrellaComponent->IsPouring();
+	IsLightReflecting = UmbrellaComponent->IsLightReflecting();
 }
 
 void UUOUPlayerAnimInstance::UpdateDerivedAnimationVariables()
@@ -106,6 +115,49 @@ void UUOUPlayerAnimInstance::UpdateLadderVariables()
 	LadderNormalizedHeight = LadderClimbComponent->GetNormalizedHeight();
 }
 
+void UUOUPlayerAnimInstance::UpdatePushPullVariables()
+{
+	if (PushPullInteractorComponent == nullptr && OwnerCharacter != nullptr)
+	{
+		PushPullInteractorComponent = OwnerCharacter->FindComponentByClass<UUOUPushPullInteractorComponent>();
+	}
+
+	if (PushPullInteractorComponent == nullptr)
+	{
+		ResetPushPullVariables();
+		return;
+	}
+
+	// 크랭크는 전용 동작을 유지하고, 이동 입력을 사용하는 상자와 회전 거울에만 밀기/당기기 애니메이션을 적용합니다.
+	IsPushPulling = PushPullInteractorComponent->GetGrabbedObject() != nullptr
+		|| PushPullInteractorComponent->GetGrabbedMirror() != nullptr;
+	if (!IsPushPulling)
+	{
+		PushPullBlendInput = 0.0f;
+		return;
+	}
+
+	FVector MoveAxis = PushPullInteractorComponent->GetGrabbedMoveAxis();
+	MoveAxis.Z = 0.0f;
+	FVector CharacterForward = OwnerCharacter != nullptr
+		? OwnerCharacter->GetActorForwardVector()
+		: FVector::ZeroVector;
+	CharacterForward.Z = 0.0f;
+
+	// 캐릭터가 실제로 앞쪽으로 이동하면 밀기(+), 뒤쪽으로 이동하면 당기기(-)를 재생합니다.
+	// 이 계산은 회전 거울의 반대편 손잡이에서 이동 축이 뒤집히는 경우도 자동으로 처리합니다.
+	const float ForwardAlignment = FVector::DotProduct(
+		CharacterForward.GetSafeNormal(),
+		MoveAxis.GetSafeNormal());
+	const float ForwardDirectionSign = FMath::IsNearlyZero(ForwardAlignment)
+		? -1.0f
+		: FMath::Sign(ForwardAlignment);
+	PushPullBlendInput = FMath::Clamp(
+		PushPullInteractorComponent->GetCurrentAxisInput() * ForwardDirectionSign,
+		-1.0f,
+		1.0f);
+}
+
 void UUOUPlayerAnimInstance::ResetMovementVariables()
 {
 	Speed = 0.0f;
@@ -119,6 +171,7 @@ void UUOUPlayerAnimInstance::ResetUmbrellaVariables()
 	IsUmbrellaOpen = false;
 	IsUmbrellaUpsideDown = false;
 	IsPouring = false;
+	IsLightReflecting = false;
 }
 
 void UUOUPlayerAnimInstance::ResetLadderVariables()
@@ -127,4 +180,10 @@ void UUOUPlayerAnimInstance::ResetLadderVariables()
 	LadderClimbState = EUOULadderClimbState::None;
 	LadderClimbInput = 0.0f;
 	LadderNormalizedHeight = 0.0f;
+}
+
+void UUOUPlayerAnimInstance::ResetPushPullVariables()
+{
+	IsPushPulling = false;
+	PushPullBlendInput = 0.0f;
 }
