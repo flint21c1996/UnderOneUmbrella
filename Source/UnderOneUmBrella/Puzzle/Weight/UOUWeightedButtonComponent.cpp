@@ -5,8 +5,7 @@
 #include "Audio/UOUAudioCueComponent.h"
 #include "Audio/UOUAudioSubsystem.h"
 #include "Components/SceneComponent.h"
-#include "Debug/UOUDebugSubsystem.h"
-#include "Engine/Engine.h"
+#include "Debug/UOUDevelopmentDebugDrawContext.h"
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
@@ -42,7 +41,6 @@ void UUOUWeightedButtonComponent::TickComponent(float DeltaTime, ELevelTick Tick
 
 	RefreshPressedState();
 	MoveButtonVisual(DeltaTime);
-	DrawScreenDebug();
 }
 
 float UUOUWeightedButtonComponent::GetPuzzleWeight() const
@@ -50,14 +48,36 @@ float UUOUWeightedButtonComponent::GetPuzzleWeight() const
 	return CurrentWeight;
 }
 
-TArray<FString> UUOUWeightedButtonComponent::GetPuzzleDebugInfo_Implementation() const
+void UUOUWeightedButtonComponent::GetPuzzleDebugInputActors_Implementation(TArray<AActor*>& OutInputActors) const
+{
+	if (Sensor != nullptr)
+	{
+		Sensor->GetOverlappingActors(OutInputActors);
+	}
+}
+
+EUOUDebugCategory UUOUWeightedButtonComponent::GetDebugCategory_Implementation() const
+{
+	return EUOUDebugCategory::Puzzle;
+}
+
+bool UUOUWeightedButtonComponent::IsDebugProviderEnabled_Implementation() const
+{
+	return true;
+}
+
+FText UUOUWeightedButtonComponent::GetDebugDisplayName_Implementation() const
+{
+	return FText::FromString(GetNameSafe(GetOwner()));
+}
+
+FText UUOUWeightedButtonComponent::GetDebugSummaryText_Implementation() const
 {
 	const int32 OverlapCount = Sensor != nullptr ? Sensor->OverlappingActorCount : 0;
 	const USceneComponent* TargetPoint = bIsSatisfied ? PressedPoint : ReleasedPoint;
 	const float VisualRelativeZ = ButtonVisual != nullptr ? ButtonVisual->GetRelativeLocation().Z : 0.0f;
 	const float TargetRelativeZ = TargetPoint != nullptr ? TargetPoint->GetRelativeLocation().Z : 0.0f;
-
-	return {
+	const TArray<FString> DebugLines = {
 		FString::Printf(
 			TEXT("Weighted Button: %s"),
 			IsPressed() ? TEXT("Pressed") : TEXT("Released")),
@@ -77,15 +97,69 @@ TArray<FString> UUOUWeightedButtonComponent::GetPuzzleDebugInfo_Implementation()
 			VisualRelativeZ,
 			TargetRelativeZ)
 	};
+
+	return FText::FromString(FString::Join(DebugLines, LINE_TERMINATOR));
 }
 
-void UUOUWeightedButtonComponent::GetPuzzleDebugInputActors_Implementation(TArray<AActor*>& OutInputActors) const
+FVector UUOUWeightedButtonComponent::GetDebugWorldLocation_Implementation() const
 {
-	if (Sensor != nullptr)
-	{
-		Sensor->GetOverlappingActors(OutInputActors);
-	}
+	const AActor* Owner = GetOwner();
+	return Owner != nullptr
+		? Owner->GetActorLocation() + FVector(0.0f, 0.0f, 120.0f)
+		: FVector::ZeroVector;
 }
+
+void UUOUWeightedButtonComponent::GetDebugConnections_Implementation(
+	TArray<FUOUDebugConnection>& OutConnections) const
+{
+	OutConnections.Reset();
+}
+
+#if UOU_WITH_DEVELOPMENT_TOOLS
+void UUOUWeightedButtonComponent::GatherDevelopmentDebugDraw(
+	IUOUDevelopmentDebugDrawContext& Context) const
+{
+	const AActor* Owner = GetOwner();
+	const int32 OverlapCount = Sensor != nullptr ? Sensor->OverlappingActorCount : 0;
+	const FString DebugText = FString::Printf(
+		TEXT("Button: %s\nPressed: %s\nCurrent Weight: %.2f\nPress / Release: %.2f / %.2f\nOverlap Count: %d\nSensor: %s\nSensor Volume: %s"),
+		*GetNameSafe(Owner),
+		IsPressed() ? TEXT("Yes") : TEXT("No"),
+		CurrentWeight,
+		PressWeight,
+		ReleaseWeight,
+		OverlapCount,
+		*GetNameSafe(Sensor),
+		Sensor != nullptr ? *GetNameSafe(Sensor->SensorVolume) : TEXT("None"));
+	const uint64 OwnerId = reinterpret_cast<uint64>(Owner);
+	const int32 MessageKey = static_cast<int32>(0x554F4200u + (OwnerId & 0xFFu));
+	Context.AddOnScreenMessage(
+		MessageKey,
+		DebugText,
+		IsPressed() ? FColor::Green : FColor::Yellow,
+		FVector2D(1.0f, 1.0f));
+}
+#endif
+
+#if UOU_WITH_PUZZLE_CHEATS
+bool UUOUWeightedButtonComponent::TryResolveInputForCheat(AActor* InputActor)
+{
+	if (!IsValid(InputActor) || InputActor != GetOwner())
+	{
+		return false;
+	}
+
+	const bool bWasSatisfied = IsSatisfied();
+	bInsufficientWeightFeedbackActive = false;
+	const bool bResolved = Super::TryResolveInputForCheat(InputActor);
+	if (bResolved && !bWasSatisfied)
+	{
+		PlayButtonAudioCue(PressedAudioCueId, PressedAudioEventId);
+	}
+
+	return bResolved;
+}
+#endif
 
 bool UUOUWeightedButtonComponent::IsPressed() const
 {
@@ -371,43 +445,3 @@ void UUOUWeightedButtonComponent::SnapVisualToCurrentState()
 	}
 }
 
-void UUOUWeightedButtonComponent::DrawScreenDebug() const
-{
-	if (!bShowScreenDebug
-		|| !UUOUDebugSubsystem::IsDebugScreenMessageEnabled(this, EUOUDebugCategory::Puzzle)
-		|| GEngine == nullptr)
-	{
-		return;
-	}
-
-	const UWorld* World = GetWorld();
-	if (World == nullptr || !World->IsGameWorld())
-	{
-		return;
-	}
-
-	const AActor* Owner = GetOwner();
-	const int32 OverlapCount = Sensor != nullptr ? Sensor->OverlappingActorCount : 0;
-	const FString SensorName = GetNameSafe(Sensor);
-	const FString SensorVolumeName = Sensor != nullptr ? GetNameSafe(Sensor->SensorVolume) : TEXT("None");
-	const FString DebugText = FString::Printf(
-		TEXT("Button: %s\nPressed: %s\nCurrent Weight: %.2f\nPress / Release: %.2f / %.2f\nOverlap Count: %d\nSensor: %s\nSensor Volume: %s"),
-		*GetNameSafe(Owner),
-		IsPressed() ? TEXT("Yes") : TEXT("No"),
-		CurrentWeight,
-		PressWeight,
-		ReleaseWeight,
-		OverlapCount,
-		*SensorName,
-		*SensorVolumeName);
-
-	const uint64 OwnerId = reinterpret_cast<uint64>(Owner);
-	const int32 MessageKey = static_cast<int32>(0x554F4200u + (OwnerId & 0xFFu));
-	GEngine->AddOnScreenDebugMessage(
-		MessageKey,
-		0.0f,
-		UUOUDebugSubsystem::GetDebugCategoryColor(this, EUOUDebugCategory::Puzzle, IsPressed() ? FColor::Green : FColor::Yellow),
-		DebugText,
-		false,
-		FVector2D(1.0f, 1.0f));
-}

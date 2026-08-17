@@ -29,7 +29,7 @@ enum class EOUUNPCActivationAction : uint8
 
 // 퍼즐에서 전달한 이동, 점프, 애니메이션 요청을 처리하는 NPC 베이스 캐릭터입니다.
 UCLASS(Blueprintable, meta = (DisplayName = "UOU NPC Character", ToolTip = "퍼즐 액션과 Behavior Tree 태스크로 제어되는 NPC 캐릭터입니다."))
-class AUOUNPCCharacter : public ACharacter, public IUOUPuzzleResultReceiver, public IUOUPuzzleResultCompletionState
+class UNDERONEUMBRELLA_API AUOUNPCCharacter : public ACharacter, public IUOUPuzzleResultReceiver, public IUOUPuzzleResultCompletionState
 {
 	GENERATED_BODY()
 
@@ -152,6 +152,9 @@ public:
 	UFUNCTION(BlueprintPure, Category = "NPC|Action")
 	float GetCurrentActionAcceptanceRadius() const;
 
+	// 현재 활성 요청이 없으면 레거시 설정으로 만든 요청을 반환합니다.
+	FUOUNPCActionRequest GetCurrentActionRequest() const;
+
 	UFUNCTION(BlueprintImplementableEvent, Category = "NPC|Events")
 	void ReceiveNPCActivated();
 
@@ -170,15 +173,10 @@ protected:
 	void ExecuteCurrentActionDirectly();
 	void SetActivationResultCompleted(bool bNewCompleted);
 	FUOUNPCActionRequest BuildLegacyActionRequest() const;
-	FUOUNPCActionRequest GetCurrentActionRequest() const;
 	bool GetTargetLocationFromActionRequest(const FUOUNPCActionRequest& ActionRequest, FVector& OutTargetLocation) const;
 	bool GetConfiguredTargetLocation(FVector& OutTargetLocation) const;
 	FVector CalculateJumpLaunchVelocity(const FVector& TargetLocation, float TravelTime) const;
 	void UpdateJumpMoveRotation(float DeltaSeconds);
-	void DrawNPCDebug();
-	FString BuildNPCDebugText(const class UUOUNPCDebugControllerComponent& DebugController) const;
-	void DrawNPCMoveTargetDebug(const class UUOUNPCDebugControllerComponent& DebugController, FColor DebugColor) const;
-	void DrawNPCPathDebug(const class UUOUNPCDebugControllerComponent& DebugController, FColor DebugColor) const;
 
 	FOnUOUPuzzleResultCompletionStateChangedNativeSignature OnPuzzleResultCompletionStateChanged;
 

@@ -4,7 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
-#include "Debug/UOUPuzzleDebugInfoProvider.h"
+#include "Debug/UOUDebugProvider.h"
 #include "Engine/EngineTypes.h"
 #include "UOURotatableMirrorComponent.generated.h"
 
@@ -34,7 +34,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
 UCLASS(ClassGroup=(Light), meta=(BlueprintSpawnableComponent, DisplayName="UOU Rotatable Mirror", ToolTip = "플레이어가 Push Volume 안에서 거울을 밀면 지정한 축을 중심으로 회전시킵니다."))
 class UNDERONEUMBRELLA_API UUOURotatableMirrorComponent
 	: public UActorComponent
-	, public IUOUPuzzleDebugInfoProvider
+	, public IUOUDebugProvider
 {
 	GENERATED_BODY()
 
@@ -47,7 +47,13 @@ public:
 		float DeltaTime,
 		ELevelTick TickType,
 		FActorComponentTickFunction* ThisTickFunction) override;
-	virtual TArray<FString> GetPuzzleDebugInfo_Implementation() const override;
+	virtual EUOUDebugCategory GetDebugCategory_Implementation() const override;
+	virtual FText GetDebugSummaryText_Implementation() const override;
+
+#if UOU_WITH_DEVELOPMENT_TOOLS
+	virtual bool ShouldDrawDevelopmentDebugLabel() const override { return false; }
+	virtual void GatherDevelopmentDebugDraw(IUOUDevelopmentDebugDrawContext& Context) const override;
+#endif
 
 #if WITH_EDITOR
 	virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
@@ -131,9 +137,6 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Mirror|Push", meta = (ClampMin = "1.0", Units = "cm", ToolTip = "이 거리 이상 가장자리를 밀면 최대 회전력이 적용됩니다."))
 	float FullTorqueLeverArm = 100.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Mirror|Debug", meta = (ToolTip = "회전축, 플레이어의 밀기 방향 및 현재 각도를 표시합니다."))
-	bool bDrawDebug = false;
-
 	UPROPERTY(BlueprintReadOnly, Transient, Category = "Mirror|Runtime", meta = (Units = "deg", ToolTip = "초기 배치 각도를 기준으로 한 현재 회전각입니다."))
 	float CurrentAngle = 0.0f;
 
@@ -188,7 +191,6 @@ protected:
 	float CalculatePushInput(const APawn* Pusher) const;
 	FVector GetPivotWorldLocation() const;
 	FVector GetRotationAxisWorld() const;
-	void DrawDebugState(const TArray<AActor*>& OverlappingPushers) const;
 	USceneComponent* FindNearestPushHandle(const AActor* Interactor) const;
 	bool FindClosestGrabSurfacePoint(const APawn* Pusher, FVector& OutClosestPoint, float& OutSurfaceGap) const;
 	float CalculateGrabSurfaceGap(const APawn* Pusher) const;

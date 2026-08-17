@@ -28,7 +28,7 @@ enum class EUOURainAreaFlowDirection : uint8
 // RainVolume 안의 플레이어 우산 상태를 읽어 비 노출, 우산 차단, 물받이 입력, Niagara 비주얼을 함께 갱신합니다.
 // 실제 파티클 제어는 UOUEnvironmentVisualComponent에 위임하고, 이 클래스는 영역 판정과 게임플레이 연결을 담당합니다.
 UCLASS(meta=(DisplayName="UOU Umbrella Rain Area"))
-class AUOUUmbrellaRainArea : public AActor
+class UNDERONEUMBRELLA_API AUOUUmbrellaRainArea : public AActor
 {
 	GENERATED_BODY()
 
@@ -40,6 +40,10 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Rain|Water Basin")
 	bool IsWaterBasinRainFillEnabled() const;
+
+	UBoxComponent* GetRainVolumeComponent() const { return RainVolume; }
+	EUOURainAreaFlowDirection GetFlowDirection() const { return FlowDirection; }
+	float GetGroundSplashHeightOffset() const { return GroundSplashHeightOffset; }
 
 protected:
 	virtual void BeginPlay() override;
@@ -221,14 +225,6 @@ protected:
 	UPROPERTY()
 	float GroundSplashHeightOffset = 5.0f;
 
-	// VFX 디버그가 켜졌을 때 RainVolume, 스폰면, 소멸 범위를 월드에 그릴지 정합니다.
-	UPROPERTY()
-	bool bDrawRainVisualDebug = true;
-
-	// VFX 디버그 선 두께입니다.
-	UPROPERTY()
-	float RainVisualDebugThickness = 2.0f;
-
 	// 현재 프리뷰 메쉬의 표시 상태와 스케일을 설정값에 맞게 다시 맞춥니다.
 	void ApplyPreviewSettings();
 	// 매 프레임 월드 전체를 탐색하지 않도록 고정 배치된 비 반응 대상을 미리 수집합니다.
@@ -259,8 +255,6 @@ protected:
 	bool IsActorBlockedByRainBlocker(const AActor* Actor, const FVector& BlockerWorldCenter, const FRotator& BlockerWorldRotation, const FVector& BlockerHalfExtent) const;
 	// 월드 위치가 우산 비 차단 영역에 가려지는지 확인합니다.
 	bool IsWorldLocationBlockedByRainBlocker(const FVector& WorldLocation, const FVector& BlockerWorldCenter, const FRotator& BlockerWorldRotation, const FVector& BlockerHalfExtent) const;
-	// 비주얼 디버그 박스를 그려서 환경 연동 범위를 확인합니다.
-	void DrawRainVisualDebug() const;
 	float GetAreaScaledRainSpawnRate() const;
 	bool ShouldRainAudioBePlaying() const;
 	FVector GetRainAudioLocation() const;

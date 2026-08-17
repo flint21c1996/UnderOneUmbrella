@@ -55,6 +55,9 @@ struct UNDERONEUMBRELLA_API FUOULightBeamVisualSegmentData
 	float Length = 0.0f;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Visual", meta = (Units = "cm"))
+	float ReferenceLength = 0.0f;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Visual", meta = (Units = "cm"))
 	float StartRadius = 0.0f;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Visual", meta = (Units = "cm"))

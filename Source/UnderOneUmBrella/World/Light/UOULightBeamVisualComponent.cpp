@@ -11,13 +11,32 @@
 #include "NiagaraComponent.h"
 #include "UObject/FieldIterator.h"
 #include "UObject/UnrealType.h"
+#include "World/Light/UOULightBeamMeshVisualActor.h"
 #include "World/Light/UOULightBeamVisualInterface.h"
 #include "World/Light/UOULightExposureSourceComponent.h"
+#include "World/Light/UOULumenStaticRayVisualActor.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogUOULightBeamVisual, Log, All);
 
 namespace
 {
+	float CalculateReferenceVisualLength(
+		const TArray<FUOULightPathData>& LightPaths,
+		const USpotLightComponent* SourceSpotLight)
+	{
+		float ReferenceLength = SourceSpotLight != nullptr
+			? FMath::Max(0.0f, SourceSpotLight->AttenuationRadius)
+			: 0.0f;
+		for (const FUOULightPathData& PathData : LightPaths)
+		{
+			for (const FUOULightPathSegmentData& SegmentData : PathData.Segments)
+			{
+				ReferenceLength = FMath::Max(ReferenceLength, SegmentData.Length);
+			}
+		}
+		return ReferenceLength;
+	}
+
 	struct FLazyGodrayBeamProfile
 	{
 		float LengthMultiplier = 1.0f;
@@ -323,15 +342,21 @@ void UUOULightBeamVisualComponent::RefreshVisuals()
 	const TArray<FUOULightPathData> LightPaths = BoundSourceComponent != nullptr
 		? BoundSourceComponent->GetLightPaths()
 		: TArray<FUOULightPathData>();
-	UpdateDirectVFX(LightPaths);
-	UpdateReflectionVFX(LightPaths);
+	const float ReferenceVisualLength = CalculateReferenceVisualLength(
+		LightPaths,
+		BoundSourceSpotLight);
+	UpdateDirectVFX(LightPaths, ReferenceVisualLength);
+	UpdateReflectionVFX(LightPaths, ReferenceVisualLength);
 }
 
 void UUOULightBeamVisualComponent::HandleLightPathsUpdated(
 	const TArray<FUOULightPathData>& LightPaths)
 {
-	UpdateDirectVFX(LightPaths);
-	UpdateReflectionVFX(LightPaths);
+	const float ReferenceVisualLength = CalculateReferenceVisualLength(
+		LightPaths,
+		BoundSourceSpotLight);
+	UpdateDirectVFX(LightPaths, ReferenceVisualLength);
+	UpdateReflectionVFX(LightPaths, ReferenceVisualLength);
 }
 
 UUOULightExposureSourceComponent* UUOULightBeamVisualComponent::ResolveSourceComponent() const
@@ -430,7 +455,8 @@ void UUOULightBeamVisualComponent::ConfigureSpawnedVFXActor(AActor* VFXActor) co
 }
 
 void UUOULightBeamVisualComponent::UpdateDirectVFX(
-	const TArray<FUOULightPathData>& LightPaths)
+	const TArray<FUOULightPathData>& LightPaths,
+	const float ReferenceVisualLength)
 {
 	if (!bEnableDirectVFX || VFXActorClass == nullptr || BoundSourceComponent == nullptr)
 	{
@@ -476,11 +502,17 @@ void UUOULightBeamVisualComponent::UpdateDirectVFX(
 
 	ApplySegmentToVFX(
 		VFXActor,
-		BuildVisualSegment(*DirectSegment, 0, nullptr, JunctionReflectedSegment));
+		BuildVisualSegment(
+			*DirectSegment,
+			0,
+			ReferenceVisualLength,
+			nullptr,
+			JunctionReflectedSegment));
 }
 
 void UUOULightBeamVisualComponent::UpdateReflectionVFX(
-	const TArray<FUOULightPathData>& LightPaths)
+	const TArray<FUOULightPathData>& LightPaths,
+	const float ReferenceVisualLength)
 {
 	if (!bEnableReflectionVFX || VFXActorClass == nullptr || MaxReflectionVFXCount <= 0)
 	{
@@ -544,7 +576,39 @@ void UUOULightBeamVisualComponent::UpdateReflectionVFX(
 			{
 				continue;
 			}
-
+			if (const AUOULightBeamMeshVisualActor* DirectMeshVFX =
+				Cast<AUOULightBeamMeshVisualActor>(DirectVFXActor))
+			{
+				if (AUOULightBeamMeshVisualActor* ReflectionMeshVFX =
+					Cast<AUOULightBeamMeshVisualActor>(VFXActor))
+				{
+					const FVector DirectBeamScale =
+						DirectMeshVFX->BeamMeshComponent->GetComponentScale();
+					const FVector ReflectionBeamScale =
+						ReflectionMeshVFX->BeamMeshComponent->GetComponentScale();
+					ReflectionMeshVFX->BeamMeshComponent->SetWorldScale3D(FVector(
+						DirectBeamScale.X,
+						DirectBeamScale.Y,
+						ReflectionBeamScale.Z));
+					const FVector DirectCoreScale =
+						DirectMeshVFX->CoreBeamMeshComponent->GetComponentScale();
+					const FVector ReflectionCoreScale =
+						ReflectionMeshVFX->CoreBeamMeshComponent->GetComponentScale();
+					ReflectionMeshVFX->CoreBeamMeshComponent->SetWorldScale3D(FVector(
+						DirectCoreScale.X,
+						DirectCoreScale.Y,
+						ReflectionCoreScale.Z));
+				}
+			}
+			if (const AUOULumenStaticRayVisualActor* DirectStaticRayVFX =
+				Cast<AUOULumenStaticRayVisualActor>(DirectVFXActor))
+			{
+				if (AUOULumenStaticRayVisualActor* ReflectionStaticRayVFX =
+					Cast<AUOULumenStaticRayVisualActor>(VFXActor))
+				{
+					ReflectionStaticRayVFX->CopyVisualWidthFrom(DirectStaticRayVFX);
+				}
+			}
 			const FUOULightPathSegmentData* NextReflectedSegment =
 				PathData.Segments.IsValidIndex(SegmentIndex + 1) &&
 				PathData.Segments[SegmentIndex + 1].bReflected
@@ -557,6 +621,7 @@ void UUOULightBeamVisualComponent::UpdateReflectionVFX(
 			FUOULightBeamVisualSegmentData VisualData = BuildVisualSegment(
 				SegmentData,
 				VFXIndex + 1,
+				ReferenceVisualLength,
 				PreviousSegment,
 				NextReflectedSegment);
 			VisualData.Color = LightColor;
@@ -851,6 +916,7 @@ void UUOULightBeamVisualComponent::SetVFXActive(AActor* VFXActor, bool bActive) 
 FUOULightBeamVisualSegmentData UUOULightBeamVisualComponent::BuildVisualSegment(
 	const FUOULightPathSegmentData& SegmentData,
 	int32 VisualSegmentIndex,
+	const float ReferenceVisualLength,
 	const FUOULightPathSegmentData* PreviousSegment,
 	const FUOULightPathSegmentData* NextReflectedSegment) const
 {
@@ -865,6 +931,7 @@ FUOULightBeamVisualSegmentData UUOULightBeamVisualComponent::BuildVisualSegment(
 	VisualData.LumenDynamicRayPresetOverride = FMath::Clamp(LumenDynamicRayPreset, 0, 8);
 	VisualData.LumenStaticRayPresetOverride = FMath::Clamp(LumenStaticRayPreset, 0, 19);
 	VisualData.Direction = SegmentData.Direction.GetSafeNormal();
+	VisualData.ReferenceLength = FMath::Max(0.0f, ReferenceVisualLength);
 	VisualData.JunctionClipFeather = FMath::Max(0.0f, ReflectionJunctionClipFeather);
 
 	if (SegmentData.bReflected && PreviousSegment != nullptr)

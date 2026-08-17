@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "Debug/UOUDebugProvider.h"
 #include "World/Pour/UOUPourReceiverInterface.h"
 #include "UOUWaterBasinTargetComponent.generated.h"
 
@@ -140,7 +141,10 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FUOUWaterBasinTargetChangedSignature
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FUOUWaterBasinWaterInputSignature, UUOUWaterBasinTargetComponent*, Target, const FUOUWaterBasinInputContext&, InputContext);
 
 UCLASS(ClassGroup=(Puzzle), meta=(BlueprintSpawnableComponent))
-class UNDERONEUMBRELLA_API UUOUWaterBasinTargetComponent : public UActorComponent, public IUOUPourReceiver
+class UNDERONEUMBRELLA_API UUOUWaterBasinTargetComponent
+	: public UActorComponent
+	, public IUOUPourReceiver
+	, public IUOUDebugProvider
 {
 	GENERATED_BODY()
 
@@ -152,6 +156,12 @@ public:
 
 	// 초기 그룹 재분배와 런타임 디버그 표시를 처리합니다. 실제 물 계산은 이벤트/장치 호출 시점에 수행됩니다.
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
+	virtual EUOUDebugCategory GetDebugCategory_Implementation() const override;
+
+#if UOU_WITH_DEVELOPMENT_TOOLS
+	virtual bool ShouldDrawDevelopmentDebugLabel() const override { return false; }
+	virtual void GatherDevelopmentDebugDraw(IUOUDevelopmentDebugDrawContext& Context) const override;
+#endif
 
 	// 이 Target과 물을 공유하는 수동 연결 목록입니다. 한쪽에만 등록해도 그룹 탐색에서는 연결로 취급합니다.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin|Connection", meta = (ToolTip = "물을 공유할 다른 WaterBasinTarget Actor 목록입니다. 목록에 넣은 Actor에 WaterBasinTargetComponent가 붙어 있어야 연결로 사용됩니다."))
@@ -405,31 +415,22 @@ private:
 	void NotifyWaterInputReceived(const FUOUWaterBasinInputContext& InputContext);
 
 	// 현재 RuntimeDebugTarget에 해당하는 경우 디버그 문자열과 연결선을 그립니다.
-	void DrawRuntimeDebug();
 
 	// 현재 Target이 최대로 물을 채울 수 있는 영역을 DebugBox로 표시합니다.
-	void DrawMaxWaterCapacityDebugBox() const;
 
 	// 최대 물 영역 DebugBox에 사용할 중심, 크기, 회전을 계산합니다.
-	bool BuildMaxWaterCapacityDebugBox(FVector& OutCenter, FVector& OutExtent, FQuat& OutRotation) const;
 
 	// 특정 Target 또는 연결 그룹의 수치 디버그 문자열을 그립니다.
-	void DrawTargetDebugString() const;
 
 	// 현재 Target에 직접 연결된 Target들만 선으로 표시합니다.
-	void DrawSpecificTargetConnections() const;
 
 	// 현재 Target이 속한 연결 그룹 내부의 직접 연결선을 표시합니다.
-	void DrawConnectedGroupConnections() const;
 
 	// 디버그 선/문자열의 기준 위치로 사용할 Basin 중심을 반환합니다.
-	FVector GetDebugCenterWorld() const;
 
 	// 디버그 문자열이 겹치지 않도록 Target 또는 그룹 bounds 위쪽 위치를 반환합니다.
-	FVector GetDebugLabelWorld() const;
 
 	// 이 인스턴스가 현재 런타임 디버그 표시 대상인지 확인합니다.
-	bool ShouldDrawTargetDebug() const;
 
 	// ConnectedTargets 목록에 Other의 소유 Actor가 들어 있는지 확인합니다.
 	bool IsDirectlyConnectedTo(const UUOUWaterBasinTargetComponent* Other) const;

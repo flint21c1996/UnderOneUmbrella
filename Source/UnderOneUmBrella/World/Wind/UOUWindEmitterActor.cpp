@@ -8,6 +8,7 @@
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "DrawDebugHelpers.h"
+#include "Debug/UOUDevelopmentToolsBuild.h"
 #include "Engine/Engine.h"
 #include "Engine/OverlapResult.h"
 #include "GameFramework/Character.h"
@@ -111,9 +112,9 @@ void AUOUWindEmitterActor::ApplyPuzzleResult_Implementation(EOUUPuzzleResultActi
 	}
 }
 
-TArray<FString> AUOUWindEmitterActor::GetPuzzleDebugInfo_Implementation() const
+FText AUOUWindEmitterActor::GetDebugSummaryText_Implementation() const
 {
-	return {
+	const TArray<FString> DebugLines = {
 		FString::Printf(TEXT("Wind Enabled: %s"), bWindEnabled ? TEXT("true") : TEXT("false")),
 		FString::Printf(
 			TEXT("Blowing: %s / Pulse: %s / Remaining: %.2fs"),
@@ -136,6 +137,13 @@ TArray<FString> AUOUWindEmitterActor::GetPuzzleDebugInfo_Implementation() const
 			InitialWindVelocityBoost,
 			FallingMomentumConversion)
 	};
+
+	return FText::FromString(FString::Join(DebugLines, LINE_TERMINATOR));
+}
+
+EUOUDebugCategory AUOUWindEmitterActor::GetDebugCategory_Implementation() const
+{
+	return EUOUDebugCategory::Puzzle;
 }
 
 void AUOUWindEmitterActor::SetWindEnabled(bool bNewEnabled)
@@ -692,6 +700,7 @@ FUOUWindExposureData AUOUWindEmitterActor::MakeExposureData(
 
 void AUOUWindEmitterActor::DrawWindDebug() const
 {
+#if UOU_WITH_DEVELOPMENT_TOOLS
 	if (!bDrawWindDebug || GetWorld() == nullptr)
 	{
 		return;
@@ -738,6 +747,7 @@ void AUOUWindEmitterActor::DrawWindDebug() const
 			0,
 			1.0f);
 	}
+#endif
 }
 
 FCollisionObjectQueryParams AUOUWindEmitterActor::BuildReceiverObjectQueryParams() const

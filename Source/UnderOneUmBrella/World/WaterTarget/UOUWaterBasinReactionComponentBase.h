@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Debug/UOUDebugProvider.h"
 #include "Puzzle/Core/UOUPuzzleConditionSourceComponent.h"
 #include "UOUWaterBasinReactionComponentBase.generated.h"
 
@@ -101,7 +102,8 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FUOUWaterBasinReactionEvent, const F
 // WaterTile 자동 탐색, 이벤트 바인딩, Context 생성, 기본 조건 판정을 제공하고
 // 파생 ReactionComponent는 조건 만족/해제 시 실제 행동만 구현하면 됩니다.
 UCLASS(Abstract, ClassGroup=(Puzzle), meta=(BlueprintSpawnableComponent, DisplayName="UOU Water Basin Reaction Base"))
-class UNDERONEUMBRELLA_API UUOUWaterBasinReactionComponentBase : public UUOUPuzzleConditionSourceComponent
+class UNDERONEUMBRELLA_API UUOUWaterBasinReactionComponentBase
+	: public UUOUPuzzleConditionSourceComponent
 {
 	GENERATED_BODY()
 
@@ -216,7 +218,13 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Water Basin Reaction")
 	FUOUWaterBasinReactionContext GetLastReactionContext() const;
 
-	virtual TArray<FString> GetPuzzleDebugInfo_Implementation() const override;
+	virtual FText GetDebugSummaryText_Implementation() const override;
+	virtual EUOUDebugCategory GetDebugCategory_Implementation() const override;
+
+#if UOU_WITH_DEVELOPMENT_TOOLS
+	virtual bool ShouldDrawDevelopmentDebugLabel() const override { return false; }
+	virtual void GatherDevelopmentDebugDraw(IUOUDevelopmentDebugDrawContext& Context) const override;
+#endif
 
 protected:
 	// 물 상태가 갱신될 때마다 호출됩니다. 조건 만족 여부와 상관없이 디버깅/캐싱에 사용할 수 있습니다.
@@ -245,7 +253,6 @@ protected:
 
 	float ResolveCurrentValue(const FUOUWaterBasinReactionContext& Context) const;
 	bool DoesValueSatisfyCondition(float CurrentValue) const;
-	void DrawReactionDebugText();
 
 private:
 	UPROPERTY(Transient)

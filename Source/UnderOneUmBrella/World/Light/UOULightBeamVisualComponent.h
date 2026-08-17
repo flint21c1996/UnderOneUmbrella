@@ -118,8 +118,12 @@ protected:
 	AActor* AcquireReflectionVFXActor(int32 PoolIndex);
 	AActor* SpawnVFXActor();
 	void ConfigureSpawnedVFXActor(AActor* VFXActor) const;
-	void UpdateDirectVFX(const TArray<FUOULightPathData>& LightPaths);
-	void UpdateReflectionVFX(const TArray<FUOULightPathData>& LightPaths);
+	void UpdateDirectVFX(
+		const TArray<FUOULightPathData>& LightPaths,
+		float ReferenceVisualLength);
+	void UpdateReflectionVFX(
+		const TArray<FUOULightPathData>& LightPaths,
+		float ReferenceVisualLength);
 	void HideUnusedReflectionVFX(int32 FirstUnusedIndex);
 	void ApplySegmentToVFX(AActor* VFXActor, const FUOULightBeamVisualSegmentData& SegmentData);
 	bool ApplySegmentToLazyGodray(AActor* VFXActor, const FUOULightBeamVisualSegmentData& SegmentData);
@@ -128,6 +132,7 @@ protected:
 	FUOULightBeamVisualSegmentData BuildVisualSegment(
 		const FUOULightPathSegmentData& SegmentData,
 		int32 VisualSegmentIndex,
+		float ReferenceVisualLength,
 		const FUOULightPathSegmentData* PreviousSegment = nullptr,
 		const FUOULightPathSegmentData* NextReflectedSegment = nullptr) const;
 	FLinearColor ResolveLightColor() const;

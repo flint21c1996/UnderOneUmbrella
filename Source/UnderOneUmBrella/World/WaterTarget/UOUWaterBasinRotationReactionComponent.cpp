@@ -4,6 +4,7 @@
 
 #include "Components/SceneComponent.h"
 #include "DrawDebugHelpers.h"
+#include "Debug/UOUDevelopmentToolsBuild.h"
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
 #include "World/WaterTarget/UOUWaterBasinTargetComponent.h"
@@ -721,6 +722,7 @@ bool UUOUWaterBasinRotationReactionComponent::ResolveInputSideReference(
 
 void UUOUWaterBasinRotationReactionComponent::DrawInputSideDebug() const
 {
+#if UOU_WITH_DEVELOPMENT_TOOLS
 	if (!bDrawInputSideDebug)
 	{
 		return;
@@ -909,6 +911,7 @@ void UUOUWaterBasinRotationReactionComponent::DrawInputSideDebug() const
 			DrawDuration,
 			true);
 	}
+#endif
 }
 
 float UUOUWaterBasinRotationReactionComponent::ResolveInputRotationSign(const FUOUWaterBasinInputContext& InputContext) const

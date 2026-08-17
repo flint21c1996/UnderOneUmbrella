@@ -26,10 +26,10 @@ void UUOUWaterAmountConditionComponent::EndPlay(const EEndPlayReason::Type EndPl
 	Super::EndPlay(EndPlayReason);
 }
 
-TArray<FString> UUOUWaterAmountConditionComponent::GetPuzzleDebugInfo_Implementation() const
+FText UUOUWaterAmountConditionComponent::GetDebugSummaryText_Implementation() const
 {
 	const float CurrentAmount = WaterContainer != nullptr ? WaterContainer->CurrentAmount : 0.0f;
-	return {
+	const TArray<FString> DebugLines = {
 		FString::Printf(
 			TEXT("Water Amount: %s"),
 			IsSatisfied() ? TEXT("Satisfied") : TEXT("Unsatisfied")),
@@ -39,6 +39,8 @@ TArray<FString> UUOUWaterAmountConditionComponent::GetPuzzleDebugInfo_Implementa
 			GetRequiredAmount()),
 		FString::Printf(TEXT("Container: %s"), *GetNameSafe(WaterContainer))
 	};
+
+	return FText::FromString(FString::Join(DebugLines, LINE_TERMINATOR));
 }
 
 void UUOUWaterAmountConditionComponent::HandleWaterAmountChanged(float NewAmount, float MaxAmount)

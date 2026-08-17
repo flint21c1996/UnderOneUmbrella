@@ -4,7 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
-#include "Debug/UOUPuzzleDebugInfoProvider.h"
+#include "Debug/UOUDebugProvider.h"
 #include "Engine/EngineTypes.h"
 #include "World/Light/UOULightExposureTypes.h"
 #include "World/Light/UOULightReceivableInterface.h"
@@ -21,7 +21,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnUOULightTemperatureChangedSignat
 
 // 게임플레이용 빛 노출을 받아 온도 값으로 변환하는 컴포넌트입니다.
 UCLASS(ClassGroup=(Light), meta=(BlueprintSpawnableComponent, DisplayName="UOU Light Exposure Receiver", ToolTip = "게임플레이용 빛 노출을 받아 온도를 갱신합니다."))
-class UUOULightExposureReceiverComponent : public UActorComponent, public IUOULightReceivableInterface, public IUOUPuzzleDebugInfoProvider
+class UNDERONEUMBRELLA_API UUOULightExposureReceiverComponent : public UActorComponent, public IUOULightReceivableInterface, public IUOUDebugProvider
 {
 	GENERATED_BODY()
 
@@ -30,7 +30,13 @@ public:
 
 	virtual void BeginPlay() override;
 	virtual void TickComponent(float DeltaTime, enum ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
-	virtual TArray<FString> GetPuzzleDebugInfo_Implementation() const override;
+	virtual EUOUDebugCategory GetDebugCategory_Implementation() const override;
+	virtual FText GetDebugSummaryText_Implementation() const override;
+
+#if UOU_WITH_DEVELOPMENT_TOOLS
+	virtual bool ShouldDrawDevelopmentDebugLabel() const override { return false; }
+	virtual void GatherDevelopmentDebugDraw(IUOUDevelopmentDebugDrawContext& Context) const override;
+#endif
 
 	virtual FVector GetLightReceiverPosition_Implementation() const override;
 	virtual void ReceiveLightExposure_Implementation(const FUOULightExposureData& ExposureData) override;
@@ -104,27 +110,6 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Runtime", meta = (ToolTip = "마지막으로 이 수신체에 빛을 준 광원 액터입니다."))
 	TObjectPtr<AActor> LastExposureSourceActor = nullptr;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Debug", meta = (ToolTip = "수신체 위에 온도와 빛 노출 상태를 디버그 텍스트로 표시합니다."))
-	bool bDrawTemperatureDebug = false;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Debug", meta = (ToolTip = "온도, 빛 수신 여부, 강도 상태 문자열을 월드에 표시합니다. 기존 디버그 설정과 함께 켜야 표시됩니다."))
-	bool bDrawTemperatureDebugLabel = false;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Debug", meta = (ToolTip = "디버그 텍스트 위치에 더할 월드 오프셋입니다."))
-	FVector TemperatureDebugOffset = FVector(0.0f, 0.0f, 100.0f);
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Debug", meta = (ClampMin = "0.0", ToolTip = "온도 디버그 텍스트의 유지 시간입니다. 0이면 한 프레임만 표시합니다."))
-	float TemperatureDebugDrawTime = 0.0f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Debug", meta = (ClampMin = "0.1", ToolTip = "온도 디버그 텍스트의 크기입니다."))
-	float TemperatureDebugTextScale = 1.0f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Debug", meta = (ToolTip = "빛을 받지 않을 때 사용할 디버그 텍스트 색상입니다."))
-	FColor TemperatureDebugColor = FColor::Cyan;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Debug", meta = (ToolTip = "빛을 받고 있을 때 사용할 디버그 텍스트 색상입니다."))
-	FColor ExposedTemperatureDebugColor = FColor::Orange;
-
 	UFUNCTION(BlueprintCallable, Category = "Light|Temperature", meta = (ToolTip = "현재 온도를 설정합니다. Min Temperature와 Max Temperature 사이로 제한됩니다."))
 	void SetTemperature(float NewTemperature);
 
@@ -148,5 +133,4 @@ protected:
 	UPrimitiveComponent* GetReceiverVolume() const;
 	void SetReceivingLight(bool bNewReceivingLight);
 	void RecoverTemperature(float DeltaTime);
-	void DrawTemperatureDebug() const;
 };

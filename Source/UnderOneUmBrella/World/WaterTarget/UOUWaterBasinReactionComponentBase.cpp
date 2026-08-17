@@ -2,8 +2,7 @@
 
 #include "World/WaterTarget/UOUWaterBasinReactionComponentBase.h"
 
-#include "Debug/UOUDebugSubsystem.h"
-#include "DrawDebugHelpers.h"
+#include "Debug/UOUDevelopmentDebugDrawContext.h"
 #include "GameFramework/Actor.h"
 #include "World/WaterTarget/UOUWaterBasinPlatformComponent.h"
 #include "World/WaterTarget/UOUWaterBasinTargetComponent.h"
@@ -15,7 +14,6 @@ namespace
 
 	// DrawDebugString에서 0초는 한 프레임 표시를 의미합니다.
 	// 이 컴포넌트는 Tick마다 다시 그리므로 지속 시간을 길게 주면 이전 텍스트가 겹쳐 보일 수 있습니다.
-	constexpr float ReactionDebugTextLifeTime = 0.0f;
 
 	FString GetReactionValueSourceDebugName(EUOUWaterBasinReactionValueSource InValueSource)
 	{
@@ -33,7 +31,6 @@ namespace
 		return TEXT("Unknown");
 	}
 }
-
 UUOUWaterBasinReactionComponentBase::UUOUWaterBasinReactionComponentBase()
 {
 	PrimaryComponentTick.bCanEverTick = true;
@@ -74,7 +71,6 @@ void UUOUWaterBasinReactionComponentBase::TickComponent(float DeltaTime, ELevelT
 		EvaluateReaction();
 	}
 
-	DrawReactionDebugText();
 }
 
 #if WITH_EDITOR
@@ -129,18 +125,53 @@ FUOUWaterBasinReactionContext UUOUWaterBasinReactionComponentBase::GetLastReacti
 	return LastContext;
 }
 
-TArray<FString> UUOUWaterBasinReactionComponentBase::GetPuzzleDebugInfo_Implementation() const
+FText UUOUWaterBasinReactionComponentBase::GetDebugSummaryText_Implementation() const
 {
-	TArray<FString> DebugInfo = Super::GetPuzzleDebugInfo_Implementation();
+	TArray<FString> DebugLines;
+	Super::GetDebugSummaryText_Implementation().ToString().ParseIntoArrayLines(DebugLines, true);
 	const EUOUWaterBasinReactionValueSource DebugValueSource = bHasEvaluated ? LastContext.ValueSource : ValueSource;
-	DebugInfo.Add(FString::Printf(TEXT("Value Source: %s"), *GetReactionValueSourceDebugName(DebugValueSource)));
-	DebugInfo.Add(FString::Printf(TEXT("Reaction Value: %.3f / %.3f"), LastContext.CurrentValue, LastContext.ThresholdValue));
-	DebugInfo.Add(FString::Printf(TEXT("Water Fill: %.3f"), LastContext.WaterFillRatio));
-	DebugInfo.Add(FString::Printf(TEXT("Rotation Angle: %.2f"), LastContext.RotationAngleDegrees));
-	DebugInfo.Add(FString::Printf(TEXT("Signed Rotation Angle: %.2f"), LastContext.SignedRotationAngleDegrees));
-	DebugInfo.Add(FString::Printf(TEXT("Reaction Events: +%d / -%d"), SatisfiedEventCount, UnsatisfiedEventCount));
-	return DebugInfo;
+	DebugLines.Add(FString::Printf(TEXT("Value Source: %s"), *GetReactionValueSourceDebugName(DebugValueSource)));
+	DebugLines.Add(FString::Printf(TEXT("Reaction Value: %.3f / %.3f"), LastContext.CurrentValue, LastContext.ThresholdValue));
+	DebugLines.Add(FString::Printf(TEXT("Water Fill: %.3f"), LastContext.WaterFillRatio));
+	DebugLines.Add(FString::Printf(TEXT("Rotation Angle: %.2f"), LastContext.RotationAngleDegrees));
+	DebugLines.Add(FString::Printf(TEXT("Signed Rotation Angle: %.2f"), LastContext.SignedRotationAngleDegrees));
+	DebugLines.Add(FString::Printf(TEXT("Reaction Events: +%d / -%d"), SatisfiedEventCount, UnsatisfiedEventCount));
+	return FText::FromString(FString::Join(DebugLines, LINE_TERMINATOR));
 }
+
+EUOUDebugCategory UUOUWaterBasinReactionComponentBase::GetDebugCategory_Implementation() const
+{
+	return EUOUDebugCategory::Puzzle;
+}
+
+#if UOU_WITH_DEVELOPMENT_TOOLS
+void UUOUWaterBasinReactionComponentBase::GatherDevelopmentDebugDraw(
+	IUOUDevelopmentDebugDrawContext& Context) const
+{
+	AActor* Owner = GetOwner();
+	if (!IsValid(Owner))
+	{
+		return;
+	}
+
+	TArray<UUOUWaterBasinReactionComponentBase*> ReactionComponents;
+	Owner->GetComponents<UUOUWaterBasinReactionComponentBase>(ReactionComponents);
+	const int32 FoundReactionIndex = ReactionComponents.IndexOfByPredicate(
+		[this](const UUOUWaterBasinReactionComponentBase* ReactionComponent)
+		{
+			return ReactionComponent == this;
+		});
+	const int32 ReactionIndex = FMath::Max(0, FoundReactionIndex);
+	const FString DebugText = GetDebugSummaryText_Implementation().ToString();
+	const FVector DebugLocation = Owner->GetActorLocation()
+		+ FVector(0.0f, 0.0f, 280.0f + static_cast<float>(ReactionIndex) * 140.0f);
+	const FColor DebugColor = bHasEvaluated
+		? (bIsConditionSatisfied ? FColor::Green : FColor::Red)
+		: FColor::Yellow;
+
+	Context.DrawString(DebugLocation, DebugText, DebugColor, 0.85f);
+}
+#endif
 
 void UUOUWaterBasinReactionComponentBase::OnWaterBasinReactionStateUpdated_Implementation(const FUOUWaterBasinReactionContext& /*Context*/)
 {
@@ -377,35 +408,3 @@ void UUOUWaterBasinReactionComponentBase::NotifyReactionResult(const FUOUWaterBa
 	}
 }
 
-void UUOUWaterBasinReactionComponentBase::DrawReactionDebugText()
-{
-	if (!bDrawDebugText
-		|| !UUOUDebugSubsystem::IsDebugWorldLabelEnabled(this, EUOUDebugCategory::Puzzle)
-		|| !GetWorld()
-		|| !GetOwner())
-	{
-		return;
-	}
-
-	const FVector DrawLocation = GetOwner()->GetActorLocation() + DrawDebugOffset;
-	const FColor TextColor = UUOUDebugSubsystem::GetDebugCategoryColor(
-		this,
-		EUOUDebugCategory::Puzzle,
-		bHasEvaluated ? (bIsConditionSatisfied ? DebugSatisfiedColor : DebugUnsatisfiedColor) : DebugWaitingColor);
-
-	const FString DebugText = FString::Printf(
-		TEXT("%s\nSatisfied: %s\nValue Source: %s\nValue: %.3f / %.3f\nWater Z: %.1f\nDepth: %.3f\nFill: %.3f\nVolume: %.3f\nEvents: +%d / -%d"),
-		*GetName(),
-		bIsConditionSatisfied ? TEXT("TRUE") : TEXT("FALSE"),
-		*GetReactionValueSourceDebugName(bHasEvaluated ? LastContext.ValueSource : ValueSource),
-		LastContext.CurrentValue,
-		LastContext.ThresholdValue,
-		LastContext.WaterSurfaceWorldZ,
-		LastContext.WaterDepth,
-		LastContext.WaterFillRatio,
-		LastContext.WaterVolume,
-		SatisfiedEventCount,
-		UnsatisfiedEventCount);
-
-	DrawDebugString(GetWorld(), DrawLocation, DebugText, nullptr, TextColor, ReactionDebugTextLifeTime, true);
-}

@@ -12,21 +12,52 @@ bool UUOUPuzzleConditionSourceComponent::IsSatisfied() const
 	return bIsSatisfied;
 }
 
-TArray<FString> UUOUPuzzleConditionSourceComponent::GetPuzzleDebugInfo_Implementation() const
+#if UOU_WITH_PUZZLE_CHEATS
+bool UUOUPuzzleConditionSourceComponent::TryResolveInputForCheat(AActor* InputActor)
 {
-	return {
-		FString::Printf(
-			TEXT("Condition: %s"),
-			bIsSatisfied ? TEXT("Satisfied") : TEXT("Unsatisfied"))
-	};
+	if (!IsValid(InputActor))
+	{
+		return false;
+	}
+
+	bCheatForceSatisfied = true;
+	SetSatisfiedState(true, true);
+	return IsSatisfied();
 }
+#endif
 
 void UUOUPuzzleConditionSourceComponent::GetPuzzleDebugInputActors_Implementation(TArray<AActor*>& OutInputActors) const
 {
 }
 
+EUOUDebugCategory UUOUPuzzleConditionSourceComponent::GetDebugCategory_Implementation() const
+{
+	return EUOUDebugCategory::Puzzle;
+}
+
+FText UUOUPuzzleConditionSourceComponent::GetDebugSummaryText_Implementation() const
+{
+	return FText::FromString(FString::Printf(
+		TEXT("Condition: %s"),
+		bIsSatisfied ? TEXT("Satisfied") : TEXT("Unsatisfied")));
+}
+
+#if UOU_WITH_DEVELOPMENT_TOOLS
+bool UUOUPuzzleConditionSourceComponent::ShouldDrawDevelopmentDebugLabel() const
+{
+	return false;
+}
+#endif
+
 bool UUOUPuzzleConditionSourceComponent::SetSatisfiedState(bool bNewSatisfied, bool bBroadcastChange)
 {
+#if UOU_WITH_PUZZLE_CHEATS
+	if (bCheatForceSatisfied && !bNewSatisfied)
+	{
+		return false;
+	}
+#endif
+
 	if (bIsSatisfied == bNewSatisfied)
 	{
 		return false;

@@ -150,6 +150,14 @@ bool AUOUPuzzleConditionGroupActor::IsSatisfied() const
 	return PuzzleConditionGroupComponent != nullptr && PuzzleConditionGroupComponent->IsSatisfied();
 }
 
+#if UOU_WITH_PUZZLE_CHEATS
+bool AUOUPuzzleConditionGroupActor::ForceSatisfiedForCheat()
+{
+	return PuzzleConditionGroupComponent != nullptr
+		&& PuzzleConditionGroupComponent->ForceSatisfiedForCheat();
+}
+#endif
+
 void AUOUPuzzleConditionGroupActor::HandleGroupSatisfied()
 {
 	OnSatisfied.Broadcast();

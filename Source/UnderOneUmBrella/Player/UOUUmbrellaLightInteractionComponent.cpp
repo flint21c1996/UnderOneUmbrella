@@ -3,11 +3,8 @@
 #include "Player/UOUUmbrellaLightInteractionComponent.h"
 
 #include "Components/SceneComponent.h"
-#include "Debug/UOUDebugSubsystem.h"
-#include "DrawDebugHelpers.h"
+#include "Debug/UOUDevelopmentDebugDrawContext.h"
 #include "GameFramework/Actor.h"
-#include "GameFramework/HUD.h"
-#include "GameFramework/PlayerController.h"
 #include "Engine/World.h"
 #include "TimerManager.h"
 #include "Player/UOUUmbrellaLightShadeVolumeComponent.h"
@@ -64,8 +61,73 @@ void UUOUUmbrellaLightInteractionComponent::TickComponent(
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 	ApplyRuntimeLightSurfacePlacement();
 	ApplyRuntimeLightShadeVolumePlacement();
-	DrawReflectorDebug();
 }
+
+EUOUDebugCategory UUOUUmbrellaLightInteractionComponent::GetDebugCategory_Implementation() const
+{
+	return EUOUDebugCategory::Puzzle;
+}
+
+#if UOU_WITH_DEVELOPMENT_TOOLS
+void UUOUUmbrellaLightInteractionComponent::GatherDevelopmentDebugDraw(
+	IUOUDevelopmentDebugDrawContext& Context) const
+{
+	const UUOULightInteractionSurfaceComponent* LightSurface = LightSurfaceComponent;
+	if (!IsValid(LightSurface))
+	{
+		return;
+	}
+
+	constexpr float ReflectorArrowLength = 180.0f;
+	constexpr float ReflectorThickness = 3.0f;
+	const EUOULightInteractionMode InteractionMode = LightSurface->LightInteractionMode;
+	const bool bShadeActive = IsValid(LightShadeVolumeComponent)
+		&& LightShadeVolumeComponent->CanShadeLight();
+	const bool bDebugBlocking = InteractionMode == EUOULightInteractionMode::Blocking
+		|| (InteractionMode == EUOULightInteractionMode::Disabled && bShadeActive);
+	const FColor SurfaceColor = InteractionMode == EUOULightInteractionMode::Reflecting
+		? FColor::Magenta
+		: (bDebugBlocking ? FColor::Yellow : FColor::Silver);
+	const FVector SurfaceLocation = LightSurface->GetComponentLocation();
+	const FVector SurfaceExtent = LightSurface->GetScaledBoxExtent();
+
+	Context.DrawBox(
+		SurfaceLocation,
+		SurfaceExtent,
+		LightSurface->GetComponentQuat(),
+		SurfaceColor,
+		ReflectorThickness);
+
+	const AActor* Owner = GetOwner();
+	const FVector ReflectionDirection = Owner != nullptr
+		? Owner->GetActorForwardVector().GetSafeNormal()
+		: LightSurface->GetForwardVector().GetSafeNormal();
+	if (InteractionMode == EUOULightInteractionMode::Reflecting
+		&& !ReflectionDirection.IsNearlyZero())
+	{
+		Context.DrawArrow(
+			SurfaceLocation,
+			SurfaceLocation + ReflectionDirection * ReflectorArrowLength,
+			24.0f,
+			FColor::Green,
+			ReflectorThickness);
+	}
+
+	const TCHAR* ModeText = InteractionMode == EUOULightInteractionMode::Reflecting
+		? TEXT("Reflecting")
+		: (bDebugBlocking ? TEXT("Blocking") : TEXT("Disabled"));
+	Context.DrawString(
+		SurfaceLocation + FVector(0.0f, 0.0f, SurfaceExtent.Z + 20.0f),
+		FString::Printf(
+			TEXT("Umbrella Reflector: %s\nExtent: %.1f %.1f %.1f"),
+			ModeText,
+			SurfaceExtent.X,
+			SurfaceExtent.Y,
+			SurfaceExtent.Z),
+		SurfaceColor,
+		1.0f);
+}
+#endif
 
 void UUOUUmbrellaLightInteractionComponent::RefreshLightInteractionMode()
 {
@@ -393,118 +455,6 @@ bool UUOUUmbrellaLightInteractionComponent::TryResolveRainBlockerAlignedTransfor
 	OutWorldRotation = (
 		OwnerTransform.GetRotation() * StateRotation * RainBlockerLocalRotation).Rotator();
 	return true;
-}
-
-void UUOUUmbrellaLightInteractionComponent::DrawReflectorDebug() const
-{
-	if (!bDrawReflectorDebug ||
-		LightSurfaceComponent == nullptr ||
-		!UUOUDebugSubsystem::IsDebugWorldDrawEnabled(this, EUOUDebugCategory::Puzzle))
-	{
-		return;
-	}
-
-	UWorld* World = GetWorld();
-	if (World == nullptr)
-	{
-		return;
-	}
-
-	const EUOULightInteractionMode InteractionMode = LightSurfaceComponent->LightInteractionMode;
-	const bool bShadeActive = LightShadeVolumeComponent != nullptr &&
-		LightShadeVolumeComponent->CanShadeLight();
-	const bool bDebugBlocking = InteractionMode == EUOULightInteractionMode::Blocking ||
-		(InteractionMode == EUOULightInteractionMode::Disabled && bShadeActive);
-	const FColor SurfaceColor = InteractionMode == EUOULightInteractionMode::Reflecting
-		? FColor::Magenta
-		: (bDebugBlocking ? FColor::Yellow : FColor::Silver);
-	const FVector SurfaceLocation = LightSurfaceComponent->GetComponentLocation();
-	const float SafeThickness = FMath::Max(0.0f, ReflectorDebugThickness);
-
-	DrawDebugBox(
-		World,
-		SurfaceLocation,
-		LightSurfaceComponent->GetScaledBoxExtent(),
-		LightSurfaceComponent->GetComponentQuat(),
-		SurfaceColor,
-		false,
-		0.0f,
-		0,
-		SafeThickness);
-
-	// 법선 반사는 입사광마다 출사 방향이 달라 고정 화살표로 표현할 수 없습니다.
-	// Component/Owner Forward 모드에서만 고정 반사 방향 화살표를 표시합니다.
-	FVector FixedReflectionDirection = FVector::ZeroVector;
-	if (LightSurfaceComponent->ReflectionDirectionMode == EUOULightReflectionDirectionMode::ComponentForward)
-	{
-		FixedReflectionDirection = LightSurfaceComponent->GetForwardVector().GetSafeNormal();
-	}
-	else if (LightSurfaceComponent->ReflectionDirectionMode == EUOULightReflectionDirectionMode::OwnerForward)
-	{
-		const AActor* Owner = GetOwner();
-		FixedReflectionDirection = Owner != nullptr
-			? Owner->GetActorForwardVector().GetSafeNormal()
-			: LightSurfaceComponent->GetForwardVector().GetSafeNormal();
-	}
-
-	if (InteractionMode == EUOULightInteractionMode::Reflecting && !FixedReflectionDirection.IsNearlyZero())
-	{
-		const FVector ArrowEnd =
-			SurfaceLocation + FixedReflectionDirection * FMath::Max(0.0f, ReflectorDebugArrowLength);
-		DrawDebugDirectionalArrow(
-			World,
-			SurfaceLocation,
-			ArrowEnd,
-			24.0f,
-			FColor::Green,
-			false,
-			0.0f,
-			0,
-			SafeThickness);
-	}
-
-	if (bDrawReflectorDebugLabel &&
-		UUOUDebugSubsystem::IsDebugWorldLabelEnabled(this, EUOUDebugCategory::Puzzle))
-	{
-		const TCHAR* ModeText = InteractionMode == EUOULightInteractionMode::Reflecting
-			? TEXT("Reflecting")
-			: (bDebugBlocking ? TEXT("Blocking") : TEXT("Disabled"));
-		const FVector DebugTextLocation =
-			SurfaceLocation + FVector(0.0f, 0.0f, LightSurfaceComponent->GetScaledBoxExtent().Z + 20.0f);
-		const FString DebugText = FString::Printf(
-			TEXT("Umbrella Reflector: %s\nExtent: %.1f %.1f %.1f"),
-			ModeText,
-			LightSurfaceComponent->GetScaledBoxExtent().X,
-			LightSurfaceComponent->GetScaledBoxExtent().Y,
-			LightSurfaceComponent->GetScaledBoxExtent().Z);
-		AActor* DebugOwner = GetOwner();
-		if (DebugOwner != nullptr)
-		{
-			for (FConstPlayerControllerIterator Iterator = World->GetPlayerControllerIterator(); Iterator; ++Iterator)
-			{
-				APlayerController* PlayerController = Iterator->Get();
-				AHUD* HUD = PlayerController != nullptr ? PlayerController->GetHUD() : nullptr;
-				if (HUD == nullptr)
-				{
-					continue;
-				}
-
-				HUD->AddDebugText(
-					DebugText,
-					DebugOwner,
-					0.15f,
-					DebugTextLocation,
-					DebugTextLocation,
-					SurfaceColor,
-					false,
-					true,
-					false,
-					nullptr,
-					1.0f,
-					true);
-			}
-		}
-	}
 }
 
 void UUOUUmbrellaLightInteractionComponent::HandleUmbrellaStateChanged(EUOUUmbrellaState NewState, bool bHasUmbrella)

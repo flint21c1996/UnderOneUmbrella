@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "Debug/UOUDebugProvider.h"
 #include "Player/UOUUmbrellaComponent.h"
 #include "UOUUmbrellaLightInteractionComponent.generated.h"
 
@@ -12,7 +13,9 @@ class UUOUUmbrellaLightShadeVolumeComponent;
 class USceneComponent;
 
 UCLASS(ClassGroup=(Gameplay), meta=(BlueprintSpawnableComponent, DisplayName="UOU Umbrella Light Interaction"))
-class UUOUUmbrellaLightInteractionComponent : public UActorComponent
+class UNDERONEUMBRELLA_API UUOUUmbrellaLightInteractionComponent
+	: public UActorComponent
+	, public IUOUDebugProvider
 {
 	GENERATED_BODY()
 
@@ -25,6 +28,12 @@ public:
 		float DeltaTime,
 		ELevelTick TickType,
 		FActorComponentTickFunction* ThisTickFunction) override;
+	virtual EUOUDebugCategory GetDebugCategory_Implementation() const override;
+
+#if UOU_WITH_DEVELOPMENT_TOOLS
+	virtual bool ShouldDrawDevelopmentDebugLabel() const override { return false; }
+	virtual void GatherDevelopmentDebugDraw(IUOUDevelopmentDebugDrawContext& Context) const override;
+#endif
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Light")
 	bool bAutoFindUmbrellaComponent = true;
@@ -80,18 +89,6 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Light|Placement", meta = (Units = "cm", EditCondition = "bAlignLightInteractionToRainBlocker", DisplayName = "빛 반사 판정 높이", ToolTip = "빛 반사 상태에서 판정면 중심에 적용할 플레이어 기준 높이입니다."))
 	float LightReflectingSurfaceHeightFromOwner = 30.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Light|Debug", meta = (DisplayName = "Draw Reflector Debug", ToolTip = "Puzzle 월드 디버그가 켜져 있을 때 우산 반사판 박스와 반사 방향을 표시합니다."))
-	bool bDrawReflectorDebug = true;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Light|Debug", meta = (EditCondition = "bDrawReflectorDebug", DisplayName = "Draw Reflector Debug Label", ToolTip = "우산 반사면의 상태와 크기를 월드 글자로 표시합니다. HUD 갱신에 따른 깜빡임을 피하기 위해 기본적으로 끕니다."))
-	bool bDrawReflectorDebugLabel = false;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Light|Debug", meta = (ClampMin = "0.0", DisplayName = "Reflector Debug Arrow Length", ToolTip = "우산 반사판에서 표시하는 반사 방향 화살표의 길이입니다."))
-	float ReflectorDebugArrowLength = 180.0f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Light|Debug", meta = (ClampMin = "0.0", DisplayName = "Reflector Debug Thickness", ToolTip = "우산 반사판 디버그 박스와 화살표의 선 두께입니다."))
-	float ReflectorDebugThickness = 3.0f;
-
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Light", meta = (ClampMin = "0.0"))
 	FVector RuntimeSurfaceBoxExtent = FVector(70.0f, 70.0f, 6.0f);
 
@@ -133,8 +130,6 @@ protected:
 		FVector& OutWorldCenter,
 		FRotator& OutWorldRotation,
 		FVector& OutHalfExtent) const;
-	void DrawReflectorDebug() const;
-
 	UFUNCTION()
 	void HandleUmbrellaStateChanged(EUOUUmbrellaState NewState, bool bHasUmbrella);
 };

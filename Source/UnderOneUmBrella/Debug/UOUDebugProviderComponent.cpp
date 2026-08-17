@@ -2,38 +2,11 @@
 
 #include "Debug/UOUDebugProviderComponent.h"
 
-#include "Debug/UOUDebugSubsystem.h"
 #include "GameFramework/Actor.h"
 
 UUOUDebugProviderComponent::UUOUDebugProviderComponent()
 {
 	PrimaryComponentTick.bCanEverTick = false;
-}
-
-void UUOUDebugProviderComponent::BeginPlay()
-{
-	Super::BeginPlay();
-
-	if (UWorld* World = GetWorld())
-	{
-		if (UUOUDebugSubsystem* DebugSubsystem = World->GetSubsystem<UUOUDebugSubsystem>())
-		{
-			DebugSubsystem->RegisterDebugProvider(this);
-		}
-	}
-}
-
-void UUOUDebugProviderComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
-{
-	if (UWorld* World = GetWorld())
-	{
-		if (UUOUDebugSubsystem* DebugSubsystem = World->GetSubsystem<UUOUDebugSubsystem>())
-		{
-			DebugSubsystem->UnregisterDebugProvider(this);
-		}
-	}
-
-	Super::EndPlay(EndPlayReason);
 }
 
 EUOUDebugCategory UUOUDebugProviderComponent::GetDebugCategory_Implementation() const

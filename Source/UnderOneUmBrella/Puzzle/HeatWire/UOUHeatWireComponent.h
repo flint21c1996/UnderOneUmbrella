@@ -79,7 +79,7 @@ public:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
-	virtual TArray<FString> GetPuzzleDebugInfo_Implementation() const override;
+	virtual FText GetDebugSummaryText_Implementation() const override;
 	virtual void GetPuzzleDebugInputActors_Implementation(TArray<AActor*>& OutInputActors) const override;
 	virtual void ApplyPuzzleResult_Implementation(EOUUPuzzleResultAction Action) override;
 	virtual void Interact_Implementation(AActor* Interactor) override;

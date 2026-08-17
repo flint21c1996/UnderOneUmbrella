@@ -4,10 +4,7 @@
 
 #include "Components/SceneComponent.h"
 #include "Components/SplineComponent.h"
-#include "Debug/UOUDebugControllerComponent.h"
-#include "Debug/UOUDebugSubsystem.h"
-#include "Debug/UOUPuzzleDebugInfoProvider.h"
-#include "DrawDebugHelpers.h"
+#include "Debug/UOUDevelopmentDebugDrawContext.h"
 #include "Engine/StaticMesh.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
@@ -36,9 +33,6 @@ namespace
 
 AUOUHeatWireActor::AUOUHeatWireActor()
 {
-	PrimaryActorTick.bCanEverTick = true;
-	PrimaryActorTick.bStartWithTickEnabled = true;
-
 	RootScene = CreateDefaultSubobject<USceneComponent>(TEXT("RootScene"));
 	SetRootComponent(RootScene);
 
@@ -65,13 +59,6 @@ AUOUHeatWireActor::AUOUHeatWireActor()
 	HeatWireComponent->HeatWirePathComponent = HeatWirePath;
 }
 
-void AUOUHeatWireActor::Tick(float DeltaSeconds)
-{
-	Super::Tick(DeltaSeconds);
-
-	DrawPathPointDebug();
-}
-
 void AUOUHeatWireActor::BeginPlay()
 {
 	Super::BeginPlay();
@@ -80,29 +67,11 @@ void AUOUHeatWireActor::BeginPlay()
 	BindHeatWireVisualEvents();
 	RefreshHeatWireVisualState();
 
-	if (bRegisterDebugProvider)
-	{
-		if (UWorld* World = GetWorld())
-		{
-			if (UUOUDebugSubsystem* DebugSubsystem = World->GetSubsystem<UUOUDebugSubsystem>())
-			{
-				DebugSubsystem->RegisterDebugProvider(this);
-			}
-		}
-	}
 }
 
 void AUOUHeatWireActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	UnbindHeatWireVisualEvents();
-
-	if (UWorld* World = GetWorld())
-	{
-		if (UUOUDebugSubsystem* DebugSubsystem = World->GetSubsystem<UUOUDebugSubsystem>())
-		{
-			DebugSubsystem->UnregisterDebugProvider(this);
-		}
-	}
 
 	ClearHeatWireVisualSegments();
 
@@ -123,11 +92,6 @@ void AUOUHeatWireActor::OnConstruction(const FTransform& Transform)
 }
 
 #if WITH_EDITOR
-bool AUOUHeatWireActor::ShouldTickIfViewportsOnly() const
-{
-	return bDrawPathPointDebug;
-}
-
 void AUOUHeatWireActor::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent)
 {
 	Super::PostEditChangeProperty(PropertyChangedEvent);
@@ -284,8 +248,7 @@ FText AUOUHeatWireActor::GetDebugSummaryText_Implementation() const
 		return FText::FromString(TEXT("HeatWire: Missing Component"));
 	}
 
-	const TArray<FString> DebugLines = IUOUPuzzleDebugInfoProvider::Execute_GetPuzzleDebugInfo(HeatWireComponent);
-	return FText::FromString(FString::Join(DebugLines, LINE_TERMINATOR));
+	return IUOUDebugProvider::Execute_GetDebugSummaryText(HeatWireComponent);
 }
 
 FVector AUOUHeatWireActor::GetDebugWorldLocation_Implementation() const
@@ -297,6 +260,87 @@ void AUOUHeatWireActor::GetDebugConnections_Implementation(TArray<FUOUDebugConne
 {
 	OutConnections.Reset();
 }
+
+#if UOU_WITH_DEVELOPMENT_TOOLS
+void AUOUHeatWireActor::GatherDevelopmentDebugDraw(
+	IUOUDevelopmentDebugDrawContext& Context) const
+{
+	if (HeatWirePath == nullptr)
+	{
+		return;
+	}
+
+	constexpr float SphereRadius = 18.0f;
+	constexpr int32 SphereSegments = 16;
+	constexpr float Thickness = 2.0f;
+	const FVector LabelOffset(0.0f, 0.0f, 36.0f);
+	const int32 SplinePointCount = HeatWirePath->GetNumberOfSplinePoints();
+	const float SplineLength = HeatWirePath->GetSplineLength();
+	const float BurnProgress = HeatWireComponent != nullptr
+		? FMath::Clamp(HeatWireComponent->BurnProgress, 0.0f, 1.0f)
+		: 0.0f;
+
+	for (int32 PointIndex = 0; PointIndex < SplinePointCount; ++PointIndex)
+	{
+		const FVector PointLocation = HeatWirePath->GetLocationAtSplinePoint(
+			PointIndex,
+			ESplineCoordinateSpace::World);
+		const float PointProgress = SplineLength > KINDA_SMALL_NUMBER
+			? FMath::Clamp(
+				HeatWirePath->GetDistanceAlongSplineAtSplinePoint(PointIndex) / SplineLength,
+				0.0f,
+				1.0f)
+			: (SplinePointCount > 1
+				? static_cast<float>(PointIndex) / static_cast<float>(SplinePointCount - 1)
+				: 0.0f);
+		const bool bReachedByHeat = HeatWireComponent != nullptr
+			&& BurnProgress + KINDA_SMALL_NUMBER >= PointProgress;
+		const FColor PointColor = PointIndex == 0
+			? FColor::Blue
+			: (PointIndex == SplinePointCount - 1 ? FColor::Red : FColor::Green);
+
+		Context.DrawSphere(
+			PointLocation,
+			SphereRadius,
+			SphereSegments,
+			PointColor,
+			Thickness);
+		Context.DrawSphere(
+			PointLocation,
+			SphereRadius * 0.45f,
+			SphereSegments,
+			bReachedByHeat ? FColor::Orange : FColor::White,
+			Thickness + 1.0f);
+		Context.DrawString(
+			PointLocation + LabelOffset,
+			FString::Printf(
+				TEXT("P%d %.0f%% %s"),
+				PointIndex,
+				PointProgress * 100.0f,
+				bReachedByHeat ? TEXT("Reached") : TEXT("Pending")),
+			bReachedByHeat ? FColor::Orange : FColor::White,
+			0.8f);
+	}
+
+	if (HeatWireComponent == nullptr)
+	{
+		return;
+	}
+
+	const FVector HeatFrontLocation = HeatWireComponent->GetFireWorldLocation();
+	Context.DrawSphere(
+		HeatFrontLocation,
+		12.0f,
+		SphereSegments,
+		FColor::Yellow,
+		Thickness + 1.0f);
+	Context.DrawString(
+		HeatFrontLocation + LabelOffset,
+		FString::Printf(TEXT("Heat %.0f%%"), BurnProgress * 100.0f),
+		FColor::Yellow,
+		0.85f);
+}
+#endif
 
 void AUOUHeatWireActor::ValidateVisualSettings()
 {
@@ -364,147 +408,6 @@ void AUOUHeatWireActor::RefreshHeatWireVisualState()
 			&& BurnProgress + KINDA_SMALL_NUMBER >= SegmentStartProgress
 			&& BurnProgress <= SegmentEndProgress + KINDA_SMALL_NUMBER;
 		ApplySegmentMaterialState(SegmentIndex, SegmentBurnRatio, SegmentWetnessAlpha, bBlocked, bActiveHeat);
-	}
-}
-
-void AUOUHeatWireActor::DrawPathPointDebug() const
-{
-	if (!bDrawPathPointDebug || HeatWirePath == nullptr)
-	{
-		return;
-	}
-
-	UWorld* World = GetWorld();
-	if (World == nullptr)
-	{
-		return;
-	}
-
-	const UUOUDebugSubsystem* DebugSubsystem = World->GetSubsystem<UUOUDebugSubsystem>();
-	if (DebugSubsystem == nullptr || !DebugSubsystem->IsDebugEnabled(EUOUDebugCategory::Puzzle))
-	{
-		return;
-	}
-
-	const UUOUPuzzleDebugControllerComponent* PuzzleDebugController =
-		Cast<UUOUPuzzleDebugControllerComponent>(DebugSubsystem->FindDebugControllerComponent(EUOUDebugCategory::Puzzle));
-	if (PuzzleDebugController != nullptr && !PuzzleDebugController->bShowHeatWirePathDebug)
-	{
-		return;
-	}
-
-	const bool bDrawWorldShapes = DebugSubsystem->IsWorldDrawEnabled(EUOUDebugCategory::Puzzle);
-	const bool bDrawWorldLabels = DebugSubsystem->IsWorldLabelEnabled(EUOUDebugCategory::Puzzle);
-	if (!bDrawWorldShapes && !bDrawWorldLabels)
-	{
-		return;
-	}
-
-	const int32 SplinePointCount = HeatWirePath->GetNumberOfSplinePoints();
-	if (SplinePointCount <= 0)
-	{
-		return;
-	}
-
-	const float SphereRadius = FMath::Max(1.0f, PathPointDebugSphereRadius);
-	const int32 SphereSegments = FMath::Max(4, PathPointDebugSphereSegments);
-	const float Thickness = FMath::Max(0.0f, PathPointDebugThickness);
-	const float SplineLength = HeatWirePath->GetSplineLength();
-	const float BurnProgress = HeatWireComponent != nullptr
-		? FMath::Clamp(HeatWireComponent->BurnProgress, 0.0f, 1.0f)
-		: 0.0f;
-
-	for (int32 PointIndex = 0; PointIndex < SplinePointCount; ++PointIndex)
-	{
-		const FVector PointLocation =
-			HeatWirePath->GetLocationAtSplinePoint(PointIndex, ESplineCoordinateSpace::World)
-			+ PathPointDebugOffset;
-		const float PointProgress = SplineLength > KINDA_SMALL_NUMBER
-			? FMath::Clamp(HeatWirePath->GetDistanceAlongSplineAtSplinePoint(PointIndex) / SplineLength, 0.0f, 1.0f)
-			: (SplinePointCount > 1
-				? static_cast<float>(PointIndex) / static_cast<float>(SplinePointCount - 1)
-				: 0.0f);
-		const bool bReachedByHeat = HeatWireComponent != nullptr && BurnProgress + KINDA_SMALL_NUMBER >= PointProgress;
-
-		const FColor PointColor = PointIndex == 0
-			? FColor::Blue
-			: (PointIndex == SplinePointCount - 1 ? FColor::Red : FColor::Green);
-
-		if (bDrawWorldShapes)
-		{
-			DrawDebugSphere(
-				World,
-				PointLocation,
-				SphereRadius,
-				SphereSegments,
-				PointColor,
-				false,
-				0.0f,
-				0,
-				Thickness);
-
-			if (bDrawPathPointHeatStateDebug)
-			{
-				DrawDebugSphere(
-					World,
-					PointLocation,
-					SphereRadius * 0.45f,
-					SphereSegments,
-					bReachedByHeat ? FColor::Orange : FColor::White,
-					false,
-					0.0f,
-					0,
-					Thickness + 1.0f);
-			}
-		}
-
-		if (bDrawWorldLabels && bDrawPathPointDebugLabels)
-		{
-			DrawDebugString(
-				World,
-				PointLocation + PathPointDebugLabelOffset,
-				FString::Printf(
-					TEXT("P%d %.0f%% %s"),
-					PointIndex,
-					PointProgress * 100.0f,
-					bReachedByHeat ? TEXT("Reached") : TEXT("Pending")),
-				nullptr,
-				bReachedByHeat ? FColor::Orange : FColor::White,
-				0.0f,
-				true,
-				0.8f);
-		}
-	}
-
-	if (bDrawCurrentHeatFrontDebug && HeatWireComponent != nullptr)
-	{
-		const FVector HeatFrontLocation = HeatWireComponent->GetFireWorldLocation() + PathPointDebugOffset;
-		if (bDrawWorldShapes)
-		{
-			DrawDebugSphere(
-				World,
-				HeatFrontLocation,
-				FMath::Max(1.0f, CurrentHeatFrontDebugSphereRadius),
-				SphereSegments,
-				FColor::Yellow,
-				false,
-				0.0f,
-				0,
-				Thickness + 1.0f);
-		}
-
-		if (bDrawWorldLabels && bDrawPathPointDebugLabels)
-		{
-			DrawDebugString(
-				World,
-				HeatFrontLocation + PathPointDebugLabelOffset,
-				FString::Printf(TEXT("Heat %.0f%%"), BurnProgress * 100.0f),
-				nullptr,
-				FColor::Yellow,
-				0.0f,
-				true,
-				0.85f);
-		}
 	}
 }
 

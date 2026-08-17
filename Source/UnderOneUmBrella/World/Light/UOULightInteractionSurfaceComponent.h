@@ -47,7 +47,7 @@ enum class EUOULightReflectionDirectionMode : uint8
 
 // 우산 표면처럼 게임플레이 빛 트레이스를 차단하거나 반사하는 표면 컴포넌트입니다.
 UCLASS(ClassGroup=(Light), meta=(BlueprintSpawnableComponent, DisplayName="UOU Light Interaction Surface", ToolTip = "UOU Light Exposure Source에서 나온 게임플레이 빛을 차단하거나 반사합니다."))
-class UUOULightInteractionSurfaceComponent : public UBoxComponent
+class UNDERONEUMBRELLA_API UUOULightInteractionSurfaceComponent : public UBoxComponent
 {
 	GENERATED_BODY()
 
@@ -96,7 +96,7 @@ public:
 	float ReflectionStartPadding = 4.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection|Aperture", meta = (ToolTip = "반사되는 빛의 시작 폭을 이 Box 컴포넌트의 실제 크기로 제한합니다."))
-	bool bLimitReflectionBySurfaceAperture = true;
+	bool bLimitReflectionBySurfaceAperture = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection|Aperture", meta = (ClampMin = "0.0", ToolTip = "Box 크기에서 계산한 반사 유효 반지름에 곱할 값입니다."))
 	float ReflectionApertureScale = 1.0f;

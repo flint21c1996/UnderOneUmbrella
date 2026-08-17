@@ -24,9 +24,9 @@ void UUOUPuzzleResultCompletedConditionComponent::EndPlay(const EEndPlayReason::
 	Super::EndPlay(EndPlayReason);
 }
 
-TArray<FString> UUOUPuzzleResultCompletedConditionComponent::GetPuzzleDebugInfo_Implementation() const
+FText UUOUPuzzleResultCompletedConditionComponent::GetDebugSummaryText_Implementation() const
 {
-	return {
+	const TArray<FString> DebugLines = {
 		FString::Printf(
 			TEXT("Puzzle Result Completed Condition: %s"),
 			IsSatisfied() ? TEXT("Satisfied") : TEXT("Unsatisfied")),
@@ -36,6 +36,8 @@ TArray<FString> UUOUPuzzleResultCompletedConditionComponent::GetPuzzleDebugInfo_
 			*StaticEnum<EOUUPuzzleResultAction>()->GetNameStringByValue(static_cast<int64>(RequiredAction))),
 		FString::Printf(TEXT("Subscribed Target: %s"), *GetNameSafe(SubscribedTargetActor.Get()))
 	};
+
+	return FText::FromString(FString::Join(DebugLines, LINE_TERMINATOR));
 }
 
 void UUOUPuzzleResultCompletedConditionComponent::GetPuzzleDebugInputActors_Implementation(

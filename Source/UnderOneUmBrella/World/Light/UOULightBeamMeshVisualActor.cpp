@@ -268,7 +268,11 @@ void AUOULightBeamMeshVisualActor::ApplyMeshTransform(
 	const float LengthScale = SegmentData.Length / MeshLength;
 	const FVector MeshAxis = bUseCone && bReverseConeAxis ? -SafeDirection : SafeDirection;
 	const FRotator MeshRotation = FRotationMatrix::MakeFromZ(MeshAxis).Rotator();
-	const FVector MeshScale(RadiusScale, RadiusScale, LengthScale);
+	const bool bPreserveVisualWidth = bUseCone || SegmentData.bReflected;
+	const FVector CurrentBeamScale = BeamMeshComponent->GetComponentScale();
+	const FVector MeshScale = bPreserveVisualWidth
+		? FVector(CurrentBeamScale.X, CurrentBeamScale.Y, LengthScale)
+		: FVector(RadiusScale, RadiusScale, LengthScale);
 	const FVector BoundsOffset = MeshRotation.RotateVector(MeshBoundsCenter * MeshScale);
 
 	BeamMeshComponent->SetWorldLocationAndRotation(
@@ -278,8 +282,11 @@ void AUOULightBeamMeshVisualActor::ApplyMeshTransform(
 	CoreBeamMeshComponent->SetWorldLocationAndRotation(
 		Midpoint - BoundsOffset,
 		MeshRotation);
-	CoreBeamMeshComponent->SetWorldScale3D(FVector(
-		RadiusScale * CoreRadiusScale,
-		RadiusScale * CoreRadiusScale,
-		LengthScale * 0.98f));
+	const FVector CurrentCoreScale = CoreBeamMeshComponent->GetComponentScale();
+	CoreBeamMeshComponent->SetWorldScale3D(bPreserveVisualWidth
+		? FVector(CurrentCoreScale.X, CurrentCoreScale.Y, LengthScale * 0.98f)
+		: FVector(
+			RadiusScale * CoreRadiusScale,
+			RadiusScale * CoreRadiusScale,
+			LengthScale * 0.98f));
 }

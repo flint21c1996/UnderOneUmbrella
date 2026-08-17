@@ -62,7 +62,7 @@ struct FOUUPuzzleResultBinding
 // 여러 퍼즐 원인과 결과를 씬에서 직접 이어주는 조건 그룹 액터입니다.
 // 내부 조건 그룹 컴포넌트를 감싸고 결과 액터로 액션을 전달하는 허브 역할을 합니다.
 UCLASS(meta=(DisplayName="UOU Puzzle Condition Group Actor"))
-class AUOUPuzzleConditionGroupActor : public AActor
+class UNDERONEUMBRELLA_API AUOUPuzzleConditionGroupActor : public AActor
 {
 	GENERATED_BODY()
 
@@ -126,6 +126,12 @@ public:
 	// 현재 그룹이 만족 상태인지 바로 확인합니다.
 	UFUNCTION(BlueprintPure, Category = "Puzzle|Group Actor|Conditions")
 	bool IsSatisfied() const;
+
+#if UOU_WITH_PUZZLE_CHEATS
+	// 개발 치트 요청을 내부 조건 그룹에 전달하여 기존 만족 이벤트와 결과 바인딩을 실행합니다.
+	// 개발 도구 모듈에서만 호출하는 일반 C++ 진입점입니다.
+	bool ForceSatisfiedForCheat();
+#endif
 
 	// 블루프린트에서 만족 시점의 추가 연출을 붙일 수 있는 이벤트입니다.
 	UFUNCTION(BlueprintImplementableEvent, Category = "Puzzle|Group Actor|Events")

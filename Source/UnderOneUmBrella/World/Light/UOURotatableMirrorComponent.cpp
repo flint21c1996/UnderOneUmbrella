@@ -5,8 +5,7 @@
 #include "Animation/AnimMontage.h"
 #include "Components/PrimitiveComponent.h"
 #include "Components/SceneComponent.h"
-#include "Debug/UOUDebugSubsystem.h"
-#include "DrawDebugHelpers.h"
+#include "Debug/UOUDevelopmentDebugDrawContext.h"
 #include "GameFramework/Actor.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/Pawn.h"
@@ -49,14 +48,12 @@ void UUOURotatableMirrorComponent::TickComponent(
 
 	if (CurrentPusher != nullptr)
 	{
-		DrawDebugState(OverlappingPushers);
 		return;
 	}
 
 	if (!bAllowProximityPush || !bRotationEnabled || DeltaTime <= 0.0f ||
 		RotatingComponent == nullptr || PushVolume == nullptr)
 	{
-		DrawDebugState(OverlappingPushers);
 		return;
 	}
 
@@ -71,19 +68,84 @@ void UUOURotatableMirrorComponent::TickComponent(
 	{
 		SetMirrorAngle(CurrentAngle + CombinedPushInput * MaximumRotationSpeed * DeltaTime);
 	}
-
-	DrawDebugState(OverlappingPushers);
 }
 
-TArray<FString> UUOURotatableMirrorComponent::GetPuzzleDebugInfo_Implementation() const
+FText UUOURotatableMirrorComponent::GetDebugSummaryText_Implementation() const
 {
-	return {
+	const TArray<FString> DebugLines = {
 		FString::Printf(TEXT("Rotatable Mirror: %s"), bRotationEnabled ? TEXT("Enabled") : TEXT("Disabled")),
 		FString::Printf(TEXT("Angle: %.1f / %.1f ~ %.1f"), CurrentAngle, MinimumAngle, MaximumAngle),
 		FString::Printf(TEXT("Rotating Component: %s"), *GetNameSafe(RotatingComponent.Get())),
 		FString::Printf(TEXT("Push Volume: %s"), *GetNameSafe(PushVolume.Get()))
 	};
+
+	return FText::FromString(FString::Join(DebugLines, LINE_TERMINATOR));
 }
+
+EUOUDebugCategory UUOURotatableMirrorComponent::GetDebugCategory_Implementation() const
+{
+	return EUOUDebugCategory::Puzzle;
+}
+
+#if UOU_WITH_DEVELOPMENT_TOOLS
+void UUOURotatableMirrorComponent::GatherDevelopmentDebugDraw(
+	IUOUDevelopmentDebugDrawContext& Context) const
+{
+	const USceneComponent* RotatingComponentPtr = GetRotatingComponent();
+	if (!IsValid(RotatingComponentPtr))
+	{
+		return;
+	}
+
+	const FTransform& RotatingTransform = RotatingComponentPtr->GetComponentTransform();
+	const FVector PivotLocation = RotatingTransform.TransformPosition(LocalPivotOffset);
+	FVector RotationAxisWorld = RotatingTransform
+		.TransformVectorNoScale(LocalRotationAxis)
+		.GetSafeNormal();
+	if (RotationAxisWorld.IsNearlyZero())
+	{
+		RotationAxisWorld = FVector::UpVector;
+	}
+
+	Context.DrawLine(
+		PivotLocation - RotationAxisWorld * 75.0f,
+		PivotLocation + RotationAxisWorld * 75.0f,
+		FColor::Magenta,
+		3.0f);
+	Context.DrawString(
+		PivotLocation + RotationAxisWorld * 85.0f,
+		FString::Printf(TEXT("Mirror %.1f deg"), CurrentAngle),
+		FColor::Magenta);
+
+	const UPrimitiveComponent* PushVolumePtr = GetPushVolume();
+	if (!IsValid(PushVolumePtr))
+	{
+		return;
+	}
+
+	TArray<AActor*> OverlappingPushers;
+	PushVolumePtr->GetOverlappingActors(OverlappingPushers, APawn::StaticClass());
+	for (const AActor* Pusher : OverlappingPushers)
+	{
+		if (!IsValid(Pusher))
+		{
+			continue;
+		}
+
+		Context.DrawLine(
+			PivotLocation,
+			Pusher->GetActorLocation(),
+			FColor::Cyan,
+			1.5f);
+		Context.DrawArrow(
+			Pusher->GetActorLocation(),
+			Pusher->GetActorLocation() + Pusher->GetVelocity() * 0.15f,
+			20.0f,
+			FColor::Green,
+			1.5f);
+	}
+}
+#endif
 
 #if WITH_EDITOR
 void UUOURotatableMirrorComponent::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent)
@@ -590,64 +652,5 @@ void UUOURotatableMirrorComponent::ApplyPusherFacing() const
 	if (!ToHandle.IsNearlyZero())
 	{
 		CurrentPusher->SetActorRotation(FRotator(0.0f, ToHandle.Rotation().Yaw, 0.0f));
-	}
-}
-
-void UUOURotatableMirrorComponent::DrawDebugState(const TArray<AActor*>& OverlappingPushers) const
-{
-	if (!bDrawDebug ||
-		!UUOUDebugSubsystem::IsDebugWorldDrawEnabled(this, EUOUDebugCategory::Puzzle) ||
-		GetWorld() == nullptr ||
-		RotatingComponent == nullptr)
-	{
-		return;
-	}
-
-	const FVector PivotLocation = GetPivotWorldLocation();
-	const FVector RotationAxisWorld = GetRotationAxisWorld();
-	DrawDebugLine(
-		GetWorld(),
-		PivotLocation - RotationAxisWorld * 75.0f,
-		PivotLocation + RotationAxisWorld * 75.0f,
-		FColor::Magenta,
-		false,
-		0.0f,
-		0,
-		3.0f);
-	DrawDebugString(
-		GetWorld(),
-		PivotLocation + RotationAxisWorld * 85.0f,
-		FString::Printf(TEXT("Mirror %.1f deg"), CurrentAngle),
-		nullptr,
-		FColor::Magenta,
-		0.0f,
-		false);
-
-	for (const AActor* Pusher : OverlappingPushers)
-	{
-		if (Pusher == nullptr)
-		{
-			continue;
-		}
-
-		DrawDebugLine(
-			GetWorld(),
-			PivotLocation,
-			Pusher->GetActorLocation(),
-			FColor::Cyan,
-			false,
-			0.0f,
-			0,
-			1.5f);
-		DrawDebugDirectionalArrow(
-			GetWorld(),
-			Pusher->GetActorLocation(),
-			Pusher->GetActorLocation() + Pusher->GetVelocity() * 0.15f,
-			20.0f,
-			FColor::Green,
-			false,
-			0.0f,
-			0,
-			1.5f);
 	}
 }

@@ -210,10 +210,11 @@ void AUOULumenDynamicRayVisualActor::ApplyPreset(
 		const float MeshRadiusX = FMath::Max(KINDA_SMALL_NUMBER, MeshSize.X * 0.5f);
 		const float MeshRadiusY = FMath::Max(KINDA_SMALL_NUMBER, MeshSize.Y * 0.5f);
 		const float MeshLength = FMath::Max(KINDA_SMALL_NUMBER, MeshSize.Z);
-		Layer->SetRelativeScale3D(FVector(
+		const FVector CalculatedLayerScale(
 			(Radius / MeshRadiusX) * LayerData.Scale.X,
 			(Radius / MeshRadiusY) * LayerData.Scale.Y,
-			LayerLength / MeshLength));
+			LayerLength / MeshLength);
+		Layer->SetRelativeScale3D(CalculatedLayerScale);
 
 		if (!DynamicMaterials.IsValidIndex(Index) || DynamicMaterials[Index] == nullptr)
 		{
