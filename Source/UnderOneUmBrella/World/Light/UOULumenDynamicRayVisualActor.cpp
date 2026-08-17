@@ -15,7 +15,32 @@ namespace
 	const FName LumenRayEmissiveIntensityParameter(TEXT("EmissiveIntensity"));
 	const FName LumenRayOpacityParameter(TEXT("Opacity"));
 	const FName LumenRayLengthParameter(TEXT("RayLength"));
+	const FName DynamicRayJunctionClipStartEnabledParameter(TEXT("JunctionClipStartEnabled"));
+	const FName DynamicRayJunctionClipStartPositionParameter(TEXT("JunctionClipStartPosition"));
+	const FName DynamicRayJunctionClipStartNormalParameter(TEXT("JunctionClipStartNormal"));
+	const FName DynamicRayJunctionClipEndEnabledParameter(TEXT("JunctionClipEndEnabled"));
+	const FName DynamicRayJunctionClipEndPositionParameter(TEXT("JunctionClipEndPosition"));
+	const FName DynamicRayJunctionClipEndNormalParameter(TEXT("JunctionClipEndNormal"));
+	const FName DynamicRayJunctionClipFeatherParameter(TEXT("JunctionClipFeather"));
 	constexpr float SourcePresetLength = 15.0f;
+
+	void ApplyDynamicRayJunctionClipParameters(
+		UMaterialInstanceDynamic* Material,
+		const FUOULightBeamVisualSegmentData& SegmentData)
+	{
+		if (Material == nullptr)
+		{
+			return;
+		}
+
+		Material->SetScalarParameterValue(DynamicRayJunctionClipStartEnabledParameter, SegmentData.bUseStartJunctionClip ? 1.0f : 0.0f);
+		Material->SetVectorParameterValue(DynamicRayJunctionClipStartPositionParameter, FLinearColor(SegmentData.StartJunctionPlanePosition));
+		Material->SetVectorParameterValue(DynamicRayJunctionClipStartNormalParameter, FLinearColor(SegmentData.StartJunctionPlaneNormal));
+		Material->SetScalarParameterValue(DynamicRayJunctionClipEndEnabledParameter, SegmentData.bUseEndJunctionClip ? 1.0f : 0.0f);
+		Material->SetVectorParameterValue(DynamicRayJunctionClipEndPositionParameter, FLinearColor(SegmentData.EndJunctionPlanePosition));
+		Material->SetVectorParameterValue(DynamicRayJunctionClipEndNormalParameter, FLinearColor(SegmentData.EndJunctionPlaneNormal));
+		Material->SetScalarParameterValue(DynamicRayJunctionClipFeatherParameter, FMath::Max(0.0f, SegmentData.JunctionClipFeather));
+	}
 
 	struct FLumenRayLayer
 	{
@@ -89,38 +114,7 @@ AUOULumenDynamicRayVisualActor::AUOULumenDynamicRayVisualActor()
 void AUOULumenDynamicRayVisualActor::OnConstruction(const FTransform& Transform)
 {
 	Super::OnConstruction(Transform);
-	bHasAppliedVisualWidth = false;
 	ConfigureComponents();
-}
-
-void AUOULumenDynamicRayVisualActor::CopyVisualWidthFrom(
-	const AUOULumenDynamicRayVisualActor* SourceVisual)
-{
-	if (SourceVisual == nullptr)
-	{
-		return;
-	}
-
-	const int32 SharedLayerCount = FMath::Min(
-		LayerComponents.Num(),
-		SourceVisual->LayerComponents.Num());
-	for (int32 Index = 0; Index < SharedLayerCount; ++Index)
-	{
-		UStaticMeshComponent* TargetLayer = LayerComponents[Index];
-		const UStaticMeshComponent* SourceLayer = SourceVisual->LayerComponents[Index];
-		if (TargetLayer == nullptr || SourceLayer == nullptr)
-		{
-			continue;
-		}
-
-		const FVector SourceScale = SourceLayer->GetRelativeScale3D();
-		const FVector TargetScale = TargetLayer->GetRelativeScale3D();
-		TargetLayer->SetRelativeScale3D(FVector(
-			SourceScale.X,
-			SourceScale.Y,
-			TargetScale.Z));
-	}
-	bHasAppliedVisualWidth = true;
 }
 
 void AUOULumenDynamicRayVisualActor::ConfigureComponents()
@@ -220,13 +214,7 @@ void AUOULumenDynamicRayVisualActor::ApplyPreset(
 			(Radius / MeshRadiusX) * LayerData.Scale.X,
 			(Radius / MeshRadiusY) * LayerData.Scale.Y,
 			LayerLength / MeshLength);
-		const FVector CurrentLayerScale = Layer->GetRelativeScale3D();
-		Layer->SetRelativeScale3D(bHasAppliedVisualWidth
-			? FVector(
-				CurrentLayerScale.X,
-				CurrentLayerScale.Y,
-				CalculatedLayerScale.Z)
-			: CalculatedLayerScale);
+		Layer->SetRelativeScale3D(CalculatedLayerScale);
 
 		if (!DynamicMaterials.IsValidIndex(Index) || DynamicMaterials[Index] == nullptr)
 		{
@@ -242,8 +230,8 @@ void AUOULumenDynamicRayVisualActor::ApplyPreset(
 			LumenRayOpacityParameter,
 			FMath::Clamp(OpacityScale * SegmentData.VisualOpacityMultiplier, 0.0f, 1.0f));
 		DynamicMaterials[Index]->SetScalarParameterValue(LumenRayLengthParameter, LayerLength);
+		ApplyDynamicRayJunctionClipParameters(DynamicMaterials[Index], SegmentData);
 	}
-	bHasAppliedVisualWidth = true;
 }
 
 void AUOULumenDynamicRayVisualActor::SetLightBeamVisualActive_Implementation(const bool bActive)

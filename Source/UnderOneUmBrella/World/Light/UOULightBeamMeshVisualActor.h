@@ -72,10 +72,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light Beam|Material", meta = (ToolTip = "빛줄기에 사용할 반투명 Emissive 머티리얼입니다."))
 	TObjectPtr<UMaterialInterface> BeamMaterial;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light Beam|Material", meta = (ClampMin = "0.0", ToolTip = "게임플레이 빛 세기를 머티리얼 Emissive 세기로 변환하는 배율입니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, AdvancedDisplay, Category = "Light Beam|Renderer Defaults", meta = (ClampMin = "0.0", DisplayName = "렌더러 기본 밝기 배율", ToolTip = "게임플레이 광량과 Beam Visual의 개별 밝기 배율을 머티리얼 Emissive 세기로 변환하는 렌더러 기본값입니다."))
 	float EmissiveIntensityScale = 2.5f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light Beam|Material", meta = (ClampMin = "0.0", ClampMax = "1.0", ToolTip = "빛줄기의 기본 불투명도입니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, AdvancedDisplay, Category = "Light Beam|Renderer Defaults", meta = (ClampMin = "0.0", ClampMax = "1.0", DisplayName = "렌더러 기본 투명도", ToolTip = "Beam Visual의 개별 투명도 배율을 곱하기 전의 메시 렌더러 기본값입니다."))
 	float Opacity = 0.09f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light Beam|Style", meta = (ToolTip = "빛줄기 중심에 별도의 밝은 코어 레이어를 겹칠지 결정합니다."))

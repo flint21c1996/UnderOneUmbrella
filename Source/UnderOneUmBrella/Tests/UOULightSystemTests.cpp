@@ -25,7 +25,7 @@
 #include "World/Light/UOULightReflectionSpotLightComponent.h"
 #include "World/Light/UOULightSourceActor.h"
 #include "World/Light/UOULumenDynamicRayVisualActor.h"
-#include "World/Light/UOULumenStaticRayVisualActor.h"
+#include "World/Light/UOURotatableMirrorActor.h"
 
 namespace
 {
@@ -161,6 +161,197 @@ bool FUOULightMirrorReflectionTest::RunTest(const FString& Parameters)
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FUOUReflectionImpactCoverageTest,
+	"UnderOneUmbrella.Light.Reflection.ImpactOffsetLimitsCoverage",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUOUReflectionImpactCoverageTest::RunTest(const FString& Parameters)
+{
+	UUOULightInteractionSurfaceComponent* Surface =
+		NewObject<UUOULightInteractionSurfaceComponent>();
+	TestNotNull(TEXT("충돌 위치 기반 반사 폭 테스트 표면을 생성한다"), Surface);
+	if (Surface == nullptr)
+	{
+		return false;
+	}
+
+	Surface->SetBoxExtent(FVector(70.0f, 70.0f, 6.0f));
+	Surface->bLimitReflectionBySurfaceAperture = true;
+	Surface->bLimitReflectionByImpactOffset = true;
+	Surface->ReflectionImpactEdgeInset = 4.0f;
+	Surface->MinimumReflectionCoverageRatio = 0.3f;
+
+	const FVector IncomingDirection = -FVector::UpVector;
+	const FVector HitNormal = FVector::UpVector;
+	const float IncomingRadius = 50.0f;
+	const float CenterRadius = Surface->ClampReflectionBeamRadius(
+		IncomingRadius,
+		IncomingDirection,
+		HitNormal,
+		FVector::ZeroVector);
+	const FVector MiddleImpact(30.0f, 0.0f, 0.0f);
+	const float MiddleRadius = Surface->ClampReflectionBeamRadius(
+		IncomingRadius,
+		IncomingDirection,
+		HitNormal,
+		MiddleImpact);
+	const FVector EdgeImpact(60.0f, 0.0f, 0.0f);
+
+	TestEqual(TEXT("중앙 충돌은 원래 반사광 굵기를 유지한다"), CenterRadius, IncomingRadius);
+	TestEqual(TEXT("가장자리로 이동하면 남은 반사 폭만 사용한다"), MiddleRadius, 36.0f);
+	TestTrue(
+		TEXT("충분히 걸친 충돌은 반사를 허용한다"),
+		Surface->HasSufficientReflectionCoverage(
+			IncomingRadius,
+			IncomingDirection,
+			HitNormal,
+			MiddleImpact));
+	TestFalse(
+		TEXT("가장자리에 조금만 걸친 충돌은 반사를 거부한다"),
+		Surface->HasSufficientReflectionCoverage(
+			IncomingRadius,
+			IncomingDirection,
+			HitNormal,
+			EdgeImpact));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FUOURotatableMirrorStableNormalTest,
+	"UnderOneUmbrella.Light.Reflection.RotatableMirrorUsesStableComponentNormal",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUOURotatableMirrorStableNormalTest::RunTest(const FString& Parameters)
+{
+	const AUOURotatableMirrorActor* MirrorDefaults = GetDefault<AUOURotatableMirrorActor>();
+	TestNotNull(TEXT("회전 거울 기본 오브젝트가 존재한다"), MirrorDefaults);
+	TestNotNull(
+		TEXT("회전 거울에 빛 상호작용 표면이 존재한다"),
+		MirrorDefaults != nullptr ? MirrorDefaults->LightInteractionSurface.Get() : nullptr);
+	if (MirrorDefaults == nullptr || MirrorDefaults->LightInteractionSurface == nullptr)
+	{
+		return false;
+	}
+
+	TestEqual(
+		TEXT("회전 거울은 Box 옆면 HitNormal 대신 컴포넌트 앞 방향을 반사 법선으로 사용한다"),
+		MirrorDefaults->LightInteractionSurface->ReflectionNormalMode,
+		EUOULightReflectionNormalMode::ComponentForward);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FUOUCylinderMultiReflectionDirectionTest,
+	"UnderOneUmbrella.Light.Reflection.CylinderMultiBouncePreservesParallelDirection",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUOUCylinderMultiReflectionDirectionTest::RunTest(const FString& Parameters)
+{
+	UWorld* UninitializedWorld = UWorld::CreateWorld(
+		EWorldType::Editor,
+		false,
+		TEXT("UOUCylinderMultiReflectionDirectionWorld"),
+		nullptr,
+		false,
+		ERHIFeatureLevel::Num,
+		nullptr,
+		true);
+	FScopedEditorWorld ScopedWorld(
+		UninitializedWorld,
+		UWorld::InitializationValues()
+			.RequiresHitProxies(false)
+			.ShouldSimulatePhysics(false)
+			.EnableTraceCollision(true)
+			.CreateNavigation(false)
+			.CreateAISystem(false)
+			.AllowAudioPlayback(false)
+			.CreatePhysicsScene(true));
+	UWorld* World = ScopedWorld.GetWorld();
+	TestNotNull(TEXT("실린더 다중 반사 테스트 월드를 생성한다"), World);
+	if (World == nullptr)
+	{
+		return false;
+	}
+
+	AUOULightSourceActor* SourceActor = World->SpawnActor<AUOULightSourceActor>();
+	TestNotNull(TEXT("실린더 광원을 생성한다"), SourceActor);
+	if (SourceActor == nullptr || SourceActor->ExposureSource == nullptr || SourceActor->SourceSpotLight == nullptr)
+	{
+		return false;
+	}
+
+	SourceActor->SetActorLocationAndRotation(FVector::ZeroVector, FRotator(0.0f, 90.0f, 0.0f));
+	SourceActor->SourceSpotLight->SetAttenuationRadius(1500.0f);
+	SourceActor->ExposureSource->BeamShape = EUOULightBeamShape::Cylinder;
+	SourceActor->ExposureSource->CylinderRadius = 50.0f;
+	SourceActor->ExposureSource->BeamLength = 1500.0f;
+	SourceActor->ExposureSource->Intensity = 1.0f;
+	SourceActor->ExposureSource->SampleInterval = 0.0f;
+	SourceActor->ExposureSource->bEnableReflectedLight = true;
+	SourceActor->ExposureSource->MaxReflectionBouncesPerPath = 4;
+	SourceActor->ExposureSource->ReflectionPathLossGraceTime = 0.0f;
+
+	auto SpawnMirror = [World](const FVector& Location)
+	{
+		AUOURotatableMirrorActor* Mirror = World->SpawnActor<AUOURotatableMirrorActor>();
+		if (Mirror == nullptr || Mirror->LightInteractionSurface == nullptr)
+		{
+			return Mirror;
+		}
+
+		Mirror->SetActorLocationAndRotation(Location, FRotator(0.0f, 135.0f, 0.0f));
+		Mirror->LightInteractionSurface->SetLightInteractionMode(EUOULightInteractionMode::Reflecting);
+		Mirror->LightInteractionSurface->bUseSurfaceAreaSampling = true;
+		Mirror->LightInteractionSurface->bReflectFrontFaceOnly = false;
+		Mirror->LightInteractionSurface->ReflectionDirectionMode =
+			EUOULightReflectionDirectionMode::MirrorByNormal;
+		return Mirror;
+	};
+
+	AUOURotatableMirrorActor* FirstMirror = SpawnMirror(FVector(0.0f, 600.0f, 10.0f));
+	AUOURotatableMirrorActor* SecondMirror = SpawnMirror(FVector(600.0f, 600.0f, 10.0f));
+	TestNotNull(TEXT("첫 번째 거울을 생성한다"), FirstMirror);
+	TestNotNull(TEXT("두 번째 거울을 생성한다"), SecondMirror);
+	if (FirstMirror == nullptr || SecondMirror == nullptr)
+	{
+		return false;
+	}
+
+	SourceActor->ExposureSource->EmitLight(0.1f);
+	const TArray<FUOULightPathData> LightPaths = SourceActor->ExposureSource->GetLightPaths();
+	const FUOULightPathData* DoubleReflectionPath = LightPaths.FindByPredicate(
+		[](const FUOULightPathData& Path)
+		{
+			return Path.Segments.Num() >= 3;
+		});
+	TestNotNull(TEXT("두 번 반사되는 실린더 경로를 계산한다"), DoubleReflectionPath);
+	if (DoubleReflectionPath == nullptr)
+	{
+		return false;
+	}
+
+	const FUOULightPathSegmentData& FirstReflection = DoubleReflectionPath->Segments[1];
+	const FUOULightPathSegmentData& SecondReflection = DoubleReflectionPath->Segments[2];
+	TestTrue(
+		TEXT("면 샘플을 맞힌 뒤에도 두 번째 입사 방향은 첫 반사의 평행 진행 방향을 유지한다"),
+		SecondReflection.IncomingDirection.Equals(FirstReflection.Direction, 0.001f));
+	TestTrue(
+		TEXT("두 번째 반사는 수직·수평 오차 없이 +Y 방향으로 진행한다"),
+		SecondReflection.Direction.Equals(FVector::RightVector, 0.001f));
+	TestTrue(
+		TEXT("첫 번째 반사 구간의 종점은 방향과 길이로 재구성한 종점과 일치한다"),
+		FirstReflection.End.Equals(
+			FirstReflection.Start + FirstReflection.Direction * FirstReflection.Length,
+			0.01f));
+	TestTrue(
+		TEXT("두 번째 반사 구간의 종점은 방향과 길이로 재구성한 종점과 일치한다"),
+		SecondReflection.End.Equals(
+			SecondReflection.Start + SecondReflection.Direction * SecondReflection.Length,
+			0.01f));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FUOULightInteractionModeTest,
 	"UnderOneUmbrella.Light.Reflection.InteractionModes",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
@@ -186,48 +377,6 @@ bool FUOULightInteractionModeTest::RunTest(const FString& Parameters)
 	Surface->SetLightInteractionMode(EUOULightInteractionMode::Reflecting);
 	TestTrue(TEXT("Reflecting 표면은 입사광을 막는다"), Surface->CanBlockLight());
 	TestTrue(TEXT("Reflecting 표면은 반사광을 만든다"), Surface->CanReflectLight());
-	return true;
-}
-
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(
-	FUOUReflectionBeamRadiusPolicyTest,
-	"UnderOneUmbrella.Light.Reflection.BeamRadiusPolicy",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
-
-bool FUOUReflectionBeamRadiusPolicyTest::RunTest(const FString& Parameters)
-{
-	UUOULightInteractionSurfaceComponent* Surface =
-		NewObject<UUOULightInteractionSurfaceComponent>();
-	TestNotNull(TEXT("Create a reflection surface for the beam radius policy test"), Surface);
-	if (Surface == nullptr)
-	{
-		return false;
-	}
-
-	constexpr float IncomingRadius = 100.0f;
-	Surface->SetBoxExtent(FVector(5.0f, 50.0f, 50.0f));
-	const FVector ObliqueIncomingDirection = FVector(1.0f, 1.0f, 0.0f).GetSafeNormal();
-	const FVector HitNormal = -FVector::ForwardVector;
-
-	TestFalse(
-		TEXT("Reflection surfaces do not limit beam width by aperture by default"),
-		Surface->bLimitReflectionBySurfaceAperture);
-	TestTrue(
-		TEXT("The default reflection policy preserves the incoming beam radius"),
-		FMath::IsNearlyEqual(
-			Surface->ClampReflectionBeamRadius(
-				IncomingRadius,
-				ObliqueIncomingDirection,
-				HitNormal),
-			IncomingRadius));
-
-	Surface->bLimitReflectionBySurfaceAperture = true;
-	TestTrue(
-		TEXT("Aperture limiting remains available as an explicit surface option"),
-		Surface->ClampReflectionBeamRadius(
-			IncomingRadius,
-			ObliqueIncomingDirection,
-			HitNormal) < IncomingRadius);
 	return true;
 }
 
@@ -438,16 +587,16 @@ bool FUOUConeBeamFixedWidthTest::RunTest(const FString& Parameters)
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
-	FUOULumenStaticRayFixedWidthTest,
-	"UnderOneUmbrella.Light.Visual.LumenStaticRayFixedWidth",
+	FUOULumenDynamicRaySegmentScaleTest,
+	"UnderOneUmbrella.Light.Visual.LumenDynamicRaySegmentScale",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
-bool FUOULumenStaticRayFixedWidthTest::RunTest(const FString& Parameters)
+bool FUOULumenDynamicRaySegmentScaleTest::RunTest(const FString& Parameters)
 {
 	UWorld* UninitializedWorld = UWorld::CreateWorld(
 		EWorldType::Editor,
 		false,
-		TEXT("UOULumenStaticRayFixedWidthWorld"),
+		TEXT("UOULumenDynamicRaySegmentScaleWorld"),
 		nullptr,
 		false,
 		ERHIFeatureLevel::Num,
@@ -464,125 +613,7 @@ bool FUOULumenStaticRayFixedWidthTest::RunTest(const FString& Parameters)
 			.AllowAudioPlayback(false)
 			.CreatePhysicsScene(false));
 	UWorld* World = ScopedWorld.GetWorld();
-	TestNotNull(TEXT("Create a world for the Static Ray fixed width test"), World);
-	if (World == nullptr)
-	{
-		return false;
-	}
-
-	auto FindFirstVisibleLayer = [](AUOULumenStaticRayVisualActor* VisualActor)
-		-> UStaticMeshComponent*
-	{
-		if (VisualActor == nullptr)
-		{
-			return nullptr;
-		}
-		TInlineComponentArray<UStaticMeshComponent*> Components(VisualActor);
-		for (UStaticMeshComponent* Component : Components)
-		{
-			if (Component != nullptr && Component->IsVisible())
-			{
-				return Component;
-			}
-		}
-		return nullptr;
-	};
-
-	AUOULumenStaticRayVisualActor* DirectVisual =
-		World->SpawnActor<AUOULumenStaticRayVisualActor>();
-	AUOULumenStaticRayVisualActor* ReflectionVisual =
-		World->SpawnActor<AUOULumenStaticRayVisualActor>();
-	TestNotNull(TEXT("Spawn a direct Static Ray visual"), DirectVisual);
-	TestNotNull(TEXT("Spawn a reflected Static Ray visual"), ReflectionVisual);
-	if (DirectVisual == nullptr || ReflectionVisual == nullptr)
-	{
-		return false;
-	}
-
-	FUOULightBeamVisualSegmentData DirectSegment;
-	DirectSegment.Direction = FVector::ForwardVector;
-	DirectSegment.Length = 300.0f;
-	DirectSegment.ReferenceLength = 600.0f;
-	DirectSegment.StartRadius = 20.0f;
-	DirectSegment.EndRadius = 80.0f;
-	DirectSegment.Intensity = 1.0f;
-	DirectVisual->ApplyLightBeamSegment_Implementation(DirectSegment);
-
-	UStaticMeshComponent* DirectLayer = FindFirstVisibleLayer(DirectVisual);
-	TestNotNull(TEXT("Activate a Static Ray layer for the direct segment"), DirectLayer);
-	if (DirectLayer == nullptr)
-	{
-		return false;
-	}
-	const FVector InitialDirectScale = DirectLayer->GetRelativeScale3D();
-
-	DirectSegment.Length = 150.0f;
-	DirectSegment.EndRadius = 40.0f;
-	DirectVisual->ApplyLightBeamSegment_Implementation(DirectSegment);
-	const FVector ShortenedDirectScale = DirectLayer->GetRelativeScale3D();
-	TestTrue(
-		TEXT("Shortening a Static Ray preserves its X scale"),
-		FMath::IsNearlyEqual(ShortenedDirectScale.X, InitialDirectScale.X));
-	TestTrue(
-		TEXT("Shortening a Static Ray preserves its Y scale"),
-		FMath::IsNearlyEqual(ShortenedDirectScale.Y, InitialDirectScale.Y));
-	TestTrue(
-		TEXT("Shortening a Static Ray preserves its reference Z scale"),
-		FMath::IsNearlyEqual(ShortenedDirectScale.Z, InitialDirectScale.Z));
-
-	ReflectionVisual->CopyVisualWidthFrom(DirectVisual);
-	FUOULightBeamVisualSegmentData ReflectionSegment = DirectSegment;
-	ReflectionSegment.bReflected = true;
-	ReflectionSegment.Length = 450.0f;
-	ReflectionSegment.EndRadius = 120.0f;
-	ReflectionVisual->ApplyLightBeamSegment_Implementation(ReflectionSegment);
-	UStaticMeshComponent* ReflectionLayer = FindFirstVisibleLayer(ReflectionVisual);
-	TestNotNull(TEXT("Activate a Static Ray layer for the reflected segment"), ReflectionLayer);
-	if (ReflectionLayer != nullptr)
-	{
-		const FVector ReflectionScale = ReflectionLayer->GetRelativeScale3D();
-		TestTrue(
-			TEXT("Reflected Static Ray copies the direct X scale"),
-			FMath::IsNearlyEqual(ReflectionScale.X, ShortenedDirectScale.X));
-		TestTrue(
-			TEXT("Reflected Static Ray copies the direct Y scale"),
-			FMath::IsNearlyEqual(ReflectionScale.Y, ShortenedDirectScale.Y));
-		TestTrue(
-			TEXT("Reflected Static Ray keeps the shared reference Z scale"),
-			FMath::IsNearlyEqual(ReflectionScale.Z, ShortenedDirectScale.Z));
-	}
-
-	return true;
-}
-
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(
-	FUOULumenDynamicRayFixedWidthTest,
-	"UnderOneUmbrella.Light.Visual.LumenDynamicRayFixedWidth",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
-
-bool FUOULumenDynamicRayFixedWidthTest::RunTest(const FString& Parameters)
-{
-	UWorld* UninitializedWorld = UWorld::CreateWorld(
-		EWorldType::Editor,
-		false,
-		TEXT("UOULumenDynamicRayFixedWidthWorld"),
-		nullptr,
-		false,
-		ERHIFeatureLevel::Num,
-		nullptr,
-		true);
-	FScopedEditorWorld ScopedWorld(
-		UninitializedWorld,
-		UWorld::InitializationValues()
-			.RequiresHitProxies(false)
-			.ShouldSimulatePhysics(false)
-			.EnableTraceCollision(false)
-			.CreateNavigation(false)
-			.CreateAISystem(false)
-			.AllowAudioPlayback(false)
-			.CreatePhysicsScene(false));
-	UWorld* World = ScopedWorld.GetWorld();
-	TestNotNull(TEXT("Create a world for the Dynamic Ray fixed width test"), World);
+	TestNotNull(TEXT("Create a world for the Dynamic Ray segment scale test"), World);
 	if (World == nullptr)
 	{
 		return false;
@@ -637,17 +668,16 @@ bool FUOULumenDynamicRayFixedWidthTest::RunTest(const FString& Parameters)
 	DirectSegment.EndRadius = 40.0f;
 	DirectVisual->ApplyLightBeamSegment_Implementation(DirectSegment);
 	const FVector ShortenedDirectScale = DirectLayer->GetRelativeScale3D();
-	TestTrue(
-		TEXT("Shortening a Dynamic Ray preserves its X scale"),
+	TestFalse(
+		TEXT("Changing a Dynamic Ray radius updates its X scale"),
 		FMath::IsNearlyEqual(ShortenedDirectScale.X, InitialDirectScale.X));
-	TestTrue(
-		TEXT("Shortening a Dynamic Ray preserves its Y scale"),
+	TestFalse(
+		TEXT("Changing a Dynamic Ray radius updates its Y scale"),
 		FMath::IsNearlyEqual(ShortenedDirectScale.Y, InitialDirectScale.Y));
 	TestFalse(
 		TEXT("Shortening a Dynamic Ray changes its Z scale"),
 		FMath::IsNearlyEqual(ShortenedDirectScale.Z, InitialDirectScale.Z));
 
-	ReflectionVisual->CopyVisualWidthFrom(DirectVisual);
 	FUOULightBeamVisualSegmentData ReflectionSegment = DirectSegment;
 	ReflectionSegment.bReflected = true;
 	ReflectionSegment.Length = 450.0f;
@@ -658,11 +688,11 @@ bool FUOULumenDynamicRayFixedWidthTest::RunTest(const FString& Parameters)
 	if (ReflectionLayer != nullptr)
 	{
 		const FVector ReflectionScale = ReflectionLayer->GetRelativeScale3D();
-		TestTrue(
-			TEXT("Reflected Dynamic Ray copies the direct X scale"),
+		TestFalse(
+			TEXT("Reflected Dynamic Ray uses its own X scale"),
 			FMath::IsNearlyEqual(ReflectionScale.X, ShortenedDirectScale.X));
-		TestTrue(
-			TEXT("Reflected Dynamic Ray copies the direct Y scale"),
+		TestFalse(
+			TEXT("Reflected Dynamic Ray uses its own Y scale"),
 			FMath::IsNearlyEqual(ReflectionScale.Y, ShortenedDirectScale.Y));
 		TestFalse(
 			TEXT("Reflected Dynamic Ray keeps its own Z length scale"),
@@ -996,7 +1026,6 @@ bool FUOUUmbrellaShadePathOcclusionTest::RunTest(const FString& Parameters)
 		EUOULightReflectionFrontNormalMode::OwnerForward;
 	MirrorSurface->ReflectionNormalMode = EUOULightReflectionNormalMode::HitNormal;
 	MirrorSurface->ReflectionDirectionMode = EUOULightReflectionDirectionMode::MirrorByNormal;
-	MirrorSurface->ReflectionRange = 500.0f;
 	MirrorSurface->RegisterComponent();
 	// 중심은 원뿔 밖에 있지만 넓은 면이 광원 중심축을 가로지르는 배치입니다.
 	// 우산이 중심축을 막을 때 가장자리 샘플만으로 반사되지 않아야 합니다.
@@ -1050,7 +1079,6 @@ bool FUOUUmbrellaShadePathOcclusionTest::RunTest(const FString& Parameters)
 		UmbrellaSurface->ReflectionFrontNormalMode =
 			EUOULightReflectionFrontNormalMode::OwnerForward;
 		UmbrellaSurface->ReflectionDirectionMode = EUOULightReflectionDirectionMode::OwnerForward;
-		UmbrellaSurface->ReflectionRange = 500.0f;
 		UmbrellaSurface->RegisterComponent();
 		UmbrellaSurface->SetLightInteractionMode(EUOULightInteractionMode::Reflecting);
 		ShadeVolume->SetShadeEnabled(true);
@@ -1268,7 +1296,6 @@ bool FUOULightWorldPathIntegrationTest::RunTest(const FString& Parameters)
 	Surface->ReflectionFrontNormalMode = EUOULightReflectionFrontNormalMode::ComponentForward;
 	Surface->ReflectionNormalMode = EUOULightReflectionNormalMode::HitNormal;
 	Surface->ReflectionDirectionMode = EUOULightReflectionDirectionMode::MirrorByNormal;
-	Surface->ReflectionRange = 800.0f;
 	Surface->RegisterComponent();
 	SurfaceActor->SetActorLocation(FVector(400.0f, 0.0f, 0.0f));
 
@@ -1353,7 +1380,7 @@ bool FUOULightWorldPathIntegrationTest::RunTest(const FString& Parameters)
 
 	SourceActor->ExposureSource->BeamShape = EUOULightBeamShape::Cylinder;
 	SourceActor->ExposureSource->CylinderRadius = 50.0f;
-	SourceActor->ExposureSource->CylinderLength = 1000.0f;
+	SourceActor->ExposureSource->BeamLength = 1000.0f;
 	SourceActor->ExposureSource->EmitLight(0.1f);
 	LightPaths = SourceActor->ExposureSource->GetLightPaths();
 
@@ -1422,7 +1449,7 @@ bool FUOULightWorldPathIntegrationTest::RunTest(const FString& Parameters)
 	FallbackSourceActor->AddInstanceComponent(FallbackSource);
 	FallbackSource->bAutoFindSourceSpotLight = false;
 	FallbackSource->BeamShape = EUOULightBeamShape::Cone;
-	FallbackSource->FallbackRange = 321.0f;
+	FallbackSource->BeamLength = 321.0f;
 	FallbackSource->bEnableReflectedLight = false;
 	FallbackSource->SampleInterval = 0.0f;
 	FallbackSource->RegisterComponent();
@@ -1433,7 +1460,7 @@ bool FUOULightWorldPathIntegrationTest::RunTest(const FString& Parameters)
 	if (!FallbackLightPaths.IsEmpty() && !FallbackLightPaths[0].Segments.IsEmpty())
 	{
 		TestEqual(
-			TEXT("LocalLight가 없으면 Fallback Range를 사용한다"),
+			TEXT("LocalLight가 없어도 빛 총 길이를 사용한다"),
 			FallbackLightPaths[0].Segments[0].Length,
 			321.0f);
 	}

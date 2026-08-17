@@ -14,7 +14,6 @@
 #include "World/Light/UOULightBeamMeshVisualActor.h"
 #include "World/Light/UOULightBeamVisualInterface.h"
 #include "World/Light/UOULightExposureSourceComponent.h"
-#include "World/Light/UOULumenDynamicRayVisualActor.h"
 #include "World/Light/UOULumenStaticRayVisualActor.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogUOULightBeamVisual, Log, All);
@@ -79,113 +78,29 @@ namespace
 		return Profile;
 	}
 
-	float CalculateReflectedJunctionClearance(
-		const FUOULightPathSegmentData& SegmentData,
-		const float VisibleEndDistance)
+	FVector CalculateJunctionPlaneNormal(
+		const FVector& IncomingDirection,
+		const FVector& ReflectedDirection)
 	{
-		const FVector IncomingDirection = SegmentData.IncomingDirection.GetSafeNormal();
-		const FVector ReflectedDirection = SegmentData.Direction.GetSafeNormal();
-		const float StartRadius = FMath::Max(0.0f, SegmentData.StartRadius);
-		if (!SegmentData.bReflected ||
-			IncomingDirection.IsNearlyZero() ||
-			ReflectedDirection.IsNearlyZero() ||
-			StartRadius <= KINDA_SMALL_NUMBER ||
-			VisibleEndDistance <= KINDA_SMALL_NUMBER)
+		const FVector SafeIncomingDirection = IncomingDirection.GetSafeNormal();
+		const FVector SafeReflectedDirection = ReflectedDirection.GetSafeNormal();
+		if (SafeIncomingDirection.IsNearlyZero() || SafeReflectedDirection.IsNearlyZero())
 		{
-			return 0.0f;
+			return FVector::ZeroVector;
 		}
 
-		// 입사·반사 방향으로 반사면 법선을 복원하고, 폭이 있는 VFX 시작 단면이
-		// 반사면 뒤로 삐져나오지 않을 만큼만 진행 방향으로 당깁니다.
-		const FVector EstimatedSurfaceNormal =
-			(ReflectedDirection - IncomingDirection).GetSafeNormal();
-		if (EstimatedSurfaceNormal.IsNearlyZero())
+		FVector PlaneNormal = (SafeReflectedDirection - SafeIncomingDirection).GetSafeNormal();
+		if (PlaneNormal.IsNearlyZero())
 		{
-			return 0.0f;
+			return FVector::ZeroVector;
 		}
 
-		const float NormalAlignment = FMath::Abs(FVector::DotProduct(
-			ReflectedDirection,
-			EstimatedSurfaceNormal));
-		const float LateralAlignment = FMath::Sqrt(FMath::Max(
-			0.0f,
-			1.0f - FMath::Square(NormalAlignment)));
-		if (LateralAlignment <= KINDA_SMALL_NUMBER)
+		// 입사광이 존재하는 쪽이 양수가 되도록 법선 방향을 고정합니다.
+		if (FVector::DotProduct(-SafeIncomingDirection, PlaneNormal) < 0.0f)
 		{
-			return 0.0f;
+			PlaneNormal *= -1.0f;
 		}
-
-		const float RadiusGrowthPerUnit = SegmentData.Length > KINDA_SMALL_NUMBER
-			? FMath::Max(0.0f, SegmentData.EndRadius - SegmentData.StartRadius) /
-				SegmentData.Length
-			: 0.0f;
-		const float ClearanceDenominator =
-			NormalAlignment - RadiusGrowthPerUnit * LateralAlignment;
-		const float DesiredClearance = ClearanceDenominator > KINDA_SMALL_NUMBER
-			? StartRadius * LateralAlignment / ClearanceDenominator
-			: VisibleEndDistance * 0.5f;
-
-		return FMath::Clamp(DesiredClearance, 0.0f, VisibleEndDistance * 0.5f);
-	}
-
-	float CalculateIncomingJunctionClearance(
-		const FUOULightPathSegmentData& IncomingSegment,
-		const FUOULightPathSegmentData& ReflectedSegment,
-		const float VisibleEndDistance)
-	{
-		const FVector IncomingDirection = IncomingSegment.Direction.GetSafeNormal();
-		const FVector ReflectedDirection = ReflectedSegment.Direction.GetSafeNormal();
-		if (!ReflectedSegment.bReflected ||
-			IncomingDirection.IsNearlyZero() ||
-			ReflectedDirection.IsNearlyZero() ||
-			VisibleEndDistance <= KINDA_SMALL_NUMBER)
-		{
-			return 0.0f;
-		}
-
-		const FVector EstimatedSurfaceNormal =
-			(ReflectedDirection - IncomingDirection).GetSafeNormal();
-		if (EstimatedSurfaceNormal.IsNearlyZero())
-		{
-			return 0.0f;
-		}
-
-		const float NormalAlignment = FMath::Abs(FVector::DotProduct(
-			IncomingDirection,
-			EstimatedSurfaceNormal));
-		const float LateralAlignment = FMath::Sqrt(FMath::Max(
-			0.0f,
-			1.0f - FMath::Square(NormalAlignment)));
-		if (LateralAlignment <= KINDA_SMALL_NUMBER)
-		{
-			return 0.0f;
-		}
-
-		const float VisibleEndRatio = IncomingSegment.Length > KINDA_SMALL_NUMBER
-			? VisibleEndDistance / IncomingSegment.Length
-			: 0.0f;
-		const float VisibleEndRadius = FMath::Lerp(
-			IncomingSegment.StartRadius,
-			IncomingSegment.EndRadius,
-			VisibleEndRatio);
-		const float RadiusGrowthPerUnit = IncomingSegment.Length > KINDA_SMALL_NUMBER
-			? FMath::Max(0.0f, IncomingSegment.EndRadius - IncomingSegment.StartRadius) /
-				IncomingSegment.Length
-			: 0.0f;
-		const float ExistingEndClearance = FMath::Max(
-			0.0f,
-			IncomingSegment.Length - VisibleEndDistance);
-		const float RequiredAdditionalClearance =
-			(VisibleEndRadius * LateralAlignment -
-				ExistingEndClearance * NormalAlignment) /
-			FMath::Max(
-				KINDA_SMALL_NUMBER,
-				NormalAlignment + RadiusGrowthPerUnit * LateralAlignment);
-
-		return FMath::Clamp(
-			RequiredAdditionalClearance,
-			0.0f,
-			VisibleEndDistance * 0.5f);
+		return PlaneNormal;
 	}
 
 	FString NormalizeBlueprintMemberText(FString MemberText)
@@ -427,15 +342,21 @@ void UUOULightBeamVisualComponent::RefreshVisuals()
 	const TArray<FUOULightPathData> LightPaths = BoundSourceComponent != nullptr
 		? BoundSourceComponent->GetLightPaths()
 		: TArray<FUOULightPathData>();
-	UpdateDirectVFX(LightPaths);
-	UpdateReflectionVFX(LightPaths);
+	const float ReferenceVisualLength = CalculateReferenceVisualLength(
+		LightPaths,
+		BoundSourceSpotLight);
+	UpdateDirectVFX(LightPaths, ReferenceVisualLength);
+	UpdateReflectionVFX(LightPaths, ReferenceVisualLength);
 }
 
 void UUOULightBeamVisualComponent::HandleLightPathsUpdated(
 	const TArray<FUOULightPathData>& LightPaths)
 {
-	UpdateDirectVFX(LightPaths);
-	UpdateReflectionVFX(LightPaths);
+	const float ReferenceVisualLength = CalculateReferenceVisualLength(
+		LightPaths,
+		BoundSourceSpotLight);
+	UpdateDirectVFX(LightPaths, ReferenceVisualLength);
+	UpdateReflectionVFX(LightPaths, ReferenceVisualLength);
 }
 
 UUOULightExposureSourceComponent* UUOULightBeamVisualComponent::ResolveSourceComponent() const
@@ -534,7 +455,8 @@ void UUOULightBeamVisualComponent::ConfigureSpawnedVFXActor(AActor* VFXActor) co
 }
 
 void UUOULightBeamVisualComponent::UpdateDirectVFX(
-	const TArray<FUOULightPathData>& LightPaths)
+	const TArray<FUOULightPathData>& LightPaths,
+	const float ReferenceVisualLength)
 {
 	if (!bEnableDirectVFX || VFXActorClass == nullptr || BoundSourceComponent == nullptr)
 	{
@@ -578,26 +500,19 @@ void UUOULightBeamVisualComponent::UpdateDirectVFX(
 		return;
 	}
 
-	const float VisibleEndDistance = FMath::Max(
-		0.0f,
-		DirectSegment->Length - FMath::Max(0.0f, EndPadding));
-	const float JunctionEndClearance = JunctionReflectedSegment != nullptr
-		? CalculateIncomingJunctionClearance(
-			*DirectSegment,
-			*JunctionReflectedSegment,
-			VisibleEndDistance)
-		: 0.0f;
 	ApplySegmentToVFX(
 		VFXActor,
 		BuildVisualSegment(
 			*DirectSegment,
 			0,
-			CalculateReferenceVisualLength(LightPaths, BoundSourceSpotLight),
-			JunctionEndClearance));
+			ReferenceVisualLength,
+			nullptr,
+			JunctionReflectedSegment));
 }
 
 void UUOULightBeamVisualComponent::UpdateReflectionVFX(
-	const TArray<FUOULightPathData>& LightPaths)
+	const TArray<FUOULightPathData>& LightPaths,
+	const float ReferenceVisualLength)
 {
 	if (!bEnableReflectionVFX || VFXActorClass == nullptr || MaxReflectionVFXCount <= 0)
 	{
@@ -605,9 +520,6 @@ void UUOULightBeamVisualComponent::UpdateReflectionVFX(
 		return;
 	}
 
-	const float ReferenceVisualLength = CalculateReferenceVisualLength(
-		LightPaths,
-		BoundSourceSpotLight);
 	int32 EligibleSegmentCount = 0;
 	for (const FUOULightPathData& PathData : LightPaths)
 	{
@@ -697,35 +609,21 @@ void UUOULightBeamVisualComponent::UpdateReflectionVFX(
 					ReflectionStaticRayVFX->CopyVisualWidthFrom(DirectStaticRayVFX);
 				}
 			}
-			if (const AUOULumenDynamicRayVisualActor* DirectDynamicRayVFX =
-				Cast<AUOULumenDynamicRayVisualActor>(DirectVFXActor))
-			{
-				if (AUOULumenDynamicRayVisualActor* ReflectionDynamicRayVFX =
-					Cast<AUOULumenDynamicRayVisualActor>(VFXActor))
-				{
-					ReflectionDynamicRayVFX->CopyVisualWidthFrom(DirectDynamicRayVFX);
-				}
-			}
-
 			const FUOULightPathSegmentData* NextReflectedSegment =
 				PathData.Segments.IsValidIndex(SegmentIndex + 1) &&
 				PathData.Segments[SegmentIndex + 1].bReflected
 					? &PathData.Segments[SegmentIndex + 1]
 					: nullptr;
-			const float VisibleEndDistance = FMath::Max(
-				0.0f,
-				SegmentData.Length - FMath::Max(0.0f, EndPadding));
-			const float JunctionEndClearance = NextReflectedSegment != nullptr
-				? CalculateIncomingJunctionClearance(
-					SegmentData,
-					*NextReflectedSegment,
-					VisibleEndDistance)
-				: 0.0f;
+			const FUOULightPathSegmentData* PreviousSegment =
+				PathData.Segments.IsValidIndex(SegmentIndex - 1)
+					? &PathData.Segments[SegmentIndex - 1]
+					: nullptr;
 			FUOULightBeamVisualSegmentData VisualData = BuildVisualSegment(
 				SegmentData,
 				VFXIndex + 1,
 				ReferenceVisualLength,
-				JunctionEndClearance);
+				PreviousSegment,
+				NextReflectedSegment);
 			VisualData.Color = LightColor;
 			ApplySegmentToVFX(VFXActor, VisualData);
 			++VFXIndex;
@@ -1018,12 +916,14 @@ void UUOULightBeamVisualComponent::SetVFXActive(AActor* VFXActor, bool bActive) 
 FUOULightBeamVisualSegmentData UUOULightBeamVisualComponent::BuildVisualSegment(
 	const FUOULightPathSegmentData& SegmentData,
 	int32 VisualSegmentIndex,
-	float ReferenceLength,
-	float AdditionalEndPadding) const
+	const float ReferenceVisualLength,
+	const FUOULightPathSegmentData* PreviousSegment,
+	const FUOULightPathSegmentData* NextReflectedSegment) const
 {
 	FUOULightBeamVisualSegmentData VisualData;
 	VisualData.SegmentIndex = VisualSegmentIndex;
 	VisualData.bReflected = SegmentData.bReflected;
+	VisualData.bEndsAtReflection = SegmentData.HitType == EUOULightPathHitType::ReflectingSurface;
 	VisualData.Color = ResolveLightColor();
 	VisualData.Intensity = SegmentData.Intensity;
 	VisualData.VisualBrightnessMultiplier = FMath::Max(0.0f, VisualBrightnessMultiplier);
@@ -1031,26 +931,53 @@ FUOULightBeamVisualSegmentData UUOULightBeamVisualComponent::BuildVisualSegment(
 	VisualData.LumenDynamicRayPresetOverride = FMath::Clamp(LumenDynamicRayPreset, 0, 8);
 	VisualData.LumenStaticRayPresetOverride = FMath::Clamp(LumenStaticRayPreset, 0, 19);
 	VisualData.Direction = SegmentData.Direction.GetSafeNormal();
+	VisualData.ReferenceLength = FMath::Max(0.0f, ReferenceVisualLength);
+	VisualData.JunctionClipFeather = FMath::Max(0.0f, ReflectionJunctionClipFeather);
+
+	if (SegmentData.bReflected && PreviousSegment != nullptr)
+	{
+		const FVector StartPlaneNormal = CalculateJunctionPlaneNormal(
+			SegmentData.IncomingDirection,
+			SegmentData.Direction);
+		if (!StartPlaneNormal.IsNearlyZero())
+		{
+			VisualData.bUseStartJunctionClip = true;
+			VisualData.StartJunctionPlanePosition = PreviousSegment->End;
+			VisualData.StartJunctionPlaneNormal = StartPlaneNormal;
+		}
+	}
+
+	if (VisualData.bEndsAtReflection && NextReflectedSegment != nullptr)
+	{
+		const FVector EndPlaneNormal = CalculateJunctionPlaneNormal(
+			SegmentData.Direction,
+			NextReflectedSegment->Direction);
+		if (!EndPlaneNormal.IsNearlyZero())
+		{
+			VisualData.bUseEndJunctionClip = true;
+			VisualData.EndJunctionPlanePosition = SegmentData.End;
+			VisualData.EndJunctionPlaneNormal = EndPlaneNormal;
+		}
+	}
+
+	// 반사 연결부는 실제 충돌점까지 메시를 이어 붙이고 머티리얼 평면으로 뒤쪽만 자릅니다.
+	// 벽·수신체 종단에만 기존 EndPadding을 적용합니다.
+	const FVector VisualStart = VisualData.bUseStartJunctionClip && PreviousSegment != nullptr
+		? PreviousSegment->End
+		: SegmentData.Start;
+	const float StartExtension = FVector::Distance(VisualStart, SegmentData.Start);
+	const float AppliedEndPadding = VisualData.bEndsAtReflection
+		? 0.0f
+		: FMath::Max(0.0f, EndPadding);
 	const float VisibleEndDistance = FMath::Max(
 		0.0f,
-		SegmentData.Length - FMath::Max(0.0f, EndPadding) -
-			FMath::Max(0.0f, AdditionalEndPadding));
-	const float StartClearance = CalculateReflectedJunctionClearance(
-		SegmentData,
-		VisibleEndDistance);
-	VisualData.Start = SegmentData.Start + VisualData.Direction * StartClearance;
-	VisualData.Length = FMath::Max(0.0f, VisibleEndDistance - StartClearance);
-	VisualData.ReferenceLength = FMath::Max(VisualData.Length, ReferenceLength);
+		SegmentData.Length + StartExtension - AppliedEndPadding);
+	VisualData.Start = VisualStart;
+	VisualData.Length = VisibleEndDistance;
 	VisualData.End = VisualData.Start + VisualData.Direction * VisualData.Length;
-	const float StartDistanceRatio = SegmentData.Length > KINDA_SMALL_NUMBER
-		? StartClearance / SegmentData.Length
-		: 0.0f;
-	VisualData.StartRadius = FMath::Lerp(
-		SegmentData.StartRadius,
-		SegmentData.EndRadius,
-		StartDistanceRatio);
+	VisualData.StartRadius = SegmentData.StartRadius;
 	const float VisibleEndRatio = SegmentData.Length > KINDA_SMALL_NUMBER
-		? VisibleEndDistance / SegmentData.Length
+		? FMath::Clamp((VisibleEndDistance - StartExtension) / SegmentData.Length, 0.0f, 1.0f)
 		: 0.0f;
 	VisualData.EndRadius = FMath::Lerp(
 		SegmentData.StartRadius,
