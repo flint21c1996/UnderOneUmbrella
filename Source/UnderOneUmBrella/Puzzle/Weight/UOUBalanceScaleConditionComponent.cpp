@@ -28,9 +28,9 @@ void UUOUBalanceScaleConditionComponent::TickComponent(float DeltaTime, ELevelTi
 	RefreshBalanceState();
 }
 
-TArray<FString> UUOUBalanceScaleConditionComponent::GetPuzzleDebugInfo_Implementation() const
+FText UUOUBalanceScaleConditionComponent::GetDebugSummaryText_Implementation() const
 {
-	return {
+	const TArray<FString> DebugLines = {
 		FString::Printf(
 			TEXT("Balance Scale: %s"),
 			IsSatisfied() ? TEXT("Satisfied") : TEXT("Unsatisfied")),
@@ -43,6 +43,8 @@ TArray<FString> UUOUBalanceScaleConditionComponent::GetPuzzleDebugInfo_Implement
 			WeightDifference,
 			AllowedDifference)
 	};
+
+	return FText::FromString(FString::Join(DebugLines, LINE_TERMINATOR));
 }
 
 void UUOUBalanceScaleConditionComponent::ResolveWeightSources()

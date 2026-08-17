@@ -3,7 +3,6 @@
 #include "Debug/UOUPuzzleDebugProviderComponent.h"
 
 #include "Components/ActorComponent.h"
-#include "Debug/UOUPuzzleDebugInfoProvider.h"
 #include "GameFramework/Actor.h"
 #include "Puzzle/Core/UOUPuzzleConditionGroupActor.h"
 #include "Puzzle/Core/UOUPuzzleConditionSourceComponent.h"
@@ -46,14 +45,29 @@ namespace UOUPuzzleDebugProviderPrivate
 #endif
 	}
 
-	TArray<FString> GetPuzzleDebugInfo(const UObject* Object)
+	TArray<FString> GetDebugSummaryLines(const UObject* Object)
 	{
-		if (Object == nullptr || !Object->GetClass()->ImplementsInterface(UUOUPuzzleDebugInfoProvider::StaticClass()))
+		if (Object == nullptr || !Object->GetClass()->ImplementsInterface(UUOUDebugProvider::StaticClass()))
 		{
 			return {};
 		}
 
-		return IUOUPuzzleDebugInfoProvider::Execute_GetPuzzleDebugInfo(const_cast<UObject*>(Object));
+		UObject* MutableObject = const_cast<UObject*>(Object);
+		if (!IUOUDebugProvider::Execute_IsDebugProviderEnabled(MutableObject))
+		{
+			return {};
+		}
+
+		const FText ProviderSummary = IUOUDebugProvider::Execute_GetDebugSummaryText(MutableObject);
+		if (ProviderSummary.IsEmpty())
+		{
+			return {};
+		}
+
+		const FString SummaryString = ProviderSummary.ToString();
+		TArray<FString> SummaryLines;
+		SummaryString.ParseIntoArrayLines(SummaryLines, true);
+		return SummaryLines;
 	}
 
 	void AppendObjectDebugInfo(const UObject* Object, TArray<FString>& OutLines, int32 MaxLineCount)
@@ -63,10 +77,10 @@ namespace UOUPuzzleDebugProviderPrivate
 			return;
 		}
 
-		const TArray<FString> DebugLines = GetPuzzleDebugInfo(Object);
+		const TArray<FString> DebugLines = GetDebugSummaryLines(Object);
 		for (const FString& DebugLine : DebugLines)
 		{
-			if (!DebugLine.IsEmpty())
+			if (!DebugLine.IsEmpty() && !OutLines.Contains(DebugLine))
 			{
 				OutLines.Add(DebugLine);
 				if (OutLines.Num() >= MaxLineCount)
@@ -89,6 +103,11 @@ namespace UOUPuzzleDebugProviderPrivate
 		TInlineComponentArray<UActorComponent*> Components(Actor);
 		for (const UActorComponent* Component : Components)
 		{
+			if (Component->IsA<UUOUPuzzleDebugProviderComponent>())
+			{
+				continue;
+			}
+
 			AppendObjectDebugInfo(Component, OutLines, MaxLineCount);
 			if (OutLines.Num() >= MaxLineCount)
 			{

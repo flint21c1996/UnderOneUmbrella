@@ -31,13 +31,15 @@ void UUOUInteractionConditionComponent::Interact_Implementation(AActor* Interact
 	TriggerInteraction(Interactor);
 }
 
-TArray<FString> UUOUInteractionConditionComponent::GetPuzzleDebugInfo_Implementation() const
+FText UUOUInteractionConditionComponent::GetDebugSummaryText_Implementation() const
 {
-	return {
+	const TArray<FString> DebugLines = {
 		FString::Printf(TEXT("Interaction Condition: %s"), IsSatisfied() ? TEXT("Satisfied") : TEXT("Unsatisfied")),
 		FString::Printf(TEXT("Mode: %s"), *StaticEnum<EUOUInteractionConditionMode>()->GetNameStringByValue(static_cast<int64>(InteractionMode))),
 		FString::Printf(TEXT("Last Interactor: %s"), *GetNameSafe(LastInteractor))
 	};
+
+	return FText::FromString(FString::Join(DebugLines, LINE_TERMINATOR));
 }
 
 void UUOUInteractionConditionComponent::GetPuzzleDebugInputActors_Implementation(TArray<AActor*>& OutInputActors) const

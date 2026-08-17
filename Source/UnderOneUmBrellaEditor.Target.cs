@@ -12,5 +12,6 @@ public class UnderOneUmBrellaEditorTarget : TargetRules
 		IncludeOrderVersion = EngineIncludeOrderVersion.Unreal5_7;
 		ExtraModuleNames.Add("UnderOneUmBrella");
 		ExtraModuleNames.Add("UnderOneUmBrellaEditor");
+		ExtraModuleNames.Add("UnderOneUmBrellaDevTools");
 	}
 }

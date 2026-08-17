@@ -11,11 +11,12 @@ class UUOUInteractionComponent;
 class UUOUCrankComponent;
 class UUOUPushPullObjectComponent;
 class UUOUUmbrellaComponent;
+class UUOURotatableMirrorComponent;
 
 // 플레이어가 퍼즐 블럭을 잡고 밀고 당기는 전용 흐름을 관리하는 컴포넌트다.
 // 후보 탐색과 잡기 상태, 이동 입력 해석을 모두 이곳에서 맡는다.
 UCLASS(ClassGroup=(Gameplay), meta=(BlueprintSpawnableComponent))
-class UUOUPushPullInteractorComponent : public UActorComponent
+class UNDERONEUMBRELLA_API UUOUPushPullInteractorComponent : public UActorComponent
 {
 	GENERATED_BODY()
 
@@ -87,6 +88,9 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "PushPull|Runtime")
 	TObjectPtr<UUOUCrankComponent> CurrentCandidateCrank = nullptr;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "PushPull|Runtime")
+	TObjectPtr<UUOURotatableMirrorComponent> CurrentCandidateMirror = nullptr;
+
 	// 실제로 잡고 있는 오브젝트다.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "PushPull|Runtime")
 	TObjectPtr<UUOUPushPullObjectComponent> GrabbedObject = nullptr;
@@ -94,9 +98,15 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "PushPull|Runtime")
 	TObjectPtr<UUOUCrankComponent> GrabbedCrank = nullptr;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "PushPull|Runtime")
+	TObjectPtr<UUOURotatableMirrorComponent> GrabbedMirror = nullptr;
+
 	// 지금 잡고 있는 오브젝트가 있는지 빠르게 확인한다.
 	UFUNCTION(BlueprintPure, Category = "PushPull")
-	bool IsGrabbing() const { return GrabbedObject != nullptr || GrabbedCrank != nullptr; }
+	bool IsGrabbing() const
+	{
+		return GrabbedObject != nullptr || GrabbedCrank != nullptr || GrabbedMirror != nullptr;
+	}
 
 	// 잡고 있는 동안에는 점프를 막기 위해 쓰는 헬퍼다.
 	UFUNCTION(BlueprintPure, Category = "PushPull")
@@ -114,6 +124,18 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "PushPull")
 	bool HandleMoveInput(const FVector2D& MovementVector, float MovementYaw);
 
+	// 후보 탐색 범위를 사용하는 외부 시스템에 현재 설정된 반경을 제공합니다.
+	float GetCandidateSearchRadius() const { return CandidateSearchRadius; }
+
+	// 현재 플레이어 상태를 반영한 후보 탐색 중심 위치를 반환합니다.
+	FVector GetCandidateDetectionOriginLocation() const { return GetDetectionOriginLocation(); }
+
+	// 현재 후보 종류와 무관하게 잡기 기준 위치를 조회합니다.
+	bool TryGetCurrentCandidateReferenceLocation(FVector& OutLocation) const;
+
+	// 현재 잡은 대상 종류와 무관하게 잡기 기준 위치를 조회합니다.
+	bool TryGetCurrentGrabbedReferenceLocation(FVector& OutLocation) const;
+
 	// 통합 플레이어 디버그 HUD에서 현재 후보를 읽기 위한 접근자입니다.
 	UFUNCTION(BlueprintPure, Category = "PushPull|Debug")
 	UUOUPushPullObjectComponent* GetCurrentCandidateObject() const { return CurrentCandidateObject; }
@@ -121,12 +143,18 @@ public:
 	UFUNCTION(BlueprintPure, Category = "PushPull|Debug")
 	UUOUCrankComponent* GetCurrentCandidateCrank() const { return CurrentCandidateCrank; }
 
+	UFUNCTION(BlueprintPure, Category = "PushPull|Debug")
+	UUOURotatableMirrorComponent* GetCurrentCandidateMirror() const { return CurrentCandidateMirror; }
+
 	// 통합 플레이어 디버그 HUD에서 실제 잡은 대상을 읽기 위한 접근자입니다.
 	UFUNCTION(BlueprintPure, Category = "PushPull|Debug")
 	UUOUPushPullObjectComponent* GetGrabbedObject() const { return GrabbedObject; }
 
 	UFUNCTION(BlueprintPure, Category = "PushPull|Debug")
 	UUOUCrankComponent* GetGrabbedCrank() const { return GrabbedCrank; }
+
+	UFUNCTION(BlueprintPure, Category = "PushPull|Debug")
+	UUOURotatableMirrorComponent* GetGrabbedMirror() const { return GrabbedMirror; }
 
 	// 통합 플레이어 디버그 HUD에서 grab 입력 유지 상태를 읽기 위한 접근자입니다.
 	UFUNCTION(BlueprintPure, Category = "PushPull|Debug")
@@ -231,14 +259,13 @@ protected:
 	void UpdateScreenDebug() const;
 
 	// 후보 탐색 반경과 이동 축을 월드에 시각화한다.
-	void DrawWorldDebug() const;
-
 	// 후보 블럭에서 실제로 사용할 수평 이동 축을 계산한다.
 	bool TryResolveGrabAxis(UUOUPushPullObjectComponent* TargetObject, FVector& OutMoveAxis) const;
 
 	// 주변 오브젝트 중 가장 적합한 밀고 당기기 후보를 찾는다.
 	UUOUPushPullObjectComponent* FindBestCandidate() const;
 	UUOUCrankComponent* FindBestCrankCandidate() const;
+	UUOURotatableMirrorComponent* FindBestMirrorCandidate() const;
 
 	// 후보 탐색의 중심 위치를 계산한다.
 	FVector GetDetectionOriginLocation() const;

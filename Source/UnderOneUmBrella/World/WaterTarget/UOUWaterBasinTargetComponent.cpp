@@ -3,8 +3,7 @@
 #include "World/WaterTarget/UOUWaterBasinTargetComponent.h"
 
 #include "Components/PrimitiveComponent.h"
-#include "Debug/UOUDebugSubsystem.h"
-#include "DrawDebugHelpers.h"
+#include "Debug/UOUDevelopmentDebugDrawContext.h"
 #include "GameFramework/Actor.h"
 #include "UObject/UObjectIterator.h"
 
@@ -16,15 +15,6 @@ TWeakObjectPtr<UUOUWaterBasinTargetComponent> UUOUWaterBasinTargetComponent::Run
 namespace
 {
 	constexpr float MinWorldUnitsPerTile = 1.0f;
-	constexpr float DebugPercentScale = 100.0f;
-	constexpr float DebugTextLifeTime = 0.0f;
-	constexpr float DebugTextScale = 1.0f;
-	constexpr float DebugConnectionLineLifeTime = 0.0f;
-	constexpr float DebugConnectionLineThickness = 4.0f;
-	constexpr float DebugGroupLabelOffsetZ = 120.0f;
-	constexpr float DebugTargetLabelOffsetZ = 80.0f;
-	constexpr float DebugMaxWaterBoxLifeTime = 0.0f;
-	constexpr float DebugMaxWaterBoxThickness = 3.0f;
 	constexpr float InputLocationBoundsToleranceWorld = 1.0f;
 
 	// 연결 그룹의 공통 수면 높이는 이분 탐색으로 찾습니다.
@@ -79,8 +69,94 @@ void UUOUWaterBasinTargetComponent::TickComponent(float DeltaTime, ELevelTick Ti
 	}
 
 	ApplyPassiveDrain(DeltaTime);
-	DrawRuntimeDebug();
 }
+
+EUOUDebugCategory UUOUWaterBasinTargetComponent::GetDebugCategory_Implementation() const
+{
+	return EUOUDebugCategory::Puzzle;
+}
+
+#if UOU_WITH_DEVELOPMENT_TOOLS
+void UUOUWaterBasinTargetComponent::GatherDevelopmentDebugDraw(
+	IUOUDevelopmentDebugDrawContext& Context) const
+{
+	const AActor* Owner = GetOwner();
+	if (!IsValid(Owner))
+	{
+		return;
+	}
+
+	const FBox OwnerBounds = Owner->GetComponentsBoundingBox(true);
+	const FVector OwnerCenter = OwnerBounds.IsValid
+		? OwnerBounds.GetCenter()
+		: Owner->GetActorLocation();
+	const FVector OwnerExtent = OwnerBounds.IsValid
+		? OwnerBounds.GetExtent()
+		: FVector(50.0f);
+	const float BottomWorldZ = GetBottomWorldZ();
+	const float TopWorldZ = GetTopWorldZ();
+	const float HalfHeight = FMath::Max(1.0f, (TopWorldZ - BottomWorldZ) * 0.5f);
+	FVector CapacityCenter = OwnerCenter;
+	CapacityCenter.Z = BottomWorldZ + HalfHeight;
+	const FVector CapacityExtent(
+		FMath::Max(1.0f, OwnerExtent.X),
+		FMath::Max(1.0f, OwnerExtent.Y),
+		HalfHeight);
+	Context.DrawBox(
+		CapacityCenter,
+		CapacityExtent,
+		FQuat::Identity,
+		FColor::Blue,
+		3.0f);
+
+	FVector SurfaceCenter = OwnerCenter;
+	SurfaceCenter.Z = WaterSurfaceWorldZ;
+	Context.DrawBox(
+		SurfaceCenter,
+		FVector(CapacityExtent.X, CapacityExtent.Y, 2.0f),
+		FQuat::Identity,
+		FColor::Cyan,
+		2.0f);
+
+	const FUOUWaterBasinGroupDebugData GroupData = GetConnectedGroupDebugData();
+	const FString DebugText = FString::Printf(
+		TEXT("Water Basin: %s\nTarget %.2f / %.2f (%.1f%%)\nDepth %.2f / Surface Z %.1f\nGroup %d targets / %.2f / %.2f (%.1f%%)"),
+		*Owner->GetName(),
+		CurrentWaterVolume,
+		GetCapacity(),
+		CurrentFillRatio * 100.0f,
+		CurrentWaterDepth,
+		WaterSurfaceWorldZ,
+		GroupData.TargetCount,
+		GroupData.TotalVolume,
+		GroupData.TotalCapacity,
+		GroupData.FillRatio * 100.0f);
+	Context.DrawString(
+		FVector(OwnerCenter.X, OwnerCenter.Y, TopWorldZ + 100.0f),
+		DebugText,
+		FColor::Cyan,
+		0.9f);
+
+	for (const AActor* ConnectedActor : ConnectedTargets)
+	{
+		if (!IsValid(ConnectedActor))
+		{
+			continue;
+		}
+
+		const FBox ConnectedBounds = ConnectedActor->GetComponentsBoundingBox(true);
+		const FVector ConnectedCenter = ConnectedBounds.IsValid
+			? ConnectedBounds.GetCenter()
+			: ConnectedActor->GetActorLocation();
+		Context.DrawArrow(
+			OwnerCenter,
+			ConnectedCenter,
+			50.0f,
+			FColor::Yellow,
+			3.0f);
+	}
+}
+#endif
 
 //에디터에서 속성 변경시 호출되는 함수
 #if WITH_EDITOR
@@ -946,276 +1022,6 @@ void UUOUWaterBasinTargetComponent::NotifyWaterInputReceived(const FUOUWaterBasi
 			Target->OnWaterInputReceived.Broadcast(Target, TargetInputContext);
 		}
 	}
-}
-
-void UUOUWaterBasinTargetComponent::DrawRuntimeDebug()
-{
-	if (!bRuntimeDebugOverlayEnabled
-		|| !UUOUDebugSubsystem::IsDebugCategoryEnabled(this, EUOUDebugCategory::Puzzle)
-		|| !ShouldDrawTargetDebug())
-	{
-		return;
-	}
-
-	if (UUOUDebugSubsystem::IsDebugWorldLabelEnabled(this, EUOUDebugCategory::Puzzle))
-	{
-		DrawTargetDebugString();
-	}
-
-	if (!UUOUDebugSubsystem::IsDebugWorldDrawEnabled(this, EUOUDebugCategory::Puzzle))
-	{
-		return;
-	}
-
-	if (RuntimeDebugOverlayScope == EUOUWaterBasinDebugOverlayScope::SpecificConnectedGroup)
-	{
-		TArray<UUOUWaterBasinTargetComponent*> Group;
-		GetConnectedGroup(Group);
-
-		for (const UUOUWaterBasinTargetComponent* Target : Group)
-		{
-			if (IsValid(Target))
-			{
-				Target->DrawMaxWaterCapacityDebugBox();
-			}
-		}
-	}
-	else
-	{
-		DrawMaxWaterCapacityDebugBox();
-	}
-
-	if (!bRuntimeDebugConnectionLinesEnabled)
-	{
-		return;
-	}
-
-	if (RuntimeDebugOverlayScope == EUOUWaterBasinDebugOverlayScope::SpecificConnectedGroup)
-	{
-		DrawConnectedGroupConnections();
-	}
-	else
-	{
-		DrawSpecificTargetConnections();
-	}
-}
-
-void UUOUWaterBasinTargetComponent::DrawMaxWaterCapacityDebugBox() const
-{
-	UWorld* World = GetWorld();
-	if (!World)
-	{
-		return;
-	}
-
-	FVector BoxCenter = FVector::ZeroVector;
-	FVector BoxExtent = FVector::ZeroVector;
-	FQuat BoxRotation = FQuat::Identity;
-	if (!BuildMaxWaterCapacityDebugBox(BoxCenter, BoxExtent, BoxRotation))
-	{
-		return;
-	}
-
-	DrawDebugBox(
-		World,
-		BoxCenter,
-		BoxExtent,
-		BoxRotation,
-		FColor::Blue,
-		false,
-		DebugMaxWaterBoxLifeTime,
-		0,
-		DebugMaxWaterBoxThickness);
-}
-
-bool UUOUWaterBasinTargetComponent::BuildMaxWaterCapacityDebugBox(FVector& OutCenter, FVector& OutExtent, FQuat& OutRotation) const
-{
-	FBox BasinBounds;
-	if (!TryGetBasinBounds(BasinBounds))
-	{
-		return false;
-	}
-
-	const float MaxDepthWorld = GetMaxWaterHeight() * FMath::Max(WorldUnitsPerTile, MinWorldUnitsPerTile);
-	if (MaxDepthWorld <= KINDA_SMALL_NUMBER)
-	{
-		return false;
-	}
-
-	OutCenter = BasinBounds.GetCenter();
-	OutCenter.Z = GetBottomWorldZ() + (MaxDepthWorld * 0.5f);
-	OutExtent = BasinBounds.GetExtent();
-	OutExtent.Z = MaxDepthWorld * 0.5f;
-	OutRotation = FQuat::Identity;
-	return true;
-}
-
-void UUOUWaterBasinTargetComponent::DrawTargetDebugString() const
-{
-	const UWorld* World = GetWorld();
-	if (!World)
-	{
-		return;
-	}
-
-	if (RuntimeDebugOverlayScope == EUOUWaterBasinDebugOverlayScope::SpecificConnectedGroup)
-	{
-		const FUOUWaterBasinGroupDebugData GroupData = GetConnectedGroupDebugData();
-		const FString Text = FString::Printf(
-			TEXT("Water Group\nTargets: %d\nVolume: %.2f / %.2f\nFill: %.1f%%\nSurface Z: %.1f"),
-			GroupData.TargetCount,
-			GroupData.TotalVolume,
-			GroupData.TotalCapacity,
-			GroupData.FillRatio * DebugPercentScale,
-			GroupData.SurfaceWorldZ);
-
-		DrawDebugString(
-			World,
-			GetDebugLabelWorld(),
-			Text,
-			nullptr,
-			UUOUDebugSubsystem::GetDebugCategoryColor(this, EUOUDebugCategory::Puzzle, FColor::Yellow),
-			DebugTextLifeTime,
-			true,
-			DebugTextScale);
-		return;
-	}
-
-	const FString Text = FString::Printf(
-		TEXT("Water Target\nVolume: %.2f / %.2f\nDepth: %.2f\nFill: %.1f%%\nSurface Z: %.1f"),
-		CurrentWaterVolume,
-		GetCapacity(),
-		CurrentWaterDepth,
-		CurrentFillRatio * DebugPercentScale,
-		WaterSurfaceWorldZ);
-
-	DrawDebugString(
-		World,
-		GetDebugLabelWorld(),
-		Text,
-		nullptr,
-		UUOUDebugSubsystem::GetDebugCategoryColor(this, EUOUDebugCategory::Puzzle, FColor::Cyan),
-		DebugTextLifeTime,
-		true,
-		DebugTextScale);
-}
-
-void UUOUWaterBasinTargetComponent::DrawSpecificTargetConnections() const
-{
-	UWorld* World = GetWorld();
-	if (!World)
-	{
-		return;
-	}
-
-	const FVector Start = GetDebugCenterWorld();
-	const FColor ConnectionColor = UUOUDebugSubsystem::GetDebugCategoryColor(this, EUOUDebugCategory::Puzzle, FColor::Cyan);
-	for (TObjectIterator<UUOUWaterBasinTargetComponent> It; It; ++It)
-	{
-		UUOUWaterBasinTargetComponent* Candidate = *It;
-		if (!IsValid(Candidate) || Candidate == this || Candidate->GetWorld() != World)
-		{
-			continue;
-		}
-
-		if (IsDirectlyConnectedTo(Candidate) || Candidate->IsDirectlyConnectedTo(this))
-		{
-			DrawDebugLine(World, Start, Candidate->GetDebugCenterWorld(), ConnectionColor, false, DebugConnectionLineLifeTime, 0, DebugConnectionLineThickness);
-		}
-	}
-}
-
-void UUOUWaterBasinTargetComponent::DrawConnectedGroupConnections() const
-{
-	UWorld* World = GetWorld();
-	if (!World)
-	{
-		return;
-	}
-
-	TArray<UUOUWaterBasinTargetComponent*> Group;
-	GetConnectedGroup(Group);
-
-	const FColor ConnectionColor = UUOUDebugSubsystem::GetDebugCategoryColor(this, EUOUDebugCategory::Puzzle, FColor::Yellow);
-	for (int32 A = 0; A < Group.Num(); ++A)
-	{
-		UUOUWaterBasinTargetComponent* From = Group[A];
-		if (!IsValid(From))
-		{
-			continue;
-		}
-
-		for (int32 B = A + 1; B < Group.Num(); ++B)
-		{
-			UUOUWaterBasinTargetComponent* To = Group[B];
-			if (!IsValid(To))
-			{
-				continue;
-			}
-
-			if (From->IsDirectlyConnectedTo(To) || To->IsDirectlyConnectedTo(From))
-			{
-				DrawDebugLine(World, From->GetDebugCenterWorld(), To->GetDebugCenterWorld(), ConnectionColor, false, DebugConnectionLineLifeTime, 0, DebugConnectionLineThickness);
-			}
-		}
-	}
-}
-
-FVector UUOUWaterBasinTargetComponent::GetDebugCenterWorld() const
-{
-	FBox BasinBounds;
-	if (TryGetBasinBounds(BasinBounds))
-	{
-		return BasinBounds.GetCenter();
-	}
-
-	AActor* Owner = GetOwner();
-	return Owner ? Owner->GetActorLocation() : FVector::ZeroVector;
-}
-
-FVector UUOUWaterBasinTargetComponent::GetDebugLabelWorld() const
-{
-	if (RuntimeDebugOverlayScope == EUOUWaterBasinDebugOverlayScope::SpecificConnectedGroup)
-	{
-		TArray<UUOUWaterBasinTargetComponent*> Group;
-		GetConnectedGroup(Group);
-
-		FBox GroupBounds(ForceInit);
-		for (const UUOUWaterBasinTargetComponent* Target : Group)
-		{
-			if (!IsValid(Target))
-			{
-				continue;
-			}
-
-			FBox BasinBounds;
-			if (Target->TryGetBasinBounds(BasinBounds))
-			{
-				GroupBounds += BasinBounds;
-			}
-			else if (const AActor* Owner = Target->GetOwner())
-			{
-				GroupBounds += Owner->GetActorLocation();
-			}
-		}
-
-		if (GroupBounds.IsValid)
-		{
-			FVector LabelLocation = GroupBounds.GetCenter();
-			LabelLocation.Z = GroupBounds.Max.Z + DebugGroupLabelOffsetZ;
-			return LabelLocation;
-		}
-	}
-
-	FVector LabelLocation = GetDebugCenterWorld();
-	LabelLocation.Z = GetTopWorldZ() + DebugTargetLabelOffsetZ;
-	return LabelLocation;
-}
-
-bool UUOUWaterBasinTargetComponent::ShouldDrawTargetDebug() const
-{
-	const UUOUWaterBasinTargetComponent* Target = RuntimeDebugTarget.Get();
-	return IsValid(Target) && Target == this && Target->GetWorld() == GetWorld();
 }
 
 bool UUOUWaterBasinTargetComponent::IsDirectlyConnectedTo(const UUOUWaterBasinTargetComponent* Other) const

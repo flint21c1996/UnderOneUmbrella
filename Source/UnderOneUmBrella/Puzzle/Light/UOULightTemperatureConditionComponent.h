@@ -20,7 +20,7 @@ public:
 
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
-	virtual TArray<FString> GetPuzzleDebugInfo_Implementation() const override;
+	virtual FText GetDebugSummaryText_Implementation() const override;
 	virtual void GetPuzzleDebugInputActors_Implementation(TArray<AActor*>& OutInputActors) const override;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Puzzle|Light", meta = (ToolTip = "명시적인 참조가 없으면 소유 액터의 UOU Light Exposure Receiver를 자동으로 찾습니다."))

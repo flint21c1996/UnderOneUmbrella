@@ -3,8 +3,6 @@
 #include "Puzzle/Timer/UOUTimerConditionActor.h"
 
 #include "Components/SceneComponent.h"
-#include "Debug/UOUDebugSubsystem.h"
-#include "Debug/UOUPuzzleDebugInfoProvider.h"
 #include "Puzzle/Timer/UOUTimerConditionComponent.h"
 
 AUOUTimerConditionActor::AUOUTimerConditionActor()
@@ -15,35 +13,6 @@ AUOUTimerConditionActor::AUOUTimerConditionActor()
 	SetRootComponent(RootScene);
 
 	TimerConditionComponent = CreateDefaultSubobject<UUOUTimerConditionComponent>(TEXT("TimerConditionComponent"));
-}
-
-void AUOUTimerConditionActor::BeginPlay()
-{
-	Super::BeginPlay();
-
-	if (bRegisterDebugProvider)
-	{
-		if (UWorld* World = GetWorld())
-		{
-			if (UUOUDebugSubsystem* DebugSubsystem = World->GetSubsystem<UUOUDebugSubsystem>())
-			{
-				DebugSubsystem->RegisterDebugProvider(this);
-			}
-		}
-	}
-}
-
-void AUOUTimerConditionActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
-{
-	if (UWorld* World = GetWorld())
-	{
-		if (UUOUDebugSubsystem* DebugSubsystem = World->GetSubsystem<UUOUDebugSubsystem>())
-		{
-			DebugSubsystem->UnregisterDebugProvider(this);
-		}
-	}
-
-	Super::EndPlay(EndPlayReason);
 }
 
 void AUOUTimerConditionActor::ApplyPuzzleResult_Implementation(EOUUPuzzleResultAction Action)
@@ -112,8 +81,7 @@ FText AUOUTimerConditionActor::GetDebugSummaryText_Implementation() const
 		return FText::FromString(TEXT("Timer Condition: Missing Component"));
 	}
 
-	const TArray<FString> DebugLines = IUOUPuzzleDebugInfoProvider::Execute_GetPuzzleDebugInfo(TimerConditionComponent);
-	return FText::FromString(FString::Join(DebugLines, LINE_TERMINATOR));
+	return IUOUDebugProvider::Execute_GetDebugSummaryText(TimerConditionComponent);
 }
 
 FVector AUOUTimerConditionActor::GetDebugWorldLocation_Implementation() const

@@ -8,7 +8,10 @@
 
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "EditorWorldUtils.h"
+#include "Engine/World.h"
 #include "Engine/StaticMesh.h"
+#include "GameFramework/Character.h"
 #include "Misc/AutomationTest.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
@@ -36,6 +39,16 @@ bool FUOUUmbrellaStateTransitionTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("Open command enters the open state"), Umbrella->IsOpen());
 	TestEqual(TEXT("Open umbrella uses the open visual state"), Umbrella->GetCurrentVisualState(), EUOUUmbrellaVisualState::Open);
 
+	Umbrella->HandleInputPressed(EKeys::RightMouseButton);
+	TestTrue(TEXT("Right mouse begins light reflection from the open state"), Umbrella->IsLightReflecting());
+	TestEqual(TEXT("Light reflecting reuses the open visual state"), Umbrella->GetCurrentVisualState(), EUOUUmbrellaVisualState::Open);
+
+	Umbrella->HandleInputPressed(EKeys::LeftShift);
+	TestTrue(TEXT("Left Shift no longer changes the light reflection state"), Umbrella->IsLightReflecting());
+
+	Umbrella->HandleInputPressed(EKeys::RightMouseButton);
+	TestTrue(TEXT("Pressing right mouse again ends light reflection"), Umbrella->IsOpen());
+
 	Umbrella->TurnUmbrellaUpsideDown();
 	TestTrue(TEXT("Invert command enters the upside-down state"), Umbrella->IsUpsideDown());
 	TestEqual(TEXT("Upside-down umbrella uses the reversed-open visual state"), Umbrella->GetCurrentVisualState(), EUOUUmbrellaVisualState::OpenReversed);
@@ -46,6 +59,136 @@ bool FUOUUmbrellaStateTransitionTest::RunTest(const FString& Parameters)
 
 	Umbrella->RemoveUmbrella();
 	TestFalse(TEXT("Remove clears umbrella ownership"), Umbrella->HasUmbrella());
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FUOUUmbrellaLightReflectionEightWayAimTest,
+	"UnderOneUmBrella.Player.Umbrella.LightReflectionEightWayAim",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUOUUmbrellaLightReflectionEightWayAimTest::RunTest(const FString& Parameters)
+{
+	UWorld* UninitializedWorld = UWorld::CreateWorld(
+		EWorldType::Editor,
+		false,
+		TEXT("UOUUmbrellaEightWayAimWorld"),
+		nullptr,
+		false,
+		ERHIFeatureLevel::Num,
+		nullptr,
+		true);
+	FScopedEditorWorld ScopedWorld(
+		UninitializedWorld,
+		UWorld::InitializationValues()
+			.RequiresHitProxies(false)
+			.ShouldSimulatePhysics(false)
+			.EnableTraceCollision(false)
+			.CreateNavigation(false)
+			.CreateAISystem(false)
+			.AllowAudioPlayback(false)
+			.CreatePhysicsScene(false));
+	UWorld* World = ScopedWorld.GetWorld();
+	TestNotNull(TEXT("8방향 반사 조준 테스트용 월드를 생성한다"), World);
+	if (World == nullptr)
+	{
+		return false;
+	}
+
+	ACharacter* Character = World->SpawnActor<ACharacter>();
+	TestNotNull(TEXT("8방향 반사 조준 테스트용 캐릭터를 생성한다"), Character);
+	if (Character == nullptr)
+	{
+		return false;
+	}
+
+	UUOUUmbrellaComponent* Umbrella = NewObject<UUOUUmbrellaComponent>(Character);
+	TestNotNull(TEXT("캐릭터에 우산 컴포넌트를 생성한다"), Umbrella);
+	if (Umbrella == nullptr)
+	{
+		return false;
+	}
+
+	Character->AddInstanceComponent(Umbrella);
+	Umbrella->RegisterComponent();
+	Umbrella->AcquireUmbrella();
+	Umbrella->OpenUmbrella();
+	Umbrella->BeginLightReflecting();
+	TestTrue(TEXT("펼친 우산이 빛 반사 상태로 진입한다"), Umbrella->IsLightReflecting());
+
+	struct FEightWayAimCase
+	{
+		const TCHAR* Name;
+		FVector2D Input;
+		float ExpectedYaw;
+	};
+
+	constexpr float CameraYaw = 45.0f;
+	const FEightWayAimCase Cases[] = {
+		{TEXT("W"), FVector2D(0.0f, 1.0f), 45.0f},
+		{TEXT("W+D"), FVector2D(1.0f, 1.0f), 90.0f},
+		{TEXT("D"), FVector2D(1.0f, 0.0f), 135.0f},
+		{TEXT("S+D"), FVector2D(1.0f, -1.0f), 180.0f},
+		{TEXT("S"), FVector2D(0.0f, -1.0f), -135.0f},
+		{TEXT("S+A"), FVector2D(-1.0f, -1.0f), -90.0f},
+		{TEXT("A"), FVector2D(-1.0f, 0.0f), -45.0f},
+		{TEXT("W+A"), FVector2D(-1.0f, 1.0f), 0.0f}
+	};
+
+	Umbrella->SetPourAimMovementInput(Cases[0].Input, CameraYaw);
+	Umbrella->TickComponent(1.0f / 60.0f, LEVELTICK_All, nullptr);
+	const float FirstFrameYaw = Character->GetActorRotation().Yaw;
+	TestTrue(
+		TEXT("8방향 목표가 바뀌어도 한 프레임 만에 회전이 끝나지 않는다"),
+		FirstFrameYaw > 0.0f && FirstFrameYaw < Cases[0].ExpectedYaw);
+
+	for (const FEightWayAimCase& AimCase : Cases)
+	{
+		Umbrella->SetPourAimMovementInput(AimCase.Input, CameraYaw);
+		for (int32 Frame = 0; Frame < 60; ++Frame)
+		{
+			Umbrella->TickComponent(1.0f / 60.0f, LEVELTICK_All, nullptr);
+		}
+		const float ActualYaw = Character->GetActorRotation().Yaw;
+		TestTrue(
+			FString::Printf(TEXT("%s 입력은 카메라 기준 8방향 Yaw %.1f를 사용한다"), AimCase.Name, AimCase.ExpectedYaw),
+			FMath::Abs(FMath::FindDeltaAngleDegrees(ActualYaw, AimCase.ExpectedYaw)) <= 0.1f);
+	}
+
+	Umbrella->SetPourAimMovementInput(FVector2D::ZeroVector, 0.0f);
+	Umbrella->SetPourAimMovementInput(FVector2D(-1.0f, 1.0f), 0.0f);
+	for (int32 Frame = 0; Frame < 60; ++Frame)
+	{
+		Umbrella->TickComponent(1.0f / 60.0f, LEVELTICK_All, nullptr);
+	}
+	TestTrue(
+		TEXT("W+A 입력은 카메라 기준 왼쪽 대각선으로 회전한다"),
+		FMath::Abs(FMath::FindDeltaAngleDegrees(Character->GetActorRotation().Yaw, -45.0f)) <= 0.1f);
+
+	Umbrella->SetPourAimMovementInput(FVector2D(-1.0f, 0.0f), 0.0f);
+	for (int32 Frame = 0; Frame < 2; ++Frame)
+	{
+		Umbrella->TickComponent(1.0f / 60.0f, LEVELTICK_All, nullptr);
+	}
+	Umbrella->SetPourAimMovementInput(FVector2D::ZeroVector, 0.0f);
+	for (int32 Frame = 0; Frame < 30; ++Frame)
+	{
+		Umbrella->TickComponent(1.0f / 60.0f, LEVELTICK_All, nullptr);
+	}
+	TestTrue(
+		TEXT("대각선 키를 거의 동시에 놓을 때 잠깐 들어온 A가 W+A 방향을 덮지 않는다"),
+		FMath::Abs(FMath::FindDeltaAngleDegrees(Character->GetActorRotation().Yaw, -45.0f)) <= 0.1f);
+
+	Umbrella->SetPourAimMovementInput(FVector2D(-1.0f, 1.0f), 0.0f);
+	Umbrella->SetPourAimMovementInput(FVector2D(-1.0f, 0.0f), 0.0f);
+	for (int32 Frame = 0; Frame < 60; ++Frame)
+	{
+		Umbrella->TickComponent(1.0f / 60.0f, LEVELTICK_All, nullptr);
+	}
+	TestTrue(
+		TEXT("대각선에서 A를 계속 유지하면 유예 후 왼쪽 방향으로 전환한다"),
+		FMath::Abs(FMath::FindDeltaAngleDegrees(Character->GetActorRotation().Yaw, -90.0f)) <= 0.1f);
 
 	return true;
 }

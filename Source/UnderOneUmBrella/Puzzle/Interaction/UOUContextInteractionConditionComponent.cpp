@@ -38,20 +38,21 @@ void UUOUContextInteractionConditionComponent::Interact_Implementation(AActor* I
 	StartContextInteraction(Interactor);
 }
 
-TArray<FString> UUOUContextInteractionConditionComponent::GetPuzzleDebugInfo_Implementation() const
+FText UUOUContextInteractionConditionComponent::GetDebugSummaryText_Implementation() const
 {
-	TArray<FString> Lines = Super::GetPuzzleDebugInfo_Implementation();
-	Lines.Add(FString::Printf(
+	TArray<FString> DebugLines;
+	Super::GetDebugSummaryText_Implementation().ToString().ParseIntoArrayLines(DebugLines, true);
+	DebugLines.Add(FString::Printf(
 		TEXT("Player Interaction: %s"),
 		PlayerInteractionRequest.HasPlayerMontage() ? TEXT("Montage") : TEXT("Instant")));
-	Lines.Add(FString::Printf(
+	DebugLines.Add(FString::Printf(
 		TEXT("Waiting Player Interaction: %s"),
 		bWaitingForPlayerInteraction ? TEXT("Yes") : TEXT("No")));
-	Lines.Add(FString::Printf(
+	DebugLines.Add(FString::Printf(
 		TEXT("Block After Satisfied: %s"),
 		bBlockInteractionAfterSatisfied ? TEXT("Yes") : TEXT("No")));
-	Lines.Add(FString::Printf(TEXT("Pending Interactor: %s"), *GetNameSafe(PendingInteractor.Get())));
-	return Lines;
+	DebugLines.Add(FString::Printf(TEXT("Pending Interactor: %s"), *GetNameSafe(PendingInteractor.Get())));
+	return FText::FromString(FString::Join(DebugLines, LINE_TERMINATOR));
 }
 
 void UUOUContextInteractionConditionComponent::GetPuzzleDebugInputActors_Implementation(

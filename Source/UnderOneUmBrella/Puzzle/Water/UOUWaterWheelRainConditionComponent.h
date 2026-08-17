@@ -86,7 +86,7 @@ public:
 	virtual void OnRegister() override;
 	virtual void BeginPlay() override;
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
-	virtual TArray<FString> GetPuzzleDebugInfo_Implementation() const override;
+	virtual FText GetDebugSummaryText_Implementation() const override;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Wheel|Rain", meta = (ToolTip = "켜져 있으면 RainArea에서 전달한 빗물 입력으로 물레방아가 회전합니다."))
 	bool bRainInputEnabled = true;

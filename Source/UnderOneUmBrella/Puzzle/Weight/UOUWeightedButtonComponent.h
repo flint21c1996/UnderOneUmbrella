@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Debug/UOUDebugProvider.h"
 #include "Engine/EngineTypes.h"
 #include "Puzzle/Core/UOUPuzzleConditionSourceComponent.h"
 #include "Puzzle/Core/UOUPuzzleWeightSource.h"
@@ -15,7 +16,9 @@ class UUOUWeightSensorComponent;
 // 센서가 읽은 무게를 바탕으로 버튼 눌림 상태를 계산하는 버튼 핵심 컴포넌트입니다.
 // 조건 소스와 무게 소스 역할을 동시에 맡아 퍼즐 그룹과 저울에 함께 연결할 수 있습니다.
 UCLASS(ClassGroup=(Puzzle), meta=(BlueprintSpawnableComponent))
-class UUOUWeightedButtonComponent : public UUOUPuzzleConditionSourceComponent, public IUOUPuzzleWeightSource
+class UNDERONEUMBRELLA_API UUOUWeightedButtonComponent
+	: public UUOUPuzzleConditionSourceComponent
+	, public IUOUPuzzleWeightSource
 {
 	GENERATED_BODY()
 
@@ -30,8 +33,23 @@ public:
 
 	// 현재 버튼이 퍼즐 무게 소스로 제공할 값을 반환합니다.
 	virtual float GetPuzzleWeight() const override;
-	virtual TArray<FString> GetPuzzleDebugInfo_Implementation() const override;
 	virtual void GetPuzzleDebugInputActors_Implementation(TArray<AActor*>& OutInputActors) const override;
+	virtual EUOUDebugCategory GetDebugCategory_Implementation() const override;
+	virtual bool IsDebugProviderEnabled_Implementation() const override;
+	virtual FText GetDebugDisplayName_Implementation() const override;
+	virtual FText GetDebugSummaryText_Implementation() const override;
+	virtual FVector GetDebugWorldLocation_Implementation() const override;
+	virtual void GetDebugConnections_Implementation(TArray<FUOUDebugConnection>& OutConnections) const override;
+
+#if UOU_WITH_PUZZLE_CHEATS
+	// 치트 HUD에서 이 버튼을 외부 입력으로 실행하면 실제 무게와 무관하게 눌림 상태를 유지합니다.
+	virtual bool TryResolveInputForCheat(AActor* InputActor) override;
+#endif
+
+#if UOU_WITH_DEVELOPMENT_TOOLS
+	virtual bool ShouldDrawDevelopmentDebugLabel() const override { return false; }
+	virtual void GatherDevelopmentDebugDraw(IUOUDevelopmentDebugDrawContext& Context) const override;
+#endif
 
 	// 같은 액터 안에서 센서 컴포넌트를 자동으로 찾을지 결정합니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Puzzle|Weight")
@@ -121,10 +139,6 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Puzzle|Audio", meta = (ToolTip = "Audio DataAsset에 등록된 부족한 무게 덜컹 효과음 Event ID입니다."))
 	FName InsufficientWeightAudioEventId = TEXT("WeightButton.Insufficient");
 
-	// 화면 디버그를 켜서 현재 무게와 상태를 확인할지 결정합니다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Puzzle|Debug")
-	bool bShowScreenDebug = false;
-
 	// 현재 센서가 읽은 버튼 무게 값입니다.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Puzzle|Runtime")
 	float CurrentWeight = 0.0f;
@@ -134,9 +148,6 @@ public:
 	bool IsPressed() const;
 
 protected:
-	// 화면 왼쪽 위에 버튼 상태 디버그를 출력합니다.
-	void DrawScreenDebug() const;
-
 	// 센서와 비주얼 관련 참조를 자동 탐색하거나 수동 참조로 해석합니다.
 	void ResolveReferences();
 

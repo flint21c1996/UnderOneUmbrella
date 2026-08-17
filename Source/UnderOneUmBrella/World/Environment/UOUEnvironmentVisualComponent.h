@@ -12,7 +12,7 @@ class UNiagaraSystem;
 // RainArea처럼 주요 액터가 가진 영역과 상태를 Niagara 이펙트에 전달하는 시각 전용 컴포넌트입니다.
 // 컴포넌트 자신의 Transform을 기준으로 Primary/Secondary Niagara 위치와 User Parameter를 갱신합니다.
 UCLASS(ClassGroup=(Environment), meta=(BlueprintSpawnableComponent, DisplayName="UOU Rain VFX Controller"))
-class UUOUEnvironmentVisualComponent : public USceneComponent
+class UNDERONEUMBRELLA_API UUOUEnvironmentVisualComponent : public USceneComponent
 {
 	GENERATED_BODY()
 
@@ -58,6 +58,16 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Environment Visual")
 	void SetVisualsEnabled(bool bNewEnabled);
+
+	bool GetRainBlockerState(
+		FVector& OutWorldCenter,
+		FVector& OutHalfExtent,
+		float& OutIntensity) const;
+	void GetRegisteredEffectComponents(TArray<UNiagaraComponent*>& OutEffects) const;
+	FName GetRainBlockerLocalPositionParameterName() const
+	{
+		return RainBlockerLocalPositionParameterName;
+	}
 
 protected:
 	virtual void OnRegister() override;
@@ -181,17 +191,10 @@ protected:
 	UPROPERTY()
 	FName RainBlockerIntensityParameterName = TEXT("RainBlockerIntensity");
 
-	UPROPERTY()
-	bool bDrawRainBlockerNiagaraDebug = true;
-
-	UPROPERTY()
-	float RainBlockerNiagaraDebugThickness = 2.0f;
-
 	void ApplyVisualEffectSettings(bool bForcePrimarySystem = false, bool bForceSecondarySystem = false);
 	void ApplyVisualEffectTransforms();
 	void ApplyNiagaraParameters();
 	void RefreshNiagaraActivation();
-	void DrawRainBlockerNiagaraDebug(const UNiagaraComponent* Effect, const FVector& BlockerWorldCenter, const FVector& BlockerHalfExtent) const;
 	bool CanApplyNiagaraState() const;
 	UNiagaraComponent* GetPrimaryEffectComponent() const;
 	UNiagaraComponent* GetSecondaryEffectComponent() const;

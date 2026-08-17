@@ -28,7 +28,7 @@ struct FOccludedMeshState
 
 // 8방향 스냅 카메라와 줌, 가림 처리를 한 번에 관리하는 카메라 전용 컴포넌트다.
 UCLASS(ClassGroup=(Camera), meta=(BlueprintSpawnableComponent))
-class UUOUCameraControllerComponent : public UActorComponent
+class UNDERONEUMBRELLA_API UUOUCameraControllerComponent : public UActorComponent
 {
 	GENERATED_BODY()
 
@@ -105,6 +105,17 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Camera|Temporary Zoom")
 	bool IsTemporaryZoomRequestedBy(const UObject* RequestSource) const;
+
+	// 특정 월드 구간에서 사용할 주시점 보정값을 설정합니다. 실제 이동은 평상시 카메라 보간 흐름을 그대로 사용합니다.
+	UFUNCTION(BlueprintCallable, Category = "Camera|Area Framing")
+	void SetAreaCameraOffset(FVector NewOffset);
+
+	// 월드 구간용 주시점 보정을 해제해 평상시 구도로 돌아갑니다.
+	UFUNCTION(BlueprintCallable, Category = "Camera|Area Framing")
+	void ClearAreaCameraOffset();
+
+	UFUNCTION(BlueprintPure, Category = "Camera|Area Framing")
+	FVector GetAreaCameraOffset() const { return AreaCameraOffset; }
 
 protected:
 	// 참조를 수동으로 넣지 않아도 기본 카메라 구성을 자동으로 찾게 한다.
@@ -254,6 +265,10 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Camera|Runtime")
 	bool bTemporaryZoomFaceOwnerFromFront = false;
+
+	// 지역 카메라 볼륨이 평상시 주시점에 더하는 월드 공간 보정값입니다.
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Camera|Runtime")
+	FVector AreaCameraOffset = FVector::ZeroVector;
 
 	UPROPERTY(Transient)
 	TMap<TObjectPtr<UMeshComponent>, FOccludedMeshState> OccludedMeshStates;

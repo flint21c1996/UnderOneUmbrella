@@ -38,9 +38,21 @@ public:
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void Tick(float DeltaSeconds) override;
 
+#if WITH_EDITOR
+	virtual EDataValidationResult IsDataValid(class FDataValidationContext& Context) const override;
+#endif
+
 	// 저장 데이터와 UI 표시 데이터가 동일한 보상을 식별할 때 사용하는 ID입니다.
-	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Reward")
+	UPROPERTY(
+		EditInstanceOnly,
+		BlueprintReadOnly,
+		Category = "Reward",
+		meta = (GetOptions = "GetAvailableRewardIds"))
 	FName RewardId = NAME_None;
+
+	/** 현재 Actor가 속한 레벨의 Stage Definition 행에서 선택 가능한 Reward ID를 반환합니다. */
+	UFUNCTION()
+	TArray<FName> GetAvailableRewardIds() const;
 
 	// 수집 피드백까지 끝난 뒤 RewardId와 수집자를 외부 시스템에 전달합니다.
 	UPROPERTY(BlueprintAssignable, Category = "Reward|Events")

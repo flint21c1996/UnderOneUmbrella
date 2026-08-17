@@ -14,12 +14,12 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/SphereComponent.h"
 #include "Components/StaticMeshComponent.h"
-#include "Debug/UOUDebugSubsystem.h"
 #include "Engine/GameInstance.h"
-#include "DrawDebugHelpers.h"
 #include "Engine/Engine.h"
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
+#include "GameFramework/Character.h"
+#include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
 #include "Camera/PlayerCameraManager.h"
@@ -130,6 +130,7 @@ void UUOUUmbrellaComponent::BeginPlay()
 void UUOUUmbrellaComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	StopRainBlockedAudio();
+	ClearPourAimFacing();
 
 	Super::EndPlay(EndPlayReason);
 }
@@ -146,17 +147,14 @@ void UUOUUmbrellaComponent::TickComponent(float DeltaTime, ELevelTick TickType, 
 		ClearPourAimFacing();
 		ClearPourTraceDebug();
 		DrawScreenDebug();
-		DrawRainBlockerDebug();
 		return;
 	}
 
-	UpdatePourAimFacing();
+	UpdatePendingMovementAimDirection(DeltaTime);
+	UpdateUmbrellaAimFacing(DeltaTime);
 	UpdatePouring(DeltaTime);
 	UpdatePouringEffectState();
 	DrawScreenDebug();
-	DrawRainBlockerDebug();
-	DrawPourSocketAndDropSpawnDebug();
-	DrawPourTraceDebug();
 	UpdateRainBlockedAudioState();
 }
 
@@ -265,6 +263,9 @@ void UUOUUmbrellaComponent::BeginPour()
 	{
 		PourAimWorldDirection = SnapPourDirectionToAngleStep(Owner->GetActorForwardVector());
 	}
+	bMovementAimInputActive = false;
+	bCommittedMovementAimWasDiagonal = false;
+	ClearPendingMovementAimDirection();
 
 	SetState(EUOUUmbrellaState::Pouring);
 }
@@ -280,9 +281,61 @@ void UUOUUmbrellaComponent::EndPour()
 	SetState(GetOpenStateForCurrentDirection());
 }
 
+void UUOUUmbrellaComponent::BeginLightReflecting()
+{
+	if (!bHasUmbrella || CurrentState != EUOUUmbrellaState::Open)
+	{
+		return;
+	}
+
+	// 점프 또는 낙하 중에는 우산을 빛 반사 상태로 전환하지 않습니다.
+	if (const ACharacter* OwnerCharacter = Cast<ACharacter>(GetOwner()))
+	{
+		const UCharacterMovementComponent* CharacterMovement = OwnerCharacter->GetCharacterMovement();
+		if (CharacterMovement != nullptr && CharacterMovement->IsFalling())
+		{
+			return;
+		}
+	}
+
+	if (AActor* Owner = GetOwner())
+	{
+		PourAimWorldDirection = SnapPourDirectionToAngleStep(Owner->GetActorForwardVector());
+	}
+	bMovementAimInputActive = false;
+	bCommittedMovementAimWasDiagonal = false;
+	ClearPendingMovementAimDirection();
+
+	SetState(EUOUUmbrellaState::LightReflecting);
+}
+
+void UUOUUmbrellaComponent::EndLightReflecting()
+{
+	if (CurrentState != EUOUUmbrellaState::LightReflecting)
+	{
+		return;
+	}
+
+	SetState(EUOUUmbrellaState::Open);
+}
+
+void UUOUUmbrellaComponent::ToggleLightReflectingState()
+{
+	if (CurrentState == EUOUUmbrellaState::LightReflecting)
+	{
+		EndLightReflecting();
+		return;
+	}
+
+	BeginLightReflecting();
+}
+
 void UUOUUmbrellaComponent::SetPourAimMovementInput(FVector2D MovementInput, float MovementYaw)
 {
-	if (!bUseMovementInputPourAim || CurrentState != EUOUUmbrellaState::Pouring)
+	const bool bUseMovementAim =
+		(CurrentState == EUOUUmbrellaState::Pouring && bUseMovementInputPourAim) ||
+		(CurrentState == EUOUUmbrellaState::LightReflecting && bUseMovementInputLightReflectingAim);
+	if (!bUseMovementAim)
 	{
 		return;
 	}
@@ -290,6 +343,9 @@ void UUOUUmbrellaComponent::SetPourAimMovementInput(FVector2D MovementInput, flo
 	const float SafeDeadZone = FMath::Clamp(MovementInputPourAimDeadZone, 0.0f, 1.0f);
 	if (MovementInput.SizeSquared() <= FMath::Square(SafeDeadZone))
 	{
+		// 대각선 키를 거의 동시에 놓는 과정에서 잠깐 생긴 단일 방향은 확정하지 않습니다.
+		bMovementAimInputActive = false;
+		ClearPendingMovementAimDirection();
 		return;
 	}
 
@@ -300,8 +356,54 @@ void UUOUUmbrellaComponent::SetPourAimMovementInput(FVector2D MovementInput, flo
 	WorldDirection.Z = 0.0f;
 	if (!WorldDirection.IsNearlyZero())
 	{
-		PourAimWorldDirection = SnapPourDirectionToAngleStep(WorldDirection);
+		const FVector SnappedDirection = SnapPourDirectionToAngleStep(WorldDirection);
+		const bool bIsDiagonalInput =
+			FMath::Abs(MovementInput.X) > SafeDeadZone &&
+			FMath::Abs(MovementInput.Y) > SafeDeadZone;
+
+		if (!bMovementAimInputActive || bIsDiagonalInput || !bCommittedMovementAimWasDiagonal)
+		{
+			CommitMovementAimDirection(SnappedDirection, bIsDiagonalInput);
+		}
+		else if (!bHasPendingMovementAimDirection ||
+			!PendingMovementAimWorldDirection.Equals(SnappedDirection, KINDA_SMALL_NUMBER))
+		{
+			// 대각선에서 한 축만 빠졌다면 실제 방향 전환인지 키 해제 순서인지 잠시 구분합니다.
+			PendingMovementAimWorldDirection = SnappedDirection;
+			PendingMovementAimTimeRemaining = FMath::Max(0.0f, MovementAimDiagonalReleaseGraceSeconds);
+			bHasPendingMovementAimDirection = true;
+		}
+
+		bMovementAimInputActive = true;
 	}
+}
+
+void UUOUUmbrellaComponent::UpdatePendingMovementAimDirection(float DeltaTime)
+{
+	if (!bHasPendingMovementAimDirection || !bMovementAimInputActive)
+	{
+		return;
+	}
+
+	PendingMovementAimTimeRemaining -= FMath::Max(0.0f, DeltaTime);
+	if (PendingMovementAimTimeRemaining <= 0.0f)
+	{
+		CommitMovementAimDirection(PendingMovementAimWorldDirection, false);
+	}
+}
+
+void UUOUUmbrellaComponent::CommitMovementAimDirection(const FVector& AimDirection, bool bIsDiagonalInput)
+{
+	PourAimWorldDirection = AimDirection;
+	bCommittedMovementAimWasDiagonal = bIsDiagonalInput;
+	ClearPendingMovementAimDirection();
+}
+
+void UUOUUmbrellaComponent::ClearPendingMovementAimDirection()
+{
+	PendingMovementAimWorldDirection = FVector::ZeroVector;
+	PendingMovementAimTimeRemaining = 0.0f;
+	bHasPendingMovementAimDirection = false;
 }
 
 // 비나 다른 시스템에서 전달받은 물 양을 우산 저장 컨테이너에 더합니다.
@@ -371,6 +473,7 @@ void UUOUUmbrellaComponent::ToggleOpenState()
 	case EUOUUmbrellaState::Open:
 	case EUOUUmbrellaState::UpsideDown:
 	case EUOUUmbrellaState::Pouring:
+	case EUOUUmbrellaState::LightReflecting:
 		CloseUmbrella();
 		break;
 	}
@@ -395,6 +498,7 @@ void UUOUUmbrellaComponent::ToggleInvertState()
 	case EUOUUmbrellaState::Open:
 	case EUOUUmbrellaState::UpsideDown:
 	case EUOUUmbrellaState::Pouring:
+	case EUOUUmbrellaState::LightReflecting:
 		SetState(GetOpenStateForCurrentDirection());
 		break;
 	}
@@ -432,7 +536,15 @@ void UUOUUmbrellaComponent::HandleInputPressed(FKey InputKey)
 
 	if (InputKey == PourKey)
 	{
-		BeginPour();
+		if (CurrentState == EUOUUmbrellaState::Open ||
+			CurrentState == EUOUUmbrellaState::LightReflecting)
+		{
+			ToggleLightReflectingState();
+		}
+		else
+		{
+			BeginPour();
+		}
 		return;
 	}
 
@@ -445,6 +557,7 @@ void UUOUUmbrellaComponent::HandleInputReleased(FKey InputKey)
 	{
 		EndPour();
 	}
+
 }
 
 // 우산을 가지고 있고 뒤집힌 상태일 때만 비를 받아 물로 저장할 수 있습니다.
@@ -483,6 +596,11 @@ bool UUOUUmbrellaComponent::IsPouring() const
 	return bHasUmbrella && CurrentState == EUOUUmbrellaState::Pouring;
 }
 
+bool UUOUUmbrellaComponent::IsLightReflecting() const
+{
+	return bHasUmbrella && CurrentState == EUOUUmbrellaState::LightReflecting;
+}
+
 bool UUOUUmbrellaComponent::IsNormalDirection() const
 {
 	return bHasUmbrella && CurrentDirectionState == EUOUUmbrellaDirectionState::Normal;
@@ -512,10 +630,12 @@ void UUOUUmbrellaComponent::SetClosedReversedVisualOverride(bool bEnable)
 }
 
 // ?곗궛???ㅼ쭛?붽굅??臾쇱쓣 遺볥뒗 以묒씠硫??먰봽瑜?留됱븘 ?뚮젅??媛먭컖???덉젙?쒗궢?덈떎.
-// 우산이 뒤집혔거나 물을 붓는 중이면 점프를 막아 플레이 감각을 안정시킵니다.
+// 우산이 뒤집힌 계열의 동작 중이면 점프를 막아 플레이 감각을 안정시킵니다.
 bool UUOUUmbrellaComponent::BlocksJumping() const
 {
-	return bHasUmbrella && (CurrentState == EUOUUmbrellaState::UpsideDown || CurrentState == EUOUUmbrellaState::Pouring);
+	return bHasUmbrella && (CurrentState == EUOUUmbrellaState::UpsideDown ||
+		CurrentState == EUOUUmbrellaState::Pouring ||
+		CurrentState == EUOUUmbrellaState::LightReflecting);
 }
 
 // 현재 구현에서는 펼친 우산만 비를 막는 상태로 봅니다.
@@ -639,11 +759,12 @@ void UUOUUmbrellaComponent::SetState(EUOUUmbrellaState NewState, bool bBroadcast
 	{
 		CurrentDirectionState = EUOUUmbrellaDirectionState::Normal;
 	}
-	else if (ResolvedState == EUOUUmbrellaState::Open)
+	else if (ResolvedState == EUOUUmbrellaState::Open || ResolvedState == EUOUUmbrellaState::LightReflecting)
 	{
 		CurrentDirectionState = EUOUUmbrellaDirectionState::Normal;
 	}
-	else if (ResolvedState == EUOUUmbrellaState::UpsideDown || ResolvedState == EUOUUmbrellaState::Pouring)
+	else if (ResolvedState == EUOUUmbrellaState::UpsideDown ||
+		ResolvedState == EUOUUmbrellaState::Pouring)
 	{
 		CurrentDirectionState = EUOUUmbrellaDirectionState::Reversed;
 	}
@@ -685,6 +806,10 @@ void UUOUUmbrellaComponent::SetState(EUOUUmbrellaState NewState, bool bBroadcast
 	}
 
 	CurrentState = ResolvedState;
+	if (CurrentState != EUOUUmbrellaState::Pouring && CurrentState != EUOUUmbrellaState::LightReflecting)
+	{
+		ClearPourAimFacing();
+	}
 	if (CurrentState != EUOUUmbrellaState::Open)
 	{
 		StopRainBlockedAudio();
@@ -1517,215 +1642,6 @@ void UUOUUmbrellaComponent::DrawScreenDebug() const
 	// 플레이어/우산 화면 디버그는 Debug Controller의 Player HUD에서 통합 표시합니다.
 }
 
-// 우산이 비를 막는 중심과 범위를 월드에 그려 RainArea 판정 위치를 눈으로 확인합니다.
-void UUOUUmbrellaComponent::DrawRainBlockerDebug() const
-{
-	if (!UUOUDebugSubsystem::IsDebugWorldDrawEnabled(this, EUOUDebugCategory::Player))
-	{
-		return;
-	}
-
-	UWorld* World = GetWorld();
-	if (World == nullptr)
-	{
-		return;
-	}
-
-	FVector BlockerWorldCenter = FVector::ZeroVector;
-	FRotator BlockerWorldRotation = FRotator::ZeroRotator;
-	FVector BlockerHalfExtent = FVector::ZeroVector;
-	if (!TryGetGameplayRainBlockerVolumeData(BlockerWorldCenter, BlockerWorldRotation, BlockerHalfExtent))
-	{
-		// 비를 막는 상태가 아니면 그릴 기준 데이터가 없으므로 바로 종료합니다.
-		return;
-	}
-
-	const float Thickness = FMath::Max(0.0f, RainBlockerDebugThickness);
-	const float LifeTime = 0.0f;
-	const bool bIsActiveBlocker = IsBlockingRain();
-	const FColor PlayerDebugColor = bIsActiveBlocker
-		? FColor::Cyan
-		: FColor(90, 90, 90);
-
-	DrawDebugSphere(
-		World,
-		BlockerWorldCenter,
-		8.0f,
-		12,
-		PlayerDebugColor,
-		false,
-		LifeTime,
-		0,
-		Thickness);
-
-	DrawDebugBox(
-		World,
-		BlockerWorldCenter,
-		BlockerHalfExtent,
-		BlockerWorldRotation.Quaternion(),
-		PlayerDebugColor,
-		false,
-		LifeTime,
-		0,
-		Thickness);
-
-	DrawDebugLine(
-		World,
-		BlockerWorldCenter + BlockerWorldRotation.Quaternion().GetAxisZ() * BlockerHalfExtent.Z,
-		BlockerWorldCenter - BlockerWorldRotation.Quaternion().GetAxisZ() * BlockerHalfExtent.Z,
-		PlayerDebugColor,
-		false,
-		LifeTime,
-		0,
-		Thickness);
-
-	DrawDebugString(
-		World,
-		BlockerWorldCenter + BlockerWorldRotation.Quaternion().GetAxisZ() * (BlockerHalfExtent.Z + 18.0f),
-		FString::Printf(
-			TEXT("Gameplay RainBlocker %s Half %.1f %.1f %.1f Offset %.1f %.1f %.1f"),
-			bIsActiveBlocker ? TEXT("Active") : TEXT("Inactive"),
-			BlockerHalfExtent.X,
-			BlockerHalfExtent.Y,
-			BlockerHalfExtent.Z,
-			RainBlockerLocalOffset.X,
-			RainBlockerLocalOffset.Y,
-			RainBlockerLocalOffset.Z),
-		nullptr,
-		PlayerDebugColor,
-		LifeTime,
-		false,
-		1.0f);
-}
-
-// 물 붓기 라인트레이스의 마지막 결과를 월드에 그려 어느 대상에 닿았는지 확인합니다.
-void UUOUUmbrellaComponent::DrawPourTraceDebug() const
-{
-	if (!bHasLastPourTrace
-		|| !UUOUDebugSubsystem::IsDebugWorldDrawEnabled(this, EUOUDebugCategory::Player))
-	{
-		return;
-	}
-
-	UWorld* World = GetWorld();
-	if (World == nullptr)
-	{
-		return;
-	}
-
-	const float LifeTime = FMath::Max(0.0f, PourTraceDebugLifeTime);
-	const float Thickness = FMath::Max(0.0f, PourTraceDebugThickness);
-	const FVector DrawEnd = bLastPourTraceHit ? LastPourTraceImpactPoint : LastPourTraceEnd;
-	const FColor ImpactPointColor = bLastPourCheckedWaterBasinImpactPoint
-		? (bLastPourImpactPointInsideWaterBasin ? FColor::Green : FColor::Red)
-		: FColor::Orange;
-	const FColor TraceColor = UUOUDebugSubsystem::GetDebugCategoryColor(
-		this,
-		EUOUDebugCategory::Player,
-		bLastPourDeliveredWater ? FColor::Green : (bLastPourTraceHit ? FColor::Red : FColor::Cyan));
-
-	DrawDebugLine(
-		World,
-		LastPourTraceStart,
-		DrawEnd,
-		TraceColor,
-		false,
-		LifeTime,
-		0,
-		Thickness);
-
-	DrawDebugSphere(
-		World,
-		LastPourTraceStart,
-		6.0f,
-		12,
-		TraceColor,
-		false,
-		LifeTime,
-		0,
-		Thickness);
-
-	if (bLastPourTraceHit)
-	{
-		DrawDebugSphere(
-			World,
-			LastPourTraceImpactPoint,
-			8.0f,
-			12,
-			ImpactPointColor,
-			false,
-			LifeTime,
-			0,
-			Thickness);
-
-		const float ImpactCrossSize = 18.0f;
-		DrawDebugLine(
-			World,
-			LastPourTraceImpactPoint - FVector(ImpactCrossSize, 0.0f, 0.0f),
-			LastPourTraceImpactPoint + FVector(ImpactCrossSize, 0.0f, 0.0f),
-			ImpactPointColor,
-			false,
-			LifeTime,
-			0,
-			Thickness);
-		DrawDebugLine(
-			World,
-			LastPourTraceImpactPoint - FVector(0.0f, ImpactCrossSize, 0.0f),
-			LastPourTraceImpactPoint + FVector(0.0f, ImpactCrossSize, 0.0f),
-			ImpactPointColor,
-			false,
-			LifeTime,
-			0,
-			Thickness);
-		DrawDebugLine(
-			World,
-			LastPourTraceImpactPoint - FVector(0.0f, 0.0f, ImpactCrossSize),
-			LastPourTraceImpactPoint + FVector(0.0f, 0.0f, ImpactCrossSize),
-			ImpactPointColor,
-			false,
-			LifeTime,
-			0,
-			Thickness);
-	}
-
-	if (UUOUDebugSubsystem::IsDebugWorldLabelEnabled(this, EUOUDebugCategory::Player))
-	{
-		const FVector LabelLocation = DrawEnd + FVector(0.0f, 0.0f, 24.0f);
-		const FString ImpactPointText = bLastPourTraceHit
-			? FString::Printf(
-				TEXT("\nImpactPoint: X %.1f / Y %.1f / Z %.1f"),
-				LastPourTraceImpactPoint.X,
-				LastPourTraceImpactPoint.Y,
-				LastPourTraceImpactPoint.Z)
-			: FString();
-		const FString WaterBasinImpactText = bLastPourCheckedWaterBasinImpactPoint
-			? FString::Printf(
-				TEXT("\nBasin 판정: %s"),
-				bLastPourImpactPointInsideWaterBasin ? TEXT("내부") : TEXT("외부"))
-			: FString();
-		const FString LabelText = FString::Printf(
-			TEXT("Pour Trace\nHit: %s\nTarget: %s\nReceiver: %s\nAmount: %.2f\nStored: %.2f -> %.2f%s%s"),
-			*LastPourHitName,
-			*LastPourTargetName,
-			GetPourReceiverTypeText(LastPourReceiverType),
-			LastPourAmount,
-			LastPourStoredWaterBefore,
-			LastPourStoredWaterAfter,
-			*ImpactPointText,
-			*WaterBasinImpactText);
-
-		DrawDebugString(
-			World,
-			LabelLocation,
-			LabelText,
-			nullptr,
-			TraceColor,
-			LifeTime,
-			true,
-			1.0f);
-	}
-}
-
 // 물 붓기 디버그 기록을 초기 상태로 돌립니다.
 void UUOUUmbrellaComponent::ClearPourTraceDebug()
 {
@@ -1743,73 +1659,22 @@ void UUOUUmbrellaComponent::ClearPourTraceDebug()
 	LastPourReceiverType = EUOUUmbrellaPourReceiverType::None;
 }
 
-// 물을 붓는 동안 캐릭터 몸 방향을 마우스 조준 방향에 맞춥니다.
-void UUOUUmbrellaComponent::DrawPourSocketAndDropSpawnDebug() const
+void UUOUUmbrellaComponent::UpdateUmbrellaAimFacing(float DeltaTime)
 {
-	if (!bHasUmbrella || (!bDrawPourSocketDebug && !bDrawPourDropSpawnDebug))
-	{
-		return;
-	}
-
-	if (!UUOUDebugSubsystem::IsDebugWorldDrawEnabled(this, EUOUDebugCategory::Player))
-	{
-		return;
-	}
-
-	UWorld* World = GetWorld();
-	if (World == nullptr)
-	{
-		return;
-	}
-
-	const float Radius = FMath::Max(1.0f, PourSocketDebugRadius);
-	const float LifeTime = 0.0f;
-	const float Thickness = 2.0f;
-
-	FTransform SocketTransform = FTransform::Identity;
-	if (bDrawPourSocketDebug && TryGetPouringPointTransform(SocketTransform))
-	{
-		const FVector SocketLocation = SocketTransform.GetLocation();
-		const USkeletalMeshComponent* SocketSource = ResolvePouringSocketSourceComponent();
-		const FString SocketSourceName = GetNameSafe(SocketSource);
-		const FString SocketMeshName = SocketSource != nullptr ? GetNameSafe(SocketSource->GetSkeletalMeshAsset()) : TEXT("None");
-		const FString SocketDebugText = FString::Printf(
-			TEXT("PourSocket\nComponent: %s\nMesh: %s\nSocket: %s\nOffset: %.1f %.1f %.1f"),
-			*SocketSourceName,
-			*SocketMeshName,
-			*PouringSocketName.ToString(),
-			PouringSocketWorldUnitOffset.X,
-			PouringSocketWorldUnitOffset.Y,
-			PouringSocketWorldUnitOffset.Z);
-		DrawDebugSphere(World, SocketLocation, Radius, 16, FColor::Magenta, false, LifeTime, 0, Thickness);
-		DrawDebugCoordinateSystem(World, SocketLocation, SocketTransform.Rotator(), Radius * 2.5f, false, LifeTime, 0, Thickness);
-		DrawDebugString(World, SocketLocation + FVector(0.0f, 0.0f, Radius + 18.0f), SocketDebugText, nullptr, FColor::Magenta, LifeTime, true);
-	}
-
-	FVector DropLocation = FVector::ZeroVector;
-	FVector DropDirection = FVector::ForwardVector;
-	if (bDrawPourDropSpawnDebug && TryGetPourDropSpawnPlacement(DropLocation, DropDirection))
-	{
-		const FVector SafeDirection = DropDirection.IsNearlyZero() ? FVector::DownVector : DropDirection.GetSafeNormal();
-		DrawDebugSphere(World, DropLocation, Radius * 0.7f, 16, FColor::Yellow, false, LifeTime, 0, Thickness);
-		DrawDebugLine(World, DropLocation, DropLocation + SafeDirection * 120.0f, FColor::Yellow, false, LifeTime, 0, Thickness);
-		DrawDebugLine(World, DropLocation, DropLocation + FVector::DownVector * 120.0f, FColor::Cyan, false, LifeTime, 0, Thickness);
-		DrawDebugString(World, DropLocation + FVector(0.0f, 0.0f, Radius + 36.0f), TEXT("DropSpawn"), nullptr, FColor::Yellow, LifeTime, true);
-	}
-}
-
-void UUOUUmbrellaComponent::UpdatePourAimFacing()
-{
-	if (!bRotateOwnerTowardsPourDirection || CurrentState != EUOUUmbrellaState::Pouring)
+	const bool bIsPourAimActive = CurrentState == EUOUUmbrellaState::Pouring && bRotateOwnerTowardsPourDirection;
+	const bool bIsLightReflectingAimActive = CurrentState == EUOUUmbrellaState::LightReflecting &&
+		bRotateOwnerTowardsLightReflectingDirection;
+	if (!bIsPourAimActive && !bIsLightReflectingAimActive)
 	{
 		ClearPourAimFacing();
 		return;
 	}
+
+	ApplyAimFacingMovementOverride();
 
 	FVector AimDirection = FVector::ZeroVector;
 	if (!TryGetActivePourAimDirection(AimDirection))
 	{
-		ClearPourAimFacing();
 		return;
 	}
 
@@ -1829,12 +1694,55 @@ void UUOUUmbrellaComponent::UpdatePourAimFacing()
 	// 캐릭터가 위아래로 기울어지지 않도록 평면 회전만 적용합니다.
 	AimRotation.Pitch = 0.0f;
 	AimRotation.Roll = 0.0f;
-	Owner->SetActorRotation(AimRotation);
+	const float SafeRotationSpeed = FMath::Max(0.0f, MovementAimRotationSpeedDegreesPerSecond);
+	const FRotator NewRotation = SafeRotationSpeed > KINDA_SMALL_NUMBER
+		? FMath::RInterpConstantTo(Owner->GetActorRotation(), AimRotation, FMath::Max(0.0f, DeltaTime), SafeRotationSpeed)
+		: AimRotation;
+	Owner->SetActorRotation(NewRotation);
 }
 
 // 현재는 별도 보관 상태가 없지만, 조준 보정 정리 지점을 명확히 남겨둡니다.
 void UUOUUmbrellaComponent::ClearPourAimFacing()
 {
+	bMovementAimInputActive = false;
+	bCommittedMovementAimWasDiagonal = false;
+	ClearPendingMovementAimDirection();
+
+	if (!bHasAimFacingMovementOverride)
+	{
+		return;
+	}
+
+	if (ACharacter* OwnerCharacter = Cast<ACharacter>(GetOwner()))
+	{
+		if (UCharacterMovementComponent* CharacterMovement = OwnerCharacter->GetCharacterMovement())
+		{
+			CharacterMovement->bOrientRotationToMovement = bSavedOrientRotationToMovement;
+		}
+	}
+
+	bHasAimFacingMovementOverride = false;
+}
+
+void UUOUUmbrellaComponent::ApplyAimFacingMovementOverride()
+{
+	if (bHasAimFacingMovementOverride)
+	{
+		return;
+	}
+
+	ACharacter* OwnerCharacter = Cast<ACharacter>(GetOwner());
+	UCharacterMovementComponent* CharacterMovement = OwnerCharacter != nullptr
+		? OwnerCharacter->GetCharacterMovement()
+		: nullptr;
+	if (CharacterMovement == nullptr)
+	{
+		return;
+	}
+
+	bSavedOrientRotationToMovement = CharacterMovement->bOrientRotationToMovement;
+	CharacterMovement->bOrientRotationToMovement = false;
+	bHasAimFacingMovementOverride = true;
 }
 
 bool UUOUUmbrellaComponent::SpawnPendingPourDrop()
@@ -1888,7 +1796,6 @@ bool UUOUUmbrellaComponent::SpawnPendingPourDrop()
 		DropContext.VisualSettings = ContentProfile->DropVisual;
 	}
 	DropActor->InitializePourDrop(DropContext);
-	DropActor->bDrawDebugCollisionRadius = bDrawPourDropCollisionDebug;
 	if (bOverridePourDropCollisionRadius)
 	{
 		DropActor->CollisionRadius = FMath::Max(0.0f, PourDropCollisionRadiusOverride);
@@ -2209,7 +2116,10 @@ bool UUOUUmbrellaComponent::TryGetActivePourAimDirection(FVector& AimDirection) 
 {
 	AimDirection = FVector::ZeroVector;
 
-	if (bUseMovementInputPourAim)
+	const bool bUseMovementAim =
+		(CurrentState == EUOUUmbrellaState::Pouring && bUseMovementInputPourAim) ||
+		(CurrentState == EUOUUmbrellaState::LightReflecting && bUseMovementInputLightReflectingAim);
+	if (bUseMovementAim)
 	{
 		AimDirection = PourAimWorldDirection;
 		if (AimDirection.IsNearlyZero())
@@ -2304,7 +2214,8 @@ bool UUOUUmbrellaComponent::TryGetPourDirection(FVector& PourOriginLocation, FVe
 // 물을 담고 있던 상태에서 닫힘이나 펼침으로 바뀌면 더 이상 담을 수 없으므로 버려야 합니다.
 bool UUOUUmbrellaComponent::ShouldSpillStoredWater(EUOUUmbrellaState PreviousState, EUOUUmbrellaState NextState) const
 {
-	const bool bWasHoldingWater = PreviousState == EUOUUmbrellaState::UpsideDown || PreviousState == EUOUUmbrellaState::Pouring;
+	const bool bWasHoldingWater = PreviousState == EUOUUmbrellaState::UpsideDown ||
+		PreviousState == EUOUUmbrellaState::Pouring;
 	const bool bWillNotHoldWater = NextState == EUOUUmbrellaState::Open || NextState == EUOUUmbrellaState::Closed;
 	return bWasHoldingWater && bWillNotHoldWater && GetCurrentStoredWater() > 0.0f;
 }

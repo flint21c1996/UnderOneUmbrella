@@ -5,8 +5,7 @@
 #include "Components/BoxComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
-#include "Debug/UOUDebugSubsystem.h"
-#include "DrawDebugHelpers.h"
+#include "Debug/UOUDevelopmentDebugDrawContext.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
 #include "Materials/MaterialInstanceDynamic.h"
@@ -15,9 +14,6 @@
 
 AUOUPlayerBlockingWallActor::AUOUPlayerBlockingWallActor()
 {
-	PrimaryActorTick.bCanEverTick = true;
-	PrimaryActorTick.bStartWithTickEnabled = false;
-
 	RootScene = CreateDefaultSubobject<USceneComponent>(TEXT("RootScene"));
 	SetRootComponent(RootScene);
 
@@ -57,7 +53,6 @@ void AUOUPlayerBlockingWallActor::BeginPlay()
 	ApplyCollisionSettings();
 	ApplyPreviewSettings();
 
-	SetActorTickEnabled(bShowPreviewInGameWhenPuzzleDebug);
 }
 
 void AUOUPlayerBlockingWallActor::OnConstruction(const FTransform& Transform)
@@ -65,13 +60,6 @@ void AUOUPlayerBlockingWallActor::OnConstruction(const FTransform& Transform)
 	Super::OnConstruction(Transform);
 
 	ApplyCollisionSettings();
-	ApplyPreviewSettings();
-}
-
-void AUOUPlayerBlockingWallActor::Tick(float DeltaSeconds)
-{
-	Super::Tick(DeltaSeconds);
-
 	ApplyPreviewSettings();
 }
 
@@ -103,6 +91,33 @@ bool AUOUPlayerBlockingWallActor::IsWallEnabled() const
 {
 	return bWallEnabled;
 }
+
+EUOUDebugCategory AUOUPlayerBlockingWallActor::GetDebugCategory_Implementation() const
+{
+	return EUOUDebugCategory::Puzzle;
+}
+
+#if UOU_WITH_DEVELOPMENT_TOOLS
+void AUOUPlayerBlockingWallActor::GatherDevelopmentDebugDraw(
+	IUOUDevelopmentDebugDrawContext& Context) const
+{
+	if (BlockingVolume == nullptr)
+	{
+		return;
+	}
+
+	const FColor StateColor = (
+		IsWallEnabled()
+			? EnabledPreviewColor
+			: DisabledPreviewColor).ToFColor(true);
+	Context.DrawBox(
+		BlockingVolume->GetComponentLocation(),
+		BlockingVolume->GetScaledBoxExtent(),
+		BlockingVolume->GetComponentQuat(),
+		StateColor,
+		4.0f);
+}
+#endif
 
 void AUOUPlayerBlockingWallActor::ApplyPuzzleResult_Implementation(EOUUPuzzleResultAction Action)
 {
@@ -169,30 +184,13 @@ void AUOUPlayerBlockingWallActor::ApplyPreviewSettings()
 
 	const UWorld* World = GetWorld();
 	const bool bIsGameWorld = World != nullptr && World->IsGameWorld();
-	const bool bShouldShowDebugPreview = bIsGameWorld
-		&& bShowPreviewInGameWhenPuzzleDebug
-		&& UUOUDebugSubsystem::IsDebugWorldDrawEnabled(this, EUOUDebugCategory::Puzzle);
 	const bool bShouldShowPreview = bIsGameWorld
-		? (bShowPreviewInGame || bShouldShowDebugPreview)
+		? bShowPreviewInGame
 		: bShowPreviewInEditor;
 
 	PreviewMesh->SetVisibility(bShouldShowPreview, true);
 	PreviewMesh->SetHiddenInGame(!bShouldShowPreview);
 
-	if (bShouldShowDebugPreview)
-	{
-		const FColor StateColor = (bWallEnabled ? EnabledPreviewColor : DisabledPreviewColor).ToFColor(true);
-		DrawDebugBox(
-			World,
-			BlockingVolume->GetComponentLocation(),
-			BlockingVolume->GetScaledBoxExtent(),
-			BlockingVolume->GetComponentQuat(),
-			StateColor,
-			false,
-			0.0f,
-			0,
-			4.0f);
-	}
 }
 
 void AUOUPlayerBlockingWallActor::ApplyPreviewMaterialSettings()

@@ -26,13 +26,13 @@ void UUOUFloorPlatformStepConditionComponent::EndPlay(const EEndPlayReason::Type
 	Super::EndPlay(EndPlayReason);
 }
 
-TArray<FString> UUOUFloorPlatformStepConditionComponent::GetPuzzleDebugInfo_Implementation() const
+FText UUOUFloorPlatformStepConditionComponent::GetDebugSummaryText_Implementation() const
 {
 	const int32 LastArrivedIndex = TargetPlatform != nullptr
 		? TargetPlatform->GetLastArrivedMoveStepIndex()
 		: INDEX_NONE;
 
-	return {
+	const TArray<FString> DebugLines = {
 		FString::Printf(
 			TEXT("Floor Step Condition: %s"),
 			IsSatisfied() ? TEXT("Satisfied") : TEXT("Unsatisfied")),
@@ -44,6 +44,8 @@ TArray<FString> UUOUFloorPlatformStepConditionComponent::GetPuzzleDebugInfo_Impl
 			TargetPlatform != nullptr && TargetPlatform->IsMoving() ? TEXT("Y") : TEXT("N"),
 			bRequireNotMoving ? TEXT("Y") : TEXT("N"))
 	};
+
+	return FText::FromString(FString::Join(DebugLines, LINE_TERMINATOR));
 }
 
 void UUOUFloorPlatformStepConditionComponent::GetPuzzleDebugInputActors_Implementation(

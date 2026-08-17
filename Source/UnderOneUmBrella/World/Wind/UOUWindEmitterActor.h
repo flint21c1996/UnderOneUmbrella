@@ -3,7 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Debug/UOUPuzzleDebugInfoProvider.h"
+#include "Debug/UOUDebugProvider.h"
 #include "GameFramework/Actor.h"
 #include "Puzzle/Core/UOUPuzzleResultReceiver.h"
 #include "World/Wind/UOUWindTypes.h"
@@ -24,7 +24,7 @@ UCLASS(meta=(DisplayName="UOU Wind Emitter"))
 class UNDERONEUMBRELLA_API AUOUWindEmitterActor
 	: public AActor
 	, public IUOUPuzzleResultReceiver
-	, public IUOUPuzzleDebugInfoProvider
+	, public IUOUDebugProvider
 {
 	GENERATED_BODY()
 
@@ -35,7 +35,8 @@ public:
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void OnConstruction(const FTransform& Transform) override;
 	virtual void ApplyPuzzleResult_Implementation(EOUUPuzzleResultAction Action) override;
-	virtual TArray<FString> GetPuzzleDebugInfo_Implementation() const override;
+	virtual EUOUDebugCategory GetDebugCategory_Implementation() const override;
+	virtual FText GetDebugSummaryText_Implementation() const override;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Wind")
 	TObjectPtr<USceneComponent> RootScene = nullptr;

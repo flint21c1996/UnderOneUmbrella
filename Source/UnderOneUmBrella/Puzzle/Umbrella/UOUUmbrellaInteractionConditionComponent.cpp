@@ -9,17 +9,18 @@ UUOUUmbrellaInteractionConditionComponent::UUOUUmbrellaInteractionConditionCompo
 	InteractionMode = EUOUInteractionConditionMode::SetSatisfied;
 }
 
-TArray<FString> UUOUUmbrellaInteractionConditionComponent::GetPuzzleDebugInfo_Implementation() const
+FText UUOUUmbrellaInteractionConditionComponent::GetDebugSummaryText_Implementation() const
 {
-	TArray<FString> Lines = Super::GetPuzzleDebugInfo_Implementation();
-	Lines.Add(FString::Printf(
+	TArray<FString> DebugLines;
+	Super::GetDebugSummaryText_Implementation().ToString().ParseIntoArrayLines(DebugLines, true);
+	DebugLines.Add(FString::Printf(
 		TEXT("Required Umbrella: %s"),
 		*StaticEnum<EUOUUmbrellaState>()->GetNameStringByValue(static_cast<int64>(RequiredUmbrellaState))));
-	Lines.Add(FString::Printf(
+	DebugLines.Add(FString::Printf(
 		TEXT("Required Umbrella Direction: %s"),
 		*StaticEnum<EUOUUmbrellaDirectionRequirement>()->GetNameStringByValue(static_cast<int64>(RequiredUmbrellaDirection))));
-	Lines.Add(FString::Printf(TEXT("Last Rejected Interactor: %s"), *GetNameSafe(LastRejectedInteractor.Get())));
-	return Lines;
+	DebugLines.Add(FString::Printf(TEXT("Last Rejected Interactor: %s"), *GetNameSafe(LastRejectedInteractor.Get())));
+	return FText::FromString(FString::Join(DebugLines, LINE_TERMINATOR));
 }
 
 void UUOUUmbrellaInteractionConditionComponent::GetPuzzleDebugInputActors_Implementation(
@@ -75,6 +76,9 @@ bool UUOUUmbrellaInteractionConditionComponent::DoesInteractorUmbrellaStateMatch
 
 	case EUOUUmbrellaState::Pouring:
 		return UmbrellaComponent->IsPouring();
+
+	case EUOUUmbrellaState::LightReflecting:
+		return UmbrellaComponent->IsLightReflecting();
 
 	default:
 		return false;

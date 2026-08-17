@@ -38,9 +38,9 @@ void UUOUPlayerUmbrellaStateConditionComponent::EndPlay(const EEndPlayReason::Ty
 	Super::EndPlay(EndPlayReason);
 }
 
-TArray<FString> UUOUPlayerUmbrellaStateConditionComponent::GetPuzzleDebugInfo_Implementation() const
+FText UUOUPlayerUmbrellaStateConditionComponent::GetDebugSummaryText_Implementation() const
 {
-	return {
+	const TArray<FString> DebugLines = {
 		FString::Printf(
 			TEXT("Player Umbrella Condition: %s"),
 			IsSatisfied() ? TEXT("Satisfied") : TEXT("Unsatisfied")),
@@ -53,6 +53,8 @@ TArray<FString> UUOUPlayerUmbrellaStateConditionComponent::GetPuzzleDebugInfo_Im
 		FString::Printf(TEXT("Player: %s"), *GetNameSafe(CachedPlayerPawn.Get())),
 		FString::Printf(TEXT("Umbrella Component: %s"), *GetNameSafe(CachedUmbrellaComponent.Get()))
 	};
+
+	return FText::FromString(FString::Join(DebugLines, LINE_TERMINATOR));
 }
 
 void UUOUPlayerUmbrellaStateConditionComponent::GetPuzzleDebugInputActors_Implementation(
@@ -234,6 +236,9 @@ bool UUOUPlayerUmbrellaStateConditionComponent::DoesCurrentUmbrellaStateMatch() 
 
 	case EUOUUmbrellaState::Pouring:
 		return CachedUmbrellaComponent->IsPouring();
+
+	case EUOUUmbrellaState::LightReflecting:
+		return CachedUmbrellaComponent->IsLightReflecting();
 
 	default:
 		return false;

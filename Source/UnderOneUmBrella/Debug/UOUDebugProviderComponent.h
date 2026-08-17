@@ -16,9 +16,6 @@ class UNDERONEUMBRELLA_API UUOUDebugProviderComponent : public UActorComponent, 
 public:
 	UUOUDebugProviderComponent();
 
-	virtual void BeginPlay() override;
-	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
-
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug", meta = (ToolTip = "이 provider가 디버그 정보를 제공할지 결정합니다."))
 	bool bEnabled = true;
 

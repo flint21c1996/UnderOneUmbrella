@@ -81,9 +81,9 @@ void UUOUHeatWireComponent::TickComponent(
 	RefreshTickState();
 }
 
-TArray<FString> UUOUHeatWireComponent::GetPuzzleDebugInfo_Implementation() const
+FText UUOUHeatWireComponent::GetDebugSummaryText_Implementation() const
 {
-	return {
+	const TArray<FString> DebugLines = {
 		FString::Printf(TEXT("HeatWire: %s"), IsSatisfied() ? TEXT("Satisfied") : TEXT("Unsatisfied")),
 		FString::Printf(
 			TEXT("State: %s"),
@@ -93,6 +93,8 @@ TArray<FString> UUOUHeatWireComponent::GetPuzzleDebugInfo_Implementation() const
 		FString::Printf(TEXT("Light Receiver: %s"), *GetNameSafe(LightReceiver)),
 		FString::Printf(TEXT("Last Igniter: %s"), *GetNameSafe(LastIgniter))
 	};
+
+	return FText::FromString(FString::Join(DebugLines, LINE_TERMINATOR));
 }
 
 void UUOUHeatWireComponent::GetPuzzleDebugInputActors_Implementation(TArray<AActor*>& OutInputActors) const

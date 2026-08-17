@@ -31,7 +31,8 @@ enum class EUOUUmbrellaState : uint8
 	Closed,
 	Open,
 	UpsideDown,
-	Pouring
+	Pouring,
+	LightReflecting UMETA(DisplayName = "Light Reflecting")
 };
 
 // 우산 손잡이 방향을 나타내는 독립 상태입니다.
@@ -75,7 +76,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnUmbrellaRainBlockedSignature, flo
 // 플레이어가 들고 있는 우산의 보유 상태, 형태 전환, 물 저장과 붓기, 비 차단을 담당하는 컴포넌트입니다.
 // 캐릭터 블루프린트에 붙여두고 참조 컴포넌트와 입력 키를 디테일 창에서 조정할 수 있게 열어둡니다.
 UCLASS(ClassGroup=(Gameplay), meta=(BlueprintSpawnableComponent, DisplayName="UOU Umbrella"))
-class UUOUUmbrellaComponent : public UActorComponent
+class UNDERONEUMBRELLA_API UUOUUmbrellaComponent : public UActorComponent
 {
 	GENERATED_BODY()
 
@@ -111,7 +112,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Input")
 	FKey InvertUmbrellaKey = EKeys::R;
 
-	// 뒤집힌 우산에 담긴 물을 붓기 시작하고 멈추는 기본 키입니다.
+	// 우산 상태에 따라 빛 반사를 토글하거나, 뒤집힌 우산의 물을 붓는 문맥 입력 키입니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Input")
 	FKey PourKey = EKeys::RightMouseButton;
 
@@ -273,47 +274,11 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, AdvancedDisplay, Category = "Umbrella|Debug", meta = (ToolTip = "이 값은 더 이상 화면 디버그 표시 여부를 결정하지 않습니다. Debug Controller의 Player HUD 옵션을 사용합니다."))
 	bool bShowScreenDebug = false;
 
-	// 우산 월드 디버그 표시 여부는 이제 Debug Controller의 Player 카테고리가 결정합니다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, AdvancedDisplay, Category = "Umbrella|Debug", meta = (ToolTip = "이 값은 더 이상 비 차단 월드 디버그 표시 여부를 결정하지 않습니다. Debug Controller의 Player World Debug 옵션을 사용합니다."))
-	bool bDrawRainBlockerDebug = true;
-
-	// 비 차단 디버그 선과 중심점의 두께입니다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Debug", meta = (ClampMin = "0.0", ToolTip = "비 차단 디버그 선과 중심점의 두께입니다."))
-	float RainBlockerDebugThickness = 2.0f;
-
-	// 물 붓기 라인트레이스 표시 여부는 이제 Debug Controller의 Player 카테고리가 결정합니다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, AdvancedDisplay, Category = "Umbrella|Debug", meta = (ToolTip = "이 값은 더 이상 물 붓기 라인트레이스 표시 여부를 결정하지 않습니다. Debug Controller의 Player World Debug 옵션을 사용합니다."))
-	bool bDrawPourTraceDebug = true;
-
-	// 물 붓기 라벨 표시 여부는 이제 Debug Controller의 Player 카테고리가 결정합니다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, AdvancedDisplay, Category = "Umbrella|Debug", meta = (ToolTip = "이 값은 더 이상 물 붓기 라벨 표시 여부를 결정하지 않습니다. Debug Controller의 Player World Label 옵션을 사용합니다."))
-	bool bDrawPourTraceDebugLabel = true;
-
-	// 물 붓기 라인트레이스 디버그 선의 두께입니다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Debug", meta = (ClampMin = "0.0"))
-	float PourTraceDebugThickness = 3.0f;
-
-	// 물 붓기 디버그 선과 라벨이 유지되는 시간입니다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Debug", meta = (ClampMin = "0.0"))
-	float PourTraceDebugLifeTime = 0.0f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Umbrella|Debug|Pour", meta = (ToolTip = "Draws the resolved PouringPoint socket in the world while the umbrella is held."))
-	bool bDrawPourSocketDebug = true;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Umbrella|Debug|Pour", meta = (ToolTip = "Draws the exact PourDropActor spawn point and direction in the world."))
-	bool bDrawPourDropSpawnDebug = true;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Umbrella|Debug|Pour", meta = (ToolTip = "Draws spawned PourDropActor collision spheres in the world."))
-	bool bDrawPourDropCollisionDebug = true;
-
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Umbrella|Pour Drop", meta = (ToolTip = "Overrides spawned PourDropActor collision radius after profile and Blueprint defaults are applied."))
 	bool bOverridePourDropCollisionRadius = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Umbrella|Pour Drop", meta = (ClampMin = "0.0", EditCondition = "bOverridePourDropCollisionRadius", EditConditionHides))
 	float PourDropCollisionRadiusOverride = 4.0f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Umbrella|Debug|Pour", meta = (ClampMin = "0.0"))
-	float PourSocketDebugRadius = 10.0f;
 
 	// 초당 붓는 물의 양입니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Water", meta = (ClampMin = "0.0"))
@@ -344,6 +309,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Umbrella|Aim", meta = (ToolTip = "While pouring, uses camera-relative movement input (WASD) to choose the pour direction and keeps the character in place."))
 	bool bUseMovementInputPourAim = true;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Umbrella|Aim", meta = (ToolTip = "빛 반사 중 카메라 기준 이동 입력(WASD)으로 반사 방향을 선택하고 캐릭터를 제자리에 유지합니다."))
+	bool bUseMovementInputLightReflectingAim = true;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Umbrella|Aim", meta = (ClampMin = "0.0", ClampMax = "1.0", EditCondition = "bUseMovementInputPourAim", EditConditionHides, ToolTip = "Movement input smaller than this value does not change the current pour direction."))
 	float MovementInputPourAimDeadZone = 0.1f;
 
@@ -361,11 +329,23 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Umbrella|Aim", meta = (ClampMin = "0.0", EditCondition = "bUseScreenSpacePourAim", EditConditionHides))
 	float ScreenSpacePourAimDeadZone = 12.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Umbrella|Aim", meta = (ToolTip = "Snaps pouring aim to fixed angle steps around the player. 45 degrees gives 8 directions."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Umbrella|Aim", meta = (ToolTip = "물 붓기와 빛 반사 조준을 플레이어 주변의 고정 각도 단위로 보정합니다. 45도는 8방향입니다."))
 	bool bSnapPourAimDirection = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Umbrella|Aim", meta = (ClampMin = "1.0", ClampMax = "180.0", EditCondition = "bSnapPourAimDirection", EditConditionHides))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Umbrella|Aim", meta = (ClampMin = "1.0", ClampMax = "180.0", EditCondition = "bSnapPourAimDirection", EditConditionHides, DisplayName = "Movement Aim Snap Angle Degrees"))
 	float PourAimSnapAngleDegrees = 45.0f;
+
+	// 물 붓기와 빛 반사 중 캐릭터가 목표 조준 방향을 따라가는 일정한 회전 속도입니다. 0이면 즉시 회전합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Umbrella|Aim", meta = (ClampMin = "0.0", Units = "deg/s"))
+	float MovementAimRotationSpeedDegreesPerSecond = 720.0f;
+
+	// 대각선 입력에서 키 하나를 먼저 놓았을 때 단일 방향으로 잘못 확정하지 않도록 기다리는 시간입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Umbrella|Aim", meta = (ClampMin = "0.0", Units = "s"))
+	float MovementAimDiagonalReleaseGraceSeconds = 0.08f;
+
+	// 빛 반사 중 플레이어가 마우스 방향을 바라보게 할지 정합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Aim")
+	bool bRotateOwnerTowardsLightReflectingDirection = true;
 
 	// 우산에 저장된 물이 무게 계산에 얼마나 영향을 줄지 정합니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Rain", meta = (ClampMin = "0.0"))
@@ -494,6 +474,18 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Umbrella")
 	void EndPour();
 
+	// 펼친 우산을 앞으로 내미는 조준 가능한 빛 반사 상태로 전환합니다.
+	UFUNCTION(BlueprintCallable, Category = "Umbrella")
+	void BeginLightReflecting();
+
+	// 빛 반사를 끝내고 다시 펼친 상태로 돌아갑니다.
+	UFUNCTION(BlueprintCallable, Category = "Umbrella")
+	void EndLightReflecting();
+
+	// 펼친 우산과 빛 반사 상태를 토글합니다.
+	UFUNCTION(BlueprintCallable, Category = "Umbrella")
+	void ToggleLightReflectingState();
+
 	UFUNCTION(BlueprintCallable, Category = "Umbrella|Aim")
 	void SetPourAimMovementInput(FVector2D MovementInput, float MovementYaw);
 
@@ -545,6 +537,10 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Umbrella")
 	bool IsPouring() const;
 
+	// 우산으로 빛을 반사하는 중인지 확인합니다.
+	UFUNCTION(BlueprintPure, Category = "Umbrella")
+	bool IsLightReflecting() const;
+
 	// 우산 손잡이가 정방향인지 확인합니다.
 	UFUNCTION(BlueprintPure, Category = "Umbrella")
 	bool IsNormalDirection() const;
@@ -577,6 +573,24 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Umbrella")
 	bool TryGetGameplayRainBlockerVolumeData(FVector& OutWorldCenter, FRotator& OutWorldRotation, FVector& OutHalfExtent) const;
 
+	// 비 차단 판정 중심에 적용되는 에디터 설정 로컬 오프셋을 반환합니다.
+	const FVector& GetRainBlockerLocalOffset() const { return RainBlockerLocalOffset; }
+
+	// 현재 우산 리소스에서 실제 물줄기 시작 Transform을 계산합니다.
+	bool TryGetPouringPointTransform(FTransform& OutTransform) const;
+
+	// 실제 물방울 생성 위치와 방향을 계산합니다.
+	bool TryGetPourDropSpawnPlacement(FVector& OutDropLocation, FVector& OutDropDirection) const;
+
+	// 물줄기 시작 소켓을 제공하는 현재 스켈레탈 메시 컴포넌트를 반환합니다.
+	const USkeletalMeshComponent* GetPouringSocketSourceComponent() const
+	{
+		return ResolvePouringSocketSourceComponent();
+	}
+
+	FName GetPouringSocketName() const { return PouringSocketName; }
+	const FVector& GetPouringSocketWorldUnitOffset() const { return PouringSocketWorldUnitOffset; }
+
 	// 우산에 현재 저장된 물 양을 반환합니다.
 	UFUNCTION(BlueprintPure, Category = "Umbrella")
 	float GetCurrentStoredWater() const;
@@ -593,7 +607,7 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Umbrella")
 	FKey GetInvertUmbrellaKey() const { return InvertUmbrellaKey; }
 
-	// 물 붓기에 쓰는 키를 반환합니다.
+	// 우산의 문맥 동작(빛 반사/물 붓기)에 쓰는 키를 반환합니다.
 	UFUNCTION(BlueprintPure, Category = "Umbrella")
 	FKey GetPourKey() const { return PourKey; }
 
@@ -657,11 +671,7 @@ protected:
 
 	void UpdatePouringEffectTransform();
 
-	bool TryGetPouringPointTransform(FTransform& OutTransform) const;
-
 	const USkeletalMeshComponent* ResolvePouringSocketSourceComponent() const;
-
-	bool TryGetPourDropSpawnPlacement(FVector& OutDropLocation, FVector& OutDropDirection) const;
 
 	const UUOUPourContentProfile* ResolvePourContentProfile() const;
 
@@ -676,22 +686,18 @@ protected:
 	// 우산 상태와 물 정보를 화면 디버그 텍스트로 표시합니다.
 	void DrawScreenDebug() const;
 
-	// 우산이 실제로 비를 막는 위치와 범위를 월드 디버그 선과 구로 그립니다.
-	void DrawRainBlockerDebug() const;
-
-	// 물 붓기 라인트레이스와 마지막 전달 결과를 월드 디버그로 그립니다.
-	void DrawPourTraceDebug() const;
-
 	// 물 붓기 디버그에 사용하는 마지막 트레이스 기록을 비웁니다.
 	void ClearPourTraceDebug();
 
-	void DrawPourSocketAndDropSpawnDebug() const;
-
-	// 물을 붓는 동안 플레이어가 마우스 방향을 바라보도록 회전을 보정합니다.
-	void UpdatePourAimFacing();
+	// 물 붓기와 빛 반사 중 플레이어가 목표 방향을 부드럽게 바라보도록 회전을 보정합니다.
+	void UpdateUmbrellaAimFacing(float DeltaTime);
+	void UpdatePendingMovementAimDirection(float DeltaTime);
+	void CommitMovementAimDirection(const FVector& AimDirection, bool bIsDiagonalInput);
+	void ClearPendingMovementAimDirection();
 
 	// 붓기 조준 회전에서 남겨둔 상태를 정리하기 위한 자리입니다.
 	void ClearPourAimFacing();
+	void ApplyAimFacingMovementOverride();
 
 	// 저장된 물을 시간에 따라 줄이고 일정 간격으로 낙하 물 액터를 생성합니다.
 	void UpdatePouring(float DeltaTime);
@@ -734,6 +740,9 @@ protected:
 	UPROPERTY(Transient)
 	TObjectPtr<UAnimationAsset> LastAppliedSkeletalVisualAnimation = nullptr;
 
+	bool bHasAimFacingMovementOverride = false;
+	bool bSavedOrientRotationToMovement = false;
+
 	UPROPERTY(Transient)
 	TObjectPtr<UNiagaraComponent> PouringEffectComponent = nullptr;
 
@@ -744,6 +753,11 @@ protected:
 	float TimeSinceLastPourDropSpawn = 0.0f;
 
 	FVector PourAimWorldDirection = FVector::ZeroVector;
+	FVector PendingMovementAimWorldDirection = FVector::ZeroVector;
+	float PendingMovementAimTimeRemaining = 0.0f;
+	bool bHasPendingMovementAimDirection = false;
+	bool bMovementAimInputActive = false;
+	bool bCommittedMovementAimWasDiagonal = false;
 
 	bool bRainBlockedAudioPlaying = false;
 

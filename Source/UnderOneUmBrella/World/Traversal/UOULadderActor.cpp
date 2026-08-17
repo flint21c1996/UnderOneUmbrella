@@ -2,16 +2,16 @@
 
 #include "World/Traversal/UOULadderActor.h"
 
-#include "Components/ArrowComponent.h"
 #include "Components/BoxComponent.h"
+#include "Components/HierarchicalInstancedStaticMeshComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "DrawDebugHelpers.h"
 
 AUOULadderActor::AUOULadderActor()
 {
-	constexpr float DefaultTopHeight = 400.0f;
-
-	PrimaryActorTick.bCanEverTick = false;
+	PrimaryActorTick.bCanEverTick = true;
+	PrimaryActorTick.bStartWithTickEnabled = false;
 
 	RootScene = CreateDefaultSubobject<USceneComponent>(TEXT("RootScene"));
 	SetRootComponent(RootScene);
@@ -20,73 +20,72 @@ AUOULadderActor::AUOULadderActor()
 	VisualMesh->SetupAttachment(RootScene);
 	VisualMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	VisualMesh->SetGenerateOverlapEvents(false);
+	VisualMesh->SetCanEverAffectNavigation(false);
 
-	const FRotator DefaultCharacterFacing(0.0f, 180.0f, 0.0f);
-
-	BottomStandingAnchor = CreateDefaultSubobject<UArrowComponent>(TEXT("BottomStandingAnchor"));
-	BottomStandingAnchor->SetupAttachment(RootScene);
-	BottomStandingAnchor->SetRelativeLocation(FVector(100.0f, 0.0f, 96.0f));
-	BottomStandingAnchor->SetRelativeRotation(DefaultCharacterFacing);
-	BottomStandingAnchor->ArrowColor = FColor::Green;
-	BottomStandingAnchor->ArrowSize = 0.75f;
-	BottomStandingAnchor->SetHiddenInGame(true);
-
-	BottomClimbAnchor = CreateDefaultSubobject<UArrowComponent>(TEXT("BottomClimbAnchor"));
-	BottomClimbAnchor->SetupAttachment(RootScene);
-	BottomClimbAnchor->SetRelativeLocation(FVector(55.0f, 0.0f, 96.0f));
-	BottomClimbAnchor->SetRelativeRotation(DefaultCharacterFacing);
-	BottomClimbAnchor->ArrowColor = FColor::Blue;
-	BottomClimbAnchor->ArrowSize = 0.75f;
-	BottomClimbAnchor->SetHiddenInGame(true);
-
-	TopClimbAnchor = CreateDefaultSubobject<UArrowComponent>(TEXT("TopClimbAnchor"));
-	TopClimbAnchor->SetupAttachment(RootScene);
-	TopClimbAnchor->SetRelativeLocation(FVector(55.0f, 0.0f, DefaultTopHeight));
-	TopClimbAnchor->SetRelativeRotation(DefaultCharacterFacing);
-	TopClimbAnchor->ArrowColor = FColor(255, 128, 0);
-	TopClimbAnchor->ArrowSize = 0.75f;
-	TopClimbAnchor->SetHiddenInGame(true);
-
-	TopStandingAnchor = CreateDefaultSubobject<UArrowComponent>(TEXT("TopStandingAnchor"));
-	TopStandingAnchor->SetupAttachment(RootScene);
-	TopStandingAnchor->SetRelativeLocation(FVector(-80.0f, 0.0f, DefaultTopHeight + 96.0f));
-	TopStandingAnchor->SetRelativeRotation(DefaultCharacterFacing);
-	TopStandingAnchor->ArrowColor = FColor::Magenta;
-	TopStandingAnchor->ArrowSize = 0.75f;
-	TopStandingAnchor->SetHiddenInGame(true);
+	LadderSegments = CreateDefaultSubobject<UHierarchicalInstancedStaticMeshComponent>(TEXT("LadderSegments"));
+	LadderSegments->SetupAttachment(RootScene);
+	LadderSegments->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	LadderSegments->SetGenerateOverlapEvents(false);
+	LadderSegments->SetCanEverAffectNavigation(false);
+	LadderSegments->SetVisibility(false);
+	LadderSegments->SetHiddenInGame(true);
 
 	DetectionVolume = CreateDefaultSubobject<UBoxComponent>(TEXT("DetectionVolume"));
 	DetectionVolume->SetupAttachment(RootScene);
-	DetectionVolume->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+	DetectionVolume->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	DetectionVolume->SetCollisionResponseToAllChannels(ECR_Ignore);
-	DetectionVolume->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
-	DetectionVolume->SetGenerateOverlapEvents(true);
+	DetectionVolume->SetGenerateOverlapEvents(false);
 	DetectionVolume->SetHiddenInGame(true);
-	DetectionVolume->ShapeColor = FColor::Cyan;
+	DetectionVolume->ShapeColor = FColor::Red;
+	DetectionVolume->SetBoxExtent(FVector(140.0f, 70.0f, 200.0f));
+	DetectionVolume->SetRelativeLocation(FVector(0.0f, 0.0f, 200.0f));
 
-	BottomExitMarker = CreateDefaultSubobject<UBoxComponent>(TEXT("BottomExitMarker"));
-	BottomExitMarker->SetupAttachment(RootScene);
-	BottomExitMarker->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	BottomExitMarker->SetGenerateOverlapEvents(false);
-	BottomExitMarker->SetHiddenInGame(true);
-	BottomExitMarker->ShapeColor = FColor::Red;
-	BottomExitMarker->SetRelativeLocation(FVector(0.0f, 0.0f, 99.0f));
+	BottomEntryVolume = CreateDefaultSubobject<UBoxComponent>(TEXT("BottomEntryVolume"));
+	BottomEntryVolume->SetupAttachment(RootScene);
+	BottomEntryVolume->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+	BottomEntryVolume->SetCollisionResponseToAllChannels(ECR_Ignore);
+	BottomEntryVolume->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
+	BottomEntryVolume->SetGenerateOverlapEvents(true);
+	BottomEntryVolume->SetHiddenInGame(true);
+	BottomEntryVolume->ShapeColor = FColor::Green;
+	BottomEntryVolume->SetBoxExtent(FVector(140.0f, 70.0f, 100.0f));
+	BottomEntryVolume->SetRelativeTransform(BottomEntryTransform);
 
-	TopExitMarker = CreateDefaultSubobject<UBoxComponent>(TEXT("TopExitMarker"));
-	TopExitMarker->SetupAttachment(RootScene);
-	TopExitMarker->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	TopExitMarker->SetGenerateOverlapEvents(false);
-	TopExitMarker->SetHiddenInGame(true);
-	TopExitMarker->ShapeColor = FColor::Yellow;
-	TopExitMarker->SetRelativeLocation(FVector(0.0f, 0.0f, DefaultTopHeight - 3.0f));
+	TopEntryVolume = CreateDefaultSubobject<UBoxComponent>(TEXT("TopEntryVolume"));
+	TopEntryVolume->SetupAttachment(RootScene);
+	TopEntryVolume->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+	TopEntryVolume->SetCollisionResponseToAllChannels(ECR_Ignore);
+	TopEntryVolume->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
+	TopEntryVolume->SetGenerateOverlapEvents(true);
+	TopEntryVolume->SetHiddenInGame(true);
+	TopEntryVolume->ShapeColor = FColor::Blue;
+	TopEntryVolume->SetBoxExtent(FVector(140.0f, 70.0f, 140.0f));
+	TopEntryVolume->SetRelativeTransform(TopEntryTransform);
 
-	ApplyDetectionVolumeSettings();
+	RefreshLadderLayout();
 }
 
 void AUOULadderActor::OnConstruction(const FTransform& Transform)
 {
 	Super::OnConstruction(Transform);
-	ApplyDetectionVolumeSettings();
+	RefreshLadderLayout();
+	SetActorTickEnabled(bShowTraversalDebugInGame);
+}
+
+void AUOULadderActor::BeginPlay()
+{
+	Super::BeginPlay();
+	SetActorTickEnabled(bShowTraversalDebugInGame);
+}
+
+void AUOULadderActor::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+
+	if (bShowTraversalDebugInGame)
+	{
+		DrawTraversalDebug();
+	}
 }
 
 FVector AUOULadderActor::GetClimbLocationNear(const FVector& WorldLocation) const
@@ -128,42 +127,62 @@ FRotator AUOULadderActor::GetClimbingRotationNear(const FVector& WorldLocation) 
 
 FVector AUOULadderActor::GetBottomStandingLocation() const
 {
-	return BottomStandingAnchor != nullptr ? BottomStandingAnchor->GetComponentLocation() : GetActorLocation();
+	return GetActorTransform().TransformPosition(BottomEntryTransform.GetLocation());
 }
 
 FVector AUOULadderActor::GetTopStandingLocation() const
 {
-	return TopStandingAnchor != nullptr ? TopStandingAnchor->GetComponentLocation() : GetActorLocation();
+	return GetActorTransform().TransformPosition(TopEntryTransform.GetLocation());
+}
+
+FVector AUOULadderActor::GetBottomExitLocation() const
+{
+	return GetActorTransform().TransformPosition(BottomExitTransform.GetLocation());
+}
+
+FVector AUOULadderActor::GetTopExitLocation() const
+{
+	return GetActorTransform().TransformPosition(TopExitTransform.GetLocation());
 }
 
 FVector AUOULadderActor::GetBottomClimbLocation() const
 {
-	return BottomClimbAnchor != nullptr ? BottomClimbAnchor->GetComponentLocation() : GetActorLocation();
+	return GetActorTransform().TransformPosition(BottomClimbTransform.GetLocation());
 }
 
 FVector AUOULadderActor::GetTopClimbLocation() const
 {
-	return TopClimbAnchor != nullptr ? TopClimbAnchor->GetComponentLocation() : GetActorLocation();
+	return GetActorTransform().TransformPosition(TopClimbTransform.GetLocation());
 }
 
 FRotator AUOULadderActor::GetBottomStandingRotation() const
 {
-	return BottomStandingAnchor != nullptr ? BottomStandingAnchor->GetComponentRotation() : GetActorRotation();
+	return GetActorTransform().TransformRotation(BottomEntryTransform.GetRotation()).Rotator();
 }
 
 FRotator AUOULadderActor::GetTopStandingRotation() const
 {
-	return TopStandingAnchor != nullptr ? TopStandingAnchor->GetComponentRotation() : GetActorRotation();
+	return GetActorTransform().TransformRotation(TopEntryTransform.GetRotation()).Rotator();
+}
+
+FRotator AUOULadderActor::GetBottomExitRotation() const
+{
+	return GetActorTransform().TransformRotation(BottomExitTransform.GetRotation()).Rotator();
+}
+
+FRotator AUOULadderActor::GetTopExitRotation() const
+{
+	return GetActorTransform().TransformRotation(TopExitTransform.GetRotation()).Rotator();
 }
 
 FRotator AUOULadderActor::GetBottomClimbRotation() const
 {
-	return BottomClimbAnchor != nullptr ? BottomClimbAnchor->GetComponentRotation() : GetActorRotation();
+	return GetActorTransform().TransformRotation(BottomClimbTransform.GetRotation()).Rotator();
 }
 
 FRotator AUOULadderActor::GetTopClimbRotation() const
 {
-	return TopClimbAnchor != nullptr ? TopClimbAnchor->GetComponentRotation() : GetActorRotation();
+	return GetActorTransform().TransformRotation(TopClimbTransform.GetRotation()).Rotator();
 }
 
 FVector AUOULadderActor::GetBottomEntryDirection() const
@@ -187,6 +206,31 @@ FVector AUOULadderActor::GetOutwardNormal() const
 	return GetActorForwardVector().GetSafeNormal();
 }
 
+bool AUOULadderActor::IsEntryVolume(const UPrimitiveComponent* Component) const
+{
+	return Component != nullptr &&
+		(Component == BottomEntryVolume || Component == TopEntryVolume);
+}
+
+void AUOULadderActor::SetLadderHeight(float NewLadderHeight)
+{
+	if (DetectionVolume != nullptr)
+	{
+		const float SafeHeight = FMath::Max(50.0f, NewLadderHeight);
+		const FVector CurrentExtent = DetectionVolume->GetUnscaledBoxExtent();
+		const FVector CurrentScale = DetectionVolume->GetRelativeScale3D();
+		const float CurrentHalfHeight = CurrentExtent.Z * FMath::Abs(CurrentScale.Z);
+		const float CurrentBottom =
+			DetectionVolume->GetRelativeLocation().Z - CurrentHalfHeight;
+		DetectionVolume->SetBoxExtent(FVector(CurrentExtent.X, CurrentExtent.Y, SafeHeight * 0.5f));
+		DetectionVolume->SetRelativeScale3D(FVector(CurrentScale.X, CurrentScale.Y, 1.0f));
+		FVector VolumeLocation = DetectionVolume->GetRelativeLocation();
+		VolumeLocation.Z = CurrentBottom + SafeHeight * 0.5f;
+		DetectionVolume->SetRelativeLocation(VolumeLocation);
+	}
+	RefreshLadderLayout();
+}
+
 float AUOULadderActor::GetBottomClimbHeight() const
 {
 	return GetActorTransform().InverseTransformPosition(GetBottomClimbLocation()).Z;
@@ -201,51 +245,174 @@ float AUOULadderActor::GetBottomExitHeight() const
 {
 	const float MinimumClimbHeight = FMath::Min(GetBottomClimbHeight(), GetTopClimbHeight());
 	const float MaximumClimbHeight = FMath::Max(GetBottomClimbHeight(), GetTopClimbHeight());
-	const float MarkerHeight = BottomExitMarker != nullptr
-		? GetActorTransform().InverseTransformPosition(BottomExitMarker->GetComponentLocation()).Z
-		: GetBottomClimbHeight();
-	return FMath::Clamp(MarkerHeight, MinimumClimbHeight, MaximumClimbHeight);
+	return FMath::Clamp(
+		GetBottomClimbHeight() + BottomExitOffset,
+		MinimumClimbHeight,
+		MaximumClimbHeight);
 }
 
 float AUOULadderActor::GetTopExitHeight() const
 {
 	const float MinimumClimbHeight = FMath::Min(GetBottomClimbHeight(), GetTopClimbHeight());
 	const float MaximumClimbHeight = FMath::Max(GetBottomClimbHeight(), GetTopClimbHeight());
-	const float MarkerHeight = TopExitMarker != nullptr
-		? GetActorTransform().InverseTransformPosition(TopExitMarker->GetComponentLocation()).Z
-		: GetTopClimbHeight();
-	return FMath::Clamp(MarkerHeight, MinimumClimbHeight, MaximumClimbHeight);
+	return FMath::Clamp(
+		GetTopClimbHeight() - TopExitInset,
+		MinimumClimbHeight,
+		MaximumClimbHeight);
+}
+
+void AUOULadderActor::RefreshLadderLayout()
+{
+	UpdateLadderDimensionsFromVolume();
+	LadderSegmentHeight = FMath::Max(1.0f, LadderSegmentHeight);
+	TopExitInset = FMath::Max(0.0f, TopExitInset);
+	BottomExitOffset = FMath::Max(0.0f, BottomExitOffset);
+
+	RebuildLadderSegments();
+	ApplyDetectionVolumeSettings();
+}
+
+void AUOULadderActor::UpdateLadderDimensionsFromVolume()
+{
+	if (DetectionVolume == nullptr)
+	{
+		LadderHeight = FMath::Max(50.0f, LadderHeight);
+		return;
+	}
+
+	const float ScaledHalfHeight =
+		DetectionVolume->GetUnscaledBoxExtent().Z *
+		FMath::Abs(DetectionVolume->GetRelativeScale3D().Z);
+	LadderHeight = FMath::Max(50.0f, ScaledHalfHeight * 2.0f);
+}
+
+void AUOULadderActor::RebuildLadderSegments()
+{
+	if (LadderSegments == nullptr)
+	{
+		return;
+	}
+
+	LadderSegments->ClearInstances();
+	const bool bUseModularVisual = LadderSegments->GetStaticMesh() != nullptr;
+	LadderSegments->SetVisibility(bUseModularVisual, true);
+	LadderSegments->SetHiddenInGame(!bUseModularVisual);
+
+	if (VisualMesh != nullptr)
+	{
+		VisualMesh->SetVisibility(!bUseModularVisual, true);
+		VisualMesh->SetHiddenInGame(bUseModularVisual);
+	}
+
+	if (!bUseModularVisual)
+	{
+		return;
+	}
+
+	const int32 SegmentCount = FMath::Max(
+		1,
+		FMath::CeilToInt(LadderHeight / LadderSegmentHeight));
+	const float LadderHalfHeight = DetectionVolume != nullptr
+		? DetectionVolume->GetUnscaledBoxExtent().Z *
+			FMath::Abs(DetectionVolume->GetRelativeScale3D().Z)
+		: LadderHeight * 0.5f;
+	const float LadderBottom = DetectionVolume != nullptr
+		? DetectionVolume->GetRelativeLocation().Z - LadderHalfHeight
+		: 0.0f;
+	for (int32 SegmentIndex = 0; SegmentIndex < SegmentCount; ++SegmentIndex)
+	{
+		const FVector SegmentLocation(
+			0.0f,
+			0.0f,
+			LadderBottom + SegmentIndex * LadderSegmentHeight);
+		LadderSegments->AddInstance(FTransform(SegmentLocation), false);
+	}
 }
 
 void AUOULadderActor::ApplyDetectionVolumeSettings()
 {
 	DetectionDepth = FMath::Max(20.0f, DetectionDepth);
 	DetectionHalfWidth = FMath::Max(20.0f, DetectionHalfWidth);
-	BottomEntryTolerance = FMath::Max(0.0f, BottomEntryTolerance);
-	TopEntryTolerance = FMath::Max(0.0f, TopEntryTolerance);
 
 	if (DetectionVolume == nullptr)
 	{
 		return;
 	}
 
-	const FTransform ActorTransform = GetActorTransform();
-	const float BottomStandingHeight = ActorTransform.InverseTransformPosition(GetBottomStandingLocation()).Z;
-	const float TopStandingHeight = ActorTransform.InverseTransformPosition(GetTopStandingLocation()).Z;
-	const float DetectionBottom = FMath::Min(GetBottomClimbHeight(), BottomStandingHeight) - BottomEntryTolerance;
-	const float DetectionTop = FMath::Max(GetTopClimbHeight(), TopStandingHeight) + TopEntryTolerance;
-	const float DetectionHalfHeight = FMath::Max(20.0f, (DetectionTop - DetectionBottom) * 0.5f);
-	DetectionVolume->SetBoxExtent(FVector(DetectionDepth, DetectionHalfWidth, DetectionHalfHeight));
-	DetectionVolume->SetRelativeLocation(FVector(0.0f, 0.0f, (DetectionTop + DetectionBottom) * 0.5f));
+	const FVector DetectionExtent = DetectionVolume->GetUnscaledBoxExtent();
+	DetectionVolume->SetBoxExtent(FVector(
+		DetectionDepth,
+		DetectionHalfWidth,
+		DetectionExtent.Z));
 
-	const FVector ExitMarkerExtent(DetectionDepth, DetectionHalfWidth, 2.0f);
-	if (BottomExitMarker != nullptr)
+}
+
+void AUOULadderActor::DrawTraversalDebug() const
+{
+#if ENABLE_DRAW_DEBUG
+	UWorld* World = GetWorld();
+	if (World == nullptr)
 	{
-		BottomExitMarker->SetBoxExtent(ExitMarkerExtent);
+		return;
 	}
 
-	if (TopExitMarker != nullptr)
+	auto DrawTransform = [World](
+		const FVector& Location,
+		const FRotator& Rotation,
+		const TCHAR* Label,
+		const FColor& Color)
 	{
-		TopExitMarker->SetBoxExtent(ExitMarkerExtent);
-	}
+		DrawDebugSphere(World, Location, 10.0f, 12, Color, false, 0.0f, 0, 1.5f);
+		DrawDebugCoordinateSystem(World, Location, Rotation, 30.0f, false, 0.0f, 0, 1.5f);
+		DrawDebugString(
+			World,
+			Location + FVector(0.0f, 0.0f, 18.0f),
+			Label,
+			nullptr,
+			Color,
+			0.0f,
+			true,
+			1.0f);
+	};
+
+	DrawTransform(GetBottomStandingLocation(), GetBottomStandingRotation(), TEXT("Bottom Entry"), FColor::Green);
+	DrawTransform(GetBottomClimbLocation(), GetBottomClimbRotation(), TEXT("Bottom Climb"), FColor::Cyan);
+	DrawTransform(GetBottomExitLocation(), GetBottomExitRotation(), TEXT("Bottom Exit"), FColor::Yellow);
+	DrawTransform(GetTopStandingLocation(), GetTopStandingRotation(), TEXT("Top Entry"), FColor::Blue);
+	DrawTransform(GetTopClimbLocation(), GetTopClimbRotation(), TEXT("Top Climb"), FColor(255, 128, 0));
+	DrawTransform(GetTopExitLocation(), GetTopExitRotation(), TEXT("Top Exit"), FColor::Magenta);
+
+	DrawDebugLine(
+		World,
+		GetBottomClimbLocation(),
+		GetTopClimbLocation(),
+		FColor::Cyan,
+		false,
+		0.0f,
+		0,
+		2.0f);
+
+	auto DrawVolume = [World](const UBoxComponent* Volume, const FColor& Color)
+	{
+		if (Volume == nullptr)
+		{
+			return;
+		}
+
+		DrawDebugBox(
+			World,
+			Volume->GetComponentLocation(),
+			Volume->GetScaledBoxExtent(),
+			Volume->GetComponentQuat(),
+			Color,
+			false,
+			0.0f,
+			0,
+			1.5f);
+	};
+
+	DrawVolume(DetectionVolume, FColor::Red);
+	DrawVolume(BottomEntryVolume, FColor::Green);
+	DrawVolume(TopEntryVolume, FColor::Blue);
+#endif
 }

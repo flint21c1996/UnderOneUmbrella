@@ -6,6 +6,7 @@
 #include "Components/Slider.h"
 #include "Engine/GameInstance.h"
 #include "UOUMenuPlayerController.h"
+#include "UOUPlayerController.h"
 
 void UUOUSettingsMenuWidget::NativeConstruct()
 {
@@ -36,6 +37,13 @@ void UUOUSettingsMenuWidget::CloseSettingsMenu()
 
 void UUOUSettingsMenuWidget::ReturnToTitle()
 {
+	// 기존 WBP 이벤트 연결은 유지하되, 인게임에서만 목적지를 스테이지 선택 화면으로 바꿉니다.
+	if (AUOUPlayerController* InGamePlayerController = Cast<AUOUPlayerController>(GetOwningPlayer()))
+	{
+		InGamePlayerController->OpenStageSelect();
+		return;
+	}
+
 	if (AUOUMenuPlayerController* MenuPlayerController = GetMenuPlayerController())
 	{
 		MenuPlayerController->ReturnToTitle();

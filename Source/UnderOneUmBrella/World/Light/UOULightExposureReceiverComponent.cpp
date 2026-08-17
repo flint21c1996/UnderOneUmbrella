@@ -4,8 +4,7 @@
 
 #include "Components/PrimitiveComponent.h"
 #include "Components/SceneComponent.h"
-#include "Debug/UOUDebugSubsystem.h"
-#include "DrawDebugHelpers.h"
+#include "Debug/UOUDevelopmentDebugDrawContext.h"
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
 
@@ -45,17 +44,42 @@ void UUOULightExposureReceiverComponent::TickComponent(
 	}
 
 	RecoverTemperature(DeltaTime);
-	DrawTemperatureDebug();
 }
 
-TArray<FString> UUOULightExposureReceiverComponent::GetPuzzleDebugInfo_Implementation() const
+FText UUOULightExposureReceiverComponent::GetDebugSummaryText_Implementation() const
 {
-	return {
+	const TArray<FString> DebugLines = {
 		FString::Printf(TEXT("Light Receiver: %s"), bIsReceivingLight ? TEXT("Lit") : TEXT("Not Lit")),
 		FString::Printf(TEXT("Temp: %.1f C"), CurrentTemperature),
 		FString::Printf(TEXT("Exposure: %.2f from %s"), LastExposureIntensity, *LastExposureSourceName)
 	};
+
+	return FText::FromString(FString::Join(DebugLines, LINE_TERMINATOR));
 }
+
+EUOUDebugCategory UUOULightExposureReceiverComponent::GetDebugCategory_Implementation() const
+{
+	return EUOUDebugCategory::Puzzle;
+}
+
+#if UOU_WITH_DEVELOPMENT_TOOLS
+void UUOULightExposureReceiverComponent::GatherDevelopmentDebugDraw(
+	IUOUDevelopmentDebugDrawContext& Context) const
+{
+	const FVector DebugLocation =
+		IUOULightReceivableInterface::Execute_GetLightReceiverPosition(
+			const_cast<UUOULightExposureReceiverComponent*>(this))
+		+ FVector(0.0f, 0.0f, 100.0f);
+	const FString DebugText = FString::Printf(
+		TEXT("Temp: %.1f C\nLight: %s\nIntensity: %.2f"),
+		CurrentTemperature,
+		bIsReceivingLight ? TEXT("On") : TEXT("Off"),
+		LastExposureIntensity);
+	const FColor TextColor = bIsReceivingLight ? FColor::Orange : FColor::Cyan;
+
+	Context.DrawString(DebugLocation, DebugText, TextColor, 1.0f);
+}
+#endif
 
 FVector UUOULightExposureReceiverComponent::GetLightReceiverPosition_Implementation() const
 {
@@ -80,6 +104,68 @@ FVector UUOULightExposureReceiverComponent::GetLightReceiverPosition_Implementat
 	}
 
 	return FVector::ZeroVector;
+}
+
+void UUOULightExposureReceiverComponent::GetLightReceiverSamplePositions(
+	const FVector& BeamDirection,
+	TArray<FVector>& OutSamplePositions) const
+{
+	OutSamplePositions.Reset();
+
+	const UPrimitiveComponent* ReceiverVolume = GetReceiverVolume();
+	const FVector SafeBeamDirection = BeamDirection.GetSafeNormal();
+	if (!bUseReceiverVolumeSampling || ReceiverVolume == nullptr || SafeBeamDirection.IsNearlyZero())
+	{
+		OutSamplePositions.Add(GetLightReceiverPosition_Implementation());
+		return;
+	}
+
+	const FBoxSphereBounds ReceiverBounds = ReceiverVolume->Bounds;
+	const FVector Center = ReceiverBounds.Origin;
+	const FVector Extent = ReceiverBounds.BoxExtent;
+	OutSamplePositions.Add(Center);
+
+	FVector SampleAxisA = FVector::ZeroVector;
+	FVector SampleAxisB = FVector::ZeroVector;
+	SafeBeamDirection.FindBestAxisVectors(SampleAxisA, SampleAxisB);
+
+	const auto CalculateAxisDistance = [&Extent](const FVector& Axis)
+	{
+		float Distance = TNumericLimits<float>::Max();
+		for (int32 AxisIndex = 0; AxisIndex < 3; ++AxisIndex)
+		{
+			const float AxisAmount = FMath::Abs(Axis[AxisIndex]);
+			if (AxisAmount > KINDA_SMALL_NUMBER)
+			{
+				Distance = FMath::Min(Distance, Extent[AxisIndex] / AxisAmount);
+			}
+		}
+		return Distance == TNumericLimits<float>::Max() ? 0.0f : Distance;
+	};
+
+	const float SafeInset = FMath::Clamp(ReceiverSampleInset, 0.0f, 1.0f);
+	const float AxisDistanceA = CalculateAxisDistance(SampleAxisA) * SafeInset;
+	const float AxisDistanceB = CalculateAxisDistance(SampleAxisB) * SafeInset;
+	if (AxisDistanceA > KINDA_SMALL_NUMBER)
+	{
+		OutSamplePositions.Add(Center + SampleAxisA * AxisDistanceA);
+		OutSamplePositions.Add(Center - SampleAxisA * AxisDistanceA);
+	}
+	if (AxisDistanceB > KINDA_SMALL_NUMBER)
+	{
+		OutSamplePositions.Add(Center + SampleAxisB * AxisDistanceB);
+		OutSamplePositions.Add(Center - SampleAxisB * AxisDistanceB);
+	}
+}
+
+int32 UUOULightExposureReceiverComponent::GetRequiredLightSampleHits(int32 AvailableSampleCount) const
+{
+	if (!bUseReceiverVolumeSampling || AvailableSampleCount <= 1)
+	{
+		return AvailableSampleCount > 0 ? 1 : 0;
+	}
+
+	return FMath::Clamp(RequiredReceiverSampleHits, 1, AvailableSampleCount);
 }
 
 void UUOULightExposureReceiverComponent::ReceiveLightExposure_Implementation(const FUOULightExposureData& ExposureData)
@@ -141,6 +227,9 @@ bool UUOULightExposureReceiverComponent::IsReceivingLight() const
 
 void UUOULightExposureReceiverComponent::ValidateTemperatureSettings()
 {
+	ReceiverSampleInset = FMath::Clamp(ReceiverSampleInset, 0.0f, 1.0f);
+	RequiredReceiverSampleHits = FMath::Clamp(RequiredReceiverSampleHits, 1, 5);
+
 	if (MinTemperature > MaxTemperature)
 	{
 		Swap(MinTemperature, MaxTemperature);
@@ -151,8 +240,6 @@ void UUOULightExposureReceiverComponent::ValidateTemperatureSettings()
 	TemperatureRisePerIntensity = FMath::Max(0.0f, TemperatureRisePerIntensity);
 	TemperatureRecoveryRate = FMath::Max(0.0f, TemperatureRecoveryRate);
 	ExposureEndGraceTime = FMath::Max(0.0f, ExposureEndGraceTime);
-	TemperatureDebugDrawTime = FMath::Max(0.0f, TemperatureDebugDrawTime);
-	TemperatureDebugTextScale = FMath::Max(0.1f, TemperatureDebugTextScale);
 }
 
 USceneComponent* UUOULightExposureReceiverComponent::GetReferencedReceiverTransform() const
@@ -207,6 +294,37 @@ USceneComponent* UUOULightExposureReceiverComponent::FindAutoReceiverTransform()
 	return nullptr;
 }
 
+UPrimitiveComponent* UUOULightExposureReceiverComponent::GetReceiverVolume() const
+{
+	AActor* Owner = GetOwner();
+	if (Owner == nullptr)
+	{
+		return nullptr;
+	}
+
+	if (UPrimitiveComponent* ReferencedVolume =
+		Cast<UPrimitiveComponent>(ReceiverVolumeReference.GetComponent(Owner)))
+	{
+		return ReferencedVolume;
+	}
+
+	if (UPrimitiveComponent* ReceiverTransform = Cast<UPrimitiveComponent>(GetReferencedReceiverTransform()))
+	{
+		return ReceiverTransform;
+	}
+
+	TInlineComponentArray<UPrimitiveComponent*> PrimitiveComponents(Owner);
+	for (UPrimitiveComponent* PrimitiveComponent : PrimitiveComponents)
+	{
+		if (PrimitiveComponent != nullptr && PrimitiveComponent != Owner->GetRootComponent())
+		{
+			return PrimitiveComponent;
+		}
+	}
+
+	return Cast<UPrimitiveComponent>(Owner->GetRootComponent());
+}
+
 void UUOULightExposureReceiverComponent::SetReceivingLight(bool bNewReceivingLight)
 {
 	if (bIsReceivingLight == bNewReceivingLight)
@@ -240,40 +358,4 @@ void UUOULightExposureReceiverComponent::RecoverTemperature(float DeltaTime)
 		TemperatureRecoveryRate);
 
 	SetTemperature(RecoveredTemperature);
-}
-
-void UUOULightExposureReceiverComponent::DrawTemperatureDebug() const
-{
-	if (!bDrawTemperatureDebug || !UUOUDebugSubsystem::IsDebugWorldLabelEnabled(this, EUOUDebugCategory::Puzzle))
-	{
-		return;
-	}
-
-	UWorld* World = GetWorld();
-	if (World == nullptr)
-	{
-		return;
-	}
-
-	const FVector DebugLocation = GetLightReceiverPosition_Implementation() + TemperatureDebugOffset;
-	const FString DebugText = FString::Printf(
-		TEXT("Temp: %.1f C\nLight: %s\nIntensity: %.2f"),
-		CurrentTemperature,
-		bIsReceivingLight ? TEXT("On") : TEXT("Off"),
-		LastExposureIntensity);
-
-	const FColor TemperatureTextColor = UUOUDebugSubsystem::GetDebugCategoryColor(
-		this,
-		EUOUDebugCategory::Puzzle,
-		bIsReceivingLight ? ExposedTemperatureDebugColor : TemperatureDebugColor);
-
-	DrawDebugString(
-		World,
-		DebugLocation,
-		DebugText,
-		nullptr,
-		TemperatureTextColor,
-		TemperatureDebugDrawTime,
-		true,
-		TemperatureDebugTextScale);
 }

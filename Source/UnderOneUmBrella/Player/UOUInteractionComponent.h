@@ -11,7 +11,7 @@ class USceneComponent;
 
 // 플레이어 앞쪽에서 상호작용 가능한 후보를 찾는 범용 탐지 컴포넌트다.
 UCLASS(ClassGroup=(Gameplay), meta=(BlueprintSpawnableComponent))
-class UUOUInteractionComponent : public UActorComponent
+class UNDERONEUMBRELLA_API UUOUInteractionComponent : public UActorComponent
 {
 	GENERATED_BODY()
 

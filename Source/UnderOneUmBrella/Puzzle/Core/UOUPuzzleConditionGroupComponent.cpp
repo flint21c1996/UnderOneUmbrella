@@ -57,6 +57,15 @@ int32 UUOUPuzzleConditionGroupComponent::GetSatisfiedCount() const
 	return SatisfiedCount;
 }
 
+#if UOU_WITH_PUZZLE_CHEATS
+bool UUOUPuzzleConditionGroupComponent::ForceSatisfiedForCheat()
+{
+	bHasCheatSatisfiedOverride = true;
+	RefreshSatisfiedState(true);
+	return bIsSatisfied;
+}
+#endif
+
 void UUOUPuzzleConditionGroupComponent::SetExternalConditionSources(
 	const TArray<UUOUPuzzleConditionSourceComponent*>& NewConditionSources)
 {
@@ -150,7 +159,11 @@ void UUOUPuzzleConditionGroupComponent::UnsubscribeConditions()
 
 void UUOUPuzzleConditionGroupComponent::RefreshSatisfiedState(bool bBroadcastEvents)
 {
+#if UOU_WITH_PUZZLE_CHEATS
+	const bool bNextSatisfied = ResolveSatisfiedState();
+#else
 	const bool bNextSatisfied = AreAllConditionsSatisfied();
+#endif
 	if (bIsSatisfied == bNextSatisfied)
 	{
 		return;
@@ -171,6 +184,13 @@ void UUOUPuzzleConditionGroupComponent::RefreshSatisfiedState(bool bBroadcastEve
 
 	OnUnsatisfied.Broadcast();
 }
+
+#if UOU_WITH_PUZZLE_CHEATS
+bool UUOUPuzzleConditionGroupComponent::ResolveSatisfiedState() const
+{
+	return bHasCheatSatisfiedOverride || AreAllConditionsSatisfied();
+}
+#endif
 
 bool UUOUPuzzleConditionGroupComponent::AreAllConditionsSatisfied() const
 {

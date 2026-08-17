@@ -29,7 +29,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnUOUCharacterJumpedSignature);
 // 플레이어 이동, 카메라, 우산, 퍼즐 상호작용을 한데 묶는 기본 캐릭터다.
 // 게임 중에 자주 오가는 입력 분기와 공용 진입점이 이 클래스에 모여 있다.
 UCLASS(config=Game)
-class AUOUCharacter : public ACharacter
+class UNDERONEUMBRELLA_API AUOUCharacter : public ACharacter
 {
 	GENERATED_BODY()
 
@@ -169,11 +169,11 @@ protected:
 	// 우산 뒤집기 입력을 처리한다.
 	void HandleUmbrellaInvertPressed();
 
-	// 우산 붓기 시작 입력을 처리한다.
-	void HandleUmbrellaPourPressed();
+	// 우산 상태에 따라 빛 반사 또는 물 붓기 시작 입력을 처리한다.
+	void HandleUmbrellaActionPressed();
 
-	// 우산 붓기 종료 입력을 처리한다.
-	void HandleUmbrellaPourReleased();
+	// 유지형 우산 동작인 물 붓기의 종료 입력을 처리한다.
+	void HandleUmbrellaActionReleased();
 
 	// 우산 테스트용 물 채우기 입력을 처리한다.
 	void HandleUmbrellaDebugFillPressed();
