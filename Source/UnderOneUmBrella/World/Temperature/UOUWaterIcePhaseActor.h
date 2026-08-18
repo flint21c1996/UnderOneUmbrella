@@ -12,12 +12,20 @@ class UBoxComponent;
 class USphereComponent;
 class UStaticMeshComponent;
 class UUOULightExposureReceiverComponent;
+class UUOUUmbrellaComponent;
 
 UENUM(BlueprintType)
 enum class EUOUWaterIcePhase : uint8
 {
 	Water UMETA(DisplayName = "물"),
 	Ice UMETA(DisplayName = "얼음")
+};
+
+UENUM(BlueprintType)
+enum class EUOUWaterIceControlMode : uint8
+{
+	Temperature UMETA(DisplayName = "온도 기반"),
+	PlayerUmbrellaArea UMETA(DisplayName = "플레이어 우산 범위")
 };
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(
@@ -52,6 +60,39 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Water Ice|State", meta = (ToolTip = "시작 온도가 동결점과 융해점 사이일 때 사용할 초기 상태입니다."))
 	EUOUWaterIcePhase InitialPhase = EUOUWaterIcePhase::Water;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Water Ice|Control", meta = (ToolTip = "온도로 상태를 바꿀지, 플레이어 위치와 우산 상태로 상태를 바꿀지 선택합니다."))
+	EUOUWaterIceControlMode ControlMode = EUOUWaterIceControlMode::Temperature;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Water Ice|Umbrella Area", meta = (ClampMin = "1.0", Units = "cm", EditCondition = "ControlMode == EUOUWaterIceControlMode::PlayerUmbrellaArea", EditConditionHides, ToolTip = "격자 한 칸의 가로·세로 크기입니다."))
+	float TileWorldSize = 100.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Water Ice|Umbrella Area", meta = (ClampMin = "0", EditCondition = "ControlMode == EUOUWaterIceControlMode::PlayerUmbrellaArea", EditConditionHides, ToolTip = "우산을 펼쳤을 때 플레이어 타일에서 몇 칸까지 얼릴지 정합니다. 1이면 3x3입니다."))
+	int32 OpenUmbrellaRadiusInTiles = 1;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Water Ice|Umbrella Area", meta = (ClampMin = "0", EditCondition = "ControlMode == EUOUWaterIceControlMode::PlayerUmbrellaArea", EditConditionHides, ToolTip = "우산을 접었을 때 플레이어 타일에서 몇 칸까지 얼릴지 정합니다. 0이면 현재 칸만 얼립니다."))
+	int32 ClosedUmbrellaRadiusInTiles = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Water Ice|Umbrella Area", meta = (ClampMin = "0.0", Units = "cm", EditCondition = "ControlMode == EUOUWaterIceControlMode::PlayerUmbrellaArea", EditConditionHides, ToolTip = "위아래 층에 있는 다른 타일까지 함께 얼지 않도록 허용할 높이 차이를 제한합니다."))
+	float PlayerVerticalTolerance = 200.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Water Ice|Umbrella Area", meta = (ClampMin = "0.02", Units = "s", EditCondition = "ControlMode == EUOUWaterIceControlMode::PlayerUmbrellaArea", EditConditionHides, ToolTip = "플레이어 위치와 우산 상태를 다시 확인하는 주기입니다."))
+	float UmbrellaAreaRefreshInterval = 0.1f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Water Ice|Umbrella Area", meta = (ClampMin = "0.0", EditCondition = "ControlMode == EUOUWaterIceControlMode::PlayerUmbrellaArea", EditConditionHides, ToolTip = "우산 동결 범위 안에서 빛을 받지 않는 타일의 온도를 초당 낮추는 양입니다."))
+	float UmbrellaCoolingRate = 12.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Water Ice|Visual", meta = (ToolTip = "격자 위치에 따라 얼음 높이에 작고 고정된 차이를 적용합니다."))
+	bool bUseIceHeightVariation = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Water Ice|Visual", meta = (ClampMin = "0.5", ClampMax = "1.5", EditCondition = "bUseIceHeightVariation", ToolTip = "얼음 높이 배율의 최솟값입니다."))
+	float MinimumIceHeightScale = 0.96f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Water Ice|Visual", meta = (ClampMin = "0.5", ClampMax = "1.5", EditCondition = "bUseIceHeightVariation", ToolTip = "얼음 높이 배율의 최댓값입니다."))
+	float MaximumIceHeightScale = 1.04f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Water Ice|Visual", meta = (EditCondition = "bUseIceHeightVariation", ToolTip = "같은 격자에서도 다른 높이 패턴이 필요할 때 변경하는 시드입니다."))
+	int32 IceHeightPatternSeed = 1337;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Water Ice|Collision", meta = (ToolTip = "물 상태에서 Water Mesh에 적용할 충돌 모드입니다."))
 	TEnumAsByte<ECollisionEnabled::Type> WaterCollisionEnabled = ECollisionEnabled::NoCollision;
 
@@ -66,6 +107,9 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Water Ice|State", meta = (ToolTip = "연결된 온도 수신 컴포넌트의 현재 온도로 상태를 즉시 다시 판정합니다."))
 	void RefreshPhaseFromTemperature();
+
+	UFUNCTION(BlueprintCallable, Category = "Water Ice|State", meta = (ToolTip = "플레이어 위치와 우산 상태를 확인하고, 범위 안의 타일 온도를 한 주기만큼 낮춥니다."))
+	void RefreshPhaseFromUmbrellaArea();
 
 	UFUNCTION(BlueprintCallable, Category = "Water Ice|State", meta = (ToolTip = "온도 판정과 별개로 물 또는 얼음 상태를 직접 설정합니다."))
 	void SetPhase(EUOUWaterIcePhase NewPhase);
@@ -101,4 +145,20 @@ protected:
 	void ValidateSettings();
 	void ApplyPhaseState(bool bBroadcastChange, EUOUWaterIcePhase PreviousPhase);
 	EUOUWaterIcePhase ResolveInitialPhase(float Temperature) const;
+	void ResolvePlayerReferences();
+	bool IsInsidePlayerTileRange(const FVector& PlayerLocation, int32 RadiusInTiles) const;
+	void CacheIceMeshBaseTransform();
+	void ApplyIceHeightVariation();
+	float ResolveIceHeightScale() const;
+
+	UPROPERTY(Transient)
+	TObjectPtr<AActor> CachedPlayerActor = nullptr;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UUOUUmbrellaComponent> CachedUmbrellaComponent = nullptr;
+
+	FVector BaseIceMeshRelativeLocation = FVector::ZeroVector;
+	FVector BaseIceMeshRelativeScale = FVector::OneVector;
+	bool bHasCachedIceMeshBaseTransform = false;
+	FTimerHandle UmbrellaAreaRefreshTimerHandle;
 };

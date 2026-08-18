@@ -145,6 +145,14 @@ bool UUOULightInteractionSurfaceComponent::HasSufficientReflectionCoverage(
 	const FVector& ImpactPoint) const
 {
 	const float SafeIncomingRadius = FMath::Max(0.0f, IncomingBeamRadius);
+	if (!ContainsFullBeamFootprint(
+		SafeIncomingRadius,
+		IncomingDirection,
+		HitNormal,
+		ImpactPoint))
+	{
+		return false;
+	}
 	if (!bLimitReflectionByImpactOffset || SafeIncomingRadius <= KINDA_SMALL_NUMBER)
 	{
 		return true;
@@ -157,6 +165,87 @@ bool UUOULightInteractionSurfaceComponent::HasSufficientReflectionCoverage(
 		ImpactPoint);
 	const float CoverageRatio = ReflectedRadius / SafeIncomingRadius;
 	return CoverageRatio >= FMath::Clamp(MinimumReflectionCoverageRatio, 0.0f, 1.0f);
+}
+
+bool UUOULightInteractionSurfaceComponent::ContainsFullBeamFootprint(
+	float IncomingBeamRadius,
+	const FVector& IncomingDirection,
+	const FVector& HitNormal,
+	const FVector& ImpactPoint) const
+{
+	if (!bRequireFullBeamFootprint || IncomingBeamRadius <= KINDA_SMALL_NUMBER)
+	{
+		return true;
+	}
+
+	const FVector SafeIncomingDirection = IncomingDirection.GetSafeNormal();
+	FVector SurfaceNormal = GetReflectionFrontNormal();
+	if (SurfaceNormal.IsNearlyZero())
+	{
+		SurfaceNormal = HitNormal.GetSafeNormal();
+	}
+
+	const float ProjectionDenominator = FVector::DotProduct(
+		SafeIncomingDirection,
+		SurfaceNormal);
+	if (SafeIncomingDirection.IsNearlyZero() ||
+		SurfaceNormal.IsNearlyZero() ||
+		FMath::Abs(ProjectionDenominator) <= KINDA_SMALL_NUMBER)
+	{
+		return false;
+	}
+
+	FVector BeamAxisA = FVector::ZeroVector;
+	FVector BeamAxisB = FVector::ZeroVector;
+	SafeIncomingDirection.FindBestAxisVectors(BeamAxisA, BeamAxisB);
+
+	const FTransform SurfaceTransform = GetComponentTransform();
+	const FVector LocalNormal = SurfaceTransform.InverseTransformVectorNoScale(
+		SurfaceNormal).GetAbs();
+	int32 NormalAxis = 0;
+	if (LocalNormal.Y > LocalNormal.X)
+	{
+		NormalAxis = 1;
+	}
+	if (LocalNormal.Z > LocalNormal[NormalAxis])
+	{
+		NormalAxis = 2;
+	}
+
+	const FVector LocalExtent = GetUnscaledBoxExtent().GetAbs();
+	const FVector AbsoluteScale = GetComponentScale().GetAbs();
+	constexpr int32 FootprintSampleCount = 16;
+	for (int32 SampleIndex = 0; SampleIndex < FootprintSampleCount; ++SampleIndex)
+	{
+		const float SampleAngle = 2.0f * PI *
+			static_cast<float>(SampleIndex) / static_cast<float>(FootprintSampleCount);
+		const FVector RingPoint = ImpactPoint + IncomingBeamRadius *
+			(BeamAxisA * FMath::Cos(SampleAngle) + BeamAxisB * FMath::Sin(SampleAngle));
+		const float ProjectionDistance = FVector::DotProduct(
+			ImpactPoint - RingPoint,
+			SurfaceNormal) / ProjectionDenominator;
+		const FVector ProjectedPoint = RingPoint +
+			SafeIncomingDirection * ProjectionDistance;
+		const FVector LocalPoint = SurfaceTransform.InverseTransformPosition(ProjectedPoint);
+
+		for (int32 AxisIndex = 0; AxisIndex < 3; ++AxisIndex)
+		{
+			if (AxisIndex == NormalAxis)
+			{
+				continue;
+			}
+
+			const float SafeAxisScale = FMath::Max(AbsoluteScale[AxisIndex], KINDA_SMALL_NUMBER);
+			const float LocalInset = FullBeamFootprintEdgeInset / SafeAxisScale;
+			const float AvailableExtent = FMath::Max(0.0f, LocalExtent[AxisIndex] - LocalInset);
+			if (FMath::Abs(LocalPoint[AxisIndex]) > AvailableExtent)
+			{
+				return false;
+			}
+		}
+	}
+
+	return true;
 }
 
 float UUOULightInteractionSurfaceComponent::ResolveReflectionConeAngle(float IncomingConeAngle) const
@@ -244,6 +333,7 @@ void UUOULightInteractionSurfaceComponent::ValidateSettings()
 	ReflectionApertureScale = FMath::Max(0.0f, ReflectionApertureScale);
 	ReflectionImpactEdgeInset = FMath::Max(0.0f, ReflectionImpactEdgeInset);
 	MinimumReflectionCoverageRatio = FMath::Clamp(MinimumReflectionCoverageRatio, 0.0f, 1.0f);
+	FullBeamFootprintEdgeInset = FMath::Max(0.0f, FullBeamFootprintEdgeInset);
 	SurfaceSampleInset = FMath::Clamp(SurfaceSampleInset, 0.0f, 1.0f);
 }
 
