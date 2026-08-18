@@ -9,13 +9,14 @@
 
 class UHierarchicalInstancedStaticMeshComponent;
 class UMaterialInterface;
+class UBoxComponent;
 class USceneComponent;
 class UStaticMesh;
 class UUOULightExposureSourceComponent;
 class UUOUUmbrellaComponent;
 
-// 많은 물·얼음 타일을 두 개의 HISM 컴포넌트로 묶어 관리하는 격자 액터입니다.
-UCLASS(meta = (DisplayName = "UOU Water Ice Grid Actor"))
+// 레벨에서는 하나의 물 필드로 배치하고 내부에서는 셀 데이터와 HISM으로 물·얼음을 관리합니다.
+UCLASS(meta = (DisplayName = "UOU Water Ice Field"))
 class UNDERONEUMBRELLA_API AUOUWaterIceGridActor : public AActor
 {
 	GENERATED_BODY()
@@ -96,21 +97,48 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Water Ice Grid|Visual")
 	TObjectPtr<UMaterialInterface> IceMaterial = nullptr;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Water Ice Grid|Collision", meta = (ToolTip = "얼음 상태 타일에 플레이어와 물리 오브젝트 충돌을 적용합니다."))
+	bool bEnableIceCollision = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Water Ice Grid|Collision", meta = (ClampMin = "100.0", Units = "cm", ToolTip = "물 타일에 진입하지 못하도록 만드는 투명 차단 충돌의 높이입니다."))
+	float WaterBlockingHeight = 220.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Water Ice Grid|Collision", meta = (ClampMin = "1.0", Units = "cm", ToolTip = "물과 얼음의 경계에 생성되는 투명 차단 벽의 두께입니다."))
+	float WaterBoundaryThickness = 4.0f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Water Ice Grid|Runtime", meta = (ClampMin = "0.02", Units = "s", ToolTip = "격자 전체의 온도와 상태를 갱신하는 주기입니다."))
 	float UpdateInterval = 0.1f;
 
 	UFUNCTION(BlueprintCallable, Category = "Water Ice Grid", meta = (ToolTip = "현재 설정으로 격자 인스턴스를 다시 만듭니다."))
 	void RebuildGrid();
 
+	UFUNCTION(BlueprintPure, Category = "Water Ice Grid", meta = (ToolTip = "월드 위치가 필드 안에 있으면 해당 셀 좌표를 반환합니다."))
+	bool WorldLocationToTileCoordinates(const FVector& WorldLocation, int32& OutTileX, int32& OutTileY) const;
+
+	UFUNCTION(BlueprintPure, Category = "Water Ice Grid", meta = (ToolTip = "지정한 셀의 현재 온도를 반환합니다. 범위 밖이면 주변 온도를 반환합니다."))
+	float GetTileTemperature(int32 TileX, int32 TileY) const;
+
+	UFUNCTION(BlueprintPure, Category = "Water Ice Grid", meta = (ToolTip = "지정한 셀이 얼음 상태인지 반환합니다."))
+	bool IsTileFrozen(int32 TileX, int32 TileY) const;
+
+	UFUNCTION(BlueprintCallable, Category = "Water Ice Grid", meta = (ToolTip = "지정한 셀의 온도를 설정하고 물·얼음 상태를 즉시 다시 판정합니다."))
+	bool SetTileTemperature(int32 TileX, int32 TileY, float NewTemperature);
+
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<USceneComponent> RootScene = nullptr;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components", meta = (ToolTip = "에디터에서 전체 물 필드 범위를 표시하는 충돌 없는 박스입니다."))
+	TObjectPtr<UBoxComponent> FieldBounds = nullptr;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> WaterInstances = nullptr;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> IceInstances = nullptr;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> WaterBlockingInstances = nullptr;
 
 private:
 	struct FTileRuntime
@@ -121,6 +149,8 @@ private:
 	};
 
 	void ValidateSettings();
+	void ConfigureInstanceCollision();
+	void UpdateFieldBounds();
 	void UpdateGrid();
 	void RefreshLightSources();
 	void ResolvePlayerReferences();
@@ -128,8 +158,12 @@ private:
 	bool IsPlayerBlockingLight(const FVector& RayStart, const FVector& TileWorldLocation) const;
 	bool IsTileInsideUmbrellaArea(int32 TileX, int32 TileY) const;
 	void ApplyTilePhase(int32 TileIndex, bool bMarkRenderStateDirty);
+	void EvaluateTilePhase(int32 TileIndex, bool bMarkRenderStateDirty);
+	void RebuildWaterBoundaryCollision();
 	FTransform MakeTileTransform(int32 TileIndex, EUOUWaterIcePhase Phase) const;
+	FTransform MakeWaterBoundaryTransform(int32 TileIndex, int32 OffsetX, int32 OffsetY) const;
 	FVector GetTileLocalLocation(int32 TileIndex) const;
+	int32 GetTileIndex(int32 TileX, int32 TileY) const;
 
 	TArray<FTileRuntime> Tiles;
 	TArray<TWeakObjectPtr<UUOULightExposureSourceComponent>> CachedLightSources;
