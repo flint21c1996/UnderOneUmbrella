@@ -439,6 +439,16 @@ void UUOULightBeamVisualComponent::ConfigureSpawnedVFXActor(AActor* VFXActor) co
 
 	// 표현 액터가 게임플레이 광선과 캐릭터 충돌에 참여하지 않도록 합니다.
 	VFXActor->SetActorEnableCollision(false);
+	TInlineComponentArray<UPrimitiveComponent*> PrimitiveComponents(VFXActor);
+	for (UPrimitiveComponent* PrimitiveComponent : PrimitiveComponents)
+	{
+		if (PrimitiveComponent != nullptr)
+		{
+			// 빛줄기 표현 메시가 실제 조명의 가짜 그림자를 만들지 않도록 합니다.
+			PrimitiveComponent->SetCastShadow(false);
+		}
+	}
+
 	if (!bDisableEmbeddedVFXLights)
 	{
 		return;
@@ -865,7 +875,7 @@ void UUOULightBeamVisualComponent::UpdateCrossedLazyGodrayCard(
 		{
 			CrossCard->SetMaterial(MaterialIndex, SourceCard->GetMaterial(MaterialIndex));
 		}
-		CrossCard->SetCastShadow(SourceCard->CastShadow);
+		CrossCard->SetCastShadow(false);
 		CrossCard->SetTranslucentSortPriority(SourceCard->TranslucencySortPriority);
 
 		const float AngleRadians = PI * static_cast<float>(CardIndex) /

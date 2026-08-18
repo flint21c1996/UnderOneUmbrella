@@ -165,7 +165,10 @@ int32 UUOULightExposureReceiverComponent::GetRequiredLightSampleHits(int32 Avail
 		return AvailableSampleCount > 0 ? 1 : 0;
 	}
 
-	return FMath::Clamp(RequiredReceiverSampleHits, 1, AvailableSampleCount);
+	const int32 RequiredSampleHits = bUseReceiverSampleHysteresis && bIsReceivingLight
+		? RequiredReceiverSampleHitsWhileLit
+		: RequiredReceiverSampleHits;
+	return FMath::Clamp(RequiredSampleHits, 1, AvailableSampleCount);
 }
 
 void UUOULightExposureReceiverComponent::ReceiveLightExposure_Implementation(const FUOULightExposureData& ExposureData)
@@ -229,6 +232,7 @@ void UUOULightExposureReceiverComponent::ValidateTemperatureSettings()
 {
 	ReceiverSampleInset = FMath::Clamp(ReceiverSampleInset, 0.0f, 1.0f);
 	RequiredReceiverSampleHits = FMath::Clamp(RequiredReceiverSampleHits, 1, 5);
+	RequiredReceiverSampleHitsWhileLit = FMath::Clamp(RequiredReceiverSampleHitsWhileLit, 1, 5);
 
 	if (MinTemperature > MaxTemperature)
 	{

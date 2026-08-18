@@ -105,6 +105,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Collision", meta = (ToolTip = "빛 가시성 트레이스에서 소유 액터를 무시합니다."))
 	bool bIgnoreOwner = true;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Collision|Water Ice", meta = (ToolTip = "아래로 향하는 빛이 물·얼음 바닥 타일을 관통하여 같은 빛줄기 안의 여러 타일에 도달하게 합니다."))
+	bool bUseWaterIceAnglePassthrough = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Collision|Water Ice", meta = (ClampMin = "0.0", ClampMax = "90.0", Units = "deg", EditCondition = "bUseWaterIceAnglePassthrough", ToolTip = "수평면보다 이 각도 이상 아래로 향하는 빛은 물·얼음 타일을 통과합니다. 수평에 가까운 빛은 첫 얼음에서 차단됩니다."))
+	float WaterIcePassthroughMinDownwardAngleDegrees = 25.0f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection", meta = (ToolTip = "빛 상호작용 표면이 반사된 게임플레이 빛을 발생시킬 수 있게 합니다."))
 	bool bEnableReflectedLight = true;
 
@@ -179,6 +185,12 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Light|Path", meta = (ToolTip = "직접광과 반사광을 포함한 최종 빛 경로를 반환합니다."))
 	TArray<FUOULightPathData> GetLightPaths() const
+	{
+		return LightPaths;
+	}
+
+	// 많은 타일이 같은 프레임의 경로를 읽을 때 배열 복사를 피하기 위한 C++ 전용 접근자입니다.
+	const TArray<FUOULightPathData>& GetLightPathsView() const
 	{
 		return LightPaths;
 	}
@@ -272,7 +284,9 @@ protected:
 		const FVector& TraceStart,
 		const FVector& TraceEnd,
 		const FCollisionQueryParams& QueryParams,
-		const AActor* IgnoredShadeOwner = nullptr) const;
+		const AActor* IgnoredShadeOwner = nullptr,
+		float BeamStartRadius = -1.0f,
+		float BeamConeAngle = 0.0f) const;
 	bool FindNearestUmbrellaLightShadeHit(
 		const FVector& TraceStart,
 		const FVector& TraceEnd,

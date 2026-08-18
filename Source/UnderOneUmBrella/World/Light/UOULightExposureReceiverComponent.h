@@ -71,6 +71,15 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Receiver|Sampling", meta = (ClampMin = "1", ClampMax = "5", EditCondition = "bUseReceiverVolumeSampling", ToolTip = "중앙과 상하좌우 5개 샘플 중 빛에 닿아야 하는 최소 개수입니다."))
 	int32 RequiredReceiverSampleHits = 2;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Receiver|Sampling", meta = (EditCondition = "bUseReceiverVolumeSampling", ToolTip = "빛 수신을 시작할 때보다 유지할 때 필요한 샘플 개수를 낮춰 경계에서 판정이 반복해서 켜지고 꺼지는 현상을 줄입니다."))
+	bool bUseReceiverSampleHysteresis = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Receiver|Sampling", meta = (ClampMin = "1", ClampMax = "5", EditCondition = "bUseReceiverVolumeSampling && bUseReceiverSampleHysteresis", ToolTip = "이미 빛을 받고 있는 동안 수신 상태를 유지하는 데 필요한 최소 샘플 개수입니다."))
+	int32 RequiredReceiverSampleHitsWhileLit = 1;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Receiver|Occlusion", meta = (ToolTip = "Pawn이 광원과 수신체 사이에 있으면 게임플레이용 빛 노출을 차단합니다."))
+	bool bUsePawnOcclusion = false;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Temperature", meta = (ToolTip = "BeginPlay 시 Current Temperature를 Ambient Temperature 값으로 초기화합니다."))
 	bool bStartAtAmbientTemperature = true;
 
