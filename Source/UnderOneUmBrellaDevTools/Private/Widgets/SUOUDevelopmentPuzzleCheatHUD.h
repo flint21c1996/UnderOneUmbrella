@@ -15,6 +15,7 @@ class UUOUDevelopmentDebugDrawSubsystem;
 class UUOUDevelopmentPuzzleCheatSubsystem;
 struct FUOUDevelopmentDebugActorEntry;
 enum class EUOUDebugCategory : uint8;
+enum class EUOUPlayerDebugFeature : uint8;
 
 // 퍼즐 치트 컨트롤을 담을 개발 전용 Viewport 오버레이의 기본 껍데기입니다.
 class SUOUDevelopmentPuzzleCheatHUD final : public SCompoundWidget
@@ -51,6 +52,7 @@ private:
 	FReply HandleDebugTabClicked();
 	FReply HandleDebugToolsToggleClicked();
 	FReply HandleDebugCategoryToggleClicked(EUOUDebugCategory Category);
+	FReply HandlePlayerDebugFeatureToggleClicked(EUOUPlayerDebugFeature Feature);
 	FReply HandleDebugActorRefreshClicked();
 	FReply HandleDebugActorClearClicked();
 	FReply HandleDebugActorClicked(TWeakObjectPtr<AActor> DebugActor);
@@ -65,6 +67,7 @@ private:
 	FText GetDebugStatusText() const;
 	FText GetDebugToolsToggleText() const;
 	FText GetDebugCategoryToggleText(EUOUDebugCategory Category) const;
+	FText GetPlayerDebugFeatureToggleText(EUOUPlayerDebugFeature Feature) const;
 	FText GetSelectedDebugActorsText() const;
 	FText GetPlayerDebugInfoText() const;
 	FText GetPerformanceDebugInfoText() const;

@@ -53,6 +53,7 @@ public:
 private:
 	void RefreshPlayerDebugText();
 	void DrawPlayerUmbrellaRainBlockerDebug() const;
+	void DrawPlayerUmbrellaReflectorDebug() const;
 	void DrawPlayerUmbrellaPourTraceDebug() const;
 	void DrawPlayerUmbrellaPourPlacementDebug() const;
 	void DrawInteractionDebug() const;

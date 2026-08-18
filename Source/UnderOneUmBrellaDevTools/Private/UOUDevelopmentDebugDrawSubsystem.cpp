@@ -475,10 +475,34 @@ void UUOUDevelopmentDebugDrawSubsystem::Tick(float DeltaTime)
 
 	if (ControlSubsystem->IsDebugCategoryEnabled(EUOUDebugCategory::Player))
 	{
-		RefreshPlayerDebugText();
-		DrawPlayerUmbrellaRainBlockerDebug();
-		DrawPlayerUmbrellaPourTraceDebug();
-		DrawPlayerUmbrellaPourPlacementDebug();
+		if (ControlSubsystem->IsPlayerDebugFeatureEnabled(EUOUPlayerDebugFeature::Information))
+		{
+			RefreshPlayerDebugText();
+		}
+		else
+		{
+			PlayerDebugText.Reset();
+		}
+
+		if (ControlSubsystem->IsPlayerDebugFeatureEnabled(EUOUPlayerDebugFeature::UmbrellaRainBlocker))
+		{
+			DrawPlayerUmbrellaRainBlockerDebug();
+		}
+
+		if (ControlSubsystem->IsPlayerDebugFeatureEnabled(EUOUPlayerDebugFeature::UmbrellaReflector))
+		{
+			DrawPlayerUmbrellaReflectorDebug();
+		}
+
+		if (ControlSubsystem->IsPlayerDebugFeatureEnabled(EUOUPlayerDebugFeature::UmbrellaPourTrace))
+		{
+			DrawPlayerUmbrellaPourTraceDebug();
+		}
+
+		if (ControlSubsystem->IsPlayerDebugFeatureEnabled(EUOUPlayerDebugFeature::UmbrellaPourPlacement))
+		{
+			DrawPlayerUmbrellaPourPlacementDebug();
+		}
 	}
 	else
 	{
@@ -827,6 +851,27 @@ void UUOUDevelopmentDebugDrawSubsystem::DrawPlayerUmbrellaRainBlockerDebug() con
 		0.0f,
 		false,
 		1.0f);
+}
+
+void UUOUDevelopmentDebugDrawSubsystem::DrawPlayerUmbrellaReflectorDebug() const
+{
+	UWorld* World = GetWorld();
+	const APlayerController* PlayerController = World != nullptr
+		? World->GetFirstPlayerController()
+		: nullptr;
+	const APawn* PlayerPawn = PlayerController != nullptr ? PlayerController->GetPawn() : nullptr;
+	const UUOUUmbrellaLightInteractionComponent* LightInteractionComponent = PlayerPawn != nullptr
+		? PlayerPawn->FindComponentByClass<UUOUUmbrellaLightInteractionComponent>()
+		: nullptr;
+	if (World == nullptr
+		|| !ShouldDrawActor(PlayerPawn)
+		|| LightInteractionComponent == nullptr)
+	{
+		return;
+	}
+
+	FUOUDevelopmentDebugDrawContext DrawContext(*World);
+	LightInteractionComponent->GatherDevelopmentDebugDraw(DrawContext);
 }
 
 void UUOUDevelopmentDebugDrawSubsystem::DrawPlayerUmbrellaPourTraceDebug() const
@@ -2032,6 +2077,10 @@ void UUOUDevelopmentDebugDrawSubsystem::DrawPuzzleProviderCustomDebug() const
 				UOUDevelopmentDebugDrawPrivate::GetDebugObjectOwnerActor(ProviderObject))
 			|| !ProviderObject->GetClass()->ImplementsInterface(UUOUDebugProvider::StaticClass())
 			|| !IUOUDebugProvider::Execute_IsDebugProviderEnabled(ProviderObject))
+		{
+			continue;
+		}
+		if (ProviderObject->IsA<UUOUUmbrellaLightInteractionComponent>())
 		{
 			continue;
 		}
