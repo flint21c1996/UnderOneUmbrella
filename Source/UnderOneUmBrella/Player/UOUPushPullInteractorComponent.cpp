@@ -2,6 +2,7 @@
 
 #include "Player/UOUPushPullInteractorComponent.h"
 
+#include "Components/CapsuleComponent.h"
 #include "Components/PrimitiveComponent.h"
 #include "Engine/OverlapResult.h"
 #include "Engine/World.h"
@@ -31,6 +32,7 @@ void UUOUPushPullInteractorComponent::BeginPlay()
 	Super::BeginPlay();
 
 	CandidateSearchRadius = FMath::Max(0.0f, CandidateSearchRadius);
+	GrabSurfaceDistanceTolerance = FMath::Max(0.0f, GrabSurfaceDistanceTolerance);
 	ReleaseDistanceBuffer = FMath::Max(0.0f, ReleaseDistanceBuffer);
 	PushPullWalkSpeed = FMath::Max(0.0f, PushPullWalkSpeed);
 	GrabDistanceCorrectionStrength = FMath::Max(0.0f, GrabDistanceCorrectionStrength);
@@ -275,6 +277,12 @@ void UUOUPushPullInteractorComponent::TryBeginGrab()
 		return;
 	}
 
+	if (!IsObjectSurfaceWithinGrabDistance(CurrentCandidateObject))
+	{
+		LastFailureReason = TEXT("Object Surface Too Far");
+		return;
+	}
+
 	if (!CurrentCandidateObject->TryBeginGrab(OwnerCharacter))
 	{
 		LastFailureReason = TEXT("Object Rejected Grab");
@@ -290,6 +298,54 @@ void UUOUPushPullInteractorComponent::TryBeginGrab()
 	ApplyGrabbedCharacterMovementSettings(true);
 
 	ApplyGrabbedRotation();
+}
+
+bool UUOUPushPullInteractorComponent::IsObjectSurfaceWithinGrabDistance(
+	const UUOUPushPullObjectComponent* TargetObject) const
+{
+	if (OwnerCharacter == nullptr || TargetObject == nullptr)
+	{
+		return false;
+	}
+
+	const UCapsuleComponent* CharacterCapsule = OwnerCharacter->GetCapsuleComponent();
+	UPrimitiveComponent* TargetPrimitive = TargetObject->GetTargetPrimitive();
+	if (CharacterCapsule == nullptr || TargetPrimitive == nullptr)
+	{
+		return false;
+	}
+
+	FVector TargetSurfacePoint = FVector::ZeroVector;
+	const float TargetSurfaceQueryDistance = TargetPrimitive->GetClosestPointOnCollision(
+		CharacterCapsule->GetComponentLocation(),
+		TargetSurfacePoint);
+	if (TargetSurfaceQueryDistance < 0.0f)
+	{
+		return false;
+	}
+
+	FVector CharacterSurfacePoint = FVector::ZeroVector;
+	const float CharacterSurfaceQueryDistance = CharacterCapsule->GetClosestPointOnCollision(
+		TargetSurfacePoint,
+		CharacterSurfacePoint);
+	if (CharacterSurfaceQueryDistance < 0.0f)
+	{
+		return false;
+	}
+
+	// Capsule 표면점을 기준으로 대상 표면을 한 번 더 구해 두 Collision 사이의 최근접 간격을 보정합니다.
+	FVector RefinedTargetSurfacePoint = FVector::ZeroVector;
+	const float RefinedTargetSurfaceQueryDistance = TargetPrimitive->GetClosestPointOnCollision(
+		CharacterSurfacePoint,
+		RefinedTargetSurfacePoint);
+	if (RefinedTargetSurfaceQueryDistance >= 0.0f)
+	{
+		TargetSurfacePoint = RefinedTargetSurfacePoint;
+	}
+
+	const float AllowedDistance = FMath::Max(0.0f, GrabSurfaceDistanceTolerance);
+	return FVector::DistSquared(CharacterSurfacePoint, TargetSurfacePoint)
+		<= FMath::Square(AllowedDistance);
 }
 
 void UUOUPushPullInteractorComponent::EndGrab()
