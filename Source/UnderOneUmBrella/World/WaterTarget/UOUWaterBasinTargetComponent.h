@@ -9,6 +9,7 @@
 #include "UOUWaterBasinTargetComponent.generated.h"
 
 class AActor;
+class USceneComponent;
 class UUOUWaterBasinTargetComponent;
 
 // 물 바닥 높이(BottomWorldZ)를 어떤 기준으로 잡을지 정합니다.
@@ -234,6 +235,27 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin|Passive Drain", meta = (EditCondition = "bEnablePassiveDrain", EditConditionHides, ToolTip = "켜져 있으면 이 Target이 속한 연결 그룹 전체에서 물을 배출합니다. 꺼져 있으면 이 Target 하나에서만 배출합니다."))
 	bool bPassiveDrainApplyToConnectedGroup = true;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin|Visual", meta = (ToolTip = "지정한 Water Visual 컴포넌트를 현재 수위에 맞춰 자동 갱신합니다."))
+	bool bUpdateWaterVisual = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, AdvancedDisplay, Category = "Water Basin|Visual", meta = (EditCondition = "bUpdateWaterVisual", EditConditionHides, ToolTip = "Water Visual Component가 비어 있으면 소유 Actor 안에서 이름 또는 Component Tag로 자동 탐색합니다."))
+	bool bAutoFindWaterVisualComponent = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, AdvancedDisplay, Category = "Water Basin|Visual", meta = (EditCondition = "bUpdateWaterVisual && bAutoFindWaterVisualComponent", EditConditionHides, ToolTip = "Water Visual을 자동 탐색할 때 사용할 Component 이름 또는 Component Tag입니다."))
+	FName WaterVisualComponentName = TEXT("WaterVisual");
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Basin|Visual", meta = (EditCondition = "bUpdateWaterVisual", EditConditionHides, ToolTip = "현재 수위에 맞춰 크기와 위치를 갱신할 Water Visual 컴포넌트입니다."))
+	TObjectPtr<USceneComponent> WaterVisualComponent = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, AdvancedDisplay, Category = "Water Basin|Visual", meta = (EditCondition = "bUpdateWaterVisual", EditConditionHides, ToolTip = "Water Visual의 X/Y를 Basin 영역에 맞추고 Z를 현재 물 깊이에 맞춥니다."))
+	bool bFitWaterVisualToBasinBounds = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, AdvancedDisplay, Category = "Water Basin|Visual", meta = (EditCondition = "bUpdateWaterVisual", EditConditionHides, ToolTip = "Water Visual을 Basin 중심과 물 바닥을 기준으로 자동 배치합니다."))
+	bool bAutoPlaceWaterVisual = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, AdvancedDisplay, Category = "Water Basin|Visual", meta = (EditCondition = "bUpdateWaterVisual", EditConditionHides, ToolTip = "물이 없을 때 Water Visual을 숨깁니다."))
+	bool bHideWaterVisualWhenEmpty = true;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Transient, AdvancedDisplay, Category = "Water Basin|Runtime Test", meta = (ClampMin = "0.0", ToolTip = "테스트용 현재 물 부피입니다. 에디터에서 바꾸면 깊이, 비율, 수면 Z가 즉시 갱신됩니다."))
 	float CurrentWaterVolume = 0.0f;
 
@@ -371,6 +393,8 @@ private:
 	static TWeakObjectPtr<UUOUWaterBasinTargetComponent> RuntimeDebugTarget;
 
 	bool bPendingInitialRedistribution = false;
+	bool bCapturedWaterVisualTransform = false;
+	FVector InitialWaterVisualScale = FVector::OneVector;
 
 	// 연결 리스트에서 null, 자기 자신, 중복, WaterBasinTargetComponent가 없는 Actor를 제거합니다.
 	void NormalizeConnections();
@@ -402,8 +426,8 @@ private:
 	// 공통 SurfaceWorldZ를 기준으로 각 Target의 CurrentWaterVolume을 다시 계산합니다.
 	void ApplyGroupSurfaceToTargets(const TArray<UUOUWaterBasinTargetComponent*>& Group, float SurfaceWorldZ);
 
-	// CurrentWaterVolume에서 Depth, FillRatio, SurfaceWorldZ를 다시 계산합니다.
-	void UpdateCachedWaterState();
+	// CurrentWaterVolume에서 Depth, FillRatio, SurfaceWorldZ를 다시 계산하고 필요하면 WaterVisual을 갱신합니다.
+	void UpdateCachedWaterState(bool bUpdateVisual = true);
 
 	// 그룹 합산 정보를 그룹에 속한 각 Target의 LastGroup... 런타임 값에 복사합니다.
 	void UpdateGroupRuntimeCache(const FUOUWaterBasinGroupDebugData& GroupData);
@@ -413,6 +437,21 @@ private:
 
 	// 실제 수위 변화 여부와 무관하게 물 입력이 들어왔음을 대상 범위에 알립니다.
 	void NotifyWaterInputReceived(const FUOUWaterBasinInputContext& InputContext);
+
+	// CurrentWaterDepth를 기준으로 WaterVisual의 크기, 위치, 표시 상태를 갱신합니다.
+	void UpdateWaterVisual();
+
+	// WaterVisualComponent가 비어 있으면 이름 또는 Component Tag 기준으로 자동 탐색합니다.
+	void ResolveWaterVisualComponent();
+
+	// 소유 Actor의 SceneComponent 중 WaterVisualComponentName과 일치하는 컴포넌트를 찾습니다.
+	USceneComponent* FindWaterVisualComponent() const;
+
+	// WaterVisual StaticMesh를 Basin의 X/Y 크기와 현재 물 깊이에 맞춥니다.
+	bool ApplyWaterVisualBounds(float VisibleDepthWorld);
+
+	// Bounds 자동 맞춤을 사용하지 않을 때 적용할 WaterVisual의 100% 기준 Scale을 저장합니다.
+	void CaptureWaterVisualTransformIfNeeded();
 
 	// 현재 RuntimeDebugTarget에 해당하는 경우 디버그 문자열과 연결선을 그립니다.
 

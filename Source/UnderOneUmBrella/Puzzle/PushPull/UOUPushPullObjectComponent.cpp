@@ -99,6 +99,10 @@ FVector UUOUPushPullObjectComponent::SetHorizontalVelocity(FVector HorizontalVel
 	{
 		HorizontalVelocity = HorizontalVelocity.GetSafeNormal() * MaxHorizontalSpeed;
 	}
+	if (!HorizontalVelocity.IsNearlyZero())
+	{
+		TargetPrimitive->WakeAllRigidBodies();
+	}
 
 	const FVector CurrentVelocity = TargetPrimitive->GetPhysicsLinearVelocity();
 	const bool bAppliedStepAssist = ApplyLowStepAssist(HorizontalVelocity);
