@@ -44,6 +44,8 @@ AUOURotatableMirrorActor::AUOURotatableMirrorActor()
 	LightInteractionSurface->ReflectionNormalMode = EUOULightReflectionNormalMode::ComponentForward;
 	LightInteractionSurface->ReflectionFrontNormalMode =
 		EUOULightReflectionFrontNormalMode::ComponentForward;
+	// 거울보다 넓은 빛은 일부만 잘라 반사하지 않고 원래 경로로 통과시킵니다.
+	LightInteractionSurface->bRequireFullBeamFootprint = true;
 
 	PushVolume = CreateDefaultSubobject<UBoxComponent>(TEXT("PushVolume"));
 	PushVolume->SetupAttachment(MirrorPivot);
