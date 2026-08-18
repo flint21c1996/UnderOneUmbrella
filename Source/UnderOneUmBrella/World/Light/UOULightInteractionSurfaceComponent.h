@@ -110,6 +110,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection|Aperture", meta = (ClampMin = "0.0", ClampMax = "1.0", EditCondition = "bLimitReflectionByImpactOffset", ToolTip = "입사광 반지름 대비 남은 반사 반지름의 최소 비율입니다. 이 값보다 적게 걸친 빛은 반사하지 않습니다."))
 	float MinimumReflectionCoverageRatio = 0.3f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection|Aperture", meta = (ToolTip = "켜면 거울에 투영된 빛 단면 전체가 Box 범위 안에 들어올 때만 빛을 반사하거나 차단합니다. 범위를 벗어나면 입사광은 그대로 통과합니다."))
+	bool bRequireFullBeamFootprint = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection|Aperture", meta = (ClampMin = "0.0", Units = "cm", EditCondition = "bRequireFullBeamFootprint", ToolTip = "빛 단면 전체 포함 판정에서 거울 가장자리로부터 제외할 안전 여백입니다."))
+	float FullBeamFootprintEdgeInset = 0.0f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection|Sampling", meta = (ToolTip = "중심점 하나가 아니라 반사면의 중앙과 상하좌우를 빛 적중 후보로 사용합니다."))
 	bool bUseSurfaceAreaSampling = true;
 
@@ -143,6 +149,13 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Light|Reflection", meta = (ToolTip = "충돌 위치에 남은 반사 폭이 최소 반사 비율을 만족하면 true를 반환합니다."))
 	bool HasSufficientReflectionCoverage(
+		float IncomingBeamRadius,
+		const FVector& IncomingDirection,
+		const FVector& HitNormal,
+		const FVector& ImpactPoint) const;
+
+	// 원형 빔 단면을 입사 방향으로 반사면에 투영한 뒤 Box 범위 안에 모두 들어오는지 검사합니다.
+	bool ContainsFullBeamFootprint(
 		float IncomingBeamRadius,
 		const FVector& IncomingDirection,
 		const FVector& HitNormal,
