@@ -63,7 +63,7 @@ public:
 
 	// Grab 시작 시 캐릭터 Capsule 표면과 PushPullObject Collision 표면 사이에 허용할 최대 간격입니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PushPull|Detection", meta = (ClampMin = "0.0", ToolTip = "상자 후보가 감지되어도 캐릭터 Capsule 표면과 상자 Collision 표면 사이 간격이 이 값 이하여야 Grab을 시작합니다."))
-	float GrabSurfaceDistanceTolerance = 15.0f;
+	float GrabSurfaceDistanceTolerance = 2.0f;
 
 	// 일반 동적 오브젝트를 밀고 당기기 후보에 포함할지 정한다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PushPull|Detection")
@@ -205,6 +205,10 @@ protected:
 	UPROPERTY(Transient)
 	float CurrentAxisInput = 0.0f;
 
+	// 현재 PushPullObject가 입력 방향의 Blocking Collision에 막혀 있는지 저장합니다.
+	UPROPERTY(Transient)
+	bool bGrabbedObjectMovementBlocked = false;
+
 	// 현재 grab 입력이 눌린 상태인지 유지하는 플래그다.
 	UPROPERTY(Transient)
 	bool bGrabInputHeld = false;
@@ -243,6 +247,10 @@ protected:
 
 	// 캐릭터 Capsule과 PushPullObject TargetPrimitive의 Collision 표면 간격이 Grab 허용 범위 안인지 확인합니다.
 	bool IsObjectSurfaceWithinGrabDistance(const UUOUPushPullObjectComponent* TargetObject) const;
+	bool TryGetObjectSurfaceDistance(const UUOUPushPullObjectComponent* TargetObject, float& OutDistance) const;
+
+	// 현재 입력 방향으로 PushPullObject Collision을 짧게 Sweep해 이동 가능 여부를 확인합니다.
+	bool CanMoveGrabbedObjectInDirection(float AxisInput) const;
 
 	// 잡기 상태를 정리하고 원래 이동 설정을 복구한다.
 	void EndGrab();
@@ -251,7 +259,7 @@ protected:
 	void RestoreGrabbedCharacterMovementSettings();
 	void CacheGrabbedReferenceDistance();
 	void ClearGrabbedReferenceDistance();
-	FVector BuildGrabbedObjectVelocity(float BaseMoveSpeed) const;
+	FVector BuildGrabbedObjectVelocity(float DeltaTime) const;
 
 	// 잡은 동안 캐릭터 방향을 블럭 축에 맞게 보정한다.
 	void ApplyGrabbedRotation() const;

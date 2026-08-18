@@ -56,10 +56,7 @@ void UUOUPushPullInteractorComponent::TickComponent(float DeltaTime, ELevelTick 
 		}
 		else if (OwnerCharacter != nullptr)
 		{
-			const float MaxWalkSpeed = OwnerCharacter->GetCharacterMovement() != nullptr
-				? OwnerCharacter->GetCharacterMovement()->MaxWalkSpeed
-				: 0.0f;
-			GrabbedObject->SetHorizontalVelocity(BuildGrabbedObjectVelocity(MaxWalkSpeed));
+			GrabbedObject->SetHorizontalVelocity(BuildGrabbedObjectVelocity(DeltaTime));
 			ApplyGrabbedRotation();
 		}
 	}
@@ -120,9 +117,14 @@ bool UUOUPushPullInteractorComponent::HandleMoveInput(const FVector2D& MovementV
 	const FVector CameraRelativeMove = ForwardDirection * MovementVector.Y + RightDirection * MovementVector.X;
 
 	CurrentAxisInput = FVector::DotProduct(CameraRelativeMove, GrabbedMoveAxis);
+	bGrabbedObjectMovementBlocked = false;
 	if (GrabbedObject != nullptr && FMath::Abs(CurrentAxisInput) > UOUPushPullInteractorPrivate::MoveInputThreshold)
 	{
-		OwnerCharacter->AddMovementInput(GrabbedMoveAxis, CurrentAxisInput);
+		bGrabbedObjectMovementBlocked = !CanMoveGrabbedObjectInDirection(CurrentAxisInput);
+		if (!bGrabbedObjectMovementBlocked)
+		{
+			OwnerCharacter->AddMovementInput(GrabbedMoveAxis, CurrentAxisInput);
+		}
 	}
 	else if (FMath::Abs(CurrentAxisInput) <= UOUPushPullInteractorPrivate::MoveInputThreshold)
 	{
@@ -187,8 +189,23 @@ bool UUOUPushPullInteractorComponent::CanUseHands() const
 
 bool UUOUPushPullInteractorComponent::IsGrabbedObjectTooFar() const
 {
-	if ((GrabbedObject == nullptr && GrabbedCrank == nullptr && GrabbedMirror == nullptr) ||
-		InteractionComponent == nullptr || OwnerCharacter == nullptr)
+	if ((GrabbedObject == nullptr && GrabbedCrank == nullptr && GrabbedMirror == nullptr)
+		|| OwnerCharacter == nullptr)
+	{
+		return false;
+	}
+
+	if (GrabbedObject != nullptr)
+	{
+		float SurfaceDistance = 0.0f;
+		if (TryGetObjectSurfaceDistance(GrabbedObject, SurfaceDistance))
+		{
+			const float AllowedSurfaceDistance = GrabSurfaceDistanceTolerance + ReleaseDistanceBuffer;
+			return SurfaceDistance > AllowedSurfaceDistance;
+		}
+	}
+
+	if (InteractionComponent == nullptr)
 	{
 		return false;
 	}
@@ -303,6 +320,16 @@ void UUOUPushPullInteractorComponent::TryBeginGrab()
 bool UUOUPushPullInteractorComponent::IsObjectSurfaceWithinGrabDistance(
 	const UUOUPushPullObjectComponent* TargetObject) const
 {
+	float SurfaceDistance = 0.0f;
+	return TryGetObjectSurfaceDistance(TargetObject, SurfaceDistance)
+		&& SurfaceDistance <= FMath::Max(0.0f, GrabSurfaceDistanceTolerance);
+}
+
+bool UUOUPushPullInteractorComponent::TryGetObjectSurfaceDistance(
+	const UUOUPushPullObjectComponent* TargetObject,
+	float& OutDistance) const
+{
+	OutDistance = 0.0f;
 	if (OwnerCharacter == nullptr || TargetObject == nullptr)
 	{
 		return false;
@@ -343,9 +370,74 @@ bool UUOUPushPullInteractorComponent::IsObjectSurfaceWithinGrabDistance(
 		TargetSurfacePoint = RefinedTargetSurfacePoint;
 	}
 
-	const float AllowedDistance = FMath::Max(0.0f, GrabSurfaceDistanceTolerance);
-	return FVector::DistSquared(CharacterSurfacePoint, TargetSurfacePoint)
-		<= FMath::Square(AllowedDistance);
+	OutDistance = FVector::Distance(CharacterSurfacePoint, TargetSurfacePoint);
+	return true;
+}
+
+bool UUOUPushPullInteractorComponent::CanMoveGrabbedObjectInDirection(float AxisInput) const
+{
+	if (GrabbedObject == nullptr
+		|| OwnerCharacter == nullptr
+		|| FMath::Abs(AxisInput) <= UOUPushPullInteractorPrivate::MoveInputThreshold)
+	{
+		return true;
+	}
+
+	UPrimitiveComponent* TargetPrimitive = GrabbedObject->GetTargetPrimitive();
+	UCharacterMovementComponent* CharacterMovement = OwnerCharacter->GetCharacterMovement();
+	UWorld* World = GetWorld();
+	if (TargetPrimitive == nullptr || CharacterMovement == nullptr || World == nullptr)
+	{
+		return true;
+	}
+
+	FVector HorizontalAxis = GrabbedMoveAxis;
+	HorizontalAxis.Z = 0.0f;
+	if (HorizontalAxis.IsNearlyZero())
+	{
+		return false;
+	}
+
+	HorizontalAxis.Normalize();
+	const FVector MoveDirection = HorizontalAxis * FMath::Sign(AxisInput);
+	const float ProbeDistance = FMath::Max(0.0f, CharacterMovement->MaxWalkSpeed) * World->GetDeltaSeconds();
+	if (ProbeDistance <= UOUPushPullInteractorPrivate::MoveInputThreshold)
+	{
+		return true;
+	}
+
+	const FVector Start = TargetPrimitive->GetComponentLocation();
+	const FVector End = Start + MoveDirection * ProbeDistance;
+	FComponentQueryParams QueryParams(TEXT("PushPullMovementSweep"), OwnerCharacter);
+	QueryParams.AddIgnoredActor(TargetPrimitive->GetOwner());
+
+	TArray<FHitResult> Hits;
+	World->ComponentSweepMulti(
+		Hits,
+		TargetPrimitive,
+		Start,
+		End,
+		TargetPrimitive->GetComponentQuat(),
+		QueryParams);
+
+	for (const FHitResult& Hit : Hits)
+	{
+		if (!Hit.bBlockingHit)
+		{
+			continue;
+		}
+
+		const FVector BlockingNormal = !Hit.ImpactNormal.IsNearlyZero()
+			? Hit.ImpactNormal.GetSafeNormal()
+			: Hit.Normal.GetSafeNormal();
+		const float DirectionDot = FVector::DotProduct(BlockingNormal, MoveDirection);
+		if (DirectionDot < -UOUPushPullInteractorPrivate::MoveInputThreshold)
+		{
+			return false;
+		}
+	}
+
+	return true;
 }
 
 void UUOUPushPullInteractorComponent::EndGrab()
@@ -370,6 +462,7 @@ void UUOUPushPullInteractorComponent::EndGrab()
 	GrabbedMirror = nullptr;
 	GrabbedMoveAxis = FVector::ZeroVector;
 	CurrentAxisInput = 0.0f;
+	bGrabbedObjectMovementBlocked = false;
 	ClearGrabbedReferenceDistance();
 	if (bGrabInputHeld)
 	{
@@ -457,7 +550,7 @@ void UUOUPushPullInteractorComponent::ClearGrabbedReferenceDistance()
 	bHasGrabbedReferenceDistance = false;
 }
 
-FVector UUOUPushPullInteractorComponent::BuildGrabbedObjectVelocity(float BaseMoveSpeed) const
+FVector UUOUPushPullInteractorComponent::BuildGrabbedObjectVelocity(float DeltaTime) const
 {
 	FVector HorizontalAxis = GrabbedMoveAxis;
 	HorizontalAxis.Z = 0.0f;
@@ -467,7 +560,39 @@ FVector UUOUPushPullInteractorComponent::BuildGrabbedObjectVelocity(float BaseMo
 	}
 
 	HorizontalAxis.Normalize();
-	FVector DesiredVelocity = HorizontalAxis * CurrentAxisInput * FMath::Max(0.0f, BaseMoveSpeed);
+	const UCharacterMovementComponent* CharacterMovement = OwnerCharacter != nullptr
+		? OwnerCharacter->GetCharacterMovement()
+		: nullptr;
+	const FVector CharacterVelocity = OwnerCharacter != nullptr
+		? OwnerCharacter->GetVelocity()
+		: FVector::ZeroVector;
+	float CharacterAxisSpeed = FVector::DotProduct(CharacterVelocity, HorizontalAxis);
+
+	// Grab 축은 상자에서 플레이어를 향하므로 음수 입력이 밀기입니다.
+	// 밀기 중에는 Capsule 충돌로 캐릭터 실제 속도가 0일 수 있으므로 상자의 현재 물리 속도에서 누적 가속합니다.
+	if (CurrentAxisInput < -UOUPushPullInteractorPrivate::MoveInputThreshold
+		&& CharacterMovement != nullptr
+		&& GrabbedObject != nullptr)
+	{
+		if (bGrabbedObjectMovementBlocked)
+		{
+			CharacterAxisSpeed = 0.0f;
+		}
+		else if (UPrimitiveComponent* TargetPrimitive = GrabbedObject->GetTargetPrimitive())
+		{
+			const float ObjectAxisSpeed = FVector::DotProduct(
+				TargetPrimitive->GetPhysicsLinearVelocity(),
+				HorizontalAxis);
+			const float TargetPushSpeed = CurrentAxisInput * FMath::Max(0.0f, CharacterMovement->MaxWalkSpeed);
+			CharacterAxisSpeed = FMath::FInterpConstantTo(
+				ObjectAxisSpeed,
+				TargetPushSpeed,
+				FMath::Max(0.0f, DeltaTime),
+				FMath::Max(0.0f, CharacterMovement->MaxAcceleration));
+		}
+	}
+
+	FVector DesiredVelocity = HorizontalAxis * CharacterAxisSpeed;
 
 	if (!bUseGrabDistanceCorrection
 		|| !bHasGrabbedReferenceDistance
