@@ -53,6 +53,24 @@ struct FUOUNPCActionRequest
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "NPC|Animation", meta = (ToolTip = "재생을 시작할 몽타주 섹션 이름입니다. None이면 처음부터 재생합니다."))
 	FName AnimationStartSection = NAME_None;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "NPC|Animation", meta = (ToolTip = "켜져 있으면 몽타주가 끝나는 시간으로 액션을 완료하지 않고 Deactivate될 때까지 유지합니다. 몽타주의 해당 섹션은 자체 루프로 설정되어 있어야 합니다."))
+	bool bLoopAnimationUntilDeactivated = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "NPC|Animation|Temperature", meta = (ToolTip = "현재 NPC의 UOU Light Exposure Receiver 온도에 따라 재생 중인 몽타주의 속도를 갱신합니다."))
+	bool bUseTemperatureDrivenPlayRate = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "NPC|Animation|Temperature", meta = (EditCondition = "bUseTemperatureDrivenPlayRate", ClampMin = "-273.15", ToolTip = "최소 애니메이션 재생 속도를 적용할 온도입니다."))
+	float MinPlayRateTemperature = 25.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "NPC|Animation|Temperature", meta = (EditCondition = "bUseTemperatureDrivenPlayRate", ClampMin = "-273.15", ToolTip = "최대 애니메이션 재생 속도를 적용할 온도입니다."))
+	float MaxPlayRateTemperature = 100.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "NPC|Animation|Temperature", meta = (EditCondition = "bUseTemperatureDrivenPlayRate", ClampMin = "0.01", ToolTip = "온도가 Min Play Rate Temperature 이하일 때 사용할 재생 속도입니다."))
+	float MinTemperatureAnimationPlayRate = 0.5f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "NPC|Animation|Temperature", meta = (EditCondition = "bUseTemperatureDrivenPlayRate", ClampMin = "0.01", ToolTip = "온도가 Max Play Rate Temperature 이상일 때 사용할 재생 속도입니다."))
+	float MaxTemperatureAnimationPlayRate = 2.0f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "NPC|Action", meta = (ToolTip = "액션이 끝나면 현재 요청을 비우고 요청한 오브젝트에 완료를 알립니다. 시퀀스 액터는 자동으로 켭니다."))
 	bool bClearActionOnFinish = false;
 };
