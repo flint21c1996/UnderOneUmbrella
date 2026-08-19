@@ -25,6 +25,8 @@ namespace UOUWindEmitterActorPrivate
 {
 	const FName GeneratedWindPathPreviewTag(
 		TEXT("UOU.GeneratedWindPathPreview"));
+	const FName GeneratedWindVFXTag(
+		TEXT("UOU.GeneratedWindVFX"));
 
 	FName NormalizeNiagaraParameterName(FName ParameterName)
 	{
@@ -79,6 +81,40 @@ namespace UOUWindEmitterActorPrivate
 		Effect->SetVariableFloat(NormalizeNiagaraParameterName(ParameterName), Value);
 		return true;
 	}
+
+	bool SetColorParameterIfPresent(
+		UNiagaraComponent* Effect,
+		FName ParameterName,
+		const FLinearColor& Value)
+	{
+		if (Effect == nullptr || ParameterName.IsNone())
+		{
+			return false;
+		}
+
+		TArray<FName, TInlineAllocator<2>> NamesToCheck;
+		NamesToCheck.AddUnique(ParameterName);
+		NamesToCheck.AddUnique(NormalizeNiagaraParameterName(ParameterName));
+
+		const UNiagaraSystem* System = Effect->GetAsset();
+		for (const FName NameToCheck : NamesToCheck)
+		{
+			const FNiagaraVariable QueryParameter(
+				FNiagaraTypeDefinition::GetColorDef(),
+				NameToCheck);
+			if ((System != nullptr
+					&& System->GetExposedParameters().FindParameterVariable(QueryParameter, false) != nullptr)
+				|| Effect->GetOverrideParameters().FindParameterVariable(QueryParameter, false) != nullptr)
+			{
+				Effect->SetVariableLinearColor(
+					NormalizeNiagaraParameterName(ParameterName),
+					Value);
+				return true;
+			}
+		}
+
+		return false;
+	}
 }
 
 AUOUWindEmitterActor::AUOUWindEmitterActor()
@@ -122,6 +158,12 @@ void AUOUWindEmitterActor::BeginPlay()
 	SetWindVFXActive(IsWindBlowing());
 	SetActorTickEnabled(bWindEnabled);
 	RebuildWindPath();
+}
+
+void AUOUWindEmitterActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	ClearGeneratedWindVFX();
+	Super::EndPlay(EndPlayReason);
 }
 
 void AUOUWindEmitterActor::Tick(float DeltaSeconds)
@@ -335,6 +377,7 @@ void AUOUWindEmitterActor::RebuildWindPathInternal(
 		|| MaximumWindAcceleration <= 0.0f
 		|| MaximumWindSpeed <= 0.0f)
 	{
+		ClearGeneratedWindVFX();
 		OnWindPathChanged.Broadcast();
 		return;
 	}
@@ -411,6 +454,7 @@ void AUOUWindEmitterActor::RebuildWindPathInternal(
 		PreviousReflectionSurface = InteractionSurface;
 	}
 
+	RefreshWindVFX();
 	OnWindPathChanged.Broadcast();
 }
 
@@ -576,6 +620,9 @@ void AUOUWindEmitterActor::ValidateSettings()
 	DebugDrawTime = FMath::Max(0.0f, DebugDrawTime);
 	MinimumWindVFXBoundsSize = FMath::Max(1.0f, MinimumWindVFXBoundsSize);
 	MaximumWindVFXAutoScale = FMath::Max(1.0f, MaximumWindVFXAutoScale);
+	WindVFXLengthCoverage = FMath::Clamp(WindVFXLengthCoverage, 0.1f, 1.5f);
+	WindVFXLengthParameterRatio = FMath::Max(0.01f, WindVFXLengthParameterRatio);
+	WindVFXJointOverlap = FMath::Max(0.0f, WindVFXJointOverlap);
 }
 
 void AUOUWindEmitterActor::UpdateWindRangePreview()
@@ -627,19 +674,129 @@ void AUOUWindEmitterActor::HandleWindPhaseChanged(bool bWasBlowing)
 	}
 }
 
-void AUOUWindEmitterActor::RefreshWindVFX()
+float AUOUWindEmitterActor::GetWindVFXDisplayDistance() const
 {
-	if (!bAutoFitWindVFX || WindOrigin == nullptr)
+	if (bUseActualWindPathLengthForVFX && !WindPathSegments.IsEmpty())
+	{
+		return WindPathSegments[0].GetLength();
+	}
+
+	return MaxWindDistance;
+}
+
+void AUOUWindEmitterActor::ApplyWindVFXParameters(
+	UNiagaraComponent* WindEffect,
+	float DisplayDistance)
+{
+	if (WindEffect == nullptr)
 	{
 		return;
 	}
 
+	const float SafeDisplayDistance = FMath::Max(0.0f, DisplayDistance);
+	const float CoveredDisplayDistance = SafeDisplayDistance * WindVFXLengthCoverage;
+	if (bOverrideWindVFXColor)
+	{
+		UOUWindEmitterActorPrivate::SetColorParameterIfPresent(
+			WindEffect,
+			WindVFXColorParameterName,
+			WindVFXColor);
+	}
+
+	const float WindDiameter = WindRadius * 2.0f;
+	const bool bHasLengthParameter =
+		UOUWindEmitterActorPrivate::SetFloatParameterIfPresent(
+			WindEffect,
+			WindVFXLengthParameterName,
+			CoveredDisplayDistance * WindVFXLengthParameterRatio);
+	const bool bHasWidthParameter =
+		UOUWindEmitterActorPrivate::SetFloatParameterIfPresent(
+			WindEffect,
+			WindVFXWidthParameterName,
+			WindDiameter);
+	const bool bHasHeightParameter =
+		UOUWindEmitterActorPrivate::SetFloatParameterIfPresent(
+			WindEffect,
+			WindVFXHeightParameterName,
+			WindDiameter);
+	UOUWindEmitterActorPrivate::SetFloatParameterIfPresent(
+		WindEffect,
+		WindVFXMinRadiusParameterName,
+		0.0f);
+	const bool bHasMaxRadiusParameter =
+		UOUWindEmitterActorPrivate::SetFloatParameterIfPresent(
+			WindEffect,
+			WindVFXMaxRadiusParameterName,
+			WindRadius);
+
+	FVector EffectScale = WindEffect->GetRelativeScale3D();
+	bool bAdjustedEffectScale = false;
+	const UNiagaraSystem* WindSystem = WindEffect->GetAsset();
+	if (bFitMissingWindVFXDimensionsFromBounds && WindSystem != nullptr)
+	{
+		const FBox SystemBounds = WindSystem->GetFixedBounds();
+		if (SystemBounds.IsValid != 0)
+		{
+			const FVector BoundsSize = SystemBounds.GetSize();
+			auto CalculateAxisScale = [this](float DesiredSize, float SourceSize)
+			{
+				return FMath::Clamp(
+					DesiredSize / FMath::Max(SourceSize, MinimumWindVFXBoundsSize),
+					UE_KINDA_SMALL_NUMBER,
+					MaximumWindVFXAutoScale);
+			};
+
+			if (!bHasLengthParameter)
+			{
+				EffectScale.X = CalculateAxisScale(CoveredDisplayDistance, BoundsSize.X);
+				bAdjustedEffectScale = true;
+			}
+			if (!bHasWidthParameter && !bHasMaxRadiusParameter)
+			{
+				EffectScale.Y = CalculateAxisScale(WindDiameter, BoundsSize.Y);
+				bAdjustedEffectScale = true;
+			}
+			if (!bHasHeightParameter && !bHasMaxRadiusParameter)
+			{
+				EffectScale.Z = CalculateAxisScale(WindDiameter, BoundsSize.Z);
+				bAdjustedEffectScale = true;
+			}
+		}
+	}
+
+	if (bAdjustedEffectScale)
+	{
+		WindEffect->SetRelativeScale3D(EffectScale);
+	}
+}
+
+void AUOUWindEmitterActor::RefreshWindVFX()
+{
+	if (!bAutoFitWindVFX || WindOrigin == nullptr)
+	{
+		ClearGeneratedWindVFX();
+		return;
+	}
+
 	TInlineComponentArray<UNiagaraComponent*> WindEffects(this);
+	UNiagaraComponent* TemplateEffect = nullptr;
+	const float BaseDisplayDistance = GetWindVFXDisplayDistance();
+	const float FirstSegmentEndOverlap =
+		bCreateWindVFXForReflectedSegments && WindPathSegments.Num() > 1
+			? WindVFXJointOverlap
+			: 0.0f;
+
 	for (UNiagaraComponent* WindEffect : WindEffects)
 	{
-		if (WindEffect == nullptr)
+		if (WindEffect == nullptr
+			|| WindEffect->ComponentHasTag(UOUWindEmitterActorPrivate::GeneratedWindVFXTag))
 		{
 			continue;
+		}
+
+		if (TemplateEffect == nullptr)
+		{
+			TemplateEffect = WindEffect;
 		}
 
 		if (WindEffect->GetAttachParent() != WindOrigin)
@@ -652,77 +809,128 @@ void AUOUWindEmitterActor::RefreshWindVFX()
 		if (bOffsetWindVFXByHalfDistance)
 		{
 			FVector EffectLocation = WindEffect->GetRelativeLocation();
-			EffectLocation.X = MaxWindDistance * 0.5f;
+			EffectLocation.X = BaseDisplayDistance * 0.5f + FirstSegmentEndOverlap * 0.5f;
 			WindEffect->SetRelativeLocation(EffectLocation);
 		}
 
-		const float WindDiameter = WindRadius * 2.0f;
-		const bool bHasLengthParameter =
-			UOUWindEmitterActorPrivate::SetFloatParameterIfPresent(
-				WindEffect,
-				WindVFXLengthParameterName,
-				MaxWindDistance);
-		const bool bHasWidthParameter =
-			UOUWindEmitterActorPrivate::SetFloatParameterIfPresent(
-				WindEffect,
-				WindVFXWidthParameterName,
-				WindDiameter);
-		const bool bHasHeightParameter =
-			UOUWindEmitterActorPrivate::SetFloatParameterIfPresent(
-				WindEffect,
-				WindVFXHeightParameterName,
-				WindDiameter);
-		const bool bHasMinRadiusParameter =
-			UOUWindEmitterActorPrivate::SetFloatParameterIfPresent(
-				WindEffect,
-				WindVFXMinRadiusParameterName,
-				0.0f);
-		const bool bHasMaxRadiusParameter =
-			UOUWindEmitterActorPrivate::SetFloatParameterIfPresent(
-				WindEffect,
-				WindVFXMaxRadiusParameterName,
-				WindRadius);
+		ApplyWindVFXParameters(
+			WindEffect,
+			BaseDisplayDistance + FirstSegmentEndOverlap);
+	}
 
-		FVector EffectScale = WindEffect->GetRelativeScale3D();
-		bool bAdjustedEffectScale = false;
-		const UNiagaraSystem* WindSystem = WindEffect->GetAsset();
-		if (bFitMissingWindVFXDimensionsFromBounds && WindSystem != nullptr)
+	RefreshReflectedWindVFX(TemplateEffect);
+}
+
+void AUOUWindEmitterActor::RefreshReflectedWindVFX(
+	UNiagaraComponent* TemplateEffect)
+{
+	const int32 DesiredEffectCount =
+		bCreateWindVFXForReflectedSegments
+			&& bUseActualWindPathLengthForVFX
+			&& TemplateEffect != nullptr
+				? FMath::Max(0, WindPathSegments.Num() - 1)
+				: 0;
+
+	while (GeneratedWindVFXComponents.Num() > DesiredEffectCount)
+	{
+		if (UNiagaraComponent* EffectToRemove = GeneratedWindVFXComponents.Pop())
 		{
-			const FBox SystemBounds = WindSystem->GetFixedBounds();
-			if (SystemBounds.IsValid != 0)
-			{
-				const FVector BoundsSize = SystemBounds.GetSize();
-				auto CalculateAxisScale = [this](float DesiredSize, float SourceSize)
-				{
-					return FMath::Clamp(
-						DesiredSize / FMath::Max(SourceSize, MinimumWindVFXBoundsSize),
-						UE_KINDA_SMALL_NUMBER,
-						MaximumWindVFXAutoScale);
-				};
-
-				if (!bHasLengthParameter)
-				{
-					EffectScale.X = CalculateAxisScale(MaxWindDistance, BoundsSize.X);
-					bAdjustedEffectScale = true;
-				}
-				if (!bHasWidthParameter && !bHasMaxRadiusParameter)
-				{
-					EffectScale.Y = CalculateAxisScale(WindDiameter, BoundsSize.Y);
-					bAdjustedEffectScale = true;
-				}
-				if (!bHasHeightParameter && !bHasMaxRadiusParameter)
-				{
-					EffectScale.Z = CalculateAxisScale(WindDiameter, BoundsSize.Z);
-					bAdjustedEffectScale = true;
-				}
-			}
-		}
-
-		if (bAdjustedEffectScale)
-		{
-			WindEffect->SetRelativeScale3D(EffectScale);
+			EffectToRemove->DestroyComponent();
 		}
 	}
+
+	while (GeneratedWindVFXComponents.Num() < DesiredEffectCount)
+	{
+		const FName ComponentName = MakeUniqueObjectName(
+			this,
+			UNiagaraComponent::StaticClass(),
+			TEXT("GeneratedWindVFX"));
+		UNiagaraComponent* GeneratedEffect = NewObject<UNiagaraComponent>(
+			this,
+			ComponentName,
+			RF_Transient | RF_TextExportTransient);
+		if (GeneratedEffect == nullptr)
+		{
+			break;
+		}
+
+		GeneratedEffect->CreationMethod = EComponentCreationMethod::Instance;
+		GeneratedEffect->ComponentTags.AddUnique(
+			UOUWindEmitterActorPrivate::GeneratedWindVFXTag);
+		GeneratedEffect->SetAutoActivate(false);
+		GeneratedEffect->SetupAttachment(RootScene);
+		AddInstanceComponent(GeneratedEffect);
+		GeneratedEffect->RegisterComponent();
+		GeneratedWindVFXComponents.Add(GeneratedEffect);
+	}
+
+	for (int32 GeneratedIndex = 0;
+		GeneratedIndex < GeneratedWindVFXComponents.Num();
+		++GeneratedIndex)
+	{
+		UNiagaraComponent* GeneratedEffect =
+			GeneratedWindVFXComponents[GeneratedIndex];
+		const int32 SegmentIndex = GeneratedIndex + 1;
+		if (GeneratedEffect == nullptr
+			|| !WindPathSegments.IsValidIndex(SegmentIndex))
+		{
+			continue;
+		}
+
+		if (GeneratedEffect->GetAsset() != TemplateEffect->GetAsset())
+		{
+			GeneratedEffect->SetAsset(TemplateEffect->GetAsset());
+		}
+		TemplateEffect->GetOverrideParameters().CopyParametersTo(
+			GeneratedEffect->GetOverrideParameters(),
+			false,
+			FNiagaraParameterStore::EDataInterfaceCopyMethod::Value);
+
+		const FUOUWindPathSegment& Segment = WindPathSegments[SegmentIndex];
+		const FVector SegmentDirection = Segment.Direction.GetSafeNormal();
+		const float StartOverlap = WindVFXJointOverlap;
+		const float EndOverlap =
+			SegmentIndex < WindPathSegments.Num() - 1
+				? WindVFXJointOverlap
+				: 0.0f;
+		const float DisplayDistance =
+			Segment.GetLength() + StartOverlap + EndOverlap;
+		const FVector DisplayCenter =
+			(Segment.Start + Segment.End) * 0.5f
+			+ SegmentDirection * ((EndOverlap - StartOverlap) * 0.5f);
+		const FQuat DisplayRotation =
+			FRotationMatrix::MakeFromX(SegmentDirection).ToQuat();
+
+		GeneratedEffect->SetWorldLocationAndRotation(
+			DisplayCenter,
+			DisplayRotation);
+		GeneratedEffect->SetWorldScale3D(TemplateEffect->GetComponentScale());
+		ApplyWindVFXParameters(GeneratedEffect, DisplayDistance);
+
+		if (IsWindBlowing())
+		{
+			if (!GeneratedEffect->IsActive())
+			{
+				GeneratedEffect->Activate(true);
+			}
+		}
+		else if (GeneratedEffect->IsActive())
+		{
+			GeneratedEffect->Deactivate();
+		}
+	}
+}
+
+void AUOUWindEmitterActor::ClearGeneratedWindVFX()
+{
+	for (UNiagaraComponent* GeneratedEffect : GeneratedWindVFXComponents)
+	{
+		if (GeneratedEffect != nullptr)
+		{
+			GeneratedEffect->DestroyComponent();
+		}
+	}
+	GeneratedWindVFXComponents.Reset();
 }
 
 void AUOUWindEmitterActor::SetWindVFXActive(bool bActive)
@@ -761,6 +969,7 @@ void AUOUWindEmitterActor::ClearWindPath()
 {
 	WindPathSegments.Reset();
 	LastAffectedReceiverCount = 0;
+	ClearGeneratedWindVFX();
 	OnWindPathChanged.Broadcast();
 }
 
