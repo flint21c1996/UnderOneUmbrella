@@ -11,8 +11,56 @@
 #include "Puzzle/Core/UOUPuzzleResultReceiver.h"
 #include "TimerManager.h"
 
+DEFINE_LOG_CATEGORY_STATIC(LogUOUPuzzleConditionGroup, Log, All);
+
 namespace
 {
+	UActorComponent* ResolveComponentReference(
+		const FComponentReference& ComponentReference,
+		AActor* OwningActor)
+	{
+		// 네이티브 UPROPERTY, 직접 Override, 컴포넌트 경로 등 엔진 기본 참조 방식을 우선합니다.
+		if (UActorComponent* ResolvedComponent = ComponentReference.GetComponent(OwningActor))
+		{
+			return ResolvedComponent;
+		}
+
+		if (ComponentReference.ComponentProperty == NAME_None)
+		{
+			return nullptr;
+		}
+
+		// 레벨 인스턴스에 추가된 컴포넌트는 같은 이름의 UPROPERTY가 액터 클래스에 없을 수 있습니다.
+		// 이 경우 Referenced Actor의 실제 컴포넌트 객체 이름으로 한 번 더 해석합니다.
+		AActor* SearchActor = ComponentReference.OtherActor.IsValid()
+			? ComponentReference.OtherActor.Get()
+			: OwningActor;
+		if (SearchActor == nullptr)
+		{
+			return nullptr;
+		}
+
+		TInlineComponentArray<UActorComponent*> Components(SearchActor);
+		for (UActorComponent* Component : Components)
+		{
+			if (Component != nullptr && Component->GetFName() == ComponentReference.ComponentProperty)
+			{
+				UE_LOG(LogUOUPuzzleConditionGroup, Log,
+					TEXT("Component reference resolved by instance-name fallback | Actor:%s Component:%s"),
+					*GetNameSafe(SearchActor),
+					*GetNameSafe(Component));
+				return Component;
+			}
+		}
+
+		UE_LOG(LogUOUPuzzleConditionGroup, Warning,
+			TEXT("Component reference unresolved | Actor:%s ComponentName:%s Components:%d"),
+			*GetNameSafe(SearchActor),
+			*ComponentReference.ComponentProperty.ToString(),
+			Components.Num());
+		return nullptr;
+	}
+
 	bool HasPuzzleResultReceiver(UObject* TargetObject)
 	{
 		if (TargetObject == nullptr)
@@ -161,6 +209,13 @@ void AUOUPuzzleConditionGroupActor::RefreshGroupSetup()
 
 	PuzzleConditionGroupComponent->SetExternalConditionSources(SourcePointers);
 	PuzzleConditionGroupComponent->RefreshNow();
+	UE_LOG(LogUOUPuzzleConditionGroup, Log,
+		TEXT("Group setup refreshed | Group:%s ConditionActors:%d DirectReferences:%d ResolvedSources:%d Satisfied:%s"),
+		*GetNameSafe(this),
+		ConditionActors.Num(),
+		ConditionSourceReferences.Num(),
+		ResolvedConditionSources.Num(),
+		PuzzleConditionGroupComponent->IsSatisfied() ? TEXT("Yes") : TEXT("No"));
 }
 
 bool AUOUPuzzleConditionGroupActor::IsSatisfied() const
@@ -178,6 +233,10 @@ bool AUOUPuzzleConditionGroupActor::ForceSatisfiedForCheat()
 
 void AUOUPuzzleConditionGroupActor::HandleGroupSatisfied()
 {
+	UE_LOG(LogUOUPuzzleConditionGroup, Log,
+		TEXT("Group became satisfied | Group:%s ResultBindings:%d"),
+		*GetNameSafe(this),
+		ResultBindings.Num());
 	OnSatisfied.Broadcast();
 	DispatchResultBindings(true);
 	ReceiveGroupSatisfied();
@@ -185,6 +244,10 @@ void AUOUPuzzleConditionGroupActor::HandleGroupSatisfied()
 
 void AUOUPuzzleConditionGroupActor::HandleGroupUnsatisfied()
 {
+	UE_LOG(LogUOUPuzzleConditionGroup, Log,
+		TEXT("Group became unsatisfied | Group:%s ResultBindings:%d"),
+		*GetNameSafe(this),
+		ResultBindings.Num());
 	OnUnsatisfied.Broadcast();
 	DispatchResultBindings(false);
 	ReceiveGroupUnsatisfied();
@@ -212,7 +275,7 @@ void AUOUPuzzleConditionGroupActor::ResolveConditionSourcesFromActors()
 
 	for (const FComponentReference& ConditionSourceReference : ConditionSourceReferences)
 	{
-		if (UActorComponent* Component = ConditionSourceReference.GetComponent(this))
+		if (UActorComponent* Component = ResolveComponentReference(ConditionSourceReference, this))
 		{
 			if (UUOUPuzzleConditionSourceComponent* ConditionSource =
 				Cast<UUOUPuzzleConditionSourceComponent>(Component))
@@ -248,8 +311,20 @@ void AUOUPuzzleConditionGroupActor::ResolveConditionSourcesFromActors()
 void AUOUPuzzleConditionGroupActor::DispatchResultBindings(bool bSatisfied)
 {
 	// 현재 만족 상태에 맞는 액션을 골라 결과 액터들에게 순서대로 전달합니다.
-	for (FOUUPuzzleResultBinding& Binding : ResultBindings)
+	for (int32 BindingIndex = 0; BindingIndex < ResultBindings.Num(); ++BindingIndex)
 	{
+		FOUUPuzzleResultBinding& Binding = ResultBindings[BindingIndex];
+		UObject* ResolvedTarget = ResolveResultTarget(Binding);
+		UE_LOG(LogUOUPuzzleConditionGroup, Log,
+			TEXT("Dispatch binding | Group:%s Index:%d State:%s SpecificComponent:%s Target:%s SatisfiedAction:%s UnsatisfiedAction:%s"),
+			*GetNameSafe(this),
+			BindingIndex,
+			bSatisfied ? TEXT("Satisfied") : TEXT("Unsatisfied"),
+			Binding.bTargetSpecificComponent ? TEXT("Yes") : TEXT("No"),
+			*GetNameSafe(ResolvedTarget),
+			*StaticEnum<EOUUPuzzleResultAction>()->GetNameStringByValue(static_cast<int64>(Binding.SatisfiedAction)),
+			*StaticEnum<EOUUPuzzleResultAction>()->GetNameStringByValue(static_cast<int64>(Binding.UnsatisfiedAction)));
+
 		if (bSatisfied)
 		{
 			if (ShouldSkipSatisfiedAction(Binding))
@@ -263,7 +338,7 @@ void AUOUPuzzleConditionGroupActor::DispatchResultBindings(bool bSatisfied)
 			}
 
 			if (DispatchOrScheduleResultAction(
-				ResolveResultTarget(Binding),
+				ResolvedTarget,
 				Binding.SatisfiedAction,
 				Binding.SatisfiedDelaySeconds))
 			{
@@ -278,7 +353,7 @@ void AUOUPuzzleConditionGroupActor::DispatchResultBindings(bool bSatisfied)
 		}
 
 		DispatchOrScheduleResultAction(
-			ResolveResultTarget(Binding),
+			ResolvedTarget,
 			Binding.UnsatisfiedAction,
 			Binding.UnsatisfiedDelaySeconds);
 	}
@@ -288,7 +363,9 @@ UObject* AUOUPuzzleConditionGroupActor::ResolveResultTarget(const FOUUPuzzleResu
 {
 	if (Binding.bTargetSpecificComponent)
 	{
-		return Binding.TargetComponentReference.GetComponent(const_cast<AUOUPuzzleConditionGroupActor*>(this));
+		return ResolveComponentReference(
+			Binding.TargetComponentReference,
+			const_cast<AUOUPuzzleConditionGroupActor*>(this));
 	}
 
 	return Binding.TargetActor.Get();

@@ -4,6 +4,8 @@
 
 #include "GameFramework/Actor.h"
 
+DEFINE_LOG_CATEGORY_STATIC(LogUOUPuzzleResultCondition, Log, All);
+
 UUOUPuzzleResultCompletedConditionComponent::UUOUPuzzleResultCompletedConditionComponent()
 {
 	PrimaryComponentTick.bCanEverTick = false;
@@ -51,7 +53,17 @@ void UUOUPuzzleResultCompletedConditionComponent::GetPuzzleDebugInputActors_Impl
 
 void UUOUPuzzleResultCompletedConditionComponent::RefreshConditionState()
 {
-	SetSatisfiedState(IsTargetResultCompleted(), true);
+	const bool bWasSatisfied = IsSatisfied();
+	const bool bTargetCompleted = IsTargetResultCompleted();
+	UE_LOG(LogUOUPuzzleResultCondition, Log,
+		TEXT("Refresh condition | Owner:%s Component:%s Target:%s RequiredAction:%s Previous:%s TargetCompleted:%s"),
+		*GetNameSafe(GetOwner()),
+		*GetNameSafe(this),
+		*GetNameSafe(TargetActor.Get()),
+		*StaticEnum<EOUUPuzzleResultAction>()->GetNameStringByValue(static_cast<int64>(RequiredAction)),
+		bWasSatisfied ? TEXT("Satisfied") : TEXT("Unsatisfied"),
+		bTargetCompleted ? TEXT("Yes") : TEXT("No"));
+	SetSatisfiedState(bTargetCompleted, true);
 }
 
 void UUOUPuzzleResultCompletedConditionComponent::SubscribeTargetCompletionState()
@@ -60,12 +72,21 @@ void UUOUPuzzleResultCompletedConditionComponent::SubscribeTargetCompletionState
 
 	if (TargetActor == nullptr)
 	{
+		UE_LOG(LogUOUPuzzleResultCondition, Warning,
+			TEXT("Completion subscription failed: TargetActor is null | Owner:%s Component:%s"),
+			*GetNameSafe(GetOwner()),
+			*GetNameSafe(this));
 		return;
 	}
 
 	IUOUPuzzleResultCompletionState* CompletionState = Cast<IUOUPuzzleResultCompletionState>(TargetActor.Get());
 	if (CompletionState == nullptr)
 	{
+		UE_LOG(LogUOUPuzzleResultCondition, Warning,
+			TEXT("Completion subscription failed: target does not expose native completion state | Owner:%s Component:%s Target:%s"),
+			*GetNameSafe(GetOwner()),
+			*GetNameSafe(this),
+			*GetNameSafe(TargetActor.Get()));
 		return;
 	}
 
@@ -73,6 +94,11 @@ void UUOUPuzzleResultCompletedConditionComponent::SubscribeTargetCompletionState
 		CompletionState->GetPuzzleResultCompletionStateChangedEvent();
 	if (CompletionStateChangedEvent == nullptr)
 	{
+		UE_LOG(LogUOUPuzzleResultCondition, Warning,
+			TEXT("Completion subscription failed: event is null | Owner:%s Component:%s Target:%s"),
+			*GetNameSafe(GetOwner()),
+			*GetNameSafe(this),
+			*GetNameSafe(TargetActor.Get()));
 		return;
 	}
 
@@ -80,6 +106,13 @@ void UUOUPuzzleResultCompletedConditionComponent::SubscribeTargetCompletionState
 	CompletionStateChangedHandle = CompletionStateChangedEvent->AddUObject(
 		this,
 		&UUOUPuzzleResultCompletedConditionComponent::HandleTargetCompletionStateChanged);
+	UE_LOG(LogUOUPuzzleResultCondition, Log,
+		TEXT("Completion subscription succeeded | Owner:%s Component:%s Target:%s RequiredAction:%s HandleValid:%s"),
+		*GetNameSafe(GetOwner()),
+		*GetNameSafe(this),
+		*GetNameSafe(TargetActor.Get()),
+		*StaticEnum<EOUUPuzzleResultAction>()->GetNameStringByValue(static_cast<int64>(RequiredAction)),
+		CompletionStateChangedHandle.IsValid() ? TEXT("Yes") : TEXT("No"));
 }
 
 void UUOUPuzzleResultCompletedConditionComponent::UnsubscribeTargetCompletionState()
@@ -125,6 +158,15 @@ void UUOUPuzzleResultCompletedConditionComponent::HandleTargetCompletionStateCha
 	EOUUPuzzleResultAction Action,
 	bool bIsCompleted)
 {
+	UE_LOG(LogUOUPuzzleResultCondition, Log,
+		TEXT("Completion event received | Owner:%s Component:%s Target:%s EventAction:%s RequiredAction:%s EventCompleted:%s"),
+		*GetNameSafe(GetOwner()),
+		*GetNameSafe(this),
+		*GetNameSafe(TargetActor.Get()),
+		*StaticEnum<EOUUPuzzleResultAction>()->GetNameStringByValue(static_cast<int64>(Action)),
+		*StaticEnum<EOUUPuzzleResultAction>()->GetNameStringByValue(static_cast<int64>(RequiredAction)),
+		bIsCompleted ? TEXT("Yes") : TEXT("No"));
+
 	if (Action != RequiredAction)
 	{
 		return;
