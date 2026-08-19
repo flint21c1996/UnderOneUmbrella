@@ -19,6 +19,8 @@
 #include "UI/UOUSpeechBubbleWidget.h"
 #include "UI/UOUUISubsystem.h"
 
+DEFINE_LOG_CATEGORY_STATIC(LogUOUDialogueTrigger, Log, All);
+
 namespace
 {
 	// WBP_NPCSpeechBubble??ShowBubble ?⑥닔 ?낅젰 援ъ“? 留욎텣 ?꾩떆 ?뚮씪誘명꽣?낅땲??
@@ -54,7 +56,12 @@ void UUOUDialogueTriggerComponent::BeginPlay()
 
 	OnComponentBeginOverlap.AddDynamic(this, &UUOUDialogueTriggerComponent::HandleBeginOverlap);
 	OnComponentEndOverlap.AddDynamic(this, &UUOUDialogueTriggerComponent::HandleEndOverlap);
-	SetComponentTickEnabled(bRequireUmbrellaCoverHold);
+	SetComponentTickEnabled(bDialogueInteractionEnabled && bRequireUmbrellaCoverHold);
+
+	if (UUOUDialogueSourceComponent* Source = ResolveDialogueSource())
+	{
+		Source->SetDialogueAvailable(bDialogueInteractionEnabled);
+	}
 
 	UWidgetComponent* ResolvedHintWidgetComponent = ResolveHintWidgetComponent();
 	if (ResolvedHintWidgetComponent != nullptr)
@@ -67,6 +74,9 @@ void UUOUDialogueTriggerComponent::BeginPlay()
 	{
 		HideInteractionHint();
 	}
+
+	// 이벤트 바인딩 전에 이미 형성된 overlap도 첫 접근으로 처리합니다.
+	RefreshOverlappingInteraction();
 
 	if (bRequireUmbrellaCoverHold)
 	{
@@ -87,6 +97,11 @@ void UUOUDialogueTriggerComponent::EndPlay(const EEndPlayReason::Type EndPlayRea
 void UUOUDialogueTriggerComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+
+	if (!bDialogueInteractionEnabled)
+	{
+		return;
+	}
 
 	// ?곗궛 而ㅻ쾭 ??붾뒗 ?몃━嫄??덉뿉 ?ㅼ뼱???뚮젅?댁뼱瑜?湲곗뼲???먭퀬 留??깅쭏???곹깭瑜??ㅼ떆 寃?ы빀?덈떎.
 	// ?뚮젅?댁뼱媛 癒쇱? ?ㅼ뼱?????곗궛???쇱퀜?? 議곌굔??留욌뒗 ?쒓컙遺??而ㅻ쾭 ?좎? ?쒓컙???볦엯?덈떎.
@@ -156,14 +171,32 @@ void UUOUDialogueTriggerComponent::TickComponent(float DeltaTime, ELevelTick Tic
 
 bool UUOUDialogueTriggerComponent::TryStartDialogue(AActor* InstigatorActor)
 {
+	if (!bDialogueInteractionEnabled)
+	{
+		UE_LOG(LogUOUDialogueTrigger, Warning,
+			TEXT("TryStart blocked: interaction disabled | Owner:%s Instigator:%s"),
+			*GetNameSafe(GetOwner()),
+			*GetNameSafe(InstigatorActor));
+		ShowProximityDebugStatus(TEXT("Dialogue Start Blocked: interaction disabled"), FColor::Yellow);
+		return false;
+	}
+
 	if (bTriggerOnce && bHasTriggered)
 	{
+		UE_LOG(LogUOUDialogueTrigger, Warning,
+			TEXT("TryStart blocked: already triggered | Owner:%s Instigator:%s"),
+			*GetNameSafe(GetOwner()),
+			*GetNameSafe(InstigatorActor));
 		ShowProximityDebugStatus(TEXT("Dialogue Start Blocked: already triggered"), FColor::Yellow);
 		return false;
 	}
 
 	if (!PassesInstigatorRules(InstigatorActor))
 	{
+		UE_LOG(LogUOUDialogueTrigger, Warning,
+			TEXT("TryStart blocked: instigator rules failed | Owner:%s Instigator:%s"),
+			*GetNameSafe(GetOwner()),
+			*GetNameSafe(InstigatorActor));
 		ShowProximityDebugStatus(TEXT("Dialogue Start Blocked: rule check failed"), FColor::Yellow);
 		return false;
 	}
@@ -174,6 +207,13 @@ bool UUOUDialogueTriggerComponent::TryStartDialogue(AActor* InstigatorActor)
 		if (!IsOwnerCoveredByDialogueCover(InstigatorActor, &CoverDebugDetails)
 			|| CurrentCoverHoldTime < RequiredCoverDuration)
 		{
+			UE_LOG(LogUOUDialogueTrigger, Warning,
+				TEXT("TryStart blocked: cover hold not ready | Owner:%s Instigator:%s Hold:%.3f/%.3f | %s"),
+				*GetNameSafe(GetOwner()),
+				*GetNameSafe(InstigatorActor),
+				CurrentCoverHoldTime,
+				RequiredCoverDuration,
+				*CoverDebugDetails);
 			ShowCoverDebugMessage(FString::Printf(TEXT("Dialogue Start Failed: cover hold not ready | %s"), *CoverDebugDetails), FColor::Red, 1.5f);
 			return false;
 		}
@@ -182,6 +222,11 @@ bool UUOUDialogueTriggerComponent::TryStartDialogue(AActor* InstigatorActor)
 	UUOUDialogueSourceComponent* Source = ResolveDialogueSource();
 	if (Source == nullptr || !Source->CanStartDialogue())
 	{
+		UE_LOG(LogUOUDialogueTrigger, Warning,
+			TEXT("TryStart blocked: source missing or unavailable | Owner:%s Source:%s Instigator:%s"),
+			*GetNameSafe(GetOwner()),
+			*GetNameSafe(Source),
+			*GetNameSafe(InstigatorActor));
 		ShowCoverDebugMessage(TEXT("Dialogue Start Failed: source missing or blocked"), FColor::Red, 1.5f);
 		return false;
 	}
@@ -189,12 +234,22 @@ bool UUOUDialogueTriggerComponent::TryStartDialogue(AActor* InstigatorActor)
 	HideInteractionHint();
 	if (!Source->StartDialogue(InstigatorActor))
 	{
+		UE_LOG(LogUOUDialogueTrigger, Warning,
+			TEXT("TryStart failed: dialogue source rejected start | Owner:%s Source:%s Instigator:%s"),
+			*GetNameSafe(GetOwner()),
+			*GetNameSafe(Source),
+			*GetNameSafe(InstigatorActor));
 		ShowInteractionHint();
 		ShowCoverDebugMessage(TEXT("Dialogue Start Failed: UI subsystem missing"), FColor::Red, 1.5f);
 		return false;
 	}
 
 	ShowCoverDebugMessage(TEXT("Dialogue Started"), FColor::Cyan, 2.0f);
+	UE_LOG(LogUOUDialogueTrigger, Log,
+		TEXT("Dialogue started | Owner:%s Source:%s Instigator:%s"),
+		*GetNameSafe(GetOwner()),
+		*GetNameSafe(Source),
+		*GetNameSafe(InstigatorActor));
 	StartDialogueCameraFocus(InstigatorActor, Source->GetSpeakerActor());
 
 	bHasTriggered = true;
@@ -207,12 +262,6 @@ void UUOUDialogueTriggerComponent::ShowInteractionHint()
 	if (!bEnableInteractionHint)
 	{
 		LastHintDebugStatus = TEXT("Failed:Disabled");
-		return;
-	}
-
-	if (bHintVisible)
-	{
-		LastHintDebugStatus = TEXT("Skipped:AlreadyVisible");
 		return;
 	}
 
@@ -238,6 +287,9 @@ void UUOUDialogueTriggerComponent::ShowInteractionHint()
 	if (DisplayHintText.IsEmpty())
 	{
 		LastHintDebugStatus = TEXT("Failed:TextEmpty");
+		UE_LOG(LogUOUDialogueTrigger, Warning,
+			TEXT("Hint show blocked: proximity text is empty | Owner:%s"),
+			*GetNameSafe(GetOwner()));
 		return;
 	}
 
@@ -245,6 +297,10 @@ void UUOUDialogueTriggerComponent::ShowInteractionHint()
 	if (WidgetComponent == nullptr)
 	{
 		LastHintDebugStatus = TEXT("Failed:WidgetComponentMissing");
+		UE_LOG(LogUOUDialogueTrigger, Warning,
+			TEXT("Hint show failed: widget component missing | Owner:%s ExpectedName:%s"),
+			*GetNameSafe(GetOwner()),
+			*HintWidgetComponentName.ToString());
 		ShowCoverDebugMessage(TEXT("Hint Show Failed: widget component missing"), FColor::Red, 1.5f);
 		return;
 	}
@@ -257,6 +313,10 @@ void UUOUDialogueTriggerComponent::ShowInteractionHint()
 	{
 		SetHintWidgetComponentVisible(false);
 		LastHintDebugStatus = FString::Printf(TEXT("Failed:UserWidgetMissing Component:%s"), *GetNameSafe(WidgetComponent));
+		UE_LOG(LogUOUDialogueTrigger, Warning,
+			TEXT("Hint show failed: user widget missing | Owner:%s Component:%s"),
+			*GetNameSafe(GetOwner()),
+			*GetNameSafe(WidgetComponent));
 		ShowCoverDebugMessage(
 			FString::Printf(TEXT("Hint Show Failed: user widget missing | Component:%s"), *GetNameSafe(WidgetComponent)),
 			FColor::Red,
@@ -268,6 +328,11 @@ void UUOUDialogueTriggerComponent::ShowInteractionHint()
 	{
 		SetHintWidgetComponentVisible(false);
 		LastHintDebugStatus = FString::Printf(TEXT("Failed:ShowFunction Widget:%s Function:%s"),
+			*GetNameSafe(UserWidget),
+			*HintShowFunctionName.ToString());
+		UE_LOG(LogUOUDialogueTrigger, Warning,
+			TEXT("Hint show failed: widget function rejected call | Owner:%s Widget:%s Function:%s"),
+			*GetNameSafe(GetOwner()),
 			*GetNameSafe(UserWidget),
 			*HintShowFunctionName.ToString());
 		ShowCoverDebugMessage(
@@ -282,6 +347,12 @@ void UUOUDialogueTriggerComponent::ShowInteractionHint()
 	SetHintWidgetComponentVisible(true);
 	bHintVisible = true;
 	LastHintDebugStatus = FString::Printf(TEXT("Success:%s"), *DisplayHintText.ToString());
+	UE_LOG(LogUOUDialogueTrigger, Log,
+		TEXT("Hint shown | Owner:%s Widget:%s Duration:%.2f Text:%s"),
+		*GetNameSafe(GetOwner()),
+		*GetNameSafe(UserWidget),
+		DisplayDuration,
+		*DisplayHintText.ToString());
 	ShowCoverDebugMessage(
 		FString::Printf(TEXT("Hint Show Success: %s"), *DisplayHintText.ToString()),
 		FColor::Green,
@@ -350,6 +421,144 @@ void UUOUDialogueTriggerComponent::ResetTrigger()
 	ClearCoverProgress();
 }
 
+void UUOUDialogueTriggerComponent::SetDialogueInteractionEnabled(bool bNewEnabled)
+{
+	const bool bWasEnabled = bDialogueInteractionEnabled;
+	bDialogueInteractionEnabled = bNewEnabled;
+	UE_LOG(LogUOUDialogueTrigger, Log,
+		TEXT("Interaction state requested | Owner:%s Component:%s Previous:%s New:%s CachedOverlaps:%d"),
+		*GetNameSafe(GetOwner()),
+		*GetNameSafe(this),
+		bWasEnabled ? TEXT("Enabled") : TEXT("Disabled"),
+		bDialogueInteractionEnabled ? TEXT("Enabled") : TEXT("Disabled"),
+		ActiveOverlapCounts.Num());
+
+	if (UUOUDialogueSourceComponent* Source = ResolveDialogueSource())
+	{
+		Source->SetDialogueAvailable(bDialogueInteractionEnabled);
+	}
+
+	if (!bDialogueInteractionEnabled)
+	{
+		ClearCoverProgress();
+		return;
+	}
+
+	// 같은 Activate 결과가 다시 들어온 경우에도 현재 overlap과 우산 상태는 달라질 수 있으므로 항상 재평가합니다.
+	RefreshOverlappingInteraction();
+}
+
+void UUOUDialogueTriggerComponent::RefreshOverlappingInteraction()
+{
+	TArray<AActor*> InteractionCandidates;
+	for (const TPair<TWeakObjectPtr<AActor>, int32>& OverlapEntry : ActiveOverlapCounts)
+	{
+		if (OverlapEntry.Value > 0)
+		{
+			if (AActor* TrackedActor = OverlapEntry.Key.Get())
+			{
+				InteractionCandidates.AddUnique(TrackedActor);
+			}
+		}
+	}
+
+	TArray<AActor*> PhysicallyOverlappingActors;
+	GetOverlappingActors(PhysicallyOverlappingActors);
+	for (AActor* PhysicallyOverlappingActor : PhysicallyOverlappingActors)
+	{
+		if (PhysicallyOverlappingActor != nullptr)
+		{
+			InteractionCandidates.AddUnique(PhysicallyOverlappingActor);
+		}
+	}
+
+	UE_LOG(LogUOUDialogueTrigger, Log,
+		TEXT("Refreshing overlaps | Owner:%s Enabled:%s CachedEntries:%d PhysicalActors:%d Candidates:%d"),
+		*GetNameSafe(GetOwner()),
+		bDialogueInteractionEnabled ? TEXT("Yes") : TEXT("No"),
+		ActiveOverlapCounts.Num(),
+		PhysicallyOverlappingActors.Num(),
+		InteractionCandidates.Num());
+
+	for (AActor* OverlappingActor : InteractionCandidates)
+	{
+		if (!CanTrackOverlapActor(OverlappingActor))
+		{
+			UE_LOG(LogUOUDialogueTrigger, Verbose,
+				TEXT("Refresh candidate rejected by tracking rules | Owner:%s Candidate:%s"),
+				*GetNameSafe(GetOwner()),
+				*GetNameSafe(OverlappingActor));
+			continue;
+		}
+
+		// 접근 Bubble은 실제 대화 활성 상태와 무관하게 먼저 표시합니다.
+		ShowInteractionHint();
+		if (!bDialogueInteractionEnabled)
+		{
+			return;
+		}
+
+		if (bRequireUmbrellaCoverHold)
+		{
+			CurrentInstigatorActor = OverlappingActor;
+			CurrentCoverHoldTime = 0.0f;
+			bIsCurrentlyCoveredByUmbrella = false;
+			SetComponentTickEnabled(true);
+
+			FString CoverDebugDetails;
+			const bool bPassesRules = PassesInstigatorRules(OverlappingActor);
+			const bool bCovered = IsOwnerCoveredByDialogueCover(OverlappingActor, &CoverDebugDetails);
+			UE_LOG(LogUOUDialogueTrigger, Log,
+				TEXT("Refresh cover evaluation | Owner:%s Candidate:%s Rules:%s Covered:%s | %s"),
+				*GetNameSafe(GetOwner()),
+				*GetNameSafe(OverlappingActor),
+				bPassesRules ? TEXT("Pass") : TEXT("Fail"),
+				bCovered ? TEXT("Yes") : TEXT("No"),
+				*CoverDebugDetails);
+
+			if (bPassesRules && bCovered)
+			{
+				bIsCurrentlyCoveredByUmbrella = true;
+				CurrentCoverHoldTime = FMath::Max(0.0f, RequiredCoverDuration);
+				TryStartDialogue(OverlappingActor);
+			}
+			return;
+		}
+
+		if (TryStartDialogue(OverlappingActor))
+		{
+			return;
+		}
+	}
+}
+
+void UUOUDialogueTriggerComponent::ApplyPuzzleResult_Implementation(EOUUPuzzleResultAction Action)
+{
+	UE_LOG(LogUOUDialogueTrigger, Log,
+		TEXT("Puzzle result received | Owner:%s Component:%s Action:%s"),
+		*GetNameSafe(GetOwner()),
+		*GetNameSafe(this),
+		*UEnum::GetValueAsString(Action));
+
+	switch (Action)
+	{
+	case EOUUPuzzleResultAction::Activate:
+	case EOUUPuzzleResultAction::Resume:
+		SetDialogueInteractionEnabled(true);
+		break;
+	case EOUUPuzzleResultAction::Deactivate:
+	case EOUUPuzzleResultAction::Pause:
+		SetDialogueInteractionEnabled(false);
+		break;
+	case EOUUPuzzleResultAction::Toggle:
+		SetDialogueInteractionEnabled(!bDialogueInteractionEnabled);
+		break;
+	case EOUUPuzzleResultAction::None:
+	default:
+		break;
+	}
+}
+
 void UUOUDialogueTriggerComponent::HandleBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
 	HandleTrackedActorEnter(OtherActor, OtherComp);
@@ -369,6 +578,12 @@ void UUOUDialogueTriggerComponent::HandleTrackedActorEnter(AActor* OtherActor, U
 	// 媛숈? 罹먮┃???덉쓽 ?щ윭 而댄룷?뚰듃媛 ?우븘???≫꽣 湲곗? 泥?吏꾩엯留?泥섎━?⑸땲??
 	if (!RegisterActorOverlap(OtherActor))
 	{
+		return;
+	}
+
+	if (!bDialogueInteractionEnabled)
+	{
+		ShowInteractionHint();
 		return;
 	}
 
