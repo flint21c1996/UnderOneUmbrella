@@ -33,6 +33,7 @@ public:
 	AUOUWindEmitterActor();
 
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void OnConstruction(const FTransform& Transform) override;
 	virtual void PostRegisterAllComponents() override;
@@ -156,6 +157,51 @@ public:
 			ToolTip = "켜면 Niagara의 상대 X 위치를 MaxWindDistance의 절반으로 자동 설정합니다. 끄면 Niagara 컴포넌트의 X 위치를 직접 수정할 수 있습니다."))
 	bool bOffsetWindVFXByHalfDistance = true;
 
+	// 경로가 장애물에 막히면 MaxWindDistance 대신 실제 첫 번째 직선 구간 길이를 VFX에 사용합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|VFX", meta = (EditCondition = "bAutoFitWindVFX"))
+	bool bUseActualWindPathLengthForVFX = true;
+
+	// 반사로 경로가 꺾이면 첫 번째 Niagara를 템플릿으로 사용해 나머지 직선 구간의 효과를 생성합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|VFX", meta = (EditCondition = "bAutoFitWindVFX && bUseActualWindPathLengthForVFX"))
+	bool bCreateWindVFXForReflectedSegments = true;
+
+	// 인접한 직선 VFX가 꺾이는 지점에서 끊겨 보이지 않도록 서로 겹치는 거리입니다.
+	UPROPERTY(
+		EditAnywhere,
+		BlueprintReadOnly,
+		Category = "Wind|VFX",
+		meta = (EditCondition = "bAutoFitWindVFX && bCreateWindVFXForReflectedSegments", ClampMin = "0.0", Units = "cm"))
+	float WindVFXJointOverlap = 75.0f;
+
+	// 1보다 작게 설정하면 VFX가 판정 범위 양끝에서 조금 안쪽으로 들어옵니다.
+	UPROPERTY(
+		EditAnywhere,
+		BlueprintReadOnly,
+		Category = "Wind|VFX",
+		meta = (EditCondition = "bAutoFitWindVFX", ClampMin = "0.1", ClampMax = "1.5", UIMin = "0.8", UIMax = "1.1"))
+	float WindVFXLengthCoverage = 0.95f;
+
+	// VisualWind 팩의 Length는 중심에서 한쪽 끝까지의 반길이이므로 전체 바람 거리에 곱할 비율입니다.
+	UPROPERTY(
+		EditAnywhere,
+		BlueprintReadOnly,
+		Category = "Wind|VFX",
+		meta = (EditCondition = "bAutoFitWindVFX", ClampMin = "0.01", UIMin = "0.1", UIMax = "1.0"))
+	float WindVFXLengthParameterRatio = 0.5f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|VFX")
+	bool bOverrideWindVFXColor = true;
+
+	UPROPERTY(
+		EditAnywhere,
+		BlueprintReadOnly,
+		Category = "Wind|VFX",
+		meta = (EditCondition = "bOverrideWindVFXColor", DisplayName = "바람 VFX 색상"))
+	FLinearColor WindVFXColor = FLinearColor(0.12f, 0.8f, 0.3f, 1.0f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|VFX", meta = (EditCondition = "bOverrideWindVFXColor"))
+	FName WindVFXColorParameterName = TEXT("User.Color");
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|VFX", meta = (EditCondition = "bAutoFitWindVFX"))
 	FName WindVFXLengthParameterName = TEXT("User.Length");
 
@@ -225,7 +271,11 @@ private:
 	void InitializePulseCycleState();
 	void UpdatePulseCycle(float DeltaSeconds);
 	void HandleWindPhaseChanged(bool bWasBlowing);
+	float GetWindVFXDisplayDistance() const;
+	void ApplyWindVFXParameters(UNiagaraComponent* WindEffect, float DisplayDistance);
 	void RefreshWindVFX();
+	void RefreshReflectedWindVFX(UNiagaraComponent* TemplateEffect);
+	void ClearGeneratedWindVFX();
 	void SetWindVFXActive(bool bActive);
 	void RefreshWindPathForCurrentState();
 	void ClearWindPath();
@@ -251,4 +301,7 @@ private:
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<USceneComponent>> EditorWindPathPreviewComponents;
 #endif
+
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UNiagaraComponent>> GeneratedWindVFXComponents;
 };
