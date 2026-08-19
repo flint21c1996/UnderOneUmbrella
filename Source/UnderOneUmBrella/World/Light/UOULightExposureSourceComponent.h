@@ -291,7 +291,9 @@ protected:
 		const FVector& TraceStart,
 		const FVector& TraceEnd,
 		FHitResult& OutHit,
-		const AActor* IgnoredShadeOwner = nullptr) const;
+		const AActor* IgnoredShadeOwner = nullptr,
+		float BeamStartRadius = -1.0f,
+		float BeamConeAngle = 0.0f) const;
 	bool TryBuildLightInteractionSurfaceHit(UUOULightInteractionSurfaceComponent* SurfaceComponent, FHitResult& OutSurfaceHit) const;
 	void RecordExposureCandidate(
 		UObject* ReceiverObject,

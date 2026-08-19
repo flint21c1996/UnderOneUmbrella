@@ -1557,7 +1557,9 @@ bool UUOULightExposureSourceComponent::TraceLightPathSingle(
 		TraceStart,
 		TraceEnd,
 		ShadeHit,
-		IgnoredShadeOwner);
+		IgnoredShadeOwner,
+		BeamStartRadius,
+		BeamConeAngle);
 	if (!bHasCollisionHit && !bHasShadeHit)
 	{
 		return false;
@@ -1581,7 +1583,9 @@ bool UUOULightExposureSourceComponent::FindNearestUmbrellaLightShadeHit(
 	const FVector& TraceStart,
 	const FVector& TraceEnd,
 	FHitResult& OutHit,
-	const AActor* IgnoredShadeOwner) const
+	const AActor* IgnoredShadeOwner,
+	float BeamStartRadius,
+	float BeamConeAngle) const
 {
 	OutHit = FHitResult();
 	UWorld* World = GetWorld();
@@ -1636,14 +1640,47 @@ bool UUOULightExposureSourceComponent::FindNearestUmbrellaLightShadeHit(
 		const FVector HitNormal = ShadeTransform.TransformVectorNoScale(LocalHitNormal).GetSafeNormal();
 		if (AActor* ShadeOwner = ShadeVolume->GetOwner())
 		{
-			if (const UUOULightInteractionSurfaceComponent* SurfaceComponent =
+			if (UUOULightInteractionSurfaceComponent* SurfaceComponent =
 				ShadeOwner->FindComponentByClass<UUOULightInteractionSurfaceComponent>();
-				SurfaceComponent != nullptr &&
-				SurfaceComponent->ShouldPassThroughIncomingLight(
+				SurfaceComponent != nullptr)
+			{
+				if (SurfaceComponent->ShouldPassThroughIncomingLight(
 					IncomingDirection,
 					HitNormal))
-			{
-				continue;
+				{
+					continue;
+				}
+
+				// 반사 상태의 우산 가장자리에 빛이 일부만 걸친 경우 그늘 볼륨만
+				// 입사광을 잘라 버리지 않도록 실제 반사면의 전체 빔 수용 여부를 사용합니다.
+				if (BeamStartRadius >= 0.0f && SurfaceComponent->CanReflectLight())
+				{
+					FCollisionQueryParams SurfaceQueryParams(
+						SCENE_QUERY_STAT(UOUUmbrellaShadeCoverageTrace),
+						false,
+						GetOwner());
+					FHitResult SurfaceHit;
+					if (!SurfaceComponent->LineTraceComponent(
+						SurfaceHit,
+						TraceStart,
+						TraceEnd,
+						SurfaceQueryParams))
+					{
+						continue;
+					}
+
+					const float BeamRadiusAtSurface = FMath::Max(0.0f, BeamStartRadius) +
+						SurfaceHit.Distance * FMath::Tan(FMath::DegreesToRadians(
+							FMath::Clamp(BeamConeAngle, 0.0f, 89.0f)));
+					if (!SurfaceComponent->HasSufficientReflectionCoverage(
+						BeamRadiusAtSurface,
+						IncomingDirection,
+						SurfaceHit.ImpactNormal,
+						SurfaceHit.ImpactPoint))
+					{
+						continue;
+					}
+				}
 			}
 		}
 

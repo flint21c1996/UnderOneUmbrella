@@ -202,6 +202,36 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|VFX", meta = (EditCondition = "bOverrideWindVFXColor"))
 	FName WindVFXColorParameterName = TEXT("User.Color");
 
+	// 바람 박스의 체적 비율에 맞춰 Niagara 생성량을 조절해 시각적 밀도를 일정하게 유지합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|VFX")
+	bool bScaleWindVFXRateByVolume = true;
+
+	UPROPERTY(
+		EditAnywhere,
+		BlueprintReadOnly,
+		Category = "Wind|VFX",
+		meta = (EditCondition = "bScaleWindVFXRateByVolume", ClampMin = "1.0", Units = "cm"))
+	float WindVFXRateReferenceDistance = 3000.0f;
+
+	UPROPERTY(
+		EditAnywhere,
+		BlueprintReadOnly,
+		Category = "Wind|VFX",
+		meta = (EditCondition = "bScaleWindVFXRateByVolume", ClampMin = "1.0", Units = "cm"))
+	float WindVFXRateReferenceRadius = 120.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|VFX", meta = (EditCondition = "bScaleWindVFXRateByVolume", ClampMin = "0.0"))
+	float WindVFXBaseRateScale = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|VFX", meta = (EditCondition = "bScaleWindVFXRateByVolume", ClampMin = "0.0"))
+	float MinimumWindVFXRateScale = 0.1f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|VFX", meta = (EditCondition = "bScaleWindVFXRateByVolume", ClampMin = "0.0"))
+	float MaximumWindVFXRateScale = 5.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|VFX", meta = (EditCondition = "bScaleWindVFXRateByVolume"))
+	FName WindVFXRateScaleParameterName = TEXT("User.RateScale");
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|VFX", meta = (EditCondition = "bAutoFitWindVFX"))
 	FName WindVFXLengthParameterName = TEXT("User.Length");
 
@@ -217,9 +247,17 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|VFX", meta = (EditCondition = "bAutoFitWindVFX"))
 	FName WindVFXMaxRadiusParameterName = TEXT("User.MaxRadius");
 
-	// 치수 User Parameter가 없는 VFX는 Niagara System의 Fixed Bounds를 사용해 부족한 축만 맞춥니다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|VFX", meta = (EditCondition = "bAutoFitWindVFX"))
-	bool bFitMissingWindVFXDimensionsFromBounds = true;
+	// 켜면 치수 User Parameter가 없는 VFX의 Scale을 Fixed Bounds 기준으로 자동 설정합니다.
+	// 일반 레벨에서 Niagara 컴포넌트 Scale을 직접 조절할 수 있도록 기본값은 끕니다.
+	UPROPERTY(
+		EditAnywhere,
+		BlueprintReadOnly,
+		Category = "Wind|VFX",
+		meta = (
+			EditCondition = "bAutoFitWindVFX",
+			DisplayName = "치수 없는 VFX 스케일 자동 보정",
+			ToolTip = "켜면 Length/Width/Height 파라미터가 없는 축의 Scale을 자동으로 덮어씁니다. 직접 Scale을 조절하려면 끄세요."))
+	bool bFitMissingWindVFXDimensionsFromBounds = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|VFX", meta = (EditCondition = "bAutoFitWindVFX", ClampMin = "1.0"))
 	float MinimumWindVFXBoundsSize = 1.0f;
