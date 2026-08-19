@@ -217,9 +217,17 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|VFX", meta = (EditCondition = "bAutoFitWindVFX"))
 	FName WindVFXMaxRadiusParameterName = TEXT("User.MaxRadius");
 
-	// 치수 User Parameter가 없는 VFX는 Niagara System의 Fixed Bounds를 사용해 부족한 축만 맞춥니다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|VFX", meta = (EditCondition = "bAutoFitWindVFX"))
-	bool bFitMissingWindVFXDimensionsFromBounds = true;
+	// 켜면 치수 User Parameter가 없는 VFX의 Scale을 Fixed Bounds 기준으로 자동 설정합니다.
+	// 일반 레벨에서 Niagara 컴포넌트 Scale을 직접 조절할 수 있도록 기본값은 끕니다.
+	UPROPERTY(
+		EditAnywhere,
+		BlueprintReadOnly,
+		Category = "Wind|VFX",
+		meta = (
+			EditCondition = "bAutoFitWindVFX",
+			DisplayName = "치수 없는 VFX 스케일 자동 보정",
+			ToolTip = "켜면 Length/Width/Height 파라미터가 없는 축의 Scale을 자동으로 덮어씁니다. 직접 Scale을 조절하려면 끄세요."))
+	bool bFitMissingWindVFXDimensionsFromBounds = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|VFX", meta = (EditCondition = "bAutoFitWindVFX", ClampMin = "1.0"))
 	float MinimumWindVFXBoundsSize = 1.0f;
