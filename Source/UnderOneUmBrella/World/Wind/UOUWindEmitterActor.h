@@ -202,6 +202,36 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|VFX", meta = (EditCondition = "bOverrideWindVFXColor"))
 	FName WindVFXColorParameterName = TEXT("User.Color");
 
+	// 바람 박스의 체적 비율에 맞춰 Niagara 생성량을 조절해 시각적 밀도를 일정하게 유지합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|VFX")
+	bool bScaleWindVFXRateByVolume = true;
+
+	UPROPERTY(
+		EditAnywhere,
+		BlueprintReadOnly,
+		Category = "Wind|VFX",
+		meta = (EditCondition = "bScaleWindVFXRateByVolume", ClampMin = "1.0", Units = "cm"))
+	float WindVFXRateReferenceDistance = 3000.0f;
+
+	UPROPERTY(
+		EditAnywhere,
+		BlueprintReadOnly,
+		Category = "Wind|VFX",
+		meta = (EditCondition = "bScaleWindVFXRateByVolume", ClampMin = "1.0", Units = "cm"))
+	float WindVFXRateReferenceRadius = 120.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|VFX", meta = (EditCondition = "bScaleWindVFXRateByVolume", ClampMin = "0.0"))
+	float WindVFXBaseRateScale = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|VFX", meta = (EditCondition = "bScaleWindVFXRateByVolume", ClampMin = "0.0"))
+	float MinimumWindVFXRateScale = 0.1f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|VFX", meta = (EditCondition = "bScaleWindVFXRateByVolume", ClampMin = "0.0"))
+	float MaximumWindVFXRateScale = 5.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|VFX", meta = (EditCondition = "bScaleWindVFXRateByVolume"))
+	FName WindVFXRateScaleParameterName = TEXT("User.RateScale");
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|VFX", meta = (EditCondition = "bAutoFitWindVFX"))
 	FName WindVFXLengthParameterName = TEXT("User.Length");
 

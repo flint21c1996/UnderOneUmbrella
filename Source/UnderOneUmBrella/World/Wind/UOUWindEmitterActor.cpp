@@ -623,6 +623,11 @@ void AUOUWindEmitterActor::ValidateSettings()
 	WindVFXLengthCoverage = FMath::Clamp(WindVFXLengthCoverage, 0.1f, 1.5f);
 	WindVFXLengthParameterRatio = FMath::Max(0.01f, WindVFXLengthParameterRatio);
 	WindVFXJointOverlap = FMath::Max(0.0f, WindVFXJointOverlap);
+	WindVFXRateReferenceDistance = FMath::Max(1.0f, WindVFXRateReferenceDistance);
+	WindVFXRateReferenceRadius = FMath::Max(1.0f, WindVFXRateReferenceRadius);
+	WindVFXBaseRateScale = FMath::Max(0.0f, WindVFXBaseRateScale);
+	MinimumWindVFXRateScale = FMath::Max(0.0f, MinimumWindVFXRateScale);
+	MaximumWindVFXRateScale = FMath::Max(MinimumWindVFXRateScale, MaximumWindVFXRateScale);
 }
 
 void AUOUWindEmitterActor::UpdateWindRangePreview()
@@ -701,6 +706,23 @@ void AUOUWindEmitterActor::ApplyWindVFXParameters(
 			WindEffect,
 			WindVFXColorParameterName,
 			WindVFXColor);
+	}
+	if (bScaleWindVFXRateByVolume)
+	{
+		const float LengthRatio =
+			SafeDisplayDistance / WindVFXRateReferenceDistance;
+		const float RadiusRatio =
+			WindRadius / WindVFXRateReferenceRadius;
+		const float VolumeRatio =
+			LengthRatio * FMath::Square(RadiusRatio);
+		const float RateScale = FMath::Clamp(
+			WindVFXBaseRateScale * VolumeRatio,
+			MinimumWindVFXRateScale,
+			MaximumWindVFXRateScale);
+		UOUWindEmitterActorPrivate::SetFloatParameterIfPresent(
+			WindEffect,
+			WindVFXRateScaleParameterName,
+			RateScale);
 	}
 
 	const float WindDiameter = WindRadius * 2.0f;
