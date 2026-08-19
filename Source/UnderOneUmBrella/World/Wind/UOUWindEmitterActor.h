@@ -11,6 +11,7 @@
 
 class UArrowComponent;
 class UBoxComponent;
+class UNiagaraComponent;
 class UPrimitiveComponent;
 class USceneComponent;
 class UStaticMeshComponent;
@@ -34,9 +35,14 @@ public:
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void OnConstruction(const FTransform& Transform) override;
+	virtual void PostRegisterAllComponents() override;
 	virtual void ApplyPuzzleResult_Implementation(EOUUPuzzleResultAction Action) override;
 	virtual EUOUDebugCategory GetDebugCategory_Implementation() const override;
 	virtual FText GetDebugSummaryText_Implementation() const override;
+
+#if WITH_EDITOR
+	virtual bool ShouldTickIfViewportsOnly() const override;
+#endif
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Wind")
 	TObjectPtr<USceneComponent> RootScene = nullptr;
@@ -135,6 +141,46 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Wind|Runtime")
 	FUOUWindPulseRuntimeState PulseRuntimeState;
 
+	// 이 액터에 추가된 Niagara 효과를 실제 바람 길이와 반경에 자동으로 맞춥니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|VFX")
+	bool bAutoFitWindVFX = true;
+
+	// 켜면 Niagara 중심을 바람 범위 중앙에 맞추기 위해 X 위치를 MaxWindDistance의 절반으로 고정합니다.
+	UPROPERTY(
+		EditAnywhere,
+		BlueprintReadOnly,
+		Category = "Wind|VFX",
+		meta = (
+			DisplayName = "바람 거리 절반만큼 X축 이동",
+			EditCondition = "bAutoFitWindVFX",
+			ToolTip = "켜면 Niagara의 상대 X 위치를 MaxWindDistance의 절반으로 자동 설정합니다. 끄면 Niagara 컴포넌트의 X 위치를 직접 수정할 수 있습니다."))
+	bool bOffsetWindVFXByHalfDistance = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|VFX", meta = (EditCondition = "bAutoFitWindVFX"))
+	FName WindVFXLengthParameterName = TEXT("User.Length");
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|VFX", meta = (EditCondition = "bAutoFitWindVFX"))
+	FName WindVFXWidthParameterName = TEXT("User.Width");
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|VFX", meta = (EditCondition = "bAutoFitWindVFX"))
+	FName WindVFXHeightParameterName = TEXT("User.Height");
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|VFX", meta = (EditCondition = "bAutoFitWindVFX"))
+	FName WindVFXMinRadiusParameterName = TEXT("User.MinRadius");
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|VFX", meta = (EditCondition = "bAutoFitWindVFX"))
+	FName WindVFXMaxRadiusParameterName = TEXT("User.MaxRadius");
+
+	// 치수 User Parameter가 없는 VFX는 Niagara System의 Fixed Bounds를 사용해 부족한 축만 맞춥니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|VFX", meta = (EditCondition = "bAutoFitWindVFX"))
+	bool bFitMissingWindVFXDimensionsFromBounds = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|VFX", meta = (EditCondition = "bAutoFitWindVFX", ClampMin = "1.0"))
+	float MinimumWindVFXBoundsSize = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|VFX", meta = (EditCondition = "bAutoFitWindVFX", ClampMin = "1.0"))
+	float MaximumWindVFXAutoScale = 100.0f;
+
 	UPROPERTY(BlueprintAssignable, Category = "Wind|Events")
 	FOnUOUWindPathChangedSignature OnWindPathChanged;
 
@@ -179,6 +225,8 @@ private:
 	void InitializePulseCycleState();
 	void UpdatePulseCycle(float DeltaSeconds);
 	void HandleWindPhaseChanged(bool bWasBlowing);
+	void RefreshWindVFX();
+	void SetWindVFXActive(bool bActive);
 	void RefreshWindPathForCurrentState();
 	void ClearWindPath();
 	void ApplyWindToReceivers(float DeltaSeconds);
