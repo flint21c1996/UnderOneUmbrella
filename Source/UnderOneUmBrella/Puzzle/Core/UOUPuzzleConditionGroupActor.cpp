@@ -13,16 +13,22 @@
 
 namespace
 {
-	bool HasPuzzleResultReceiver(AActor* TargetActor)
+	bool HasPuzzleResultReceiver(UObject* TargetObject)
 	{
-		if (TargetActor == nullptr)
+		if (TargetObject == nullptr)
 		{
 			return false;
 		}
 
-		if (TargetActor->GetClass()->ImplementsInterface(UUOUPuzzleResultReceiver::StaticClass()))
+		if (TargetObject->GetClass()->ImplementsInterface(UUOUPuzzleResultReceiver::StaticClass()))
 		{
 			return true;
+		}
+
+		AActor* TargetActor = Cast<AActor>(TargetObject);
+		if (TargetActor == nullptr)
+		{
+			return false;
 		}
 
 		TArray<UActorComponent*> Components;
@@ -39,11 +45,23 @@ namespace
 		return false;
 	}
 
-	bool ExecutePuzzleResultReceiver(AActor* TargetActor, EOUUPuzzleResultAction Action)
+	bool ExecutePuzzleResultReceiver(UObject* TargetObject, EOUUPuzzleResultAction Action)
 	{
-		if (TargetActor == nullptr || Action == EOUUPuzzleResultAction::None)
+		if (TargetObject == nullptr || Action == EOUUPuzzleResultAction::None)
 		{
 			return false;
+		}
+
+		AActor* TargetActor = Cast<AActor>(TargetObject);
+		if (TargetActor == nullptr)
+		{
+			if (!TargetObject->GetClass()->ImplementsInterface(UUOUPuzzleResultReceiver::StaticClass()))
+			{
+				return false;
+			}
+
+			IUOUPuzzleResultReceiver::Execute_ApplyPuzzleResult(TargetObject, Action);
+			return true;
 		}
 
 		bool bHandled = false;
@@ -245,7 +263,7 @@ void AUOUPuzzleConditionGroupActor::DispatchResultBindings(bool bSatisfied)
 			}
 
 			if (DispatchOrScheduleResultAction(
-				Binding.TargetActor.Get(),
+				ResolveResultTarget(Binding),
 				Binding.SatisfiedAction,
 				Binding.SatisfiedDelaySeconds))
 			{
@@ -260,70 +278,79 @@ void AUOUPuzzleConditionGroupActor::DispatchResultBindings(bool bSatisfied)
 		}
 
 		DispatchOrScheduleResultAction(
-			Binding.TargetActor.Get(),
+			ResolveResultTarget(Binding),
 			Binding.UnsatisfiedAction,
 			Binding.UnsatisfiedDelaySeconds);
 	}
 }
 
+UObject* AUOUPuzzleConditionGroupActor::ResolveResultTarget(const FOUUPuzzleResultBinding& Binding) const
+{
+	if (Binding.bTargetSpecificComponent)
+	{
+		return Binding.TargetComponentReference.GetComponent(const_cast<AUOUPuzzleConditionGroupActor*>(this));
+	}
+
+	return Binding.TargetActor.Get();
+}
+
 bool AUOUPuzzleConditionGroupActor::ShouldSkipSatisfiedAction(const FOUUPuzzleResultBinding& Binding) const
 {
 	return Binding.bIgnoreSatisfiedActionAfterResultCompleted
-		&& IsResultActionCompleted(Binding.TargetActor.Get(), Binding.SatisfiedAction);
+		&& IsResultActionCompleted(ResolveResultTarget(Binding), Binding.SatisfiedAction);
 }
 
 bool AUOUPuzzleConditionGroupActor::ShouldSkipUnsatisfiedAction(const FOUUPuzzleResultBinding& Binding) const
 {
 	return Binding.bIgnoreUnsatisfiedActionAfterResultCompleted
-		&& IsResultActionCompleted(Binding.TargetActor.Get(), Binding.SatisfiedAction);
+		&& IsResultActionCompleted(ResolveResultTarget(Binding), Binding.SatisfiedAction);
 }
 
 bool AUOUPuzzleConditionGroupActor::IsResultActionCompleted(
-	AActor* TargetActor,
+	UObject* TargetObject,
 	EOUUPuzzleResultAction Action) const
 {
-	if (TargetActor == nullptr || Action == EOUUPuzzleResultAction::None)
+	if (TargetObject == nullptr || Action == EOUUPuzzleResultAction::None)
 	{
 		return false;
 	}
 
-	if (!TargetActor->GetClass()->ImplementsInterface(UUOUPuzzleResultCompletionState::StaticClass()))
+	if (!TargetObject->GetClass()->ImplementsInterface(UUOUPuzzleResultCompletionState::StaticClass()))
 	{
 		return false;
 	}
 
-	return IUOUPuzzleResultCompletionState::Execute_IsPuzzleResultCompleted(TargetActor, Action);
+	return IUOUPuzzleResultCompletionState::Execute_IsPuzzleResultCompleted(TargetObject, Action);
 }
 
-bool AUOUPuzzleConditionGroupActor::ExecuteResultAction(AActor* TargetActor, EOUUPuzzleResultAction Action) const
+bool AUOUPuzzleConditionGroupActor::ExecuteResultAction(UObject* TargetObject, EOUUPuzzleResultAction Action) const
 {
-	if (TargetActor == nullptr || Action == EOUUPuzzleResultAction::None)
+	if (TargetObject == nullptr || Action == EOUUPuzzleResultAction::None)
 	{
 		return false;
 	}
 
-	if (!HasPuzzleResultReceiver(TargetActor))
+	if (!HasPuzzleResultReceiver(TargetObject))
 	{
 		return false;
 	}
 
-	// 결과 액터가 구현한 공통 인터페이스 진입점을 호출합니다.
-	// 내부에서 어떤 동작을 할지는 각 액터가 ApplyPuzzleResult로 재정의합니다.
-	ExecutePuzzleResultReceiver(TargetActor, Action);
+	// Actor 대상은 기존처럼 Actor와 수신 컴포넌트 전체에, 컴포넌트 대상은 해당 컴포넌트에만 전달합니다.
+	ExecutePuzzleResultReceiver(TargetObject, Action);
 	return true;
 }
 
 bool AUOUPuzzleConditionGroupActor::DispatchOrScheduleResultAction(
-	AActor* TargetActor,
+	UObject* TargetObject,
 	EOUUPuzzleResultAction Action,
 	float DelaySeconds)
 {
-	if (TargetActor == nullptr || Action == EOUUPuzzleResultAction::None)
+	if (TargetObject == nullptr || Action == EOUUPuzzleResultAction::None)
 	{
 		return false;
 	}
 
-	if (!HasPuzzleResultReceiver(TargetActor))
+	if (!HasPuzzleResultReceiver(TargetObject))
 	{
 		return false;
 	}
@@ -331,37 +358,37 @@ bool AUOUPuzzleConditionGroupActor::DispatchOrScheduleResultAction(
 	const float SafeDelaySeconds = FMath::Max(0.0f, DelaySeconds);
 	if (SafeDelaySeconds <= 0.0f)
 	{
-		return ExecuteResultAction(TargetActor, Action);
+		return ExecuteResultAction(TargetObject, Action);
 	}
 
 	UWorld* World = GetWorld();
 	if (World == nullptr)
 	{
-		return ExecuteResultAction(TargetActor, Action);
+		return ExecuteResultAction(TargetObject, Action);
 	}
 
-	// 조건 결과를 바로 실행하지 않고, 지정된 시간 뒤 같은 TargetActor에 같은 액션을 전달합니다.
-	// 대상이 그 사이 사라지면 약한 참조가 무효가 되어 아무 것도 실행하지 않습니다.
-	const TWeakObjectPtr<AActor> WeakTargetActor(TargetActor);
+	// 조건 결과를 바로 실행하지 않고, 지정된 시간 뒤 같은 대상 객체에 같은 액션을 전달합니다.
+	// 대상 Actor 또는 컴포넌트가 그 사이 사라지면 약한 참조가 무효가 되어 아무 것도 실행하지 않습니다.
+	const TWeakObjectPtr<UObject> WeakTargetObject(TargetObject);
 	FTimerHandle DelayTimerHandle;
 	World->GetTimerManager().SetTimer(
 		DelayTimerHandle,
 		FTimerDelegate::CreateWeakLambda(
 			this,
-			[WeakTargetActor, Action]()
+			[WeakTargetObject, Action]()
 			{
-				AActor* ResolvedTargetActor = WeakTargetActor.Get();
-				if (ResolvedTargetActor == nullptr)
+				UObject* ResolvedTargetObject = WeakTargetObject.Get();
+				if (ResolvedTargetObject == nullptr)
 				{
 					return;
 				}
 
-				if (!HasPuzzleResultReceiver(ResolvedTargetActor))
+				if (!HasPuzzleResultReceiver(ResolvedTargetObject))
 				{
 					return;
 				}
 
-				ExecutePuzzleResultReceiver(ResolvedTargetActor, Action);
+				ExecutePuzzleResultReceiver(ResolvedTargetObject, Action);
 			}),
 		SafeDelaySeconds,
 		false);
