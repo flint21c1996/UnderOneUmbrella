@@ -492,6 +492,10 @@ void UUOULightExposureSourceComponent::ValidateSettings()
 	CylinderInnerRadiusRatio = FMath::Clamp(CylinderInnerRadiusRatio, 0.0f, 1.0f);
 	Intensity = FMath::Max(0.0f, Intensity);
 	SampleInterval = FMath::Max(0.0f, SampleInterval);
+	WaterIcePassthroughMinDownwardAngleDegrees = FMath::Clamp(
+		WaterIcePassthroughMinDownwardAngleDegrees,
+		0.0f,
+		90.0f);
 	MaxReflectionSurfacesPerTick = FMath::Max(0, MaxReflectionSurfacesPerTick);
 	MaxReflectionBouncesPerPath = FMath::Clamp(MaxReflectionBouncesPerPath, 1, 16);
 	MinimumReflectedIntensity = FMath::Max(0.0f, MinimumReflectedIntensity);
@@ -636,7 +640,10 @@ FUOULightPathSegmentData UUOULightExposureSourceComponent::BuildDirectLightPathS
 				Hit,
 				Segment.Start,
 				Segment.End,
-				QueryParams))
+				QueryParams,
+				nullptr,
+				BeamShape == EUOULightBeamShape::Cylinder ? CylinderRadius : 0.0f,
+				BeamShape == EUOULightBeamShape::Cylinder ? 0.0f : GetEffectiveOuterConeAngle()))
 			{
 				Segment.End = Hit.ImpactPoint;
 				Segment.Length = Hit.Distance;
@@ -1394,6 +1401,26 @@ bool UUOULightExposureSourceComponent::HasLineOfSightFrom(
 	}
 
 	const FVector TraceEnd = TraceStart + ToReceiver.GetSafeNormal() * TraceDistance;
+	const UUOULightExposureReceiverComponent* ReceiverComponent =
+		Cast<UUOULightExposureReceiverComponent>(ReceiverObject);
+	if (ReceiverComponent != nullptr && ReceiverComponent->bUsePawnOcclusion)
+	{
+		FCollisionObjectQueryParams PawnObjectQueryParams;
+		PawnObjectQueryParams.AddObjectTypesToQuery(ECC_Pawn);
+
+		FHitResult PawnBlockingHit;
+		if (World->LineTraceSingleByObjectType(
+			PawnBlockingHit,
+			TraceStart,
+			TraceEnd,
+			PawnObjectQueryParams,
+			QueryParams))
+		{
+			OutBlockingHit = PawnBlockingHit;
+			return false;
+		}
+	}
+
 	return !TraceLightPathSingle(OutBlockingHit, TraceStart, TraceEnd, QueryParams, IgnoredActor);
 }
 
@@ -1440,7 +1467,9 @@ bool UUOULightExposureSourceComponent::TraceLightPathSingle(
 	const FVector& TraceStart,
 	const FVector& TraceEnd,
 	const FCollisionQueryParams& QueryParams,
-	const AActor* IgnoredShadeOwner) const
+	const AActor* IgnoredShadeOwner,
+	float BeamStartRadius,
+	float BeamConeAngle) const
 {
 	OutHit = FHitResult();
 	UWorld* World = GetWorld();
@@ -1470,6 +1499,17 @@ bool UUOULightExposureSourceComponent::TraceLightPathSingle(
 		}
 
 		AActor* HitActor = CandidateHit.GetActor();
+		const float DownwardAngleDegrees = FMath::RadiansToDegrees(
+			FMath::Asin(FMath::Clamp(-TraceDirection.Z, 0.0f, 1.0f)));
+		if (bUseWaterIceAnglePassthrough &&
+			HitActor != nullptr &&
+			HitActor->ActorHasTag(TEXT("UOUWaterIceLightOccluder")) &&
+			DownwardAngleDegrees >= WaterIcePassthroughMinDownwardAngleDegrees)
+		{
+			PassthroughQueryParams.AddIgnoredActor(HitActor);
+			continue;
+		}
+
 		UUOULightInteractionSurfaceComponent* SurfaceComponent =
 			Cast<UUOULightInteractionSurfaceComponent>(CandidateHit.GetComponent());
 		if (SurfaceComponent == nullptr && HitActor != nullptr)
@@ -1479,9 +1519,17 @@ bool UUOULightExposureSourceComponent::TraceLightPathSingle(
 		}
 
 		if (SurfaceComponent == nullptr ||
-			!SurfaceComponent->ShouldPassThroughIncomingLight(
+			(!SurfaceComponent->ShouldPassThroughIncomingLight(
 				TraceDirection,
-				CandidateHit.ImpactNormal))
+				CandidateHit.ImpactNormal) &&
+				(BeamStartRadius < 0.0f ||
+				 SurfaceComponent->ContainsFullBeamFootprint(
+					FMath::Max(0.0f, BeamStartRadius) +
+						CandidateHit.Distance * FMath::Tan(FMath::DegreesToRadians(
+							FMath::Clamp(BeamConeAngle, 0.0f, 89.0f))),
+					TraceDirection,
+					CandidateHit.ImpactNormal,
+					CandidateHit.ImpactPoint))))
 		{
 			CollisionHit = CandidateHit;
 			bHasCollisionHit = true;
@@ -1509,7 +1557,9 @@ bool UUOULightExposureSourceComponent::TraceLightPathSingle(
 		TraceStart,
 		TraceEnd,
 		ShadeHit,
-		IgnoredShadeOwner);
+		IgnoredShadeOwner,
+		BeamStartRadius,
+		BeamConeAngle);
 	if (!bHasCollisionHit && !bHasShadeHit)
 	{
 		return false;
@@ -1533,7 +1583,9 @@ bool UUOULightExposureSourceComponent::FindNearestUmbrellaLightShadeHit(
 	const FVector& TraceStart,
 	const FVector& TraceEnd,
 	FHitResult& OutHit,
-	const AActor* IgnoredShadeOwner) const
+	const AActor* IgnoredShadeOwner,
+	float BeamStartRadius,
+	float BeamConeAngle) const
 {
 	OutHit = FHitResult();
 	UWorld* World = GetWorld();
@@ -1588,14 +1640,47 @@ bool UUOULightExposureSourceComponent::FindNearestUmbrellaLightShadeHit(
 		const FVector HitNormal = ShadeTransform.TransformVectorNoScale(LocalHitNormal).GetSafeNormal();
 		if (AActor* ShadeOwner = ShadeVolume->GetOwner())
 		{
-			if (const UUOULightInteractionSurfaceComponent* SurfaceComponent =
+			if (UUOULightInteractionSurfaceComponent* SurfaceComponent =
 				ShadeOwner->FindComponentByClass<UUOULightInteractionSurfaceComponent>();
-				SurfaceComponent != nullptr &&
-				SurfaceComponent->ShouldPassThroughIncomingLight(
+				SurfaceComponent != nullptr)
+			{
+				if (SurfaceComponent->ShouldPassThroughIncomingLight(
 					IncomingDirection,
 					HitNormal))
-			{
-				continue;
+				{
+					continue;
+				}
+
+				// 반사 상태의 우산 가장자리에 빛이 일부만 걸친 경우 그늘 볼륨만
+				// 입사광을 잘라 버리지 않도록 실제 반사면의 전체 빔 수용 여부를 사용합니다.
+				if (BeamStartRadius >= 0.0f && SurfaceComponent->CanReflectLight())
+				{
+					FCollisionQueryParams SurfaceQueryParams(
+						SCENE_QUERY_STAT(UOUUmbrellaShadeCoverageTrace),
+						false,
+						GetOwner());
+					FHitResult SurfaceHit;
+					if (!SurfaceComponent->LineTraceComponent(
+						SurfaceHit,
+						TraceStart,
+						TraceEnd,
+						SurfaceQueryParams))
+					{
+						continue;
+					}
+
+					const float BeamRadiusAtSurface = FMath::Max(0.0f, BeamStartRadius) +
+						SurfaceHit.Distance * FMath::Tan(FMath::DegreesToRadians(
+							FMath::Clamp(BeamConeAngle, 0.0f, 89.0f)));
+					if (!SurfaceComponent->HasSufficientReflectionCoverage(
+						BeamRadiusAtSurface,
+						IncomingDirection,
+						SurfaceHit.ImpactNormal,
+						SurfaceHit.ImpactPoint))
+					{
+						continue;
+					}
+				}
 			}
 		}
 
@@ -1672,7 +1757,9 @@ bool UUOULightExposureSourceComponent::TryBuildLightInteractionSurfaceHit(
 			CenterTraceStart,
 			CenterTraceEnd,
 			QueryParams,
-			SurfaceComponent->GetOwner());
+			SurfaceComponent->GetOwner(),
+			BeamShape == EUOULightBeamShape::Cylinder ? CylinderRadius : 0.0f,
+			BeamShape == EUOULightBeamShape::Cylinder ? 0.0f : GetEffectiveOuterConeAngle());
 		if (IsBlockedByActiveUmbrellaShade(CenterHit, SurfaceComponent->GetOwner()))
 		{
 			return false;
@@ -1699,7 +1786,9 @@ bool UUOULightExposureSourceComponent::TryBuildLightInteractionSurfaceHit(
 				SourcePosition,
 				AxisOcclusionEnd,
 				QueryParams,
-				SurfaceComponent->GetOwner());
+				SurfaceComponent->GetOwner(),
+				BeamShape == EUOULightBeamShape::Cylinder ? CylinderRadius : 0.0f,
+				BeamShape == EUOULightBeamShape::Cylinder ? 0.0f : GetEffectiveOuterConeAngle());
 			if (IsBlockedByActiveUmbrellaShade(AxisOcclusionHit, SurfaceComponent->GetOwner()))
 			{
 				return false;
@@ -1723,7 +1812,9 @@ bool UUOULightExposureSourceComponent::TryBuildLightInteractionSurfaceHit(
 			SourcePosition,
 			SourcePosition + SourceForward * BeamRange,
 			QueryParams,
-			SurfaceComponent->GetOwner()) &&
+			SurfaceComponent->GetOwner(),
+			BeamShape == EUOULightBeamShape::Cylinder ? CylinderRadius : 0.0f,
+			BeamShape == EUOULightBeamShape::Cylinder ? 0.0f : GetEffectiveOuterConeAngle()) &&
 			AxisHit.GetComponent() == SurfaceComponent &&
 			SurfaceComponent->CanReflectIncomingLight(
 				SourceForward,
@@ -1782,7 +1873,9 @@ bool UUOULightExposureSourceComponent::TryBuildLightInteractionSurfaceHit(
 			TraceStart,
 			TraceEnd,
 			QueryParams,
-			SurfaceComponent->GetOwner()) &&
+			SurfaceComponent->GetOwner(),
+			BeamShape == EUOULightBeamShape::Cylinder ? CylinderRadius : 0.0f,
+			BeamShape == EUOULightBeamShape::Cylinder ? 0.0f : GetEffectiveOuterConeAngle()) &&
 			SampleHit.GetComponent() == SurfaceComponent &&
 			SurfaceComponent->CanReflectIncomingLight(
 				DirectionToSurface,
@@ -2070,7 +2163,9 @@ void UUOULightExposureSourceComponent::EmitReflectedLightFromSurface(
 				ReflectionOrigin,
 				SegmentTraceEnd,
 				SegmentTraceQueryParams,
-				CurrentSurface->GetOwner()))
+				CurrentSurface->GetOwner(),
+				CurrentBeamStartRadius,
+				OutgoingBeamConeAngle))
 			{
 				SegmentEnd = SegmentBlockingHit.ImpactPoint;
 			}
@@ -2404,7 +2499,9 @@ bool UUOULightExposureSourceComponent::TryFindNextReflectionSurface(
 				ReflectionOrigin,
 				ReflectionOrigin + SafeReflectedDirection * SearchRange,
 				TraceQueryParams,
-				CurrentSurface->GetOwner()) &&
+				CurrentSurface->GetOwner(),
+				BeamStartRadius,
+				BeamConeAngle) &&
 				AxisHit.GetComponent() == CandidateSurface &&
 				CandidateSurface->CanReflectIncomingLight(
 					SafeReflectedDirection,
@@ -2476,7 +2573,9 @@ bool UUOULightExposureSourceComponent::TryFindNextReflectionSurface(
 					ReflectionOrigin,
 					TraceEnd,
 					TraceQueryParams,
-					CurrentSurface->GetOwner()) &&
+					CurrentSurface->GetOwner(),
+					BeamStartRadius,
+					BeamConeAngle) &&
 					CandidateHit.GetComponent() == CandidateSurface &&
 					CandidateSurface->CanReflectIncomingLight(
 						SafeReflectedDirection,

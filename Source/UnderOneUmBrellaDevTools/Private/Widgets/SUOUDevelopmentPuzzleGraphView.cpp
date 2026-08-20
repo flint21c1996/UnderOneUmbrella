@@ -4,6 +4,7 @@
 
 #include "GameFramework/Actor.h"
 #include "Puzzle/Core/UOUPuzzleConditionGroupActor.h"
+#include "Puzzle/Core/UOUPuzzleConditionSourceComponent.h"
 #include "Rendering/DrawElements.h"
 #include "Styling/CoreStyle.h"
 #include "UOUDevelopmentPuzzleCheatSubsystem.h"
@@ -18,7 +19,7 @@ namespace UOUDevelopmentPuzzleGraphViewPrivate
 	constexpr float CanvasPadding = 18.0f;
 	constexpr float DepthHeaderHeight = 24.0f;
 	constexpr float NodeWidth = 260.0f;
-	constexpr float NodeHeight = 196.0f;
+	constexpr float NodeHeight = 260.0f;
 	constexpr float HorizontalGap = 130.0f;
 	constexpr float VerticalGap = 24.0f;
 	constexpr float EdgeThickness = 2.0f;
@@ -248,6 +249,11 @@ void SUOUDevelopmentPuzzleGraphView::RebuildLayout()
 							&SUOUDevelopmentPuzzleGraphView::GetExternalInputButtonColor,
 							NodeIndex,
 							ExternalInputIndex)
+						.ToolTipText(
+							this,
+							&SUOUDevelopmentPuzzleGraphView::GetExternalInputTooltipText,
+							NodeIndex,
+							ExternalInputIndex)
 						.ContentPadding(FMargin(5.0f, 2.0f))
 						[
 							SNew(STextBlock)
@@ -307,7 +313,7 @@ void SUOUDevelopmentPuzzleGraphView::RebuildLayout()
 					.Padding(0.0f, 6.0f, 0.0f, 0.0f)
 					[
 						SNew(STextBlock)
-						.Text(BuildNodeDetailText(NodeIndex))
+						.Text(this, &SUOUDevelopmentPuzzleGraphView::BuildNodeDetailText, NodeIndex)
 						.AutoWrapText(true)
 						.ColorAndOpacity(FLinearColor(0.78f, 0.78f, 0.78f, 1.0f))
 					]
@@ -338,9 +344,9 @@ void SUOUDevelopmentPuzzleGraphView::RebuildLayout()
 			(SourcePosition->X + NodeWidth + TargetPosition->X) * 0.5f - 58.0f,
 			(SourcePosition->Y + TargetPosition->Y) * 0.5f + NodeHeight * 0.5f
 				+ EdgeOffsetIndex * 20.0f - 10.0f);
-		const AActor* RelationActor = Edge.RelationActor.Get();
-		const FString RelationName = RelationActor != nullptr
-			? RelationActor->GetName()
+		const UObject* RelationObject = Edge.RelationObject.Get();
+		const FString RelationName = RelationObject != nullptr
+			? RelationObject->GetName()
 			: TEXT("직접 연결");
 
 		GraphCanvas->AddSlot()
@@ -390,6 +396,49 @@ FText SUOUDevelopmentPuzzleGraphView::BuildNodeDetailText(int32 NodeIndex) const
 		return FText::GetEmpty();
 	}
 
+	TArray<FString> DetailLines;
+	const int32 TotalConditionCount = Node->ConditionSources.Num();
+	int32 SatisfiedConditionCount = 0;
+	TArray<FString> ConditionLines;
+	for (const TWeakObjectPtr<UUOUPuzzleConditionSourceComponent>& WeakConditionSource :
+		Node->ConditionSources)
+	{
+		UUOUPuzzleConditionSourceComponent* ConditionSource = WeakConditionSource.Get();
+		if (!IsValid(ConditionSource))
+		{
+			ConditionLines.Add(TEXT("[Invalid] ConditionSource"));
+			continue;
+		}
+
+		if (ConditionSource->IsSatisfied())
+		{
+			++SatisfiedConditionCount;
+		}
+
+		const bool bIsLocalSource = ConditionSource->GetOwner() == Node->PuzzleGroup.Get();
+		ConditionLines.Add(FString::Printf(
+			TEXT("[%s] %s : %s"),
+			bIsLocalSource ? TEXT("Local") : TEXT("Reference"),
+			*ConditionSource->GetName(),
+			ConditionSource->IsSatisfied() ? TEXT("Satisfied") : TEXT("Unsatisfied")));
+	}
+
+	DetailLines.Add(FString::Printf(
+		TEXT("조건: %d/%d"),
+		SatisfiedConditionCount,
+		TotalConditionCount));
+	if (ConditionLines.IsEmpty())
+	{
+		DetailLines.Add(TEXT("  없음"));
+	}
+	else
+	{
+		for (const FString& ConditionLine : ConditionLines)
+		{
+			DetailLines.Add(FString::Printf(TEXT("  %s"), *ConditionLine));
+		}
+	}
+
 	TArray<FString> ResultNames;
 	for (const TObjectPtr<AActor>& ResultActor : Node->ResultActors)
 	{
@@ -402,7 +451,8 @@ FText SUOUDevelopmentPuzzleGraphView::BuildNodeDetailText(int32 NodeIndex) const
 	const FString ResultText = ResultNames.IsEmpty()
 		? TEXT("없음")
 		: FString::Join(ResultNames, TEXT(", "));
-	return FText::FromString(FString::Printf(TEXT("결과: %s"), *ResultText));
+	DetailLines.Add(FString::Printf(TEXT("결과: %s"), *ResultText));
+	return FText::FromString(FString::Join(DetailLines, LINE_TERMINATOR));
 }
 
 FText SUOUDevelopmentPuzzleGraphView::GetNodeTitleText(int32 NodeIndex) const
@@ -460,10 +510,77 @@ FText SUOUDevelopmentPuzzleGraphView::GetExternalInputButtonText(
 	const FString InputName = ExternalInput.DisplayName.IsEmpty()
 		? GetNameSafe(ExternalInput.InputActor.Get())
 		: ExternalInput.DisplayName.ToString();
-	return FText::FromString(FString::Printf(
+
+	TArray<FString> DisplayLines;
+	DisplayLines.Add(FString::Printf(
 		TEXT("[%s] %s"),
 		bSatisfied ? TEXT("완료") : TEXT("대기"),
 		*InputName));
+
+	int32 ValidConditionSourceCount = 0;
+	for (const TWeakObjectPtr<UUOUPuzzleConditionSourceComponent>& WeakConditionSource :
+		ExternalInput.ConditionSources)
+	{
+		UUOUPuzzleConditionSourceComponent* ConditionSource = WeakConditionSource.Get();
+		if (!IsValid(ConditionSource))
+		{
+			continue;
+		}
+
+		++ValidConditionSourceCount;
+		DisplayLines.Add(FString::Printf(
+			TEXT("  %s : %s"),
+			*ConditionSource->GetName(),
+			ConditionSource->IsSatisfied() ? TEXT("Satisfied") : TEXT("Unsatisfied")));
+	}
+
+	if (ValidConditionSourceCount == 0)
+	{
+		DisplayLines.Add(TEXT("  [참조 해석 실패] ConditionSource 없음"));
+	}
+
+	return FText::FromString(FString::Join(DisplayLines, LINE_TERMINATOR));
+}
+
+FText SUOUDevelopmentPuzzleGraphView::GetExternalInputTooltipText(
+	int32 NodeIndex,
+	int32 ExternalInputIndex) const
+{
+	const FUOUDevelopmentPuzzleCheatGraphNode* Node = FindNode(NodeIndex);
+	if (Node == nullptr || !Node->ExternalInputs.IsValidIndex(ExternalInputIndex))
+	{
+		return FText::FromString(TEXT("유효하지 않은 외부 입력입니다."));
+	}
+
+	const FUOUDevelopmentPuzzleCheatExternalInput& ExternalInput =
+		Node->ExternalInputs[ExternalInputIndex];
+	TArray<FString> DetailLines;
+	DetailLines.Add(FString::Printf(
+		TEXT("Actor: %s"),
+		*GetPathNameSafe(ExternalInput.InputActor.Get())));
+
+	for (const TWeakObjectPtr<UUOUPuzzleConditionSourceComponent>& WeakConditionSource :
+		ExternalInput.ConditionSources)
+	{
+		UUOUPuzzleConditionSourceComponent* ConditionSource = WeakConditionSource.Get();
+		if (!IsValid(ConditionSource))
+		{
+			DetailLines.Add(TEXT("ConditionSource: [유효하지 않은 참조]"));
+			continue;
+		}
+
+		DetailLines.Add(FString::Printf(
+			TEXT("%s\n%s"),
+			*ConditionSource->GetPathName(),
+			*IUOUDebugProvider::Execute_GetDebugSummaryText(ConditionSource).ToString()));
+	}
+
+	if (ExternalInput.ConditionSources.IsEmpty())
+	{
+		DetailLines.Add(TEXT("ConditionSource: [참조 해석 실패]"));
+	}
+
+	return FText::FromString(FString::Join(DetailLines, TEXT("\n\n")));
 }
 
 FSlateColor SUOUDevelopmentPuzzleGraphView::GetExternalInputButtonColor(

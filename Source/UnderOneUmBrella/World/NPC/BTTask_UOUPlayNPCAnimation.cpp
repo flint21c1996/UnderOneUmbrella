@@ -29,7 +29,8 @@ EBTNodeResult::Type UBTTask_UOUPlayNPCAnimation::ExecuteTask(
 		return EBTNodeResult::Failed;
 	}
 
-	if (!bWaitForCompletion)
+	const bool bWaitUntilDeactivated = NPCCharacter->IsCurrentAnimationLoopingUntilDeactivated();
+	if (!bWaitForCompletion && !bWaitUntilDeactivated)
 	{
 		if (bClearActionOnFinish || NPCCharacter->ShouldClearActiveActionOnFinish())
 		{
@@ -42,6 +43,7 @@ EBTNodeResult::Type UBTTask_UOUPlayNPCAnimation::ExecuteTask(
 	Memory->NPCCharacter = NPCCharacter;
 	Memory->ElapsedTime = 0.0f;
 	Memory->Duration = Duration;
+	Memory->bWaitUntilDeactivated = bWaitUntilDeactivated;
 	return EBTNodeResult::InProgress;
 }
 
@@ -51,6 +53,11 @@ void UBTTask_UOUPlayNPCAnimation::TickTask(
 	float DeltaSeconds)
 {
 	FUOUPlayNPCAnimationTaskMemory* Memory = reinterpret_cast<FUOUPlayNPCAnimationTaskMemory*>(NodeMemory);
+	if (Memory->bWaitUntilDeactivated)
+	{
+		return;
+	}
+
 	Memory->ElapsedTime += DeltaSeconds;
 
 	if (Memory->ElapsedTime < Memory->Duration)

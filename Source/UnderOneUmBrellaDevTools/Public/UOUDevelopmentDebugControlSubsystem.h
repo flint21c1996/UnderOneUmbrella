@@ -9,6 +9,16 @@
 
 class AActor;
 
+UENUM(BlueprintType)
+enum class EUOUPlayerDebugFeature : uint8
+{
+	Information UMETA(DisplayName = "Information"),
+	UmbrellaRainBlocker UMETA(DisplayName = "Umbrella Rain Blocker"),
+	UmbrellaReflector UMETA(DisplayName = "Umbrella Reflector"),
+	UmbrellaPourTrace UMETA(DisplayName = "Umbrella Pour Trace"),
+	UmbrellaPourPlacement UMETA(DisplayName = "Umbrella Pour Placement")
+};
+
 // 개발 도구 HUD와 런타임 디버그 설정 사이의 제어 진입점입니다.
 UCLASS()
 class UNDERONEUMBRELLADEVTOOLS_API UUOUDevelopmentDebugControlSubsystem : public UWorldSubsystem
@@ -33,6 +43,12 @@ public:
 	// 전체 활성 상태를 유지하면서 지정한 디버그 카테고리의 활성 상태만 변경합니다.
 	UFUNCTION(BlueprintCallable, Category = "Development Debug")
 	void SetDebugCategoryEnabled(EUOUDebugCategory Category, bool bNewEnabled);
+
+	UFUNCTION(BlueprintPure, Category = "Development Debug|Player")
+	bool IsPlayerDebugFeatureEnabled(EUOUPlayerDebugFeature Feature) const;
+
+	UFUNCTION(BlueprintCallable, Category = "Development Debug|Player")
+	void SetPlayerDebugFeatureEnabled(EUOUPlayerDebugFeature Feature, bool bNewEnabled);
 
 	// HUD에서 전달한 액터를 현재 복수 선택 집합에 추가하거나 제거합니다.
 	UFUNCTION(BlueprintCallable, Category = "Development Debug|Selection")
@@ -61,6 +77,9 @@ private:
 	// 전체 디버그 상태와 독립적으로 꺼져 있는 카테고리만 저장합니다.
 	UPROPERTY(Transient)
 	TSet<EUOUDebugCategory> DisabledDebugCategories;
+
+	UPROPERTY(Transient)
+	TSet<EUOUPlayerDebugFeature> DisabledPlayerDebugFeatures;
 
 	// HUD가 선택한 복수 액터의 약한 참조 집합이며 월드 액터의 수명을 소유하지 않습니다.
 	UPROPERTY(Transient)

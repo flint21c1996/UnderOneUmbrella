@@ -8,6 +8,7 @@
 #include "UOUPlayerAnimInstance.generated.h"
 
 class AUOUCharacter;
+class UUOUPushPullInteractorComponent;
 class UUOUUmbrellaComponent;
 
 // 플레이어 애니메이션 블루프린트에서 사용하는 런타임 상태를 갱신합니다.
@@ -57,6 +58,15 @@ public:
 	UPROPERTY(BlueprintReadOnly, Category = "Animation|Umbrella", meta = (ToolTip = "우산으로 물을 따르고 있는지 여부입니다."))
 	bool IsPouring = false;
 
+	UPROPERTY(BlueprintReadOnly, Category = "Animation|Umbrella", meta = (ToolTip = "우산으로 빛을 반사하고 있는지 여부입니다."))
+	bool IsLightReflecting = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Animation|PushPull", meta = (ToolTip = "현재 밀고 당길 수 있는 물체 또는 회전 거울을 잡고 있는지 여부입니다."))
+	bool IsPushPulling = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Animation|PushPull", meta = (ClampMin = "-1.0", ClampMax = "1.0", ToolTip = "-1은 당기기, 0은 정지, 1은 밀기 애니메이션을 선택합니다."))
+	float PushPullBlendInput = 0.0f;
+
 	UPROPERTY(BlueprintReadOnly, Category = "Animation|Umbrella", meta = (ToolTip = "일반 우산 보유 애니메이션 세트를 사용할지 여부입니다."))
 	bool UseUmbrellaAnim = false;
 
@@ -72,13 +82,18 @@ public:
 	UPROPERTY(BlueprintReadOnly, Transient, Category = "Animation|References")
 	TObjectPtr<UUOULadderClimbComponent> LadderClimbComponent = nullptr;
 
+	UPROPERTY(BlueprintReadOnly, Transient, Category = "Animation|References")
+	TObjectPtr<UUOUPushPullInteractorComponent> PushPullInteractorComponent = nullptr;
+
 private:
 	void CacheOwnerIfNeeded();
 	void UpdateMovementVariables();
 	void UpdateUmbrellaVariables();
 	void UpdateLadderVariables();
+	void UpdatePushPullVariables();
 	void UpdateDerivedAnimationVariables();
 	void ResetMovementVariables();
 	void ResetUmbrellaVariables();
 	void ResetLadderVariables();
+	void ResetPushPullVariables();
 };

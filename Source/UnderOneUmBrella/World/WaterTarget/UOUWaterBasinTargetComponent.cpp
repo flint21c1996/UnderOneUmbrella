@@ -3,6 +3,8 @@
 #include "World/WaterTarget/UOUWaterBasinTargetComponent.h"
 
 #include "Components/PrimitiveComponent.h"
+#include "Components/SceneComponent.h"
+#include "Components/StaticMeshComponent.h"
 #include "Debug/UOUDevelopmentDebugDrawContext.h"
 #include "GameFramework/Actor.h"
 #include "UObject/UObjectIterator.h"
@@ -15,6 +17,7 @@ TWeakObjectPtr<UUOUWaterBasinTargetComponent> UUOUWaterBasinTargetComponent::Run
 namespace
 {
 	constexpr float MinWorldUnitsPerTile = 1.0f;
+	constexpr float MinWaterVisualDepthWorld = 0.1f;
 	constexpr float InputLocationBoundsToleranceWorld = 1.0f;
 
 	// 연결 그룹의 공통 수면 높이는 이분 탐색으로 찾습니다.
@@ -206,7 +209,7 @@ void UUOUWaterBasinTargetComponent::PostEditChangeProperty(FPropertyChangedEvent
 	if (bChangedInitialWaterSetting)
 	{
 		CurrentWaterVolume = ResolveInitialWaterVolume();
-		UpdateCachedWaterState();
+		UpdateCachedWaterState(false);
 	}
 	else if (bChangedRuntimeWaterPreview)
 	{
@@ -938,7 +941,7 @@ void UUOUWaterBasinTargetComponent::ApplyGroupSurfaceToTargets(const TArray<UUOU
 	}
 }
 
-void UUOUWaterBasinTargetComponent::UpdateCachedWaterState()
+void UUOUWaterBasinTargetComponent::UpdateCachedWaterState(bool bUpdateVisual)
 {
 	const float Capacity = GetCapacity();
 	CurrentWaterVolume = FMath::Clamp(CurrentWaterVolume, 0.0f, Capacity);
@@ -954,6 +957,11 @@ void UUOUWaterBasinTargetComponent::UpdateCachedWaterState()
 	const float MaxHeight = GetMaxWaterHeight();
 	CurrentFillRatio = MaxHeight > KINDA_SMALL_NUMBER ? CurrentWaterDepth / MaxHeight : 0.0f;
 	WaterSurfaceWorldZ = GetBottomWorldZ() + GetWaterDepthWorld();
+
+	if (bUpdateVisual)
+	{
+		UpdateWaterVisual();
+	}
 }
 
 void UUOUWaterBasinTargetComponent::UpdateGroupRuntimeCache(const FUOUWaterBasinGroupDebugData& GroupData)
@@ -1024,6 +1032,190 @@ void UUOUWaterBasinTargetComponent::NotifyWaterInputReceived(const FUOUWaterBasi
 	}
 }
 
+void UUOUWaterBasinTargetComponent::UpdateWaterVisual()
+{
+	if (!bUpdateWaterVisual)
+	{
+		return;
+	}
+
+	ResolveWaterVisualComponent();
+	if (!WaterVisualComponent)
+	{
+		return;
+	}
+
+	const float MaxDepthWorld = GetMaxWaterHeight() * FMath::Max(WorldUnitsPerTile, MinWorldUnitsPerTile);
+	if (MaxDepthWorld <= KINDA_SMALL_NUMBER)
+	{
+		return;
+	}
+
+	const float DepthWorld = GetWaterDepthWorld();
+	const bool bShouldHide = bHideWaterVisualWhenEmpty && DepthWorld <= KINDA_SMALL_NUMBER;
+	WaterVisualComponent->SetHiddenInGame(bShouldHide, true);
+	WaterVisualComponent->SetVisibility(!bShouldHide, true);
+
+	// StaticMesh의 Scale 한 축이 정확히 0이면 Query/Physics Body가 불안정해질 수 있습니다.
+	// 빈 물은 Visibility로 숨기고, Transform에는 아주 작은 최소 두께를 유지합니다.
+	const float SafeMinVisualDepthWorld = FMath::Min(MaxDepthWorld, MinWaterVisualDepthWorld);
+	const float VisibleDepthWorld = FMath::Clamp(DepthWorld, SafeMinVisualDepthWorld, MaxDepthWorld);
+	if (ApplyWaterVisualBounds(VisibleDepthWorld))
+	{
+		return;
+	}
+
+	CaptureWaterVisualTransformIfNeeded();
+
+	FVector NewScale = WaterVisualComponent->GetComponentScale();
+	FVector LocalMin = FVector::ZeroVector;
+	FVector LocalMax = FVector::ZeroVector;
+	FVector LocalCenter = FVector::ZeroVector;
+	if (UStaticMeshComponent* WaterVisualMeshComponent = Cast<UStaticMeshComponent>(WaterVisualComponent.Get()))
+	{
+		WaterVisualMeshComponent->GetLocalBounds(LocalMin, LocalMax);
+		LocalCenter = (LocalMin + LocalMax) * 0.5f;
+
+		const FVector LocalSize = LocalMax - LocalMin;
+		if (LocalSize.Z > KINDA_SMALL_NUMBER)
+		{
+			NewScale.Z = VisibleDepthWorld / LocalSize.Z;
+		}
+		else
+		{
+			const float HeightRatio = FMath::Clamp(VisibleDepthWorld / MaxDepthWorld, 0.0f, 1.0f);
+			NewScale.Z = InitialWaterVisualScale.Z * HeightRatio;
+		}
+	}
+	else
+	{
+		const float HeightRatio = FMath::Clamp(VisibleDepthWorld / MaxDepthWorld, 0.0f, 1.0f);
+		NewScale.Z = InitialWaterVisualScale.Z * HeightRatio;
+	}
+
+	const FTransform CurrentWaterVisualTransform = WaterVisualComponent->GetComponentTransform();
+	const FVector CurrentVisualCenter = CurrentWaterVisualTransform.TransformPosition(LocalCenter);
+	WaterVisualComponent->SetWorldScale3D(NewScale);
+
+	if (bAutoPlaceWaterVisual)
+	{
+		FVector DesiredCenter = CurrentVisualCenter;
+		FBox BasinBounds;
+		if (TryGetBasinBounds(BasinBounds))
+		{
+			const FVector BasinCenter = BasinBounds.GetCenter();
+			DesiredCenter.X = BasinCenter.X;
+			DesiredCenter.Y = BasinCenter.Y;
+		}
+
+		const FVector PivotOffset = WaterVisualComponent->GetComponentQuat().RotateVector(LocalCenter * NewScale);
+		DesiredCenter.Z = GetBottomWorldZ() + (VisibleDepthWorld * 0.5f);
+		WaterVisualComponent->SetWorldLocation(DesiredCenter - PivotOffset);
+	}
+}
+
+void UUOUWaterBasinTargetComponent::ResolveWaterVisualComponent()
+{
+	if (IsValid(WaterVisualComponent) || !bAutoFindWaterVisualComponent)
+	{
+		return;
+	}
+
+	WaterVisualComponent = FindWaterVisualComponent();
+	if (WaterVisualComponent)
+	{
+		bCapturedWaterVisualTransform = false;
+	}
+}
+
+USceneComponent* UUOUWaterBasinTargetComponent::FindWaterVisualComponent() const
+{
+	const AActor* Owner = GetOwner();
+	if (!Owner || WaterVisualComponentName.IsNone())
+	{
+		return nullptr;
+	}
+
+	const FString TargetName = WaterVisualComponentName.ToString();
+	TArray<USceneComponent*> SceneComponents;
+	Owner->GetComponents<USceneComponent>(SceneComponents);
+
+	for (USceneComponent* SceneComponent : SceneComponents)
+	{
+		if (!IsValid(SceneComponent))
+		{
+			continue;
+		}
+
+		if (SceneComponent->GetFName() == WaterVisualComponentName
+			|| SceneComponent->ComponentTags.Contains(WaterVisualComponentName)
+			|| SceneComponent->GetName().Contains(TargetName, ESearchCase::IgnoreCase))
+		{
+			return SceneComponent;
+		}
+	}
+
+	return nullptr;
+}
+
+bool UUOUWaterBasinTargetComponent::ApplyWaterVisualBounds(float VisibleDepthWorld)
+{
+	if (!bFitWaterVisualToBasinBounds || !WaterVisualComponent)
+	{
+		return false;
+	}
+
+	FBox BasinBounds;
+	if (!TryGetBasinBounds(BasinBounds))
+	{
+		return false;
+	}
+
+	UStaticMeshComponent* WaterVisualMeshComponent = Cast<UStaticMeshComponent>(WaterVisualComponent.Get());
+	if (!WaterVisualMeshComponent)
+	{
+		return false;
+	}
+
+	FVector LocalMin = FVector::ZeroVector;
+	FVector LocalMax = FVector::ZeroVector;
+	WaterVisualMeshComponent->GetLocalBounds(LocalMin, LocalMax);
+	const FVector LocalSize = LocalMax - LocalMin;
+	if (LocalSize.X <= KINDA_SMALL_NUMBER || LocalSize.Y <= KINDA_SMALL_NUMBER || LocalSize.Z <= KINDA_SMALL_NUMBER)
+	{
+		return false;
+	}
+
+	const FVector BasinSize = BasinBounds.GetSize();
+	const FVector LocalCenter = (LocalMin + LocalMax) * 0.5f;
+	const FVector NewScale(
+		BasinSize.X / LocalSize.X,
+		BasinSize.Y / LocalSize.Y,
+		VisibleDepthWorld / LocalSize.Z);
+	WaterVisualMeshComponent->SetWorldScale3D(NewScale);
+
+	if (bAutoPlaceWaterVisual)
+	{
+		FVector DesiredCenter = BasinBounds.GetCenter();
+		DesiredCenter.Z = GetBottomWorldZ() + (VisibleDepthWorld * 0.5f);
+		const FVector PivotOffset = LocalCenter * NewScale;
+		WaterVisualMeshComponent->SetWorldLocation(DesiredCenter - PivotOffset);
+	}
+
+	return true;
+}
+
+void UUOUWaterBasinTargetComponent::CaptureWaterVisualTransformIfNeeded()
+{
+	if (!WaterVisualComponent || bCapturedWaterVisualTransform)
+	{
+		return;
+	}
+
+	InitialWaterVisualScale = WaterVisualComponent->GetComponentScale();
+	bCapturedWaterVisualTransform = true;
+}
+
 bool UUOUWaterBasinTargetComponent::IsDirectlyConnectedTo(const UUOUWaterBasinTargetComponent* Other) const
 {
 	if (!Other)
@@ -1057,6 +1249,27 @@ bool UUOUWaterBasinTargetComponent::TryGetBasinBounds(FBox& OutBounds) const
 	for (UPrimitiveComponent* PrimitiveComponent : PrimitiveComponents)
 	{
 		if (!IsValid(PrimitiveComponent) || !PrimitiveComponent->IsRegistered())
+		{
+			continue;
+		}
+
+		if (PrimitiveComponent == WaterVisualComponent.Get())
+		{
+			continue;
+		}
+
+		if (!WaterVisualComponentName.IsNone())
+		{
+			const FString TargetName = WaterVisualComponentName.ToString();
+			if (PrimitiveComponent->GetFName() == WaterVisualComponentName
+				|| PrimitiveComponent->ComponentTags.Contains(WaterVisualComponentName)
+				|| PrimitiveComponent->GetName().Contains(TargetName, ESearchCase::IgnoreCase))
+			{
+				continue;
+			}
+		}
+
+		if (WaterVisualComponent && PrimitiveComponent->IsAttachedTo(WaterVisualComponent.Get()))
 		{
 			continue;
 		}

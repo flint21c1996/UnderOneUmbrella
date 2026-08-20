@@ -330,6 +330,101 @@ void SUOUDevelopmentPuzzleCheatHUD::Construct(const FArguments& InArgs)
 									.AutoHeight()
 									[
 										SNew(STextBlock)
+										.Text(FText::FromString(TEXT("Player 세부 표시")))
+									]
+									+ SVerticalBox::Slot()
+									.AutoHeight()
+									.Padding(0.0f, 6.0f, 0.0f, 0.0f)
+									[
+										SNew(SHorizontalBox)
+										+ SHorizontalBox::Slot()
+										.FillWidth(1.0f)
+										.Padding(0.0f, 0.0f, 3.0f, 0.0f)
+										[
+											SNew(SButton)
+											.IsFocusable(false)
+											.OnClicked(this, &SUOUDevelopmentPuzzleCheatHUD::HandlePlayerDebugFeatureToggleClicked, EUOUPlayerDebugFeature::Information)
+											.IsEnabled(this, &SUOUDevelopmentPuzzleCheatHUD::IsDebugControlAvailable)
+											[
+												SNew(STextBlock)
+												.Text(this, &SUOUDevelopmentPuzzleCheatHUD::GetPlayerDebugFeatureToggleText, EUOUPlayerDebugFeature::Information)
+											]
+										]
+										+ SHorizontalBox::Slot()
+										.FillWidth(1.0f)
+										.Padding(3.0f, 0.0f, 0.0f, 0.0f)
+										[
+											SNew(SButton)
+											.IsFocusable(false)
+											.OnClicked(this, &SUOUDevelopmentPuzzleCheatHUD::HandlePlayerDebugFeatureToggleClicked, EUOUPlayerDebugFeature::UmbrellaRainBlocker)
+											.IsEnabled(this, &SUOUDevelopmentPuzzleCheatHUD::IsDebugControlAvailable)
+											[
+												SNew(STextBlock)
+												.Text(this, &SUOUDevelopmentPuzzleCheatHUD::GetPlayerDebugFeatureToggleText, EUOUPlayerDebugFeature::UmbrellaRainBlocker)
+											]
+										]
+									]
+									+ SVerticalBox::Slot()
+									.AutoHeight()
+									.Padding(0.0f, 6.0f, 0.0f, 0.0f)
+									[
+										SNew(SHorizontalBox)
+										+ SHorizontalBox::Slot()
+										.FillWidth(1.0f)
+										.Padding(0.0f, 0.0f, 3.0f, 0.0f)
+										[
+											SNew(SButton)
+											.IsFocusable(false)
+											.OnClicked(this, &SUOUDevelopmentPuzzleCheatHUD::HandlePlayerDebugFeatureToggleClicked, EUOUPlayerDebugFeature::UmbrellaPourTrace)
+											.IsEnabled(this, &SUOUDevelopmentPuzzleCheatHUD::IsDebugControlAvailable)
+											[
+												SNew(STextBlock)
+												.Text(this, &SUOUDevelopmentPuzzleCheatHUD::GetPlayerDebugFeatureToggleText, EUOUPlayerDebugFeature::UmbrellaPourTrace)
+											]
+										]
+										+ SHorizontalBox::Slot()
+										.FillWidth(1.0f)
+										.Padding(3.0f, 0.0f, 0.0f, 0.0f)
+										[
+											SNew(SButton)
+											.IsFocusable(false)
+											.OnClicked(this, &SUOUDevelopmentPuzzleCheatHUD::HandlePlayerDebugFeatureToggleClicked, EUOUPlayerDebugFeature::UmbrellaPourPlacement)
+											.IsEnabled(this, &SUOUDevelopmentPuzzleCheatHUD::IsDebugControlAvailable)
+											[
+												SNew(STextBlock)
+												.Text(this, &SUOUDevelopmentPuzzleCheatHUD::GetPlayerDebugFeatureToggleText, EUOUPlayerDebugFeature::UmbrellaPourPlacement)
+											]
+										]
+									]
+									+ SVerticalBox::Slot()
+									.AutoHeight()
+									.Padding(0.0f, 6.0f, 0.0f, 0.0f)
+									[
+										SNew(SButton)
+										.IsFocusable(false)
+										.OnClicked(this, &SUOUDevelopmentPuzzleCheatHUD::HandlePlayerDebugFeatureToggleClicked, EUOUPlayerDebugFeature::UmbrellaReflector)
+										.IsEnabled(this, &SUOUDevelopmentPuzzleCheatHUD::IsDebugControlAvailable)
+										[
+											SNew(STextBlock)
+											.Text(this, &SUOUDevelopmentPuzzleCheatHUD::GetPlayerDebugFeatureToggleText, EUOUPlayerDebugFeature::UmbrellaReflector)
+										]
+									]
+								]
+							]
+							+ SVerticalBox::Slot()
+							.AutoHeight()
+							.Padding(0.0f, 10.0f, 0.0f, 0.0f)
+							[
+								SNew(SBorder)
+								.BorderImage(FCoreStyle::Get().GetBrush(TEXT("GenericWhiteBox")))
+								.BorderBackgroundColor(FLinearColor(0.06f, 0.06f, 0.06f, 0.9f))
+								.Padding(8.0f)
+								[
+									SNew(SVerticalBox)
+									+ SVerticalBox::Slot()
+									.AutoHeight()
+									[
+										SNew(STextBlock)
 										.Text(this, &SUOUDevelopmentPuzzleCheatHUD::GetSelectedDebugActorsText)
 										.AutoWrapText(true)
 									]
@@ -535,7 +630,7 @@ void SUOUDevelopmentPuzzleCheatHUD::RebuildDebugActorRows()
 			TEXT("[%s / %s] %s"),
 			CategoryName,
 			*GetNameSafe(DebugActor.IsValid() ? DebugActor->GetClass() : nullptr),
-			*GetNameSafe(DebugActor.Get())));
+			DebugActor.IsValid() ? *DebugActor->GetActorNameOrLabel() : TEXT("None")));
 		DebugActorListBox->AddSlot()
 		.AutoHeight()
 		.Padding(0.0f, 0.0f, 0.0f, 3.0f)
@@ -698,6 +793,17 @@ FReply SUOUDevelopmentPuzzleCheatHUD::HandleDebugCategoryToggleClicked(EUOUDebug
 	return FReply::Handled();
 }
 
+FReply SUOUDevelopmentPuzzleCheatHUD::HandlePlayerDebugFeatureToggleClicked(
+	EUOUPlayerDebugFeature Feature)
+{
+	if (UUOUDevelopmentDebugControlSubsystem* Subsystem = DebugControlSubsystem.Get())
+	{
+		const bool bNewEnabled = !Subsystem->IsPlayerDebugFeatureEnabled(Feature);
+		Subsystem->SetPlayerDebugFeatureEnabled(Feature, bNewEnabled);
+	}
+	return FReply::Handled();
+}
+
 FReply SUOUDevelopmentPuzzleCheatHUD::HandleDebugActorRefreshClicked()
 {
 	RebuildDebugActorRows();
@@ -853,6 +959,43 @@ FText SUOUDevelopmentPuzzleCheatHUD::GetDebugCategoryToggleText(EUOUDebugCategor
 		Subsystem->IsDebugCategoryEnabled(Category) ? TEXT("ON") : TEXT("OFF")));
 }
 
+FText SUOUDevelopmentPuzzleCheatHUD::GetPlayerDebugFeatureToggleText(
+	EUOUPlayerDebugFeature Feature) const
+{
+	const TCHAR* FeatureName = TEXT("Unknown");
+	switch (Feature)
+	{
+	case EUOUPlayerDebugFeature::Information:
+		FeatureName = TEXT("플레이어 정보");
+		break;
+	case EUOUPlayerDebugFeature::UmbrellaRainBlocker:
+		FeatureName = TEXT("빗물 차단");
+		break;
+	case EUOUPlayerDebugFeature::UmbrellaReflector:
+		FeatureName = TEXT("우산 빛 반사판");
+		break;
+	case EUOUPlayerDebugFeature::UmbrellaPourTrace:
+		FeatureName = TEXT("붓기 Trace");
+		break;
+	case EUOUPlayerDebugFeature::UmbrellaPourPlacement:
+		FeatureName = TEXT("붓기 배치");
+		break;
+	default:
+		break;
+	}
+
+	const UUOUDevelopmentDebugControlSubsystem* Subsystem = DebugControlSubsystem.Get();
+	if (Subsystem == nullptr)
+	{
+		return FText::FromString(FString::Printf(TEXT("%s: 사용 불가"), FeatureName));
+	}
+
+	return FText::FromString(FString::Printf(
+		TEXT("%s: %s"),
+		FeatureName,
+		Subsystem->IsPlayerDebugFeatureEnabled(Feature) ? TEXT("ON") : TEXT("OFF")));
+}
+
 FText SUOUDevelopmentPuzzleCheatHUD::GetSelectedDebugActorsText() const
 {
 	const UUOUDevelopmentDebugControlSubsystem* Subsystem = DebugControlSubsystem.Get();
@@ -864,7 +1007,7 @@ FText SUOUDevelopmentPuzzleCheatHUD::GetSelectedDebugActorsText() const
 	{
 		if (IsValid(SelectedActor))
 		{
-			SelectedActorNames.Add(SelectedActor->GetName());
+			SelectedActorNames.Add(SelectedActor->GetActorNameOrLabel());
 		}
 	}
 	const FString SelectedActorListText = SelectedActorNames.IsEmpty()
@@ -887,7 +1030,8 @@ FText SUOUDevelopmentPuzzleCheatHUD::GetPlayerDebugInfoText() const
 	}
 
 	if (!ControlSubsystem->IsDebugToolsEnabled()
-		|| !ControlSubsystem->IsDebugCategoryEnabled(EUOUDebugCategory::Player))
+		|| !ControlSubsystem->IsDebugCategoryEnabled(EUOUDebugCategory::Player)
+		|| !ControlSubsystem->IsPlayerDebugFeatureEnabled(EUOUPlayerDebugFeature::Information))
 	{
 		return FText::FromString(TEXT("Player debug information is disabled."));
 	}

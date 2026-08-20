@@ -72,6 +72,48 @@ void UUOUDevelopmentDebugControlSubsystem::SetDebugCategoryEnabled(
 
 }
 
+bool UUOUDevelopmentDebugControlSubsystem::IsPlayerDebugFeatureEnabled(
+	EUOUPlayerDebugFeature Feature) const
+{
+	switch (Feature)
+	{
+	case EUOUPlayerDebugFeature::Information:
+	case EUOUPlayerDebugFeature::UmbrellaRainBlocker:
+	case EUOUPlayerDebugFeature::UmbrellaReflector:
+	case EUOUPlayerDebugFeature::UmbrellaPourTrace:
+	case EUOUPlayerDebugFeature::UmbrellaPourPlacement:
+		return !DisabledPlayerDebugFeatures.Contains(Feature);
+	default:
+		return false;
+	}
+}
+
+void UUOUDevelopmentDebugControlSubsystem::SetPlayerDebugFeatureEnabled(
+	EUOUPlayerDebugFeature Feature,
+	bool bNewEnabled)
+{
+	switch (Feature)
+	{
+	case EUOUPlayerDebugFeature::Information:
+	case EUOUPlayerDebugFeature::UmbrellaRainBlocker:
+	case EUOUPlayerDebugFeature::UmbrellaReflector:
+	case EUOUPlayerDebugFeature::UmbrellaPourTrace:
+	case EUOUPlayerDebugFeature::UmbrellaPourPlacement:
+		break;
+	default:
+		return;
+	}
+
+	if (bNewEnabled)
+	{
+		DisabledPlayerDebugFeatures.Remove(Feature);
+	}
+	else
+	{
+		DisabledPlayerDebugFeatures.Add(Feature);
+	}
+}
+
 void UUOUDevelopmentDebugControlSubsystem::ToggleSelectedDebugActor(AActor* DebugActor)
 {
 	for (auto SelectedActorIterator = SelectedDebugActors.CreateIterator();

@@ -54,6 +54,11 @@ bool UUOUDialogueSourceComponent::StartDialogue(AActor* InstigatorActor)
 
 bool UUOUDialogueSourceComponent::CanStartDialogue() const
 {
+	if (!bDialogueAvailable)
+	{
+		return false;
+	}
+
 	if (GetLineCount() <= 0)
 	{
 		return false;
@@ -65,6 +70,11 @@ bool UUOUDialogueSourceComponent::CanStartDialogue() const
 	}
 
 	return GetWorldTimeSeconds() - LastStartTime >= StartCooldown;
+}
+
+void UUOUDialogueSourceComponent::SetDialogueAvailable(bool bNewAvailable)
+{
+	bDialogueAvailable = bNewAvailable;
 }
 
 USceneComponent* UUOUDialogueSourceComponent::ResolveBubbleAnchor() const

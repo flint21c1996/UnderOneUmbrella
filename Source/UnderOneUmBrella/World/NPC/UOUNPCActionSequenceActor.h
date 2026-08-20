@@ -56,6 +56,9 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "NPC|Runtime")
 	bool bHasCompletedResultSinceLastActivation = false;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "NPC|Runtime", meta = (ToolTip = "마지막 Deactivate 요청의 액션 목록이 완료되었으면 true입니다."))
+	bool bHasCompletedResultSinceLastDeactivation = false;
+
 	UFUNCTION(BlueprintCallable, Category = "Puzzle|Actions")
 	void Activate();
 
@@ -80,6 +83,7 @@ protected:
 	void RunCurrentAction();
 	void FinishSequence();
 	void SetActivationResultCompleted(bool bNewCompleted);
+	void SetDeactivationResultCompleted(bool bNewCompleted);
 	void BindToTargetNPC();
 	void UnbindFromTargetNPC();
 

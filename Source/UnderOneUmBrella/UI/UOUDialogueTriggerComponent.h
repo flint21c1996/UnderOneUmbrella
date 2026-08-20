@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Components/SphereComponent.h"
+#include "Puzzle/Core/UOUPuzzleResultReceiver.h"
 #include "TimerManager.h"
 #include "UOUDialogueTriggerComponent.generated.h"
 
@@ -22,7 +23,7 @@ class APlayerController;
 // 플레이어가 가까이 왔을 때 대화 소스를 실행하는 트리거 컴포넌트입니다.
 // 필요하면 우산을 펼친 채 일정 시간 동안 대상을 씌웠는지도 같이 검사합니다.
 UCLASS(ClassGroup=(UI), meta=(BlueprintSpawnableComponent, DisplayName="UOU Dialogue Trigger"))
-class UNDERONEUMBRELLA_API UUOUDialogueTriggerComponent : public USphereComponent
+class UNDERONEUMBRELLA_API UUOUDialogueTriggerComponent : public USphereComponent, public IUOUPuzzleResultReceiver
 {
 	GENERATED_BODY()
 
@@ -53,6 +54,16 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Dialogue|Trigger")
 	void ResetTrigger();
 
+	// 퍼즐 결과 등 외부 상태에 따라 새로운 대화 시작을 허용하거나 차단합니다.
+	UFUNCTION(BlueprintCallable, Category = "Dialogue|Trigger")
+	void SetDialogueInteractionEnabled(bool bNewEnabled);
+
+	// 이미 트리거 안에 있는 액터를 현재 대화 가능 상태로 다시 평가합니다.
+	UFUNCTION(BlueprintCallable, Category = "Dialogue|Trigger")
+	void RefreshOverlappingInteraction();
+
+	virtual void ApplyPuzzleResult_Implementation(EOUUPuzzleResultAction Action) override;
+
 	// 실행할 대화 소스입니다. 비어 있으면 이 컴포넌트가 붙은 액터에서 대화 소스를 찾습니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue|Trigger")
 	TObjectPtr<UUOUDialogueSourceComponent> DialogueSource = nullptr;
@@ -60,6 +71,10 @@ public:
 	// 켜져 있으면 Pawn 계열 액터만 대화를 시작할 수 있습니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue|Rules")
 	bool bOnlyPawn = true;
+
+	// false면 접촉은 추적하지만 힌트 표시와 새로운 대화 시작은 차단합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue|Rules")
+	bool bDialogueInteractionEnabled = true;
 
 	// 켜져 있으면 이 대화 트리거 범위에 들어왔을 때 물음표나 느낌표 같은 월드 힌트를 같이 표시합니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue|Hint")
