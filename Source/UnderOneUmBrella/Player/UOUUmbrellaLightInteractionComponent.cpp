@@ -334,8 +334,9 @@ void UUOUUmbrellaLightInteractionComponent::ApplyRuntimeLightSurfacePlacement() 
 			FMath::Max(0.0f, RuntimeSurfaceBoxExtent.Z));
 	}
 	LightSurfaceComponent->SetBoxExtent(SurfaceHalfExtent);
-	// 캐릭터가 바라보는 방향이 아니라 입사 방향과 우산 면의 법선으로 반사 방향을 계산합니다.
-	LightSurfaceComponent->ReflectionDirectionMode = EUOULightReflectionDirectionMode::MirrorByNormal;
+	// 우산 반사는 조작 의도가 바로 보이도록 캐릭터가 바라보는 방향을 사용합니다.
+	// 거울은 각자의 표면 설정을 유지하므로 기존 입사각·반사각 계산에 영향을 주지 않습니다.
+	LightSurfaceComponent->ReflectionDirectionMode = EUOULightReflectionDirectionMode::OwnerForward;
 	// 우산은 얇은 박스이므로 가장자리 충돌 노멀 대신 실제 우산 면인 로컬 Up을 반사 법선으로 고정합니다.
 	LightSurfaceComponent->ReflectionNormalMode = EUOULightReflectionNormalMode::ComponentUp;
 	// 우산 메시가 반사점을 가리므로 거울용 시각 여백을 적용하지 않고 입사광과 반사광을 바로 연결합니다.

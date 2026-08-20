@@ -4,11 +4,14 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "World/Light/UOULightExposureTypes.h"
 #include "World/Temperature/UOUWaterIcePhaseActor.h"
 #include "UOUWaterIceGridActor.generated.h"
 
 class UHierarchicalInstancedStaticMeshComponent;
+class UInstancedStaticMeshComponent;
 class UMaterialInterface;
+class UCapsuleComponent;
 class UBoxComponent;
 class USceneComponent;
 class UStaticMesh;
@@ -62,13 +65,31 @@ public:
 	float MeltTemperature = 5.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Water Ice Grid|Temperature", meta = (ClampMin = "0.0", ToolTip = "빛 세기 1당 초당 상승하는 온도입니다."))
-	float LightHeatingRate = 10.0f;
+	float LightHeatingRate = 30.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Water Ice Grid|Temperature", meta = (ClampMin = "0.0", ToolTip = "빛과 우산 냉각이 없을 때 주변 온도로 돌아가는 초당 속도입니다."))
-	float TemperatureRecoveryRate = 5.0f;
+	float TemperatureRecoveryRate = 10.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Water Ice Grid|Temperature|Variation", meta = (ToolTip = "타일마다 온도 상승·하강 속도에 작은 차이를 적용합니다."))
+	bool bEnableTemperatureRateVariation = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Water Ice Grid|Temperature|Variation", meta = (ClampMin = "0.1", ClampMax = "2.0", ToolTip = "타일별 온도 상승 속도의 최소 배율입니다."))
+	float MinimumHeatingRateMultiplier = 0.9f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Water Ice Grid|Temperature|Variation", meta = (ClampMin = "0.1", ClampMax = "2.0", ToolTip = "타일별 온도 상승 속도의 최대 배율입니다."))
+	float MaximumHeatingRateMultiplier = 1.1f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Water Ice Grid|Temperature|Variation", meta = (ClampMin = "0.1", ClampMax = "2.0", ToolTip = "타일별 온도 하강 속도의 최소 배율입니다."))
+	float MinimumCoolingRateMultiplier = 0.9f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Water Ice Grid|Temperature|Variation", meta = (ClampMin = "0.1", ClampMax = "2.0", ToolTip = "타일별 온도 하강 속도의 최대 배율입니다."))
+	float MaximumCoolingRateMultiplier = 1.1f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Water Ice Grid|Temperature|Variation", meta = (ToolTip = "타일별 온도 속도 패턴을 고정하는 시드입니다."))
+	int32 TemperatureRatePatternSeed = 2718;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Water Ice Grid|Umbrella", meta = (ClampMin = "0.0", ToolTip = "우산 동결 범위에서 초당 낮아지는 온도입니다."))
-	float UmbrellaCoolingRate = 12.0f;
+	float UmbrellaCoolingRate = 24.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Water Ice Grid|Umbrella", meta = (ClampMin = "0", ToolTip = "우산을 펼쳤을 때 동결할 반경입니다. 1이면 3x3입니다."))
 	int32 OpenUmbrellaRadiusInTiles = 1;
@@ -106,8 +127,35 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Water Ice Grid|Collision", meta = (ClampMin = "1.0", Units = "cm", ToolTip = "물과 얼음의 경계에 생성되는 투명 차단 벽의 두께입니다."))
 	float WaterBoundaryThickness = 4.0f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Water Ice Grid|Collision", meta = (ToolTip = "플레이어가 차지한 물 타일이 얼 때 새 얼음 충돌 위로 발 위치를 보정해 끼임을 방지합니다."))
+	bool bResolvePlayerOverlapOnFreeze = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Water Ice Grid|Collision", meta = (ClampMin = "0.0", ClampMax = "10.0", Units = "cm", ToolTip = "동결 시 플레이어 발과 얼음 상면 사이에 둘 여유 높이입니다."))
+	float PlayerFreezeSurfaceClearance = 2.0f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Water Ice Grid|Runtime", meta = (ClampMin = "0.02", Units = "s", ToolTip = "격자 전체의 온도와 상태를 갱신하는 주기입니다."))
 	float UpdateInterval = 0.1f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Water Ice Grid|Runtime", meta = (ClampMin = "1", ToolTip = "충돌을 부분 갱신할 청크 한 변의 타일 수입니다."))
+	int32 CollisionChunkSize = 5;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Water Ice Grid|Runtime|Light Cache", meta = (ClampMin = "0.02", Units = "s", ToolTip = "움직이는 빛 경로 캐시를 다시 계산할 수 있는 최소 간격입니다. 0.1초면 최대 10Hz입니다."))
+	float LightCacheMinimumRefreshInterval = 0.1f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Water Ice Grid|Runtime|Light Cache", meta = (ClampMin = "0.0", Units = "cm", ToolTip = "이 거리 이상 빛 경로가 이동했을 때 캐시를 다시 계산합니다."))
+	float LightCachePositionThreshold = 5.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Water Ice Grid|Runtime|Light Cache", meta = (ClampMin = "0.0", Units = "deg", ToolTip = "이 각도 이상 빛 방향이 바뀌었을 때 캐시를 다시 계산합니다."))
+	float LightCacheDirectionThreshold = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Water Ice Grid|Runtime|Light Cache", meta = (ClampMin = "0.0", Units = "s", ToolTip = "빛 이동이 멈춘 뒤 마지막 정확한 캐시 갱신을 보장하기 위한 대기 시간입니다."))
+	float LightCacheSettleDelay = 0.15f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Water Ice Grid|Debug", meta = (ToolTip = "활성 타일, 빛 검사, 충돌 청크 통계를 로컬 Output Log에만 출력합니다."))
+	bool bEnableLocalPerformanceLogging = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Water Ice Grid|Debug", meta = (ClampMin = "0.2", Units = "s"))
+	float PerformanceLogInterval = 1.0f;
 
 	UFUNCTION(BlueprintCallable, Category = "Water Ice Grid", meta = (ToolTip = "현재 설정으로 격자 인스턴스를 다시 만듭니다."))
 	void RebuildGrid();
@@ -137,15 +185,31 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> IceInstances = nullptr;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components", meta = (ToolTip = "서로 붙은 얼음 타일을 직사각형으로 병합한 보이지 않는 충돌입니다."))
+	TObjectPtr<UInstancedStaticMeshComponent> MergedIceCollisionInstances = nullptr;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
-	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> WaterBlockingInstances = nullptr;
+	TObjectPtr<UInstancedStaticMeshComponent> WaterBlockingInstances = nullptr;
 
 private:
 	struct FTileRuntime
 	{
 		float Temperature = 0.0f;
 		float IceHeightScale = 1.0f;
+		float HeatingRateMultiplier = 1.0f;
+		float CoolingRateMultiplier = 1.0f;
+		float CachedLightIntensity = 0.0f;
 		EUOUWaterIcePhase Phase = EUOUWaterIcePhase::Water;
+	};
+
+	struct FLightSegmentSnapshot
+	{
+		FVector Start = FVector::ZeroVector;
+		FVector Direction = FVector::ForwardVector;
+		float Length = 0.0f;
+		float StartRadius = 0.0f;
+		float EndRadius = 0.0f;
+		float Intensity = 0.0f;
 	};
 
 	void ValidateSettings();
@@ -153,22 +217,55 @@ private:
 	void UpdateFieldBounds();
 	void UpdateGrid();
 	void RefreshLightSources();
+	void UnbindLightSources();
 	void ResolvePlayerReferences();
-	float CalculateTileLightIntensity(const FVector& TileWorldLocation) const;
+	void RefreshTileLightIntensityCache();
+	void CaptureLightPathSnapshot();
+	bool HaveLightPathsChangedBeyondThreshold() const;
+	void AddUmbrellaAffectedTiles(TSet<int32>& OutTileIndices) const;
+	void ResolvePlayerOverlapWithNewIce(int32 TileIndex);
+	float CalculateTileLightIntensity(const FVector& TileWorldLocation, bool bCheckPlayerOcclusion) const;
 	bool IsPlayerBlockingLight(const FVector& RayStart, const FVector& TileWorldLocation) const;
-	bool IsTileInsideUmbrellaArea(int32 TileX, int32 TileY) const;
 	void ApplyTilePhase(int32 TileIndex, bool bMarkRenderStateDirty);
 	void EvaluateTilePhase(int32 TileIndex, bool bMarkRenderStateDirty);
-	void RebuildWaterBoundaryCollision();
+	void EnsureCollisionChunkComponents();
+	void DestroyDynamicCollisionChunkComponents();
+	void RebuildAllCollisionChunks();
+	void RebuildCollisionChunks(const TSet<int32>& ChunkIndices);
+	void RebuildWaterBoundaryCollisionChunk(int32 ChunkIndex);
+	void RebuildMergedIceCollisionChunk(int32 ChunkIndex);
+	void AddAffectedCollisionChunks(int32 TileIndex, TSet<int32>& OutChunkIndices) const;
+	int32 GetCollisionChunkIndex(int32 TileX, int32 TileY) const;
+	int32 GetCollisionChunkCountX() const;
+	int32 GetCollisionChunkCountY() const;
+	void LogLocalPerformanceStats();
 	FTransform MakeTileTransform(int32 TileIndex, EUOUWaterIcePhase Phase) const;
+	FTransform MakeMergedIceCollisionTransform(int32 StartX, int32 StartY, int32 Width, int32 Height) const;
 	FTransform MakeWaterBoundaryTransform(int32 TileIndex, int32 OffsetX, int32 OffsetY) const;
 	FVector GetTileLocalLocation(int32 TileIndex) const;
 	int32 GetTileIndex(int32 TileX, int32 TileY) const;
 
+	UFUNCTION()
+	void HandleLightPathsUpdated(const TArray<FUOULightPathData>& LightPaths);
+
 	TArray<FTileRuntime> Tiles;
+	TSet<int32> ActiveTileIndices;
 	TArray<TWeakObjectPtr<UUOULightExposureSourceComponent>> CachedLightSources;
+	TArray<FLightSegmentSnapshot> CachedLightPathSnapshot;
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UInstancedStaticMeshComponent>> IceCollisionChunkComponents;
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UInstancedStaticMeshComponent>> WaterCollisionChunkComponents;
 	TWeakObjectPtr<AActor> CachedPlayerActor;
 	TWeakObjectPtr<UUOUUmbrellaComponent> CachedUmbrellaComponent;
+	bool bLightIntensityCacheDirty = true;
+	bool bLightCacheRefreshRequested = false;
 	float NextLightSourceRefreshTime = 0.0f;
+	float NextAllowedLightCacheRefreshTime = 0.0f;
+	float LastLightPathUpdateTime = 0.0f;
+	float NextPerformanceLogTime = 0.0f;
+	int32 LightCacheRefreshesSinceLog = 0;
+	int32 CollisionChunksRebuiltSinceLog = 0;
+	mutable int64 LightSegmentTestsSinceLog = 0;
 	FTimerHandle UpdateTimerHandle;
 };
