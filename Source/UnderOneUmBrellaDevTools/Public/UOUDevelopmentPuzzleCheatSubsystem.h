@@ -82,10 +82,12 @@ public:
 private:
 	void CollectConditionDependencyActors(
 		AUOUPuzzleConditionGroupActor& PuzzleGroup,
-		TArray<AActor*>& OutDependencyActors,
-		TMap<AActor*, TArray<UUOUPuzzleConditionSourceComponent*>>& OutConditionSourcesByActor) const;
+		TArray<AActor*>& OutDisplayInputActors,
+		TMap<AActor*, TArray<UUOUPuzzleConditionSourceComponent*>>& OutConditionSourcesByActor,
+		TArray<UUOUPuzzleConditionSourceComponent*>& OutConditionSources,
+		TArray<UObject*>& OutLogicalDependencyObjects) const;
 	void BuildPuzzleGraphConnections();
-	void AddPuzzleGraphEdge(int32 SourceNodeIndex, int32 TargetNodeIndex, AActor* RelationActor);
+	void AddPuzzleGraphEdge(int32 SourceNodeIndex, int32 TargetNodeIndex, UObject* RelationObject);
 	bool ValidateAndAssignPuzzleGraphDepths();
 	bool BuildGraphExecutionWaves(int32 TargetNodeIndex);
 	void ExecuteNextGraphWave();

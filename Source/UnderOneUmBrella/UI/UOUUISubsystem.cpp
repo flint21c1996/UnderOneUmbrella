@@ -147,7 +147,7 @@ void UUOUUISubsystem::AdvanceDialogue()
 
 	if (!ActiveDialogueSource.IsValid())
 	{
-		EndDialogue();
+		FinishDialogue(false);
 		return;
 	}
 
@@ -157,7 +157,7 @@ void UUOUUISubsystem::AdvanceDialogue()
 	const FUOUDialogueLine* NextLine = ActiveDialogueSource->GetLine(ActiveDialogueIndex);
 	if (NextLine == nullptr)
 	{
-		EndDialogue();
+		FinishDialogue(true);
 		return;
 	}
 
@@ -187,7 +187,16 @@ void UUOUUISubsystem::AdvanceDialogue()
 
 void UUOUUISubsystem::EndDialogue()
 {
+	FinishDialogue(false);
+}
+
+void UUOUUISubsystem::FinishDialogue(bool bCompletedNaturally)
+{
 	ClearDialogueTimer();
+	UUOUDialogueSourceComponent* CompletedDialogueSource = bCompletedNaturally
+		? ActiveDialogueSource.Get()
+		: nullptr;
+
 	ActiveDialogueSource.Reset();
 	ActiveDialogueInstigator.Reset();
 	ActiveDialogueIndex = INDEX_NONE;
@@ -197,6 +206,11 @@ void UUOUUISubsystem::EndDialogue()
 	if (RegisteredHUDWidget.IsValid())
 	{
 		RegisteredHUDWidget->HideDialogue();
+	}
+
+	if (CompletedDialogueSource != nullptr)
+	{
+		OnDialogueCompleted.Broadcast(CompletedDialogueSource);
 	}
 }
 

@@ -31,6 +31,13 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Dialogue")
 	bool CanStartDialogue() const;
 
+	// Speech Bubble 표시와 독립적으로 실제 대화 시작 가능 여부를 변경합니다.
+	UFUNCTION(BlueprintCallable, Category = "Dialogue|Rules")
+	void SetDialogueAvailable(bool bNewAvailable);
+
+	UFUNCTION(BlueprintPure, Category = "Dialogue|Rules")
+	bool IsDialogueAvailable() const { return bDialogueAvailable; }
+
 	// Returns the scene component the speech bubble should follow.
 	UFUNCTION(BlueprintPure, Category = "Dialogue")
 	USceneComponent* ResolveBubbleAnchor() const;
@@ -140,6 +147,10 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue|Rules")
 	bool bCanReplay = true;
+
+	// false면 Speech Bubble은 유지할 수 있지만 카메라 포커스와 대사 UI를 시작할 수 없습니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue|Rules")
+	bool bDialogueAvailable = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue|Rules", meta = (ClampMin = "0.0"))
 	float StartCooldown = 0.5f;

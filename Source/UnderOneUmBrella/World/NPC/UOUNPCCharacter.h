@@ -13,6 +13,7 @@ class AUOUNPCController;
 class AUOUNPCCharacter;
 class UBehaviorTree;
 class UAnimMontage;
+class UUOULightExposureReceiverComponent;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(
 	FOnUOUNPCActionCompletedSignature,
@@ -37,6 +38,7 @@ public:
 	AUOUNPCCharacter();
 
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void Landed(const FHitResult& Hit) override;
 
@@ -131,6 +133,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "NPC|Animation")
 	float PlayActivationAnimation();
 
+	UFUNCTION(BlueprintPure, Category = "NPC|Animation")
+	bool IsCurrentAnimationLoopingUntilDeactivated() const;
+
 	UFUNCTION(BlueprintCallable, Category = "NPC|Movement")
 	void StopNPCMovement();
 
@@ -177,9 +182,27 @@ protected:
 	bool GetConfiguredTargetLocation(FVector& OutTargetLocation) const;
 	FVector CalculateJumpLaunchVelocity(const FVector& TargetLocation, float TravelTime) const;
 	void UpdateJumpMoveRotation(float DeltaSeconds);
+	UAnimMontage* ResolveCurrentAnimationMontage() const;
+	float ResolveCurrentAnimationPlayRate() const;
+	UUOULightExposureReceiverComponent* ResolveAnimationTemperatureReceiver() const;
+	float CalculateTemperatureDrivenAnimationPlayRate(
+		const FUOUNPCActionRequest& ActionRequest,
+		float Temperature) const;
+	void StartTemperatureDrivenAnimationTracking(UAnimMontage* Montage);
+	void StopTemperatureDrivenAnimationTracking();
+	void UpdateTemperatureDrivenAnimationPlayRate();
+
+	UFUNCTION()
+	void HandleAnimationTemperatureChanged(float NewTemperature, float PreviousTemperature);
 
 	FOnUOUPuzzleResultCompletionStateChangedNativeSignature OnPuzzleResultCompletionStateChanged;
 
 	bool bJumpMoveRotationActive = false;
 	FVector JumpMoveRotationTargetLocation = FVector::ZeroVector;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UUOULightExposureReceiverComponent> BoundAnimationTemperatureReceiver = nullptr;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UAnimMontage> TemperatureDrivenAnimationMontage = nullptr;
 };

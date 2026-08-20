@@ -23,8 +23,8 @@ struct UNDERONEUMBRELLADEVTOOLS_API FUOUDevelopmentPuzzleCheatExternalInput
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Puzzle Cheat|Graph")
 	FText DisplayName;
 
-	// 이 외부 입력 액터에 속하며 현재 ConditionGroup이 평가하는 조건 소스 목록입니다.
-	// 실제 소유권은 ConditionGroup의 ResolvedConditionSources에 있고 이 배열은 HUD 동작을 위한 약한 참조입니다.
+	// 이 외부 입력과 연결되어 현재 ConditionGroupComponent가 실제 평가하는 조건 소스 목록입니다.
+	// 실제 소유권은 ConditionGroupComponent의 ResolvedConditionSources에 있고 이 배열은 HUD 동작을 위한 약한 참조입니다.
 	TArray<TWeakObjectPtr<UUOUPuzzleConditionSourceComponent>> ConditionSources;
 };
 
@@ -43,7 +43,11 @@ struct UNDERONEUMBRELLADEVTOOLS_API FUOUDevelopmentPuzzleCheatGraphNode
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Puzzle Cheat|Graph")
 	TObjectPtr<AUOUPuzzleConditionGroupActor> PuzzleGroup = nullptr;
 
-	// ConditionActors와 ConditionSource 참조에서 해석한 실제 입력 액터 캐시입니다.
+	// PuzzleConditionGroupComponent가 실제 평가 중인 전체 조건 소스입니다.
+	// 외부 입력 여부와 관계없이 노드의 조건 상태를 HUD에 표시하기 위한 약한 참조입니다.
+	TArray<TWeakObjectPtr<UUOUPuzzleConditionSourceComponent>> ConditionSources;
+
+	// 각 ConditionSource가 제공한 논리 입력 액터 캐시입니다.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Puzzle Cheat|Graph")
 	TArray<TObjectPtr<AActor>> InputActors;
 
@@ -81,6 +85,9 @@ struct UNDERONEUMBRELLADEVTOOLS_API FUOUDevelopmentPuzzleCheatGraphEdge
 	// Source의 Result이면서 Target의 Condition으로 사용되어 두 그룹을 연결한 액터입니다.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Puzzle Cheat|Graph")
 	TObjectPtr<AActor> RelationActor = nullptr;
+
+	// 실제 관계를 만든 Actor 또는 Specific Component입니다. 컴포넌트 단위 관계 판정과 HUD 라벨에 사용합니다.
+	TWeakObjectPtr<UObject> RelationObject;
 };
 
 // 대상 노드까지 진행할 때 같은 깊이에서 함께 활성화할 노드 묶음입니다.

@@ -630,7 +630,7 @@ void SUOUDevelopmentPuzzleCheatHUD::RebuildDebugActorRows()
 			TEXT("[%s / %s] %s"),
 			CategoryName,
 			*GetNameSafe(DebugActor.IsValid() ? DebugActor->GetClass() : nullptr),
-			*GetNameSafe(DebugActor.Get())));
+			DebugActor.IsValid() ? *DebugActor->GetActorNameOrLabel() : TEXT("None")));
 		DebugActorListBox->AddSlot()
 		.AutoHeight()
 		.Padding(0.0f, 0.0f, 0.0f, 3.0f)
@@ -1007,7 +1007,7 @@ FText SUOUDevelopmentPuzzleCheatHUD::GetSelectedDebugActorsText() const
 	{
 		if (IsValid(SelectedActor))
 		{
-			SelectedActorNames.Add(SelectedActor->GetName());
+			SelectedActorNames.Add(SelectedActor->GetActorNameOrLabel());
 		}
 	}
 	const FString SelectedActorListText = SelectedActorNames.IsEmpty()
