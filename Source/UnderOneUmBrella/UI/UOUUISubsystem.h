@@ -18,6 +18,10 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FUOUDialogueStartedSignature, AActo
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FUOUDialogueBubbleRequestedSignature, AActor*, SpeakerActor, const FText&, BubbleText, float, Duration);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FUOUDialogueLineStartedSignature, AActor*, SpeakerActor, const FUOUDialogueLine&, Line);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FUOUDialogueEndedSignature);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
+	FUOUDialogueCompletedSignature,
+	UUOUDialogueSourceComponent*,
+	DialogueSource);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FUOUTitleRequestedSignature, const FUOUTitleDisplayData&, TitleData);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
 	FUOURewardPresentationFinishedSignature,
@@ -46,6 +50,10 @@ public:
 
 	UPROPERTY(BlueprintAssignable, Category = "UI|Dialogue")
 	FUOUDialogueEndedSignature OnDialogueEnded;
+
+	// 마지막 대사까지 정상 진행한 DialogueSource를 알립니다. 취소성 EndDialogue 호출에는 발생하지 않습니다.
+	UPROPERTY(BlueprintAssignable, Category = "UI|Dialogue")
+	FUOUDialogueCompletedSignature OnDialogueCompleted;
 
 	UPROPERTY(BlueprintAssignable, Category = "UI|Title")
 	FUOUTitleRequestedSignature OnTitleRequested;
@@ -98,6 +106,8 @@ public:
 	void NotifyRewardPresentationFinished(FName RewardId);
 
 private:
+	void FinishDialogue(bool bCompletedNaturally);
+
 	UFUNCTION()
 	void HandleUmbrellaStateChanged(EUOUUmbrellaState NewState, bool bHasUmbrella);
 

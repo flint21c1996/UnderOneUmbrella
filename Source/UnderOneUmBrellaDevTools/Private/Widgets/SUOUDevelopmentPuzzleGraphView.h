@@ -47,6 +47,7 @@ private:
 	FText GetNodeTitleText(int32 NodeIndex) const;
 	FSlateColor GetNodeTitleColor(int32 NodeIndex) const;
 	FText GetExternalInputButtonText(int32 NodeIndex, int32 ExternalInputIndex) const;
+	FText GetExternalInputTooltipText(int32 NodeIndex, int32 ExternalInputIndex) const;
 	FSlateColor GetExternalInputButtonColor(int32 NodeIndex, int32 ExternalInputIndex) const;
 	bool IsExternalInputActionEnabled(int32 NodeIndex, int32 ExternalInputIndex) const;
 	bool IsNodeActionEnabled() const;

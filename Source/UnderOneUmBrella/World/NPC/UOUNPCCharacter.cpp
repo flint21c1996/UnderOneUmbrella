@@ -7,6 +7,7 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/World.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "World/Light/UOULightExposureReceiverComponent.h"
 #include "World/NPC/UOUNPCController.h"
 
 AUOUNPCCharacter::AUOUNPCCharacter()
@@ -36,6 +37,12 @@ void AUOUNPCCharacter::BeginPlay()
 	{
 		Activate();
 	}
+}
+
+void AUOUNPCCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	StopTemperatureDrivenAnimationTracking();
+	Super::EndPlay(EndPlayReason);
 }
 
 void AUOUNPCCharacter::Tick(float DeltaSeconds)
@@ -83,10 +90,9 @@ void AUOUNPCCharacter::Activate()
 
 void AUOUNPCCharacter::Deactivate()
 {
-	UAnimMontage* MontageToStop = ActiveActionRequest.AnimationMontage != nullptr
-		? ActiveActionRequest.AnimationMontage.Get()
-		: ActivationMontage.Get();
+	UAnimMontage* MontageToStop = ResolveCurrentAnimationMontage();
 
+	StopTemperatureDrivenAnimationTracking();
 	bActivated = false;
 	bPendingMoveAfterJumpLanding = false;
 	bHasActiveActionRequest = false;
@@ -204,20 +210,32 @@ bool AUOUNPCCharacter::JumpMoveToTargetLocation(const FVector& TargetLocation)
 
 float AUOUNPCCharacter::PlayActivationAnimation()
 {
-	const FUOUNPCActionRequest ActionRequest = GetCurrentActionRequest();
-	UAnimMontage* MontageToPlay = ActionRequest.AnimationMontage != nullptr
-		? ActionRequest.AnimationMontage.Get()
-		: ActivationMontage.Get();
+	UAnimMontage* MontageToPlay = ResolveCurrentAnimationMontage();
 	if (MontageToPlay == nullptr)
 	{
 		return 0.0f;
 	}
 
-	const float PlayRate = FMath::Max(0.0f, ActionRequest.AnimationPlayRate);
+	StopTemperatureDrivenAnimationTracking();
+
+	const FUOUNPCActionRequest ActionRequest = GetCurrentActionRequest();
+	const float PlayRate = ResolveCurrentAnimationPlayRate();
 	const FName StartSection = ActionRequest.AnimationMontage != nullptr
 		? ActionRequest.AnimationStartSection
 		: ActivationMontageStartSection;
-	return PlayAnimMontage(MontageToPlay, PlayRate, StartSection);
+	const float Duration = PlayAnimMontage(MontageToPlay, PlayRate, StartSection);
+	if (Duration > 0.0f && ActionRequest.bUseTemperatureDrivenPlayRate)
+	{
+		StartTemperatureDrivenAnimationTracking(MontageToPlay);
+	}
+	return Duration;
+}
+
+bool AUOUNPCCharacter::IsCurrentAnimationLoopingUntilDeactivated() const
+{
+	return bHasActiveActionRequest
+		&& ActiveActionRequest.ActionType == EUOUNPCActionType::PlayAnimation
+		&& ActiveActionRequest.bLoopAnimationUntilDeactivated;
 }
 
 void AUOUNPCCharacter::StopNPCMovement()
@@ -282,6 +300,7 @@ void AUOUNPCCharacter::CompleteActiveNPCAction()
 	}
 
 	UObject* CompletedActionSource = ActiveActionSource.Get();
+	StopTemperatureDrivenAnimationTracking();
 	bActivated = false;
 	bPendingMoveAfterJumpLanding = false;
 	bHasActiveActionRequest = false;
@@ -472,4 +491,127 @@ void AUOUNPCCharacter::UpdateJumpMoveRotation(float DeltaSeconds)
 			SafeRotationRate);
 
 	SetActorRotation(NextRotation);
+}
+
+UAnimMontage* AUOUNPCCharacter::ResolveCurrentAnimationMontage() const
+{
+	const FUOUNPCActionRequest ActionRequest = GetCurrentActionRequest();
+	return ActionRequest.AnimationMontage != nullptr
+		? ActionRequest.AnimationMontage.Get()
+		: ActivationMontage.Get();
+}
+
+float AUOUNPCCharacter::ResolveCurrentAnimationPlayRate() const
+{
+	const FUOUNPCActionRequest ActionRequest = GetCurrentActionRequest();
+	if (!ActionRequest.bUseTemperatureDrivenPlayRate)
+	{
+		return FMath::Max(0.0f, ActionRequest.AnimationPlayRate);
+	}
+
+	const UUOULightExposureReceiverComponent* Receiver = ResolveAnimationTemperatureReceiver();
+	if (Receiver == nullptr)
+	{
+		return FMath::Max(0.0f, ActionRequest.AnimationPlayRate);
+	}
+
+	return CalculateTemperatureDrivenAnimationPlayRate(ActionRequest, Receiver->CurrentTemperature);
+}
+
+UUOULightExposureReceiverComponent* AUOUNPCCharacter::ResolveAnimationTemperatureReceiver() const
+{
+	return FindComponentByClass<UUOULightExposureReceiverComponent>();
+}
+
+float AUOUNPCCharacter::CalculateTemperatureDrivenAnimationPlayRate(
+	const FUOUNPCActionRequest& ActionRequest,
+	float Temperature) const
+{
+	const float MinTemperature = FMath::Min(
+		ActionRequest.MinPlayRateTemperature,
+		ActionRequest.MaxPlayRateTemperature);
+	const float MaxTemperature = FMath::Max(
+		ActionRequest.MinPlayRateTemperature,
+		ActionRequest.MaxPlayRateTemperature);
+	const float TemperatureAlpha = FMath::IsNearlyEqual(MinTemperature, MaxTemperature)
+		? (Temperature >= MaxTemperature ? 1.0f : 0.0f)
+		: FMath::GetMappedRangeValueClamped(
+			FVector2D(MinTemperature, MaxTemperature),
+			FVector2D(0.0f, 1.0f),
+			Temperature);
+	const float MinPlayRate = FMath::Max(
+		0.01f,
+		FMath::Min(
+			ActionRequest.MinTemperatureAnimationPlayRate,
+			ActionRequest.MaxTemperatureAnimationPlayRate));
+	const float MaxPlayRate = FMath::Max(
+		0.01f,
+		FMath::Max(
+			ActionRequest.MinTemperatureAnimationPlayRate,
+			ActionRequest.MaxTemperatureAnimationPlayRate));
+	return FMath::Lerp(MinPlayRate, MaxPlayRate, TemperatureAlpha);
+}
+
+void AUOUNPCCharacter::StartTemperatureDrivenAnimationTracking(UAnimMontage* Montage)
+{
+	if (Montage == nullptr || !GetCurrentActionRequest().bUseTemperatureDrivenPlayRate)
+	{
+		return;
+	}
+
+	UUOULightExposureReceiverComponent* Receiver = ResolveAnimationTemperatureReceiver();
+	if (Receiver == nullptr)
+	{
+		return;
+	}
+
+	BoundAnimationTemperatureReceiver = Receiver;
+	TemperatureDrivenAnimationMontage = Montage;
+	Receiver->OnTemperatureChanged.RemoveDynamic(
+		this,
+		&AUOUNPCCharacter::HandleAnimationTemperatureChanged);
+	Receiver->OnTemperatureChanged.AddDynamic(
+		this,
+		&AUOUNPCCharacter::HandleAnimationTemperatureChanged);
+}
+
+void AUOUNPCCharacter::StopTemperatureDrivenAnimationTracking()
+{
+	if (BoundAnimationTemperatureReceiver != nullptr)
+	{
+		BoundAnimationTemperatureReceiver->OnTemperatureChanged.RemoveDynamic(
+			this,
+			&AUOUNPCCharacter::HandleAnimationTemperatureChanged);
+	}
+
+	BoundAnimationTemperatureReceiver = nullptr;
+	TemperatureDrivenAnimationMontage = nullptr;
+}
+
+void AUOUNPCCharacter::UpdateTemperatureDrivenAnimationPlayRate()
+{
+	if (BoundAnimationTemperatureReceiver == nullptr
+		|| TemperatureDrivenAnimationMontage == nullptr
+		|| !bHasActiveActionRequest
+		|| !ActiveActionRequest.bUseTemperatureDrivenPlayRate)
+	{
+		return;
+	}
+
+	USkeletalMeshComponent* MeshComponent = GetMesh();
+	UAnimInstance* AnimInstance = MeshComponent != nullptr ? MeshComponent->GetAnimInstance() : nullptr;
+	if (AnimInstance == nullptr)
+	{
+		return;
+	}
+
+	const float PlayRate = CalculateTemperatureDrivenAnimationPlayRate(
+		ActiveActionRequest,
+		BoundAnimationTemperatureReceiver->CurrentTemperature);
+	AnimInstance->Montage_SetPlayRate(TemperatureDrivenAnimationMontage.Get(), PlayRate);
+}
+
+void AUOUNPCCharacter::HandleAnimationTemperatureChanged(float /*NewTemperature*/, float /*PreviousTemperature*/)
+{
+	UpdateTemperatureDrivenAnimationPlayRate();
 }

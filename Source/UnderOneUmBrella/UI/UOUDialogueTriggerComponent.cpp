@@ -54,7 +54,12 @@ void UUOUDialogueTriggerComponent::BeginPlay()
 
 	OnComponentBeginOverlap.AddDynamic(this, &UUOUDialogueTriggerComponent::HandleBeginOverlap);
 	OnComponentEndOverlap.AddDynamic(this, &UUOUDialogueTriggerComponent::HandleEndOverlap);
-	SetComponentTickEnabled(bRequireUmbrellaCoverHold);
+	SetComponentTickEnabled(bDialogueInteractionEnabled && bRequireUmbrellaCoverHold);
+
+	if (UUOUDialogueSourceComponent* Source = ResolveDialogueSource())
+	{
+		Source->SetDialogueAvailable(bDialogueInteractionEnabled);
+	}
 
 	UWidgetComponent* ResolvedHintWidgetComponent = ResolveHintWidgetComponent();
 	if (ResolvedHintWidgetComponent != nullptr)
@@ -67,6 +72,9 @@ void UUOUDialogueTriggerComponent::BeginPlay()
 	{
 		HideInteractionHint();
 	}
+
+	// 이벤트 바인딩 전에 이미 형성된 overlap도 첫 접근으로 처리합니다.
+	RefreshOverlappingInteraction();
 
 	if (bRequireUmbrellaCoverHold)
 	{
@@ -87,6 +95,11 @@ void UUOUDialogueTriggerComponent::EndPlay(const EEndPlayReason::Type EndPlayRea
 void UUOUDialogueTriggerComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+
+	if (!bDialogueInteractionEnabled)
+	{
+		return;
+	}
 
 	// ?곗궛 而ㅻ쾭 ??붾뒗 ?몃━嫄??덉뿉 ?ㅼ뼱???뚮젅?댁뼱瑜?湲곗뼲???먭퀬 留??깅쭏???곹깭瑜??ㅼ떆 寃?ы빀?덈떎.
 	// ?뚮젅?댁뼱媛 癒쇱? ?ㅼ뼱?????곗궛???쇱퀜?? 議곌굔??留욌뒗 ?쒓컙遺??而ㅻ쾭 ?좎? ?쒓컙???볦엯?덈떎.
@@ -156,6 +169,12 @@ void UUOUDialogueTriggerComponent::TickComponent(float DeltaTime, ELevelTick Tic
 
 bool UUOUDialogueTriggerComponent::TryStartDialogue(AActor* InstigatorActor)
 {
+	if (!bDialogueInteractionEnabled)
+	{
+		ShowProximityDebugStatus(TEXT("Dialogue Start Blocked: interaction disabled"), FColor::Yellow);
+		return false;
+	}
+
 	if (bTriggerOnce && bHasTriggered)
 	{
 		ShowProximityDebugStatus(TEXT("Dialogue Start Blocked: already triggered"), FColor::Yellow);
@@ -207,12 +226,6 @@ void UUOUDialogueTriggerComponent::ShowInteractionHint()
 	if (!bEnableInteractionHint)
 	{
 		LastHintDebugStatus = TEXT("Failed:Disabled");
-		return;
-	}
-
-	if (bHintVisible)
-	{
-		LastHintDebugStatus = TEXT("Skipped:AlreadyVisible");
 		return;
 	}
 
@@ -350,6 +363,110 @@ void UUOUDialogueTriggerComponent::ResetTrigger()
 	ClearCoverProgress();
 }
 
+void UUOUDialogueTriggerComponent::SetDialogueInteractionEnabled(bool bNewEnabled)
+{
+	bDialogueInteractionEnabled = bNewEnabled;
+
+	if (UUOUDialogueSourceComponent* Source = ResolveDialogueSource())
+	{
+		Source->SetDialogueAvailable(bDialogueInteractionEnabled);
+	}
+
+	if (!bDialogueInteractionEnabled)
+	{
+		ClearCoverProgress();
+		return;
+	}
+
+	// 같은 Activate 결과가 다시 들어온 경우에도 현재 overlap과 우산 상태는 달라질 수 있으므로 항상 재평가합니다.
+	RefreshOverlappingInteraction();
+}
+
+void UUOUDialogueTriggerComponent::RefreshOverlappingInteraction()
+{
+	TArray<AActor*> InteractionCandidates;
+	for (const TPair<TWeakObjectPtr<AActor>, int32>& OverlapEntry : ActiveOverlapCounts)
+	{
+		if (OverlapEntry.Value > 0)
+		{
+			if (AActor* TrackedActor = OverlapEntry.Key.Get())
+			{
+				InteractionCandidates.AddUnique(TrackedActor);
+			}
+		}
+	}
+
+	TArray<AActor*> PhysicallyOverlappingActors;
+	GetOverlappingActors(PhysicallyOverlappingActors);
+	for (AActor* PhysicallyOverlappingActor : PhysicallyOverlappingActors)
+	{
+		if (PhysicallyOverlappingActor != nullptr)
+		{
+			InteractionCandidates.AddUnique(PhysicallyOverlappingActor);
+		}
+	}
+
+	for (AActor* OverlappingActor : InteractionCandidates)
+	{
+		if (!CanTrackOverlapActor(OverlappingActor))
+		{
+			continue;
+		}
+
+		// 접근 Bubble은 실제 대화 활성 상태와 무관하게 먼저 표시합니다.
+		ShowInteractionHint();
+		if (!bDialogueInteractionEnabled)
+		{
+			return;
+		}
+
+		if (bRequireUmbrellaCoverHold)
+		{
+			CurrentInstigatorActor = OverlappingActor;
+			CurrentCoverHoldTime = 0.0f;
+			bIsCurrentlyCoveredByUmbrella = false;
+			SetComponentTickEnabled(true);
+
+			const bool bPassesRules = PassesInstigatorRules(OverlappingActor);
+			const bool bCovered = IsOwnerCoveredByDialogueCover(OverlappingActor);
+
+			if (bPassesRules && bCovered)
+			{
+				bIsCurrentlyCoveredByUmbrella = true;
+				CurrentCoverHoldTime = FMath::Max(0.0f, RequiredCoverDuration);
+				TryStartDialogue(OverlappingActor);
+			}
+			return;
+		}
+
+		if (TryStartDialogue(OverlappingActor))
+		{
+			return;
+		}
+	}
+}
+
+void UUOUDialogueTriggerComponent::ApplyPuzzleResult_Implementation(EOUUPuzzleResultAction Action)
+{
+	switch (Action)
+	{
+	case EOUUPuzzleResultAction::Activate:
+	case EOUUPuzzleResultAction::Resume:
+		SetDialogueInteractionEnabled(true);
+		break;
+	case EOUUPuzzleResultAction::Deactivate:
+	case EOUUPuzzleResultAction::Pause:
+		SetDialogueInteractionEnabled(false);
+		break;
+	case EOUUPuzzleResultAction::Toggle:
+		SetDialogueInteractionEnabled(!bDialogueInteractionEnabled);
+		break;
+	case EOUUPuzzleResultAction::None:
+	default:
+		break;
+	}
+}
+
 void UUOUDialogueTriggerComponent::HandleBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
 	HandleTrackedActorEnter(OtherActor, OtherComp);
@@ -369,6 +486,12 @@ void UUOUDialogueTriggerComponent::HandleTrackedActorEnter(AActor* OtherActor, U
 	// 媛숈? 罹먮┃???덉쓽 ?щ윭 而댄룷?뚰듃媛 ?우븘???≫꽣 湲곗? 泥?吏꾩엯留?泥섎━?⑸땲??
 	if (!RegisterActorOverlap(OtherActor))
 	{
+		return;
+	}
+
+	if (!bDialogueInteractionEnabled)
+	{
+		ShowInteractionHint();
 		return;
 	}
 

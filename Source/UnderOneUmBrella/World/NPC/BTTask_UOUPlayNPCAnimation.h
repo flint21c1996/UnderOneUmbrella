@@ -13,6 +13,7 @@ struct FUOUPlayNPCAnimationTaskMemory
 	TWeakObjectPtr<AUOUNPCCharacter> NPCCharacter;
 	float ElapsedTime = 0.0f;
 	float Duration = 0.0f;
+	bool bWaitUntilDeactivated = false;
 };
 
 // 현재 NPC 액션에 설정된 애니메이션을 재생하는 Behavior Tree 태스크입니다.

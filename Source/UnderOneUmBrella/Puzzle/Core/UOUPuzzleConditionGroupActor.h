@@ -19,10 +19,18 @@ struct FOUUPuzzleResultBinding
 {
 	GENERATED_BODY()
 
-	// 결과 액션을 전달할 대상 액터입니다.
+	// 켜져 있으면 TargetActor 전체가 아니라 아래에서 지정한 컴포넌트 하나에만 결과를 전달합니다.
+	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Puzzle", meta = (DisplayName = "Target Specific Component"))
+	bool bTargetSpecificComponent = false;
+
+	// 컴포넌트 직접 바인딩을 사용하지 않을 때 결과 액션을 전달할 대상 액터입니다.
 	// 문이나 플랫폼 같은 결과 기믹 액터를 여기에 연결합니다.
-	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Puzzle")
+	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Puzzle", meta = (EditCondition = "!bTargetSpecificComponent", EditConditionHides))
 	TObjectPtr<AActor> TargetActor = nullptr;
+
+	// 결과 액션을 직접 전달할 컴포넌트입니다. 해당 컴포넌트는 PuzzleResultReceiver를 구현해야 합니다.
+	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Puzzle", meta = (EditCondition = "bTargetSpecificComponent", EditConditionHides))
+	FComponentReference TargetComponentReference;
 
 	// 조건이 만족되었을 때 대상 액터에 전달할 액션입니다.
 	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Puzzle")
@@ -170,9 +178,10 @@ protected:
 	void DispatchResultBindings(bool bSatisfied);
 
 	// 개별 결과 액터 하나에 액션을 전달합니다.
-	bool DispatchOrScheduleResultAction(AActor* TargetActor, EOUUPuzzleResultAction Action, float DelaySeconds);
-	bool ExecuteResultAction(AActor* TargetActor, EOUUPuzzleResultAction Action) const;
+	UObject* ResolveResultTarget(const FOUUPuzzleResultBinding& Binding) const;
+	bool DispatchOrScheduleResultAction(UObject* TargetObject, EOUUPuzzleResultAction Action, float DelaySeconds);
+	bool ExecuteResultAction(UObject* TargetObject, EOUUPuzzleResultAction Action) const;
 	bool ShouldSkipSatisfiedAction(const FOUUPuzzleResultBinding& Binding) const;
 	bool ShouldSkipUnsatisfiedAction(const FOUUPuzzleResultBinding& Binding) const;
-	bool IsResultActionCompleted(AActor* TargetActor, EOUUPuzzleResultAction Action) const;
+	bool IsResultActionCompleted(UObject* TargetObject, EOUUPuzzleResultAction Action) const;
 };

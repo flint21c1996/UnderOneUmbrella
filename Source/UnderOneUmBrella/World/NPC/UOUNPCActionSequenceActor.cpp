@@ -37,6 +37,7 @@ void AUOUNPCActionSequenceActor::Activate()
 {
 	bActivated = true;
 	SetActivationResultCompleted(false);
+	SetDeactivationResultCompleted(false);
 	StartSequence(ActivateActions, false);
 }
 
@@ -44,6 +45,7 @@ void AUOUNPCActionSequenceActor::Deactivate()
 {
 	bActivated = false;
 	SetActivationResultCompleted(false);
+	SetDeactivationResultCompleted(false);
 	StartSequence(DeactivateActions, true);
 }
 
@@ -96,7 +98,19 @@ void AUOUNPCActionSequenceActor::ApplyPuzzleResult_Implementation(EOUUPuzzleResu
 
 bool AUOUNPCActionSequenceActor::IsPuzzleResultCompleted_Implementation(EOUUPuzzleResultAction Action) const
 {
-	return Action == EOUUPuzzleResultAction::Activate && bHasCompletedResultSinceLastActivation;
+	switch (Action)
+	{
+	case EOUUPuzzleResultAction::Activate:
+		return bHasCompletedResultSinceLastActivation;
+	case EOUUPuzzleResultAction::Deactivate:
+		return bHasCompletedResultSinceLastDeactivation;
+	case EOUUPuzzleResultAction::None:
+	case EOUUPuzzleResultAction::Pause:
+	case EOUUPuzzleResultAction::Resume:
+	case EOUUPuzzleResultAction::Toggle:
+	default:
+		return false;
+	}
 }
 
 FOnUOUPuzzleResultCompletionStateChangedNativeSignature*
@@ -119,7 +133,7 @@ void AUOUNPCActionSequenceActor::StartSequence(
 	CurrentSequenceActions = Actions;
 	CurrentActionIndex = 0;
 	bRunningSequence = CurrentSequenceActions.Num() > 0;
-	bRunningDeactivateSequence = bRunningSequence && bDeactivateSequence;
+	bRunningDeactivateSequence = bDeactivateSequence;
 
 	if (!bRunningSequence)
 	{
@@ -156,6 +170,7 @@ void AUOUNPCActionSequenceActor::RunCurrentAction()
 void AUOUNPCActionSequenceActor::FinishSequence()
 {
 	const bool bCompletedActivateSequence = bActivated && !bRunningDeactivateSequence;
+	const bool bCompletedDeactivateSequence = !bActivated && bRunningDeactivateSequence;
 
 	bRunningSequence = false;
 	bRunningDeactivateSequence = false;
@@ -165,6 +180,10 @@ void AUOUNPCActionSequenceActor::FinishSequence()
 	if (bCompletedActivateSequence)
 	{
 		SetActivationResultCompleted(true);
+	}
+	else if (bCompletedDeactivateSequence)
+	{
+		SetDeactivationResultCompleted(true);
 	}
 }
 
@@ -177,6 +196,17 @@ void AUOUNPCActionSequenceActor::SetActivationResultCompleted(bool bNewCompleted
 
 	bHasCompletedResultSinceLastActivation = bNewCompleted;
 	OnPuzzleResultCompletionStateChanged.Broadcast(EOUUPuzzleResultAction::Activate, bNewCompleted);
+}
+
+void AUOUNPCActionSequenceActor::SetDeactivationResultCompleted(bool bNewCompleted)
+{
+	if (bHasCompletedResultSinceLastDeactivation == bNewCompleted)
+	{
+		return;
+	}
+
+	bHasCompletedResultSinceLastDeactivation = bNewCompleted;
+	OnPuzzleResultCompletionStateChanged.Broadcast(EOUUPuzzleResultAction::Deactivate, bNewCompleted);
 }
 
 void AUOUNPCActionSequenceActor::BindToTargetNPC()
