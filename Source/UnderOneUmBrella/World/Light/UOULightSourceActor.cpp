@@ -29,3 +29,61 @@ AUOULightSourceActor::AUOULightSourceActor()
 	BeamVisual = CreateDefaultSubobject<UUOULightBeamVisualComponent>(TEXT("BeamVisual"));
 	BeamVisual->VFXActorClass = AUOULightBeamMeshVisualActor::StaticClass();
 }
+
+void AUOULightSourceActor::BeginPlay()
+{
+	Super::BeginPlay();
+	SetLightEnabled(bStartEnabled);
+}
+
+void AUOULightSourceActor::ApplyPuzzleResult_Implementation(const EOUUPuzzleResultAction Action)
+{
+	switch (Action)
+	{
+	case EOUUPuzzleResultAction::Activate:
+	case EOUUPuzzleResultAction::Resume:
+		EnableLight();
+		break;
+	case EOUUPuzzleResultAction::Deactivate:
+	case EOUUPuzzleResultAction::Pause:
+		DisableLight();
+		break;
+	case EOUUPuzzleResultAction::Toggle:
+		ToggleLight();
+		break;
+	case EOUUPuzzleResultAction::None:
+	default:
+		break;
+	}
+}
+
+void AUOULightSourceActor::SetLightEnabled(const bool bNewEnabled)
+{
+	bLightEnabled = bNewEnabled;
+
+	if (SourceSpotLight != nullptr)
+	{
+		SourceSpotLight->SetVisibility(bLightEnabled);
+	}
+
+	if (ExposureSource != nullptr)
+	{
+		// ExposureSource는 꺼진 다음 Tick에서 경로를 비우고 빔과 반사광에 변경을 전파합니다.
+		ExposureSource->bEmitLight = bLightEnabled;
+	}
+}
+
+void AUOULightSourceActor::EnableLight()
+{
+	SetLightEnabled(true);
+}
+
+void AUOULightSourceActor::DisableLight()
+{
+	SetLightEnabled(false);
+}
+
+void AUOULightSourceActor::ToggleLight()
+{
+	SetLightEnabled(!bLightEnabled);
+}
