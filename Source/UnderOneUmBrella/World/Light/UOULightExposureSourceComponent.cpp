@@ -1898,11 +1898,12 @@ bool UUOULightExposureSourceComponent::TryBuildLightInteractionSurfaceHit(
 		}
 	}
 
-	if (bUseAxisRepresentativePath && !bHasAxisHit)
+	if (bUseAxisRepresentativePath && !bHasAxisHit &&
+		!SurfaceComponent->bAllowEdgeOnlyCylinderReflection)
 	{
 		// A single reflection path and a single beam VFX cannot faithfully represent
 		// an edge-only ray of a parallel cylinder. Do not create a mismatched
-		// representative path; the reflected beam ends when its center ray misses.
+		// representative path unless the surface explicitly accepts partial overlap.
 		OutSurfaceHit = FHitResult();
 	}
 	else if (OutSurfaceHit.bBlockingHit)
