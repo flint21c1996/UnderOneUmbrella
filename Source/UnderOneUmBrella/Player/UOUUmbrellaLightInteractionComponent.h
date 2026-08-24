@@ -56,8 +56,8 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Light", meta = (ToolTip = "빛 반사 상태에서도 반사 허용 각도를 벗어난 입사광은 우산과 그늘 범위를 통과시킵니다."))
 	bool bPassLightThroughOutsideReflectionAngle = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Light", meta = (ClampMin = "0.0", ClampMax = "89.9", Units = "deg", ToolTip = "우산 정면과 입사광 사이의 최대 반사 허용각입니다. 이 각도를 벗어난 빛은 반사 상태에서도 우산을 통과합니다."))
-	float MaximumUmbrellaReflectionIncidenceAngle = 60.0f;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Light", meta = (ClampMin = "0.0", ClampMax = "180.0", Units = "deg", ToolTip = "우산 정면과 입사광 사이의 최대 반사 허용각입니다. 기본 95도에서는 반사면과 평행한 빛과 뒷면 쪽 5도까지 반사하며, 이 범위를 벗어난 빛은 우산을 통과합니다."))
+	float MaximumUmbrellaReflectionIncidenceAngle = 95.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Light", meta = (ClampMin = "0.0", ClampMax = "89.9", Units = "deg", DisplayName = "최대 우산 빛 차단 입사각", ToolTip = "펼친 우산이 차단할 수 있는 최대 입사각입니다. 기본 75도에서는 위와 대각선 상단광을 막고 수평 측면광은 통과시킵니다."))
 	float MaximumUmbrellaBlockingIncidenceAngle = 75.0f;

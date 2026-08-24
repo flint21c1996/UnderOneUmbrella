@@ -20,10 +20,10 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Umbrella|Light Shade", meta = (ToolTip = "현재 이 범위가 게임플레이용 빛을 차단하고 있는지 나타냅니다."))
 	bool bShadeEnabled = false;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Umbrella|Light Shade|Direction", meta = (ClampMin = "0.0", ClampMax = "89.9", Units = "deg", DisplayName = "최대 빛 차단 입사각", ToolTip = "우산 차단면의 앞면 노멀과 입사광 사이에서 허용할 최대 각도입니다. 대각선 상단광은 막고 수평 측면광은 통과시키려면 75도 안팎을 권장합니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Umbrella|Light Shade|Direction", meta = (ClampMin = "0.0", ClampMax = "180.0", Units = "deg", DisplayName = "최대 빛 차단 입사각", ToolTip = "우산 차단면의 앞면 노멀과 입사광 사이에서 허용할 최대 각도입니다. 90도를 넘기면 평행한 입사광과 제한된 범위의 뒷면 입사광도 차단합니다."))
 	float MaximumBlockingIncidenceAngle = 75.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Umbrella|Light Shade|Direction", meta = (DisplayName = "앞면 광선만 차단", ToolTip = "활성화하면 우산 차단면의 앞쪽에서 들어오는 빛만 차단합니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Umbrella|Light Shade|Direction", meta = (DisplayName = "앞면 기준으로 차단", ToolTip = "활성화하면 우산 차단면의 앞면을 기준으로 입사각을 판정합니다. 최대 입사각이 90도를 넘으면 그 초과분만큼 뒷면 방향도 허용합니다."))
 	bool bBlockFrontFaceOnly = true;
 
 	UFUNCTION(BlueprintCallable, Category = "Umbrella|Light Shade", meta = (ToolTip = "우산 그늘 범위의 빛 차단을 켜거나 끕니다."))

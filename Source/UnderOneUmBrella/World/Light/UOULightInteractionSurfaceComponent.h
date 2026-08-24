@@ -69,14 +69,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection", meta = (ToolTip = "반사된 게임플레이 빛의 방향을 정하는 방식입니다."))
 	EUOULightReflectionDirectionMode ReflectionDirectionMode = EUOULightReflectionDirectionMode::MirrorByNormal;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection|Facing", meta = (ToolTip = "켜면 지정한 앞면으로 들어온 빛만 반사합니다. 뒤에서 들어온 빛은 차단만 합니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection|Facing", meta = (ToolTip = "켜면 지정한 앞면을 기준으로 반사 각도를 판정합니다. 최대 입사각이 90도를 넘으면 그 초과분만큼 뒷면 방향도 허용합니다."))
 	bool bReflectFrontFaceOnly = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection|Facing", meta = (EditCondition = "bReflectFrontFaceOnly", ToolTip = "반사면의 앞쪽을 결정할 기준 방향입니다."))
 	EUOULightReflectionFrontNormalMode ReflectionFrontNormalMode =
 		EUOULightReflectionFrontNormalMode::ComponentUp;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection|Facing", meta = (ClampMin = "0.0", ClampMax = "89.9", Units = "deg", ToolTip = "앞면 법선과 입사광 사이에 허용할 최대 각도입니다. 90도에 가까울수록 비스듬히 들어오는 빛도 반사합니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection|Facing", meta = (ClampMin = "0.0", ClampMax = "180.0", Units = "deg", ToolTip = "앞면 법선과 입사광 사이에 허용할 최대 각도입니다. 90도를 넘기면 평행한 입사광과 제한된 범위의 뒷면 입사광도 허용합니다."))
 	float MaximumReflectionIncidenceAngle = 89.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection|Facing", meta = (ToolTip = "반사 각도 조건을 만족하지 못한 빛을 막지 않고 통과시킵니다. 우산처럼 유효한 각도에서만 빛과 상호작용해야 하는 표면에 사용합니다."))
@@ -121,6 +121,9 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection|Sampling", meta = (ClampMin = "0.0", ClampMax = "1.0", EditCondition = "bUseSurfaceAreaSampling", ToolTip = "반사면 중심에서 가장자리 방향으로 샘플을 배치하는 비율입니다."))
 	float SurfaceSampleInset = 0.7f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection|Sampling", meta = (ToolTip = "원기둥형 빛의 중심축이 표면을 빗나가더라도 빛 단면 안의 표면 샘플이 맞으면 반사를 허용합니다. 우산처럼 빛의 일부가 걸친 경우도 반사해야 하는 표면에 사용합니다."))
+	bool bAllowEdgeOnlyCylinderReflection = false;
 
 	UFUNCTION(BlueprintCallable, Category = "Light|Interaction", meta = (ToolTip = "이 표면이 게임플레이 빛을 차단하거나 반사하는 방식을 변경합니다."))
 	void SetLightInteractionMode(EUOULightInteractionMode NewMode);
