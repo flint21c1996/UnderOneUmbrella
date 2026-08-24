@@ -20,6 +20,10 @@ DEFINE_LOG_CATEGORY_STATIC(LogUOULightBeamVisual, Log, All);
 
 namespace
 {
+	// 기존 머티리얼의 Emissive 기준이 높아 개별 밝기 배율을 0.07까지 낮춰야 했던 값을
+	// 디테일창의 1.0 기준으로 정규화합니다. 게임플레이 광량에는 영향을 주지 않습니다.
+	constexpr float VisualBrightnessNormalizationScale = 0.07f;
+
 	float CalculateReferenceVisualLength(
 		const TArray<FUOULightPathData>& LightPaths,
 		const USpotLightComponent* SourceSpotLight)
@@ -936,7 +940,8 @@ FUOULightBeamVisualSegmentData UUOULightBeamVisualComponent::BuildVisualSegment(
 	VisualData.bEndsAtReflection = SegmentData.HitType == EUOULightPathHitType::ReflectingSurface;
 	VisualData.Color = ResolveLightColor();
 	VisualData.Intensity = SegmentData.Intensity;
-	VisualData.VisualBrightnessMultiplier = FMath::Max(0.0f, VisualBrightnessMultiplier);
+	VisualData.VisualBrightnessMultiplier =
+		FMath::Max(0.0f, VisualBrightnessMultiplier) * VisualBrightnessNormalizationScale;
 	VisualData.VisualOpacityMultiplier = FMath::Max(0.0f, VisualOpacityMultiplier);
 	VisualData.LumenDynamicRayPresetOverride = FMath::Clamp(LumenDynamicRayPreset, 0, 8);
 	VisualData.LumenStaticRayPresetOverride = FMath::Clamp(LumenStaticRayPreset, 0, 19);

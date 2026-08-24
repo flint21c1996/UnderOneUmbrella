@@ -75,7 +75,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light|Visual", meta = (ToolTip = "VFX BP 내부에 포함된 Light 컴포넌트를 끄고 통합 광원 액터의 SpotLight만 사용합니다."))
 	bool bDisableEmbeddedVFXLights = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light|Visual|Overrides", meta = (ClampMin = "0.0", DisplayName = "개별 밝기 배율", ToolTip = "이 광원 인스턴스의 빛줄기 밝기에만 곱하는 값입니다. VFX 액터 클래스의 기본 밝기와 함께 적용되며 퍼즐 판정용 빛 세기에는 영향을 주지 않습니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light|Visual|Overrides", meta = (ClampMin = "0.0", DisplayName = "개별 밝기 배율", ToolTip = "이 광원 인스턴스의 정규화된 빛줄기 밝기 배율입니다. 1이 권장 기본값이며 퍼즐 판정용 빛 세기에는 영향을 주지 않습니다."))
 	float VisualBrightnessMultiplier = 1.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light|Visual|Overrides", meta = (ClampMin = "0.0", DisplayName = "개별 투명도 배율", ToolTip = "이 광원 인스턴스의 빛줄기 투명도에만 곱하는 값입니다. 0이면 완전히 투명하고 1이면 VFX 액터 클래스의 기본 투명도를 그대로 사용합니다."))

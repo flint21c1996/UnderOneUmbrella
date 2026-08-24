@@ -54,6 +54,17 @@ bool UUOULightInteractionSurfaceComponent::CanReflectIncomingLight(
 	const FVector& IncomingDirection,
 	const FVector& HitNormal) const
 {
+	return CanReflectIncomingLightWithMaximumAngle(
+		IncomingDirection,
+		HitNormal,
+		MaximumReflectionIncidenceAngle);
+}
+
+bool UUOULightInteractionSurfaceComponent::CanReflectIncomingLightWithMaximumAngle(
+	const FVector& IncomingDirection,
+	const FVector& HitNormal,
+	float MaximumIncidenceAngleDegrees) const
+{
 	if (!CanReflectLight())
 	{
 		return false;
@@ -76,28 +87,55 @@ bool UUOULightInteractionSurfaceComponent::CanReflectIncomingLight(
 	}
 
 	float FrontDot = FVector::DotProduct(-SafeIncomingDirection, FrontNormal);
-	if (bReflectFrontFaceOnly && FrontDot <= 0.0f)
-	{
-		return false;
-	}
 	if (!bReflectFrontFaceOnly)
 	{
 		FrontDot = FMath::Abs(FrontDot);
 	}
 
-	const float IncidenceAngle = FMath::RadiansToDegrees(
-		FMath::Acos(FMath::Clamp(FrontDot, 0.0f, 1.0f)));
-	return IncidenceAngle <= MaximumReflectionIncidenceAngle;
+	const float SafeMaximumAngle = FMath::Clamp(
+		MaximumIncidenceAngleDegrees,
+		0.0f,
+		180.0f);
+	const float MinimumFrontDot = FMath::Cos(FMath::DegreesToRadians(SafeMaximumAngle));
+	return FrontDot >= MinimumFrontDot - KINDA_SMALL_NUMBER;
 }
 
 bool UUOULightInteractionSurfaceComponent::ShouldPassThroughIncomingLight(
 	const FVector& IncomingDirection,
 	const FVector& HitNormal) const
 {
+	return ShouldPassThroughIncomingLightWithMaximumAngle(
+		IncomingDirection,
+		HitNormal,
+		MaximumReflectionIncidenceAngle);
+}
+
+bool UUOULightInteractionSurfaceComponent::ShouldPassThroughIncomingLightWithMaximumAngle(
+	const FVector& IncomingDirection,
+	const FVector& HitNormal,
+	float MaximumIncidenceAngleDegrees) const
+{
 	return LightInteractionMode == EUOULightInteractionMode::Reflecting &&
 		bPassThroughWhenReflectionRejected &&
 		CanReflectLight() &&
-		!CanReflectIncomingLight(IncomingDirection, HitNormal);
+		!CanReflectIncomingLightWithMaximumAngle(
+			IncomingDirection,
+			HitNormal,
+			MaximumIncidenceAngleDegrees);
+}
+
+void UUOULightInteractionSurfaceComponent::SetReflectionIncidenceAngles(
+	float StartMaximumAngleDegrees,
+	float RetainedMaximumAngleDegrees)
+{
+	MaximumReflectionIncidenceAngle = FMath::Clamp(
+		StartMaximumAngleDegrees,
+		0.0f,
+		180.0f);
+	RetainedMaximumReflectionIncidenceAngle = FMath::Clamp(
+		RetainedMaximumAngleDegrees,
+		MaximumReflectionIncidenceAngle,
+		180.0f);
 }
 
 float UUOULightInteractionSurfaceComponent::ClampReflectionBeamRadius(
@@ -144,12 +182,32 @@ bool UUOULightInteractionSurfaceComponent::HasSufficientReflectionCoverage(
 	const FVector& HitNormal,
 	const FVector& ImpactPoint) const
 {
+	return HasSufficientReflectionCoverageAtRatio(
+		IncomingBeamRadius,
+		IncomingDirection,
+		HitNormal,
+		ImpactPoint,
+		GetStartingBeamFootprintCoverageRatio());
+}
+
+bool UUOULightInteractionSurfaceComponent::HasSufficientReflectionCoverageAtRatio(
+	float IncomingBeamRadius,
+	const FVector& IncomingDirection,
+	const FVector& HitNormal,
+	const FVector& ImpactPoint,
+	float RequiredFootprintCoverageRatio) const
+{
 	const float SafeIncomingRadius = FMath::Max(0.0f, IncomingBeamRadius);
-	if (!ContainsFullBeamFootprint(
+	const float SafeRequiredFootprintCoverageRatio = FMath::Clamp(
+		RequiredFootprintCoverageRatio,
+		0.0f,
+		1.0f);
+	if (!HasMinimumBeamFootprintCoverage(
 		SafeIncomingRadius,
 		IncomingDirection,
 		HitNormal,
-		ImpactPoint))
+		ImpactPoint,
+		SafeRequiredFootprintCoverageRatio))
 	{
 		return false;
 	}
@@ -173,9 +231,23 @@ bool UUOULightInteractionSurfaceComponent::ContainsFullBeamFootprint(
 	const FVector& HitNormal,
 	const FVector& ImpactPoint) const
 {
+	return HasMinimumBeamFootprintCoverage(
+		IncomingBeamRadius,
+		IncomingDirection,
+		HitNormal,
+		ImpactPoint,
+		GetStartingBeamFootprintCoverageRatio());
+}
+
+float UUOULightInteractionSurfaceComponent::CalculateBeamFootprintCoverageRatio(
+	float IncomingBeamRadius,
+	const FVector& IncomingDirection,
+	const FVector& HitNormal,
+	const FVector& ImpactPoint) const
+{
 	if (!bRequireFullBeamFootprint || IncomingBeamRadius <= KINDA_SMALL_NUMBER)
 	{
-		return true;
+		return 1.0f;
 	}
 
 	const FVector SafeIncomingDirection = IncomingDirection.GetSafeNormal();
@@ -192,7 +264,7 @@ bool UUOULightInteractionSurfaceComponent::ContainsFullBeamFootprint(
 		SurfaceNormal.IsNearlyZero() ||
 		FMath::Abs(ProjectionDenominator) <= KINDA_SMALL_NUMBER)
 	{
-		return false;
+		return 0.0f;
 	}
 
 	FVector BeamAxisA = FVector::ZeroVector;
@@ -214,38 +286,96 @@ bool UUOULightInteractionSurfaceComponent::ContainsFullBeamFootprint(
 
 	const FVector LocalExtent = GetUnscaledBoxExtent().GetAbs();
 	const FVector AbsoluteScale = GetComponentScale().GetAbs();
-	constexpr int32 FootprintSampleCount = 16;
-	for (int32 SampleIndex = 0; SampleIndex < FootprintSampleCount; ++SampleIndex)
+	constexpr int32 RadialSampleCount = 8;
+	constexpr int32 AngularSampleCount = 32;
+	constexpr int32 FootprintSampleCount = RadialSampleCount * AngularSampleCount;
+	int32 ContainedSampleCount = 0;
+	for (int32 RadialIndex = 0; RadialIndex < RadialSampleCount; ++RadialIndex)
 	{
-		const float SampleAngle = 2.0f * PI *
-			static_cast<float>(SampleIndex) / static_cast<float>(FootprintSampleCount);
-		const FVector RingPoint = ImpactPoint + IncomingBeamRadius *
-			(BeamAxisA * FMath::Cos(SampleAngle) + BeamAxisB * FMath::Sin(SampleAngle));
-		const float ProjectionDistance = FVector::DotProduct(
-			ImpactPoint - RingPoint,
-			SurfaceNormal) / ProjectionDenominator;
-		const FVector ProjectedPoint = RingPoint +
-			SafeIncomingDirection * ProjectionDistance;
-		const FVector LocalPoint = SurfaceTransform.InverseTransformPosition(ProjectedPoint);
-
-		for (int32 AxisIndex = 0; AxisIndex < 3; ++AxisIndex)
+		// sqrt 분포를 사용하면 각 고리가 같은 면적을 대표합니다.
+		const float RadiusFraction = FMath::Sqrt(
+			(static_cast<float>(RadialIndex) + 0.5f) /
+			static_cast<float>(RadialSampleCount));
+		const float AngularOffset = (RadialIndex % 2 == 0)
+			? 0.0f
+			: PI / static_cast<float>(AngularSampleCount);
+		for (int32 AngularIndex = 0; AngularIndex < AngularSampleCount; ++AngularIndex)
 		{
-			if (AxisIndex == NormalAxis)
+			const float SampleAngle = AngularOffset + 2.0f * PI *
+				static_cast<float>(AngularIndex) / static_cast<float>(AngularSampleCount);
+			const FVector BeamPoint = ImpactPoint + IncomingBeamRadius * RadiusFraction *
+				(BeamAxisA * FMath::Cos(SampleAngle) + BeamAxisB * FMath::Sin(SampleAngle));
+			const float ProjectionDistance = FVector::DotProduct(
+				ImpactPoint - BeamPoint,
+				SurfaceNormal) / ProjectionDenominator;
+			const FVector ProjectedPoint = BeamPoint +
+				SafeIncomingDirection * ProjectionDistance;
+			const FVector LocalPoint = SurfaceTransform.InverseTransformPosition(ProjectedPoint);
+			bool bContained = true;
+			for (int32 AxisIndex = 0; AxisIndex < 3; ++AxisIndex)
 			{
-				continue;
+				if (AxisIndex == NormalAxis)
+				{
+					continue;
+				}
+
+				const float SafeAxisScale = FMath::Max(AbsoluteScale[AxisIndex], KINDA_SMALL_NUMBER);
+				const float LocalInset = FullBeamFootprintEdgeInset / SafeAxisScale;
+				const float AvailableExtent = FMath::Max(0.0f, LocalExtent[AxisIndex] - LocalInset);
+				if (FMath::Abs(LocalPoint[AxisIndex]) > AvailableExtent)
+				{
+					bContained = false;
+					break;
+				}
 			}
 
-			const float SafeAxisScale = FMath::Max(AbsoluteScale[AxisIndex], KINDA_SMALL_NUMBER);
-			const float LocalInset = FullBeamFootprintEdgeInset / SafeAxisScale;
-			const float AvailableExtent = FMath::Max(0.0f, LocalExtent[AxisIndex] - LocalInset);
-			if (FMath::Abs(LocalPoint[AxisIndex]) > AvailableExtent)
+			if (bContained)
 			{
-				return false;
+				++ContainedSampleCount;
 			}
 		}
 	}
 
-	return true;
+	return static_cast<float>(ContainedSampleCount) /
+		static_cast<float>(FootprintSampleCount);
+}
+
+bool UUOULightInteractionSurfaceComponent::HasMinimumBeamFootprintCoverage(
+	float IncomingBeamRadius,
+	const FVector& IncomingDirection,
+	const FVector& HitNormal,
+	const FVector& ImpactPoint,
+	float RequiredCoverageRatio) const
+{
+	return CalculateBeamFootprintCoverageRatio(
+		IncomingBeamRadius,
+		IncomingDirection,
+		HitNormal,
+		ImpactPoint) >= FMath::Clamp(RequiredCoverageRatio, 0.0f, 1.0f);
+}
+
+float UUOULightInteractionSurfaceComponent::GetStartingBeamFootprintCoverageRatio() const
+{
+	return 1.0f - FMath::Clamp(BeamFootprintOverflowAllowancePercent, 0.0f, 100.0f) * 0.01f;
+}
+
+float UUOULightInteractionSurfaceComponent::GetRetainedBeamFootprintCoverageRatio() const
+{
+	constexpr float RetainedOverflowBonusPercent = 10.0f;
+	const float RetainedOverflowPercent = FMath::Clamp(
+		BeamFootprintOverflowAllowancePercent + RetainedOverflowBonusPercent,
+		0.0f,
+		100.0f);
+	return 1.0f - RetainedOverflowPercent * 0.01f;
+}
+
+void UUOULightInteractionSurfaceComponent::SetBeamFootprintOverflowAllowance(
+	float OverflowAllowancePercent)
+{
+	BeamFootprintOverflowAllowancePercent = FMath::Clamp(
+		OverflowAllowancePercent,
+		0.0f,
+		100.0f);
 }
 
 float UUOULightInteractionSurfaceComponent::ResolveReflectionConeAngle(float IncomingConeAngle) const
@@ -329,11 +459,22 @@ void UUOULightInteractionSurfaceComponent::ValidateSettings()
 	ReflectionConeAngle = FMath::Clamp(ReflectionConeAngle, 0.0f, 89.0f);
 	ReflectionIntensityMultiplier = FMath::Max(0.0f, ReflectionIntensityMultiplier);
 	ReflectionStartPadding = FMath::Max(0.0f, ReflectionStartPadding);
-	MaximumReflectionIncidenceAngle = FMath::Clamp(MaximumReflectionIncidenceAngle, 0.0f, 89.9f);
 	ReflectionApertureScale = FMath::Max(0.0f, ReflectionApertureScale);
 	ReflectionImpactEdgeInset = FMath::Max(0.0f, ReflectionImpactEdgeInset);
 	MinimumReflectionCoverageRatio = FMath::Clamp(MinimumReflectionCoverageRatio, 0.0f, 1.0f);
+	MaximumReflectionIncidenceAngle = FMath::Clamp(
+		MaximumReflectionIncidenceAngle,
+		0.0f,
+		180.0f);
+	RetainedMaximumReflectionIncidenceAngle = FMath::Clamp(
+		RetainedMaximumReflectionIncidenceAngle,
+		MaximumReflectionIncidenceAngle,
+		180.0f);
 	FullBeamFootprintEdgeInset = FMath::Max(0.0f, FullBeamFootprintEdgeInset);
+	BeamFootprintOverflowAllowancePercent = FMath::Clamp(
+		BeamFootprintOverflowAllowancePercent,
+		0.0f,
+		100.0f);
 	SurfaceSampleInset = FMath::Clamp(SurfaceSampleInset, 0.0f, 1.0f);
 }
 

@@ -51,22 +51,17 @@ bool UUOUUmbrellaLightShadeVolumeComponent::CanShadeIncomingLight(
 	}
 
 	float FrontDot = FVector::DotProduct(-SafeIncomingDirection, FrontNormal);
-	if (bBlockFrontFaceOnly && FrontDot <= 0.0f)
-	{
-		return false;
-	}
-
 	if (!bBlockFrontFaceOnly)
 	{
 		FrontDot = FMath::Abs(FrontDot);
 	}
 
-	const float IncidenceAngleDegrees = FMath::RadiansToDegrees(
-		FMath::Acos(FMath::Clamp(FrontDot, 0.0f, 1.0f)));
-	return IncidenceAngleDegrees <= FMath::Clamp(
+	const float SafeMaximumAngle = FMath::Clamp(
 		MaximumBlockingIncidenceAngle,
 		0.0f,
-		89.9f);
+		180.0f);
+	const float MinimumFrontDot = FMath::Cos(FMath::DegreesToRadians(SafeMaximumAngle));
+	return FrontDot >= MinimumFrontDot - KINDA_SMALL_NUMBER;
 }
 
 bool UUOUUmbrellaLightShadeVolumeComponent::ContainsWorldPosition(const FVector& WorldPosition) const
