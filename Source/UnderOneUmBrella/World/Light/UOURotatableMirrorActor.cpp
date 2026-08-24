@@ -46,6 +46,10 @@ AUOURotatableMirrorActor::AUOURotatableMirrorActor()
 		EUOULightReflectionFrontNormalMode::ComponentForward;
 	// 거울보다 넓은 빛은 일부만 잘라 반사하지 않고 원래 경로로 통과시킵니다.
 	LightInteractionSurface->bRequireFullBeamFootprint = true;
+	LightInteractionSurface->MaximumReflectionIncidenceAngle = 89.0f;
+	LightInteractionSurface->RetainedMaximumReflectionIncidenceAngle = 95.0f;
+	LightInteractionSurface->BeamFootprintOverflowAllowancePercent = 20.0f;
+	LightInteractionSurface->bAllowEdgeOnlyCylinderReflection = true;
 
 	PushVolume = CreateDefaultSubobject<UBoxComponent>(TEXT("PushVolume"));
 	PushVolume->SetupAttachment(MirrorPivot);
@@ -72,4 +76,66 @@ AUOURotatableMirrorActor::AUOURotatableMirrorActor()
 	RotatableMirror->PreferredPushVolumeName = PushVolume->GetFName();
 	RotatableMirror->bConfigurePushVolumeCollision = true;
 	RotatableMirror->LocalRotationAxis = FVector::UpVector;
+}
+
+void AUOURotatableMirrorActor::OnConstruction(const FTransform& Transform)
+{
+	Super::OnConstruction(Transform);
+	if (LightInteractionSurface != nullptr)
+	{
+		// 기존 Blueprint가 예전 false 기본값을 저장하고 있어도 거울의 돌출 허용 판정은
+		// 중심축이 메시 밖으로 나간 뒤까지 실제 단면 겹침 비율로 계속 검사합니다.
+		LightInteractionSurface->bAllowEdgeOnlyCylinderReflection = true;
+	}
+	SyncLightInteractionSurfaceToMirrorMesh();
+}
+
+void AUOURotatableMirrorActor::SetReflectionIncidenceAngles(
+	float StartMaximumAngleDegrees,
+	float RetainedMaximumAngleDegrees)
+{
+	if (LightInteractionSurface != nullptr)
+	{
+		LightInteractionSurface->SetReflectionIncidenceAngles(
+			StartMaximumAngleDegrees,
+			RetainedMaximumAngleDegrees);
+	}
+}
+
+void AUOURotatableMirrorActor::SetBeamFootprintOverflowAllowance(
+	float OverflowAllowancePercent)
+{
+	if (LightInteractionSurface != nullptr)
+	{
+		LightInteractionSurface->SetBeamFootprintOverflowAllowance(
+			OverflowAllowancePercent);
+	}
+}
+
+void AUOURotatableMirrorActor::SyncLightInteractionSurfaceToMirrorMesh() const
+{
+	if (!bSyncLightSurfaceToMirrorMesh || MirrorMesh == nullptr ||
+		LightInteractionSurface == nullptr || MirrorMesh->GetStaticMesh() == nullptr)
+	{
+		return;
+	}
+
+	const FBox MeshLocalBounds = MirrorMesh->GetStaticMesh()->GetBoundingBox();
+	if (!MeshLocalBounds.IsValid)
+	{
+		return;
+	}
+
+	const FTransform MeshRelativeTransform = MirrorMesh->GetRelativeTransform();
+	const FVector MeshScale = MeshRelativeTransform.GetScale3D().GetAbs();
+	const FVector SurfaceCenter =
+		MeshRelativeTransform.TransformPosition(MeshLocalBounds.GetCenter());
+	FVector SurfaceExtent = MeshLocalBounds.GetExtent() * MeshScale;
+	SurfaceExtent.X += FMath::Max(0.0f, LightSurfaceThicknessPadding);
+
+	LightInteractionSurface->SetRelativeLocationAndRotation(
+		SurfaceCenter,
+		MeshRelativeTransform.GetRotation());
+	LightInteractionSurface->SetRelativeScale3D(FVector::OneVector);
+	LightInteractionSurface->SetBoxExtent(SurfaceExtent);
 }

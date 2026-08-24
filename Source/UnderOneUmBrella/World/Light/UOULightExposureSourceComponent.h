@@ -87,6 +87,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Exposure", meta = (ToolTip = "광원과의 거리에 따라 빛 세기를 줄입니다."))
 	bool bUseDistanceFalloff = true;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Exposure", meta = (ClampMin = "0.01", EditCondition = "bUseDistanceFalloff", DisplayName = "거리 감쇠 지수", ToolTip = "거리 감쇠 곡선의 강도를 조절합니다. 1은 선형이며, 값이 클수록 멀리까지 밝게 유지되고 값이 작을수록 가까이에서 빠르게 약해집니다."))
+	float DistanceFalloffExponent = 1.0f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Exposure", meta = (ToolTip = "광원 원뿔 가장자리로 갈수록 빛 세기를 줄입니다."))
 	bool bUseAngleFalloff = true;
 
@@ -241,6 +244,12 @@ protected:
 	static bool HasReflectionPathTopologyLoss(
 		const TArray<FUOULightReflectionPathData>& PreviousPaths,
 		const TArray<FUOULightReflectionPathData>& CurrentPaths);
+	bool WasReflectingFromSurface(
+		const UUOULightInteractionSurfaceComponent* SurfaceComponent) const;
+	float ResolveRequiredBeamFootprintCoverageRatio(
+		const UUOULightInteractionSurfaceComponent* SurfaceComponent) const;
+	float ResolveMaximumReflectionIncidenceAngle(
+		const UUOULightInteractionSurfaceComponent* SurfaceComponent) const;
 	USceneComponent* GetReferencedSourceTransform() const;
 	USpotLightComponent* GetSourceSpotLightComponent() const;
 	FVector GetSourceLocation() const;
@@ -364,6 +373,7 @@ protected:
 		FUOULightExposureData& OutExposureData,
 		FHitResult& OutBlockingHit) const;
 	float CalculateIntensity(float Distance, float Angle, float& OutDistanceFactor, float& OutAngleFactor) const;
+	float CalculateDistanceFalloffFactor(float Distance, float MaximumDistance) const;
 	float CalculateConeFactor(float Angle, float ConeAngle) const;
 	float CalculateCylinderFactor(float RadialDistance) const;
 	static void AddActorPrimitiveComponentsToIgnore(
