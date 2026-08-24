@@ -1170,17 +1170,26 @@ bool FUOUUmbrellaReflectionAngleBoundaryTest::RunTest(const FString& Parameters)
 		UmbrellaSettings->MaximumUmbrellaReflectionIncidenceAngle;
 
 	const FVector FrontNormal = FVector::ForwardVector;
-	const FVector ValidIncomingDirection =
-		-FRotator(0.0f, 45.0f, 0.0f).RotateVector(FrontNormal);
-	const FVector GrazingIncomingDirection =
-		-FRotator(0.0f, 80.0f, 0.0f).RotateVector(FrontNormal);
+	const FVector ParallelIncomingDirection =
+		-FRotator(0.0f, 90.0f, 0.0f).RotateVector(FrontNormal);
+	const FVector BackfaceToleranceBoundaryDirection =
+		-FRotator(0.0f, 95.0f, 0.0f).RotateVector(FrontNormal);
+	const FVector OutsideBackfaceToleranceDirection =
+		-FRotator(0.0f, 96.0f, 0.0f).RotateVector(FrontNormal);
 
+	TestEqual(
+		TEXT("우산 기본 최대 반사 입사각은 95도이다"),
+		UmbrellaSettings->MaximumUmbrellaReflectionIncidenceAngle,
+		95.0f);
 	TestFalse(
-		TEXT("우산 정면에서 45도인 빛은 반사하므로 통과하지 않는다"),
-		Surface->ShouldPassThroughIncomingLight(ValidIncomingDirection, FrontNormal));
+		TEXT("우산 반사면과 평행한 90도 입사광은 반사하므로 통과하지 않는다"),
+		Surface->ShouldPassThroughIncomingLight(ParallelIncomingDirection, FrontNormal));
+	TestFalse(
+		TEXT("우산 뒷면 쪽 5도인 입사광은 허용 경계이므로 통과하지 않는다"),
+		Surface->ShouldPassThroughIncomingLight(BackfaceToleranceBoundaryDirection, FrontNormal));
 	TestTrue(
-		TEXT("우산 정면에서 80도인 비스듬한 빛은 반사하지 않고 통과한다"),
-		Surface->ShouldPassThroughIncomingLight(GrazingIncomingDirection, FrontNormal));
+		TEXT("우산 뒷면 쪽 6도인 입사광은 허용 범위를 벗어나므로 통과한다"),
+		Surface->ShouldPassThroughIncomingLight(OutsideBackfaceToleranceDirection, FrontNormal));
 	return true;
 }
 
@@ -1215,6 +1224,26 @@ bool FUOUUmbrellaShadeDirectionTest::RunTest(const FString& Parameters)
 	TestFalse(
 		TEXT("우산 뒷면에서 들어오는 빛은 차단하지 않는다"),
 		ShadeVolume->CanShadeIncomingLight(FVector::UpVector));
+
+	ShadeVolume->MaximumBlockingIncidenceAngle = 95.0f;
+	const FVector ShadeFrontNormal = FVector::UpVector;
+	const FVector ParallelIncomingDirection =
+		-FRotator(0.0f, 90.0f, 0.0f).RotateVector(FVector::ForwardVector);
+	const FVector BackfaceToleranceBoundaryDirection = -(
+		ShadeFrontNormal * FMath::Cos(FMath::DegreesToRadians(95.0f)) +
+		FVector::ForwardVector * FMath::Sin(FMath::DegreesToRadians(95.0f)));
+	const FVector OutsideBackfaceToleranceDirection = -(
+		ShadeFrontNormal * FMath::Cos(FMath::DegreesToRadians(96.0f)) +
+		FVector::ForwardVector * FMath::Sin(FMath::DegreesToRadians(96.0f)));
+	TestTrue(
+		TEXT("반사 상태에서는 우산 차단면과 평행한 빛도 그늘 범위가 차단한다"),
+		ShadeVolume->CanShadeIncomingLight(ParallelIncomingDirection));
+	TestTrue(
+		TEXT("반사 상태에서는 우산 뒷면 쪽 5도인 빛도 허용 경계로 차단한다"),
+		ShadeVolume->CanShadeIncomingLight(BackfaceToleranceBoundaryDirection));
+	TestFalse(
+		TEXT("반사 상태에서도 우산 뒷면 쪽 6도인 빛은 그늘 범위를 통과한다"),
+		ShadeVolume->CanShadeIncomingLight(OutsideBackfaceToleranceDirection));
 	return true;
 }
 
@@ -1465,6 +1494,101 @@ bool FUOULightWorldPathIntegrationTest::RunTest(const FString& Parameters)
 			321.0f);
 	}
 
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FUOUUmbrellaParallelCylinderEdgeReflectionTest,
+	"UnderOneUmbrella.Light.Reflection.UmbrellaParallelCylinderEdgeOverlap",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUOUUmbrellaParallelCylinderEdgeReflectionTest::RunTest(const FString& Parameters)
+{
+	UWorld* UninitializedWorld = UWorld::CreateWorld(
+		EWorldType::Editor,
+		false,
+		TEXT("UOUUmbrellaParallelCylinderEdgeWorld"),
+		nullptr,
+		false,
+		ERHIFeatureLevel::Num,
+		nullptr,
+		true);
+	FScopedEditorWorld ScopedWorld(
+		UninitializedWorld,
+		UWorld::InitializationValues()
+			.RequiresHitProxies(false)
+			.ShouldSimulatePhysics(false)
+			.EnableTraceCollision(true)
+			.CreateNavigation(false)
+			.CreateAISystem(false)
+			.AllowAudioPlayback(false)
+			.CreatePhysicsScene(true));
+	UWorld* World = ScopedWorld.GetWorld();
+	TestNotNull(TEXT("평행 원기둥 반사 테스트용 월드를 생성한다"), World);
+	if (World == nullptr)
+	{
+		return false;
+	}
+
+	AUOULightSourceActor* SourceActor = World->SpawnActor<AUOULightSourceActor>();
+	TestNotNull(TEXT("원기둥 광원을 생성한다"), SourceActor);
+	if (SourceActor == nullptr || SourceActor->ExposureSource == nullptr ||
+		SourceActor->SourceSpotLight == nullptr)
+	{
+		return false;
+	}
+
+	SourceActor->SetActorLocationAndRotation(FVector::ZeroVector, FRotator::ZeroRotator);
+	SourceActor->SourceSpotLight->SetAttenuationRadius(1000.0f);
+	SourceActor->ExposureSource->BeamShape = EUOULightBeamShape::Cylinder;
+	SourceActor->ExposureSource->CylinderRadius = 50.0f;
+	SourceActor->ExposureSource->BeamLength = 1000.0f;
+	SourceActor->ExposureSource->SampleInterval = 0.0f;
+	SourceActor->ExposureSource->ReflectionPathLossGraceTime = 0.0f;
+
+	AActor* UmbrellaActor = World->SpawnActor<AActor>();
+	UUOULightInteractionSurfaceComponent* UmbrellaSurface = UmbrellaActor != nullptr
+		? NewObject<UUOULightInteractionSurfaceComponent>(UmbrellaActor, TEXT("ParallelUmbrellaSurface"))
+		: nullptr;
+	TestNotNull(TEXT("광선과 평행한 우산 반사면을 생성한다"), UmbrellaSurface);
+	if (UmbrellaActor == nullptr || UmbrellaSurface == nullptr)
+	{
+		return false;
+	}
+
+	UmbrellaActor->AddInstanceComponent(UmbrellaSurface);
+	UmbrellaActor->SetRootComponent(UmbrellaSurface);
+	UmbrellaSurface->SetBoxExtent(FVector(6.0f, 70.0f, 70.0f));
+	UmbrellaSurface->bUseSurfaceAreaSampling = true;
+	UmbrellaSurface->bReflectFrontFaceOnly = true;
+	UmbrellaSurface->ReflectionFrontNormalMode =
+		EUOULightReflectionFrontNormalMode::ComponentForward;
+	UmbrellaSurface->ReflectionDirectionMode = EUOULightReflectionDirectionMode::OwnerForward;
+	UmbrellaSurface->MaximumReflectionIncidenceAngle = 95.0f;
+	UmbrellaSurface->bAllowEdgeOnlyCylinderReflection = true;
+	UmbrellaSurface->RegisterComponent();
+	UmbrellaActor->SetActorLocationAndRotation(
+		FVector(400.0f, 45.0f, 0.0f),
+		FRotator(0.0f, 90.0f, 0.0f));
+	UmbrellaSurface->SetLightInteractionMode(EUOULightInteractionMode::Reflecting);
+
+	SourceActor->ExposureSource->EmitLight(0.1f);
+	const TArray<FUOULightReflectionPathData> ReflectionPaths =
+		SourceActor->ExposureSource->GetReflectionPaths();
+	TestTrue(
+		TEXT("중심축이 빗나가도 원기둥 빛 단면이 평행한 우산에 걸치면 반사한다"),
+		!ReflectionPaths.IsEmpty());
+	if (!ReflectionPaths.IsEmpty() && !ReflectionPaths[0].Segments.IsEmpty())
+	{
+		const FUOULightReflectionSegmentData& Segment = ReflectionPaths[0].Segments[0];
+		TestEqual(
+			TEXT("가장자리 겹침 반사의 반사체는 우산 표면이다"),
+			Segment.Reflector.Get(),
+			UmbrellaSurface);
+		TestTrue(
+			TEXT("평행 입사광은 우산 소유 액터의 전방으로 반사된다"),
+			Segment.ReflectedDirection.Equals(FVector::RightVector, 0.01f));
+	}
 	return true;
 }
 

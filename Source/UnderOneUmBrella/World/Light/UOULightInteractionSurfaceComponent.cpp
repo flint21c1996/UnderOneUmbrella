@@ -76,18 +76,17 @@ bool UUOULightInteractionSurfaceComponent::CanReflectIncomingLight(
 	}
 
 	float FrontDot = FVector::DotProduct(-SafeIncomingDirection, FrontNormal);
-	if (bReflectFrontFaceOnly && FrontDot <= 0.0f)
-	{
-		return false;
-	}
 	if (!bReflectFrontFaceOnly)
 	{
 		FrontDot = FMath::Abs(FrontDot);
 	}
 
-	const float IncidenceAngle = FMath::RadiansToDegrees(
-		FMath::Acos(FMath::Clamp(FrontDot, 0.0f, 1.0f)));
-	return IncidenceAngle <= MaximumReflectionIncidenceAngle;
+	const float SafeMaximumAngle = FMath::Clamp(
+		MaximumReflectionIncidenceAngle,
+		0.0f,
+		180.0f);
+	const float MinimumFrontDot = FMath::Cos(FMath::DegreesToRadians(SafeMaximumAngle));
+	return FrontDot >= MinimumFrontDot - KINDA_SMALL_NUMBER;
 }
 
 bool UUOULightInteractionSurfaceComponent::ShouldPassThroughIncomingLight(
@@ -329,7 +328,7 @@ void UUOULightInteractionSurfaceComponent::ValidateSettings()
 	ReflectionConeAngle = FMath::Clamp(ReflectionConeAngle, 0.0f, 89.0f);
 	ReflectionIntensityMultiplier = FMath::Max(0.0f, ReflectionIntensityMultiplier);
 	ReflectionStartPadding = FMath::Max(0.0f, ReflectionStartPadding);
-	MaximumReflectionIncidenceAngle = FMath::Clamp(MaximumReflectionIncidenceAngle, 0.0f, 89.9f);
+	MaximumReflectionIncidenceAngle = FMath::Clamp(MaximumReflectionIncidenceAngle, 0.0f, 180.0f);
 	ReflectionApertureScale = FMath::Max(0.0f, ReflectionApertureScale);
 	ReflectionImpactEdgeInset = FMath::Max(0.0f, ReflectionImpactEdgeInset);
 	MinimumReflectionCoverageRatio = FMath::Clamp(MinimumReflectionCoverageRatio, 0.0f, 1.0f);

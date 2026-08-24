@@ -348,7 +348,10 @@ void UUOUUmbrellaLightInteractionComponent::ApplyRuntimeLightSurfacePlacement() 
 	LightSurfaceComponent->MaximumReflectionIncidenceAngle = FMath::Clamp(
 		MaximumUmbrellaReflectionIncidenceAngle,
 		0.0f,
-		89.9f);
+		180.0f);
+	// 원기둥 빛의 중심축이 우산 옆을 지나더라도 실제 빛 단면이 우산에 걸치면
+	// 그 적중 샘플을 대표 반사점으로 사용합니다.
+	LightSurfaceComponent->bAllowEdgeOnlyCylinderReflection = true;
 	// 우산 가장자리에 빛 중심축이 조금만 걸렸을 때 전체 굵기의 반사광이 생기지 않도록
 	// 충돌 위치에 남은 유효 반사 폭을 사용합니다.
 	LightSurfaceComponent->bLimitReflectionByImpactOffset = true;
@@ -400,7 +403,7 @@ void UUOUUmbrellaLightInteractionComponent::ApplyRuntimeLightShadeVolumePlacemen
 			? MaximumUmbrellaReflectionIncidenceAngle
 			: MaximumUmbrellaBlockingIncidenceAngle,
 		0.0f,
-		89.9f);
+		180.0f);
 	LightShadeVolumeComponent->bBlockFrontFaceOnly = true;
 	if (bUseRainBlockerPlacement)
 	{
