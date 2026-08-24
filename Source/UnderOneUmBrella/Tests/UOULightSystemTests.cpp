@@ -237,6 +237,169 @@ bool FUOURotatableMirrorStableNormalTest::RunTest(const FString& Parameters)
 		TEXT("회전 거울은 Box 옆면 HitNormal 대신 컴포넌트 앞 방향을 반사 법선으로 사용한다"),
 		MirrorDefaults->LightInteractionSurface->ReflectionNormalMode,
 		EUOULightReflectionNormalMode::ComponentForward);
+	TestEqual(
+		TEXT("회전 거울은 빛 단면이 20%까지 밖으로 나와도 반사를 시작한다"),
+		MirrorDefaults->LightInteractionSurface->BeamFootprintOverflowAllowancePercent,
+		20.0f);
+	TestEqual(
+		TEXT("회전 거울은 반사 중이면 자동으로 10% 더 돌출을 허용한다"),
+		MirrorDefaults->LightInteractionSurface->GetRetainedBeamFootprintCoverageRatio(),
+		0.7f);
+	TestEqual(
+		TEXT("회전 거울은 89도까지 새 반사를 시작한다"),
+		MirrorDefaults->LightInteractionSurface->MaximumReflectionIncidenceAngle,
+		89.0f);
+	TestEqual(
+		TEXT("회전 거울은 반사 중이면 95도까지 반사를 유지한다"),
+		MirrorDefaults->LightInteractionSurface->RetainedMaximumReflectionIncidenceAngle,
+		95.0f);
+	TestTrue(
+		TEXT("회전 거울은 빛 중심축이 빗나가도 단면이 걸치면 반사 후보로 사용한다"),
+		MirrorDefaults->LightInteractionSurface->bAllowEdgeOnlyCylinderReflection);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FUOURotatableMirrorSurfaceMeshSyncTest,
+	"UnderOneUmbrella.Light.Reflection.RotatableMirrorSurfaceMeshSync",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUOURotatableMirrorSurfaceMeshSyncTest::RunTest(const FString& Parameters)
+{
+	UWorld* UninitializedWorld = UWorld::CreateWorld(
+		EWorldType::Editor,
+		false,
+		TEXT("UOURotatableMirrorSurfaceMeshSyncWorld"),
+		nullptr,
+		false,
+		ERHIFeatureLevel::Num,
+		nullptr,
+		true);
+	FScopedEditorWorld ScopedWorld(
+		UninitializedWorld,
+		UWorld::InitializationValues()
+			.RequiresHitProxies(false)
+			.ShouldSimulatePhysics(false)
+			.EnableTraceCollision(true)
+			.CreateNavigation(false)
+			.CreateAISystem(false)
+			.AllowAudioPlayback(false)
+			.CreatePhysicsScene(true));
+	UWorld* World = ScopedWorld.GetWorld();
+	TestNotNull(TEXT("거울 메시 동기화 테스트 월드를 생성한다"), World);
+	if (World == nullptr)
+	{
+		return false;
+	}
+
+	AUOURotatableMirrorActor* Mirror = World->SpawnActor<AUOURotatableMirrorActor>();
+	TestNotNull(TEXT("메시 동기화 테스트용 회전 거울을 생성한다"), Mirror);
+	if (Mirror == nullptr || Mirror->MirrorMesh == nullptr ||
+		Mirror->LightInteractionSurface == nullptr)
+	{
+		return false;
+	}
+
+	Mirror->MirrorMesh->SetRelativeLocation(FVector(3.0f, 7.0f, 11.0f));
+	Mirror->MirrorMesh->SetRelativeRotation(FRotator(0.0f, 15.0f, 0.0f));
+	Mirror->MirrorMesh->SetRelativeScale3D(FVector(0.2f, 2.4f, 1.6f));
+	Mirror->OnConstruction(Mirror->GetActorTransform());
+
+	const FVector ExpectedExtent(11.0f, 120.0f, 80.0f);
+	TestTrue(
+		TEXT("반사 판정 박스 크기가 메시 스케일과 두께 여유를 따른다"),
+		Mirror->LightInteractionSurface->GetUnscaledBoxExtent().Equals(ExpectedExtent, 0.01f));
+	TestTrue(
+		TEXT("반사 판정 박스 위치가 메시 위치를 따른다"),
+		Mirror->LightInteractionSurface->GetRelativeLocation().Equals(
+			Mirror->MirrorMesh->GetRelativeLocation(),
+			0.01f));
+	TestTrue(
+		TEXT("반사 판정 박스 회전이 메시 회전을 따른다"),
+		Mirror->LightInteractionSurface->GetRelativeRotation().Equals(
+			Mirror->MirrorMesh->GetRelativeRotation(),
+			0.01f));
+	Mirror->SetReflectionIncidenceAngles(75.0f, 85.0f);
+	TestEqual(
+		TEXT("거울 액터 BP 함수로 반사 시작 각도를 설정할 수 있다"),
+		Mirror->LightInteractionSurface->MaximumReflectionIncidenceAngle,
+		75.0f);
+	TestEqual(
+		TEXT("거울 액터 BP 함수로 반사 유지 각도를 설정할 수 있다"),
+		Mirror->LightInteractionSurface->RetainedMaximumReflectionIncidenceAngle,
+		85.0f);
+	Mirror->SetBeamFootprintOverflowAllowance(40.0f);
+	TestEqual(
+		TEXT("거울 액터 BP 함수로 빛 단면 돌출 허용량을 설정할 수 있다"),
+		Mirror->LightInteractionSurface->BeamFootprintOverflowAllowancePercent,
+		40.0f);
+	TestEqual(
+		TEXT("돌출 허용량 40%는 새 반사에 필요한 포함 비율 60%로 변환된다"),
+		Mirror->LightInteractionSurface->GetStartingBeamFootprintCoverageRatio(),
+		0.6f);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FUOURotatableMirrorFootprintCoverageTest,
+	"UnderOneUmbrella.Light.Reflection.RotatableMirrorFootprintCoverage",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUOURotatableMirrorFootprintCoverageTest::RunTest(const FString& Parameters)
+{
+	UUOULightInteractionSurfaceComponent* Surface =
+		NewObject<UUOULightInteractionSurfaceComponent>();
+	TestNotNull(TEXT("회전 거울 단면 포함 비율 테스트 표면을 생성한다"), Surface);
+	if (Surface == nullptr)
+	{
+		return false;
+	}
+
+	Surface->SetBoxExtent(FVector(6.0f, 100.0f, 100.0f));
+	Surface->ReflectionFrontNormalMode =
+		EUOULightReflectionFrontNormalMode::ComponentForward;
+	Surface->bRequireFullBeamFootprint = true;
+	const float BeamRadius = 50.0f;
+	const FVector CenterImpact = FVector::ZeroVector;
+	const FVector ModeratelyObliqueDirection =
+		FRotator(0.0f, 68.0f, 0.0f).RotateVector(FVector::ForwardVector);
+	const FVector RetainedOnlyDirection =
+		FRotator(0.0f, 72.0f, 0.0f).RotateVector(FVector::ForwardVector);
+	const FVector StronglyObliqueDirection =
+		FRotator(0.0f, 76.0f, 0.0f).RotateVector(FVector::ForwardVector);
+
+	TestTrue(
+		TEXT("거울을 충분히 비추는 68도 입사광은 80% 시작 기준을 만족한다"),
+		Surface->HasMinimumBeamFootprintCoverage(
+			BeamRadius,
+			ModeratelyObliqueDirection,
+			FVector::ForwardVector,
+			CenterImpact,
+			0.8f));
+	TestTrue(
+		TEXT("조금 더 삐져나온 72도 입사광은 70% 유지 기준을 만족한다"),
+		Surface->HasMinimumBeamFootprintCoverage(
+			BeamRadius,
+			RetainedOnlyDirection,
+			FVector::ForwardVector,
+			CenterImpact,
+			0.7f));
+	TestFalse(
+		TEXT("72도 입사광은 새 반사를 시작하는 80% 기준은 만족하지 않는다"),
+		Surface->HasMinimumBeamFootprintCoverage(
+			BeamRadius,
+			RetainedOnlyDirection,
+			FVector::ForwardVector,
+			CenterImpact,
+			0.8f));
+	TestFalse(
+		TEXT("더 회전해 거울 밖으로 많이 벗어난 76도 입사광은 유지 기준도 만족하지 않는다"),
+		Surface->HasMinimumBeamFootprintCoverage(
+			BeamRadius,
+			StronglyObliqueDirection,
+			FVector::ForwardVector,
+			CenterImpact,
+			0.7f));
 	return true;
 }
 
