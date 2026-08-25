@@ -104,6 +104,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Bulb|Visual", meta = (ClampMin = "0.0"))
 	float OverheatedEmissiveIntensity = 5.0f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Bulb|Visual", meta = (ClampMin = "0.0", Units = "s", ToolTip = "상태가 바뀔 때 현재 표시값에서 새 색상과 발광 세기로 전환하는 시간입니다. 0이면 즉시 변경합니다."))
+	float VisualTransitionDuration = 0.25f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Bulb|Visual|Material")
 	FName PrimaryColorParameterName = TEXT("BaseColor");
 
@@ -128,7 +131,7 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Bulb|State")
 	static EUOULightCountBulbState EvaluateState(int32 LightCount, int32 RequiredCount);
 
-	UFUNCTION(BlueprintCallable, Category = "Bulb|State", meta = (ToolTip = "만료된 광원을 제거하고 현재 상태와 외형을 즉시 다시 계산합니다."))
+	UFUNCTION(BlueprintCallable, Category = "Bulb|State", meta = (ToolTip = "만료된 광원을 제거하고 현재 상태를 다시 계산하며, 필요하면 새 외형으로 전환을 시작합니다."))
 	void RefreshBulbState();
 
 protected:
@@ -137,7 +140,10 @@ protected:
 
 	void SetBulbState(EUOULightCountBulbState NewState);
 	void EnsureRuntimeMaterials();
-	void ApplyStateVisual();
+	void BeginVisualTransition();
+	void UpdateVisualTransition(float DeltaTime);
+	void ApplyVisualValues(const FLinearColor& Color, float EmissiveIntensity);
+	void UpdateTickEnabled();
 	FLinearColor GetStateColor() const;
 	float GetStateEmissiveIntensity() const;
 	FString GetDebugStateName() const;
@@ -146,4 +152,13 @@ protected:
 	// 광원별 마지막 샘플 주기를 반영한 만료 시각입니다. 반복 샘플은 같은 키의 시각만 연장합니다.
 	TMap<TWeakObjectPtr<UObject>, float> ActiveLightExpirationTimes;
 	TArray<TObjectPtr<UMaterialInstanceDynamic>> RuntimeMaterialInstances;
+
+	FLinearColor VisualStartColor = FLinearColor::Black;
+	FLinearColor CurrentVisualColor = FLinearColor::Black;
+	FLinearColor VisualTargetColor = FLinearColor::Black;
+	float VisualStartEmissiveIntensity = 0.0f;
+	float CurrentVisualEmissiveIntensity = 0.0f;
+	float VisualTargetEmissiveIntensity = 0.0f;
+	float VisualTransitionElapsedTime = 0.0f;
+	bool bVisualTransitionActive = false;
 };

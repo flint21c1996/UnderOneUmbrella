@@ -92,6 +92,7 @@ void AUOULightCountBulbActor::BeginPlay()
 	InsufficientEmissiveIntensity = FMath::Max(0.0f, InsufficientEmissiveIntensity);
 	SatisfiedEmissiveIntensity = FMath::Max(0.0f, SatisfiedEmissiveIntensity);
 	OverheatedEmissiveIntensity = FMath::Max(0.0f, OverheatedEmissiveIntensity);
+	VisualTransitionDuration = FMath::Max(0.0f, VisualTransitionDuration);
 
 	if (LightReceiver != nullptr)
 	{
@@ -105,7 +106,16 @@ void AUOULightCountBulbActor::BeginPlay()
 
 	EnsureRuntimeMaterials();
 	RefreshBulbState();
-	ApplyStateVisual();
+	CurrentVisualColor = GetStateColor();
+	CurrentVisualEmissiveIntensity = GetStateEmissiveIntensity();
+	VisualStartColor = CurrentVisualColor;
+	VisualTargetColor = CurrentVisualColor;
+	VisualStartEmissiveIntensity = CurrentVisualEmissiveIntensity;
+	VisualTargetEmissiveIntensity = CurrentVisualEmissiveIntensity;
+	VisualTransitionElapsedTime = VisualTransitionDuration;
+	bVisualTransitionActive = false;
+	ApplyVisualValues(CurrentVisualColor, CurrentVisualEmissiveIntensity);
+	UpdateTickEnabled();
 }
 
 void AUOULightCountBulbActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -125,6 +135,8 @@ void AUOULightCountBulbActor::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 	RefreshBulbState();
+	UpdateVisualTransition(DeltaTime);
+	UpdateTickEnabled();
 }
 
 EUOUDebugCategory AUOULightCountBulbActor::GetDebugCategory_Implementation() const
@@ -213,7 +225,7 @@ void AUOULightCountBulbActor::RefreshBulbState()
 
 	ActiveLightCount = ActiveLightExpirationTimes.Num();
 	SetBulbState(EvaluateState(ActiveLightCount, RequiredLightCount));
-	SetActorTickEnabled(ActiveLightCount > 0);
+	UpdateTickEnabled();
 }
 
 void AUOULightCountBulbActor::HandleLightExposureReceived(
@@ -245,7 +257,7 @@ void AUOULightCountBulbActor::SetBulbState(EUOULightCountBulbState NewState)
 	const EUOULightCountBulbState PreviousState = CurrentState;
 	const bool bWasSatisfied = PreviousState == EUOULightCountBulbState::Satisfied;
 	CurrentState = NewState;
-	ApplyStateVisual();
+	BeginVisualTransition();
 	OnBulbStateChanged.Broadcast(CurrentState, PreviousState, ActiveLightCount);
 
 	const bool bIsNowSatisfied = CurrentState == EUOULightCountBulbState::Satisfied;
@@ -270,11 +282,68 @@ void AUOULightCountBulbActor::EnsureRuntimeMaterials()
 	}
 }
 
-void AUOULightCountBulbActor::ApplyStateVisual()
+void AUOULightCountBulbActor::BeginVisualTransition()
+{
+	VisualStartColor = CurrentVisualColor;
+	VisualStartEmissiveIntensity = CurrentVisualEmissiveIntensity;
+	VisualTargetColor = GetStateColor();
+	VisualTargetEmissiveIntensity = GetStateEmissiveIntensity();
+	VisualTransitionElapsedTime = 0.0f;
+
+	const bool bAlreadyAtTarget =
+		CurrentVisualColor.Equals(VisualTargetColor) &&
+		FMath::IsNearlyEqual(
+			CurrentVisualEmissiveIntensity,
+			VisualTargetEmissiveIntensity);
+	if (VisualTransitionDuration <= KINDA_SMALL_NUMBER || bAlreadyAtTarget)
+	{
+		CurrentVisualColor = VisualTargetColor;
+		CurrentVisualEmissiveIntensity = VisualTargetEmissiveIntensity;
+		bVisualTransitionActive = false;
+		ApplyVisualValues(CurrentVisualColor, CurrentVisualEmissiveIntensity);
+		return;
+	}
+
+	bVisualTransitionActive = true;
+}
+
+void AUOULightCountBulbActor::UpdateVisualTransition(float DeltaTime)
+{
+	if (!bVisualTransitionActive)
+	{
+		return;
+	}
+
+	VisualTransitionElapsedTime += FMath::Max(0.0f, DeltaTime);
+	const float LinearAlpha = FMath::Clamp(
+		VisualTransitionElapsedTime / FMath::Max(VisualTransitionDuration, KINDA_SMALL_NUMBER),
+		0.0f,
+		1.0f);
+	const float SmoothedAlpha = FMath::SmoothStep(0.0f, 1.0f, LinearAlpha);
+	CurrentVisualColor = FMath::Lerp(
+		VisualStartColor,
+		VisualTargetColor,
+		SmoothedAlpha);
+	CurrentVisualEmissiveIntensity = FMath::Lerp(
+		VisualStartEmissiveIntensity,
+		VisualTargetEmissiveIntensity,
+		SmoothedAlpha);
+
+	if (LinearAlpha >= 1.0f)
+	{
+		CurrentVisualColor = VisualTargetColor;
+		CurrentVisualEmissiveIntensity = VisualTargetEmissiveIntensity;
+		bVisualTransitionActive = false;
+	}
+
+	ApplyVisualValues(CurrentVisualColor, CurrentVisualEmissiveIntensity);
+}
+
+void AUOULightCountBulbActor::ApplyVisualValues(
+	const FLinearColor& Color,
+	float EmissiveIntensity)
 {
 	EnsureRuntimeMaterials();
-	const FLinearColor StateColor = GetStateColor();
-	const float EmissiveIntensity = GetStateEmissiveIntensity();
 	for (UMaterialInstanceDynamic* MaterialInstance : RuntimeMaterialInstances)
 	{
 		if (MaterialInstance == nullptr)
@@ -282,11 +351,16 @@ void AUOULightCountBulbActor::ApplyStateVisual()
 			continue;
 		}
 
-		MaterialInstance->SetVectorParameterValue(PrimaryColorParameterName, StateColor);
-		MaterialInstance->SetVectorParameterValue(SecondaryColorParameterName, StateColor);
-		MaterialInstance->SetVectorParameterValue(EmissiveColorParameterName, StateColor);
+		MaterialInstance->SetVectorParameterValue(PrimaryColorParameterName, Color);
+		MaterialInstance->SetVectorParameterValue(SecondaryColorParameterName, Color);
+		MaterialInstance->SetVectorParameterValue(EmissiveColorParameterName, Color);
 		MaterialInstance->SetScalarParameterValue(EmissiveIntensityParameterName, EmissiveIntensity);
 	}
+}
+
+void AUOULightCountBulbActor::UpdateTickEnabled()
+{
+	SetActorTickEnabled(ActiveLightCount > 0 || bVisualTransitionActive);
 }
 
 FLinearColor AUOULightCountBulbActor::GetStateColor() const
