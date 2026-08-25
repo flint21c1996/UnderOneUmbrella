@@ -1735,6 +1735,20 @@ bool FUOUUmbrellaParallelCylinderEdgeReflectionTest::RunTest(const FString& Para
 		FRotator(0.0f, 90.0f, 0.0f));
 	UmbrellaSurface->SetLightInteractionMode(EUOULightInteractionMode::Reflecting);
 
+	UUOUUmbrellaLightShadeVolumeComponent* UmbrellaShade =
+		NewObject<UUOUUmbrellaLightShadeVolumeComponent>(UmbrellaActor, TEXT("ParallelUmbrellaShade"));
+	TestNotNull(TEXT("가장자리 반사 우산의 직접광 차단 볼륨을 생성한다"), UmbrellaShade);
+	if (UmbrellaShade == nullptr)
+	{
+		return false;
+	}
+	UmbrellaActor->AddInstanceComponent(UmbrellaShade);
+	UmbrellaShade->SetupAttachment(UmbrellaSurface);
+	UmbrellaShade->SetBoxExtent(FVector(6.0f, 70.0f, 70.0f));
+	UmbrellaShade->MaximumBlockingIncidenceAngle = 180.0f;
+	UmbrellaShade->RegisterComponent();
+	UmbrellaShade->SetShadeEnabled(true);
+
 	SourceActor->ExposureSource->EmitLight(0.1f);
 	const TArray<FUOULightReflectionPathData> ReflectionPaths =
 		SourceActor->ExposureSource->GetReflectionPaths();
@@ -1752,6 +1766,87 @@ bool FUOUUmbrellaParallelCylinderEdgeReflectionTest::RunTest(const FString& Para
 			TEXT("평행 입사광은 우산 소유 액터의 전방으로 반사된다"),
 			Segment.ReflectedDirection.Equals(FVector::RightVector, 0.01f));
 	}
+	const TArray<FUOULightPathData> EdgeReflectionLightPaths =
+		SourceActor->ExposureSource->GetLightPaths();
+	TestTrue(TEXT("가장자리 반사의 통합 빛 경로를 생성한다"), !EdgeReflectionLightPaths.IsEmpty());
+	if (!EdgeReflectionLightPaths.IsEmpty() && !EdgeReflectionLightPaths[0].Segments.IsEmpty())
+	{
+		const FUOULightPathSegmentData& DirectSegment = EdgeReflectionLightPaths[0].Segments[0];
+		TestTrue(
+			TEXT("원기둥 직접광은 가장자리 우산 충돌점 쪽으로 꺾이지 않고 광원 Forward를 유지한다"),
+			DirectSegment.Direction.Equals(FVector::ForwardVector, 0.01f));
+		TestTrue(
+			TEXT("원기둥 직접광 중심선은 광원에서 직선으로 진행한다"),
+			FMath::IsNearlyZero(DirectSegment.End.Y, 0.01f));
+	}
+
+	AActor* DisconnectedMirrorActor = World->SpawnActor<AActor>();
+	UUOULightInteractionSurfaceComponent* DisconnectedMirrorSurface =
+		DisconnectedMirrorActor != nullptr
+			? NewObject<UUOULightInteractionSurfaceComponent>(
+				DisconnectedMirrorActor,
+				TEXT("DisconnectedMirrorSurface"))
+			: nullptr;
+	TestNotNull(TEXT("우산 뒤 연결되지 않은 거울을 생성한다"), DisconnectedMirrorSurface);
+	if (DisconnectedMirrorActor == nullptr || DisconnectedMirrorSurface == nullptr)
+	{
+		return false;
+	}
+	DisconnectedMirrorActor->AddInstanceComponent(DisconnectedMirrorSurface);
+	DisconnectedMirrorActor->SetRootComponent(DisconnectedMirrorSurface);
+	DisconnectedMirrorSurface->SetBoxExtent(FVector(5.0f, 10.0f, 70.0f));
+	DisconnectedMirrorSurface->bUseSurfaceAreaSampling = false;
+	DisconnectedMirrorSurface->bReflectFrontFaceOnly = false;
+	DisconnectedMirrorSurface->ReflectionNormalMode =
+		EUOULightReflectionNormalMode::ComponentForward;
+	DisconnectedMirrorSurface->RegisterComponent();
+	DisconnectedMirrorActor->SetActorLocation(FVector(650.0f, 0.0f, 0.0f));
+	DisconnectedMirrorSurface->SetLightInteractionMode(EUOULightInteractionMode::Reflecting);
+
+	SourceActor->ExposureSource->EmitLight(0.1f);
+	bool bFoundDisconnectedMirrorReflection = false;
+	for (const FUOULightReflectionPathData& Path : SourceActor->ExposureSource->GetReflectionPaths())
+	{
+		for (const FUOULightReflectionSegmentData& Segment : Path.Segments)
+		{
+			bFoundDisconnectedMirrorReflection |= Segment.Reflector == DisconnectedMirrorSurface;
+		}
+	}
+	TestFalse(
+		TEXT("우산에서 거울로 이어지는 구간이 없으면 거울 반사가 독립적으로 시작되지 않는다"),
+		bFoundDisconnectedMirrorReflection);
+
+	AActor* ReceiverActor = World->SpawnActor<AActor>();
+	UBoxComponent* ReceiverBox = ReceiverActor != nullptr
+		? NewObject<UBoxComponent>(ReceiverActor, TEXT("BehindUmbrellaReceiverBox"))
+		: nullptr;
+	UUOULightExposureReceiverComponent* Receiver = ReceiverActor != nullptr
+		? NewObject<UUOULightExposureReceiverComponent>(ReceiverActor, TEXT("BehindUmbrellaReceiver"))
+		: nullptr;
+	TestNotNull(TEXT("우산 뒤 직접광 수신 액터를 생성한다"), ReceiverActor);
+	TestNotNull(TEXT("우산 뒤 직접광 수신 볼륨을 생성한다"), ReceiverBox);
+	TestNotNull(TEXT("우산 뒤 직접광 수신 컴포넌트를 생성한다"), Receiver);
+	if (ReceiverActor == nullptr || ReceiverBox == nullptr || Receiver == nullptr)
+	{
+		return false;
+	}
+
+	ReceiverActor->AddInstanceComponent(ReceiverBox);
+	ReceiverActor->SetRootComponent(ReceiverBox);
+	ReceiverBox->SetBoxExtent(FVector(10.0f));
+	ReceiverBox->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+	ReceiverBox->SetCollisionObjectType(ECC_WorldDynamic);
+	ReceiverBox->SetCollisionResponseToAllChannels(ECR_Ignore);
+	ReceiverBox->RegisterComponent();
+	ReceiverActor->SetActorLocation(FVector(700.0f, -40.0f, 0.0f));
+	ReceiverActor->AddInstanceComponent(Receiver);
+	Receiver->bUseReceiverVolumeSampling = false;
+	Receiver->RegisterComponent();
+
+	SourceActor->ExposureSource->EmitLight(0.1f);
+	TestFalse(
+		TEXT("우산 가장자리에서 반사가 성립하면 우산을 비껴간 직접광 샘플도 뒤쪽 수신체에 전달되지 않는다"),
+		Receiver->IsReceivingLight());
 	return true;
 }
 
