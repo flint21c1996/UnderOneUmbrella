@@ -216,6 +216,10 @@ protected:
 	UPROPERTY(Transient)
 	TArray<FUOULightPathData> LastPublishedLightPaths;
 
+	// 이번 샘플에서 직접광 판정을 실제로 통과한 Receiver 목록입니다.
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UObject>> LastDirectReachedReceivers;
+
 	bool bHasPublishedReflectionPaths = false;
 	bool bHasPublishedLightPaths = false;
 	float ReflectionPathLossStartWorldTime = -1.0f;
@@ -265,6 +269,16 @@ protected:
 		float DeltaTime,
 		FUOULightExposureData& OutExposureData,
 		FHitResult& OutBlockingHit) const;
+	// 빔 단면과 Receiver Bounds가 공유하는 구간에서 세기·가림 검사에 사용할 대표 지점을 찾습니다.
+	bool TryFindReceiverVolumeOverlapPoint(
+		UObject* ReceiverObject,
+		const FVector& BeamOrigin,
+		const FVector& BeamDirection,
+		float MaximumDistance,
+		float BeamStartRadius,
+		float BeamConeAngle,
+		FVector& OutExposurePosition,
+		float& OutOverlapDepth) const;
 	void GetReceiverSamplePositions(
 		UObject* ReceiverObject,
 		const FVector& BeamDirection,

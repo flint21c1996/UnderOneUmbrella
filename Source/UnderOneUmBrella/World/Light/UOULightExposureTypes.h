@@ -59,6 +59,15 @@ struct FUOULightExposureData
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Exposure", meta = (ToolTip = "최종 빛 세기를 계산할 때 사용한 원뿔 각도 감쇠 계수입니다."))
 	float AngleFactor = 0.0f;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Exposure", meta = (ToolTip = "빔과 Receiver Volume의 겹침 깊이 판정을 사용한 노출이면 true입니다."))
+	bool bUsedReceiverVolumeOverlap = false;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Exposure", meta = (Units = "cm", ToolTip = "빔과 Receiver Volume이 겹친 선형 깊이입니다."))
+	float ReceiverVolumeOverlapDepth = 0.0f;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Exposure", meta = (Units = "cm", ToolTip = "수광 판정을 통과하기 위해 필요했던 최소 겹침 깊이입니다."))
+	float RequiredReceiverVolumeOverlapDepth = 0.0f;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Exposure", meta = (ToolTip = "이 노출 샘플이 나타내는 DeltaTime입니다."))
 	float DeltaTime = 0.0f;
 };

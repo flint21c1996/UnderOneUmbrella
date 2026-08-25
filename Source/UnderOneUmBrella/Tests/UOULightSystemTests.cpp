@@ -21,6 +21,7 @@
 #include "World/Light/UOULightExposureReceiverComponent.h"
 #include "World/Light/UOULightExposureSourceComponent.h"
 #include "World/Light/UOULightInteractionSurfaceComponent.h"
+#include "World/Light/UOULightCountBulbActor.h"
 #include "World/Light/UOULightReflectionPathTypes.h"
 #include "World/Light/UOULightReflectionSpotLightComponent.h"
 #include "World/Light/UOULightSourceActor.h"
@@ -128,6 +129,153 @@ namespace
 		bOutValue = Property->GetPropertyValue(ValueAddress);
 		return true;
 	}
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FUOULightCountBulbStateEvaluationTest,
+	"UnderOneUmbrella.Light.Bulb.LightCountStateEvaluation",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUOULightCountBulbStateEvaluationTest::RunTest(const FString& Parameters)
+{
+	const AUOULightCountBulbActor* BulbDefaults = GetDefault<AUOULightCountBulbActor>();
+	TestNotNull(TEXT("광원 개수 전구 기본 오브젝트가 존재한다"), BulbDefaults);
+	if (BulbDefaults == nullptr)
+	{
+		return false;
+	}
+
+	TestNotNull(TEXT("전구에 빛 수신 컴포넌트가 존재한다"), BulbDefaults->LightReceiver.Get());
+	TestNotNull(TEXT("전구에 독립된 빛 수신 볼륨이 존재한다"), BulbDefaults->LightReceiverVolume.Get());
+	if (BulbDefaults->LightReceiver != nullptr)
+	{
+		TestTrue(
+			TEXT("전구는 빔과 수신 볼륨의 겹침 깊이 판정을 사용한다"),
+			BulbDefaults->LightReceiver->bUseBeamVolumeOverlap);
+		TestEqual(
+			TEXT("전구의 기본 최소 겹침 깊이는 10cm다"),
+			BulbDefaults->LightReceiver->MinimumBeamOverlapDepth,
+			10.0f);
+	}
+	TestTrue(
+		TEXT("전구 액터는 통합 퍼즐 디버그 Provider로 등록된다"),
+		BulbDefaults->GetClass()->ImplementsInterface(UUOUDebugProvider::StaticClass()));
+	TestEqual(
+		TEXT("전구 디버그 Provider는 Puzzle 카테고리를 사용한다"),
+		IUOUDebugProvider::Execute_GetDebugCategory(
+			const_cast<AUOULightCountBulbActor*>(BulbDefaults)),
+		EUOUDebugCategory::Puzzle);
+	const FString DefaultDebugSummary = IUOUDebugProvider::Execute_GetDebugSummaryText(
+		const_cast<AUOULightCountBulbActor*>(BulbDefaults)).ToString();
+	TestTrue(
+		TEXT("전구 디버그 요약은 현재 빛 개수와 필요 개수를 표시한다"),
+		DefaultDebugSummary.Contains(TEXT("Lights: 0 / 1")));
+	TestEqual(
+		TEXT("필요 광원이 2개일 때 빛이 없으면 꺼짐 상태다"),
+		AUOULightCountBulbActor::EvaluateState(0, 2),
+		EUOULightCountBulbState::Off);
+	TestEqual(
+		TEXT("필요 광원이 2개일 때 빛 하나는 부족 상태다"),
+		AUOULightCountBulbActor::EvaluateState(1, 2),
+		EUOULightCountBulbState::Insufficient);
+	TestEqual(
+		TEXT("필요 광원이 2개일 때 빛 두 개는 만족 상태다"),
+		AUOULightCountBulbActor::EvaluateState(2, 2),
+		EUOULightCountBulbState::Satisfied);
+	TestEqual(
+		TEXT("필요 광원이 2개일 때 빛 세 개는 과열 상태다"),
+		AUOULightCountBulbActor::EvaluateState(3, 2),
+		EUOULightCountBulbState::Overheated);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FUOULightCountBulbBeamOverlapTest,
+	"UnderOneUmbrella.Light.Bulb.BeamVolumeOverlapDepth",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUOULightCountBulbBeamOverlapTest::RunTest(const FString& Parameters)
+{
+	UWorld* UninitializedWorld = UWorld::CreateWorld(
+		EWorldType::Editor,
+		false,
+		TEXT("UOULightCountBulbBeamOverlapWorld"),
+		nullptr,
+		false,
+		ERHIFeatureLevel::Num,
+		nullptr,
+		true);
+	FScopedEditorWorld ScopedWorld(
+		UninitializedWorld,
+		UWorld::InitializationValues()
+			.RequiresHitProxies(false)
+			.ShouldSimulatePhysics(false)
+			.EnableTraceCollision(true)
+			.CreateNavigation(false)
+			.CreateAISystem(false)
+			.AllowAudioPlayback(false)
+			.CreatePhysicsScene(true));
+	UWorld* World = ScopedWorld.GetWorld();
+	TestNotNull(TEXT("전구 겹침 깊이 테스트 월드를 생성한다"), World);
+	if (World == nullptr)
+	{
+		return false;
+	}
+
+	AUOULightSourceActor* SourceActor = World->SpawnActor<AUOULightSourceActor>();
+	AUOULightCountBulbActor* BulbActor = World->SpawnActor<AUOULightCountBulbActor>();
+	TestNotNull(TEXT("겹침 깊이 테스트 광원을 생성한다"), SourceActor);
+	TestNotNull(TEXT("겹침 깊이 테스트 전구를 생성한다"), BulbActor);
+	if (SourceActor == nullptr || SourceActor->ExposureSource == nullptr ||
+		SourceActor->SourceSpotLight == nullptr || BulbActor == nullptr ||
+		BulbActor->LightReceiver == nullptr)
+	{
+		return false;
+	}
+
+	SourceActor->SetActorLocationAndRotation(FVector::ZeroVector, FRotator::ZeroRotator);
+	SourceActor->SourceSpotLight->SetAttenuationRadius(1000.0f);
+	SourceActor->ExposureSource->BeamShape = EUOULightBeamShape::Cylinder;
+	SourceActor->ExposureSource->CylinderRadius = 20.0f;
+	SourceActor->ExposureSource->BeamLength = 1000.0f;
+	SourceActor->ExposureSource->Intensity = 1.0f;
+	SourceActor->ExposureSource->SampleInterval = 0.0f;
+	SourceActor->ExposureSource->bEnableReflectedLight = false;
+
+	BulbActor->SetActorLocation(FVector(400.0f, 70.0f, 0.0f));
+	SourceActor->ExposureSource->EmitLight(0.1f);
+	TestFalse(
+		TEXT("5cm만 겹치는 가장자리 스침은 전구 수광으로 인정하지 않는다"),
+		BulbActor->LightReceiver->IsReceivingLight());
+	TestTrue(
+		TEXT("거부된 가장자리 스침도 약 5cm의 마지막 평가값으로 기록된다"),
+		FMath::IsNearlyEqual(BulbActor->LightReceiver->LastBeamOverlapDepth, 5.0f, 0.5f));
+	TestFalse(
+		TEXT("최소 깊이 미달 평가 결과는 Rejected로 기록된다"),
+		BulbActor->LightReceiver->bLastBeamOverlapAccepted);
+
+	BulbActor->SetActorLocation(FVector(400.0f, 60.0f, 0.0f));
+	SourceActor->ExposureSource->EmitLight(0.1f);
+	TestTrue(
+		TEXT("15cm 겹침은 최소 깊이 10cm를 넘어 전구 수광으로 인정한다"),
+		BulbActor->LightReceiver->IsReceivingLight());
+	TestTrue(
+		TEXT("마지막 겹침 깊이는 약 15cm로 기록된다"),
+		FMath::IsNearlyEqual(BulbActor->LightReceiver->LastBeamOverlapDepth, 15.0f, 0.5f));
+	TestTrue(
+		TEXT("최소 깊이를 넘긴 평가 결과는 Accepted로 기록된다"),
+		BulbActor->LightReceiver->bLastBeamOverlapAccepted);
+
+	const TArray<FUOULightPathData> LightPaths = SourceActor->ExposureSource->GetLightPaths();
+	TestTrue(TEXT("전구에 도달한 직접광 경로를 생성한다"), !LightPaths.IsEmpty());
+	if (!LightPaths.IsEmpty() && !LightPaths[0].Segments.IsEmpty())
+	{
+		TestTrue(
+			TEXT("초록 경로에 사용하는 실제 도달 목록에 전구 Receiver가 포함된다"),
+			LightPaths[0].Segments[0].ReachedReceivers.Contains(BulbActor->LightReceiver.Get()));
+	}
+
+	return true;
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
