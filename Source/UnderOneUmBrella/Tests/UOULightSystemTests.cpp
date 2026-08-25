@@ -26,6 +26,7 @@
 #include "World/Light/UOULightSourceActor.h"
 #include "World/Light/UOULumenDynamicRayVisualActor.h"
 #include "World/Light/UOURotatableMirrorActor.h"
+#include "World/Light/UOURotatableMirrorComponent.h"
 
 namespace
 {
@@ -228,7 +229,11 @@ bool FUOURotatableMirrorStableNormalTest::RunTest(const FString& Parameters)
 	TestNotNull(
 		TEXT("회전 거울에 빛 상호작용 표면이 존재한다"),
 		MirrorDefaults != nullptr ? MirrorDefaults->LightInteractionSurface.Get() : nullptr);
-	if (MirrorDefaults == nullptr || MirrorDefaults->LightInteractionSurface == nullptr)
+	TestNotNull(
+		TEXT("회전 거울에 조작 컴포넌트가 존재한다"),
+		MirrorDefaults != nullptr ? MirrorDefaults->RotatableMirror.Get() : nullptr);
+	if (MirrorDefaults == nullptr || MirrorDefaults->LightInteractionSurface == nullptr ||
+		MirrorDefaults->RotatableMirror == nullptr)
 	{
 		return false;
 	}
@@ -237,6 +242,80 @@ bool FUOURotatableMirrorStableNormalTest::RunTest(const FString& Parameters)
 		TEXT("회전 거울은 Box 옆면 HitNormal 대신 컴포넌트 앞 방향을 반사 법선으로 사용한다"),
 		MirrorDefaults->LightInteractionSurface->ReflectionNormalMode,
 		EUOULightReflectionNormalMode::ComponentForward);
+	TestEqual(
+		TEXT("회전 거울은 기울어진 초기 배치와 조작 회전축을 분리한다"),
+		MirrorDefaults->RotatableMirror->RotationAxisMode,
+		EUOURotatableMirrorAxisMode::WorldUp);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FUOURotatableMirrorTiltedWorldUpRotationTest,
+	"UnderOneUmbrella.Light.Reflection.RotatableMirrorTiltedWorldUpRotation",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUOURotatableMirrorTiltedWorldUpRotationTest::RunTest(const FString& Parameters)
+{
+	UWorld* UninitializedWorld = UWorld::CreateWorld(
+		EWorldType::Editor,
+		false,
+		TEXT("UOURotatableMirrorTiltedWorldUpWorld"),
+		nullptr,
+		false,
+		ERHIFeatureLevel::Num,
+		nullptr,
+		true);
+	FScopedEditorWorld ScopedWorld(
+		UninitializedWorld,
+		UWorld::InitializationValues()
+			.RequiresHitProxies(false)
+			.ShouldSimulatePhysics(false)
+			.EnableTraceCollision(true)
+			.CreateNavigation(false)
+			.CreateAISystem(false)
+			.AllowAudioPlayback(false)
+			.CreatePhysicsScene(true));
+	UWorld* World = ScopedWorld.GetWorld();
+	TestNotNull(TEXT("기울어진 회전 거울 테스트 월드를 생성한다"), World);
+	if (World == nullptr)
+	{
+		return false;
+	}
+
+	AUOURotatableMirrorActor* Mirror = World->SpawnActor<AUOURotatableMirrorActor>();
+	TestNotNull(TEXT("기울어진 회전 거울을 생성한다"), Mirror);
+	if (Mirror == nullptr || Mirror->MirrorPivot == nullptr || Mirror->RotatableMirror == nullptr)
+	{
+		return false;
+	}
+
+	Mirror->SetActorRotation(FRotator(25.0f, 35.0f, 15.0f));
+	if (!Mirror->RotatableMirror->HasBegunPlay())
+	{
+		Mirror->RotatableMirror->BeginPlay();
+	}
+
+	const FQuat InitialRotation = Mirror->MirrorPivot->GetComponentQuat();
+	const float AppliedAngle = 40.0f;
+	const FQuat ExpectedRotation =
+		FQuat(FVector::UpVector, FMath::DegreesToRadians(AppliedAngle)) * InitialRotation;
+	Mirror->RotatableMirror->SetMirrorAngle(AppliedAngle);
+
+	TestTrue(
+		TEXT("Pitch와 Roll이 있는 거울도 초기 기울기를 유지하며 월드 Z축으로 회전한다"),
+		Mirror->MirrorPivot->GetComponentQuat().Equals(ExpectedRotation, 0.001f));
+
+	AActor* Interactor = World->SpawnActor<AActor>();
+	TestNotNull(TEXT("회전 입력축을 확인할 상호작용자를 생성한다"), Interactor);
+	if (Interactor != nullptr && Mirror->PushHandleRight != nullptr)
+	{
+		Interactor->SetActorLocation(Mirror->PushHandleRight->GetComponentLocation());
+		const FVector InputAxis =
+			Mirror->RotatableMirror->GetWorldInputAxisForInteractor(Interactor);
+		TestTrue(TEXT("기울어진 거울의 플레이어 입력축은 수평이다"), FMath::IsNearlyZero(InputAxis.Z));
+		TestTrue(TEXT("기울어진 거울의 플레이어 입력축은 정규화된다"), InputAxis.IsNormalized());
+	}
+
 	return true;
 }
 
