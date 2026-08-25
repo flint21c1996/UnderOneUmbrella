@@ -1766,6 +1766,19 @@ bool FUOUUmbrellaParallelCylinderEdgeReflectionTest::RunTest(const FString& Para
 			TEXT("평행 입사광은 우산 소유 액터의 전방으로 반사된다"),
 			Segment.ReflectedDirection.Equals(FVector::RightVector, 0.01f));
 	}
+	const TArray<FUOULightPathData> EdgeReflectionLightPaths =
+		SourceActor->ExposureSource->GetLightPaths();
+	TestTrue(TEXT("가장자리 반사의 통합 빛 경로를 생성한다"), !EdgeReflectionLightPaths.IsEmpty());
+	if (!EdgeReflectionLightPaths.IsEmpty() && !EdgeReflectionLightPaths[0].Segments.IsEmpty())
+	{
+		const FUOULightPathSegmentData& DirectSegment = EdgeReflectionLightPaths[0].Segments[0];
+		TestTrue(
+			TEXT("원기둥 직접광은 가장자리 우산 충돌점 쪽으로 꺾이지 않고 광원 Forward를 유지한다"),
+			DirectSegment.Direction.Equals(FVector::ForwardVector, 0.01f));
+		TestTrue(
+			TEXT("원기둥 직접광 중심선은 광원에서 직선으로 진행한다"),
+			FMath::IsNearlyZero(DirectSegment.End.Y, 0.01f));
+	}
 
 	AActor* DisconnectedMirrorActor = World->SpawnActor<AActor>();
 	UUOULightInteractionSurfaceComponent* DisconnectedMirrorSurface =

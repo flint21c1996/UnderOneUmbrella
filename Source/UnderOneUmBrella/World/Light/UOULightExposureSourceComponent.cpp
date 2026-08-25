@@ -656,9 +656,24 @@ FUOULightPathSegmentData UUOULightExposureSourceComponent::BuildDirectLightPathS
 
 	if (FirstReflectionSegment != nullptr)
 	{
-		Segment.End = FirstReflectionSegment->ImpactPoint;
-		Segment.Direction = (Segment.End - Segment.Start).GetSafeNormal();
-		Segment.Length = FVector::Distance(Segment.Start, Segment.End);
+		if (BeamShape == EUOULightBeamShape::Cylinder)
+		{
+			// 원기둥 빛은 모든 광선이 광원 Forward와 평행합니다. 가장자리 샘플에서
+			// 반사가 시작돼도 중심 빔을 충돌점 쪽으로 꺾지 않고 원래 축을 유지합니다.
+			Segment.Direction = GetSourceForwardVector().GetSafeNormal();
+			Segment.Length = FMath::Max(
+				0.0f,
+				FVector::DotProduct(
+					FirstReflectionSegment->ImpactPoint - Segment.Start,
+					Segment.Direction));
+			Segment.End = Segment.Start + Segment.Direction * Segment.Length;
+		}
+		else
+		{
+			Segment.End = FirstReflectionSegment->ImpactPoint;
+			Segment.Direction = (Segment.End - Segment.Start).GetSafeNormal();
+			Segment.Length = FVector::Distance(Segment.Start, Segment.End);
+		}
 		Segment.Intensity = FirstReflectionSegment->IncomingIntensity;
 		Segment.HitType = EUOULightPathHitType::ReflectingSurface;
 		Segment.HitComponent = FirstReflectionSegment->Reflector;
