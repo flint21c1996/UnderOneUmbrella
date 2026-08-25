@@ -13,6 +13,7 @@ class USceneComponent;
 class USphereComponent;
 class UStaticMeshComponent;
 class UUOULightExposureReceiverComponent;
+class UUOUPuzzleConditionSourceComponent;
 
 UENUM(BlueprintType)
 enum class EUOULightCountBulbState : uint8
@@ -68,8 +69,14 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Bulb|Components")
 	TObjectPtr<UUOULightExposureReceiverComponent> LightReceiver = nullptr;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Bulb|Components")
+	TObjectPtr<UUOUPuzzleConditionSourceComponent> PuzzleConditionSource = nullptr;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Bulb|State", meta = (ClampMin = "1", ToolTip = "전구가 만족 상태가 되기 위해 동시에 받아야 하는 고유 광원 개수입니다."))
 	int32 RequiredLightCount = 1;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Bulb|Puzzle", meta = (ToolTip = "이 전구의 정답으로 인정할 원본 광원 액터 목록입니다. 반사광은 반사판이 아니라 원본 광원 액터로 판정합니다."))
+	TArray<TObjectPtr<AActor>> AllowedPuzzleSourceActors;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Bulb|State", meta = (ClampMin = "0.0", Units = "s", ToolTip = "마지막 노출 이후 광원이 사라졌다고 판정하기까지 기다리는 시간입니다. 광원의 Sample Interval보다 길게 설정합니다."))
 	float LightSourceLossGraceTime = 0.15f;
@@ -128,6 +135,9 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Bulb|State")
 	bool IsSatisfied() const { return CurrentState == EUOULightCountBulbState::Satisfied; }
 
+	UFUNCTION(BlueprintPure, Category = "Bulb|Puzzle")
+	bool IsPuzzleSatisfied() const;
+
 	UFUNCTION(BlueprintPure, Category = "Bulb|State")
 	static EUOULightCountBulbState EvaluateState(int32 LightCount, int32 RequiredCount);
 
@@ -139,6 +149,8 @@ protected:
 	void HandleLightExposureReceived(const FUOULightExposureData& ExposureData);
 
 	void SetBulbState(EUOULightCountBulbState NewState);
+	void RefreshPuzzleSatisfiedState();
+	bool IsPuzzleSourceAllowed(const UObject* SourceObject) const;
 	void EnsureRuntimeMaterials();
 	void BeginVisualTransition();
 	void UpdateVisualTransition(float DeltaTime);

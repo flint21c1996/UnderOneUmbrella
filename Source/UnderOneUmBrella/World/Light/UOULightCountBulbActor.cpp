@@ -8,6 +8,7 @@
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
 #include "Materials/MaterialInstanceDynamic.h"
+#include "Puzzle/Core/UOUPuzzleConditionSourceComponent.h"
 #include "UObject/ConstructorHelpers.h"
 #include "World/Light/UOULightExposureReceiverComponent.h"
 
@@ -80,6 +81,9 @@ AUOULightCountBulbActor::AUOULightCountBulbActor()
 		GET_MEMBER_NAME_CHECKED(AUOULightCountBulbActor, LightReceiverVolume);
 	LightReceiver->ReceiverVolumeReference.ComponentProperty =
 		GET_MEMBER_NAME_CHECKED(AUOULightCountBulbActor, LightReceiverVolume);
+
+	PuzzleConditionSource = CreateDefaultSubobject<UUOUPuzzleConditionSourceComponent>(
+		TEXT("PuzzleConditionSource"));
 }
 
 void AUOULightCountBulbActor::BeginPlay()
@@ -156,12 +160,31 @@ FText AUOULightCountBulbActor::GetDebugSummaryText_Implementation() const
 	}
 	SourceNames.Sort();
 
+	TArray<FString> AllowedSourceNames;
+	for (AActor* AllowedSourceActor : AllowedPuzzleSourceActors)
+	{
+		if (IsValid(AllowedSourceActor))
+		{
+			AllowedSourceNames.Add(
+				UOULightCountBulbPrivate::GetSourceDebugName(AllowedSourceActor));
+		}
+	}
+	AllowedSourceNames.Sort();
+
 	const TArray<FString> DebugLines = {
 		FString::Printf(TEXT("Bulb State: %s"), *GetDebugStateName()),
 		FString::Printf(TEXT("Lights: %d / %d"), ActiveLightCount, RequiredLightCount),
 		FString::Printf(
+			TEXT("Puzzle: %s"),
+			IsPuzzleSatisfied() ? TEXT("Satisfied") : TEXT("Unsatisfied")),
+		FString::Printf(
 			TEXT("Sources: %s"),
-			SourceNames.IsEmpty() ? TEXT("None") : *FString::Join(SourceNames, TEXT(", ")))
+			SourceNames.IsEmpty() ? TEXT("None") : *FString::Join(SourceNames, TEXT(", "))),
+		FString::Printf(
+			TEXT("Allowed: %s"),
+			AllowedSourceNames.IsEmpty()
+				? TEXT("None")
+				: *FString::Join(AllowedSourceNames, TEXT(", ")))
 	};
 	return FText::FromString(FString::Join(DebugLines, LINE_TERMINATOR));
 }
@@ -225,6 +248,7 @@ void AUOULightCountBulbActor::RefreshBulbState()
 
 	ActiveLightCount = ActiveLightExpirationTimes.Num();
 	SetBulbState(EvaluateState(ActiveLightCount, RequiredLightCount));
+	RefreshPuzzleSatisfiedState();
 	UpdateTickEnabled();
 }
 
@@ -265,6 +289,61 @@ void AUOULightCountBulbActor::SetBulbState(EUOULightCountBulbState NewState)
 	{
 		OnBulbSatisfiedChanged.Broadcast(bIsNowSatisfied);
 	}
+}
+
+void AUOULightCountBulbActor::RefreshPuzzleSatisfiedState()
+{
+	bool bNextPuzzleSatisfied = IsSatisfied() && !AllowedPuzzleSourceActors.IsEmpty();
+	int32 AllowedActiveSourceCount = 0;
+	if (bNextPuzzleSatisfied)
+	{
+		for (const TPair<TWeakObjectPtr<UObject>, float>& ActiveSource : ActiveLightExpirationTimes)
+		{
+			UObject* SourceObject = ActiveSource.Key.Get();
+			if (!IsValid(SourceObject) || !IsPuzzleSourceAllowed(SourceObject))
+			{
+				bNextPuzzleSatisfied = false;
+				break;
+			}
+
+			++AllowedActiveSourceCount;
+		}
+
+		bNextPuzzleSatisfied = bNextPuzzleSatisfied &&
+			AllowedActiveSourceCount == RequiredLightCount;
+	}
+
+	if (PuzzleConditionSource != nullptr)
+	{
+		PuzzleConditionSource->SetConditionSatisfied(bNextPuzzleSatisfied);
+	}
+}
+
+bool AUOULightCountBulbActor::IsPuzzleSatisfied() const
+{
+	return PuzzleConditionSource != nullptr && PuzzleConditionSource->IsSatisfied();
+}
+
+bool AUOULightCountBulbActor::IsPuzzleSourceAllowed(const UObject* SourceObject) const
+{
+	const AActor* SourceActor = Cast<AActor>(SourceObject);
+	if (SourceActor == nullptr)
+	{
+		const UActorComponent* SourceComponent = Cast<UActorComponent>(SourceObject);
+		SourceActor = SourceComponent != nullptr ? SourceComponent->GetOwner() : nullptr;
+	}
+
+	if (!IsValid(SourceActor))
+	{
+		return false;
+	}
+
+	return AllowedPuzzleSourceActors.ContainsByPredicate(
+		[SourceActor](const TObjectPtr<AActor>& AllowedSourceActor)
+		{
+			return IsValid(AllowedSourceActor.Get()) &&
+				AllowedSourceActor.Get() == SourceActor;
+		});
 }
 
 void AUOULightCountBulbActor::EnsureRuntimeMaterials()
