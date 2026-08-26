@@ -392,6 +392,7 @@ void UUOULightExposureSourceComponent::EmitLight(float DeltaTime)
 
 	TSet<UObject*> ProcessedReceivers;
 	FPendingExposureMap PendingExposures;
+	FPendingExposureMap DirectPendingExposures;
 	for (const FOverlapResult& OverlapResult : OverlapResults)
 	{
 		AActor* OverlapActor = OverlapResult.GetActor();
@@ -423,7 +424,7 @@ void UUOULightExposureSourceComponent::EmitLight(float DeltaTime)
 					ExposureData,
 					false,
 					TEXT("Direct"),
-					PendingExposures);
+					DirectPendingExposures);
 				continue;
 			}
 
@@ -437,7 +438,7 @@ void UUOULightExposureSourceComponent::EmitLight(float DeltaTime)
 
 	if (!bEnableReflectedLight || MaxReflectionSurfacesPerTick <= 0)
 	{
-		DeliverPendingExposures(PendingExposures);
+		DeliverPendingExposures(DirectPendingExposures);
 		PublishComputedPaths();
 		return;
 	}
@@ -490,6 +491,13 @@ void UUOULightExposureSourceComponent::EmitLight(float DeltaTime)
 		{
 			continue;
 		}
+		if (IsWorldPositionBehindUmbrellaReflection(SurfaceHit.ImpactPoint))
+		{
+			// 우산 뒤 표면은 원본 광원의 독립 반사 시작점이 될 수 없습니다.
+			// 실제 우산 반사광이 표면에 닿으면 EmitReflectedLightFromSurface 내부의
+			// 다중 반사 탐색에서 다음 구간으로 연결됩니다.
+			continue;
+		}
 
 		++ReflectedSurfaceCount;
 		LastReflectorName = GetNameSafe(InteractionSurface);
@@ -497,6 +505,21 @@ void UUOULightExposureSourceComponent::EmitLight(float DeltaTime)
 			InteractionSurface,
 			SurfaceHit,
 			DeltaTime,
+			PendingExposures);
+	}
+
+	for (const TPair<UObject*, FPendingExposureCandidate>& DirectPair : DirectPendingExposures)
+	{
+		if (IsDirectExposureBehindUmbrellaReflection(DirectPair.Value.ExposureData))
+		{
+			continue;
+		}
+
+		RecordExposureCandidate(
+			DirectPair.Key,
+			DirectPair.Value.ExposureData,
+			false,
+			DirectPair.Value.StablePathKey,
 			PendingExposures);
 	}
 
@@ -643,9 +666,24 @@ FUOULightPathSegmentData UUOULightExposureSourceComponent::BuildDirectLightPathS
 
 	if (FirstReflectionSegment != nullptr)
 	{
-		Segment.End = FirstReflectionSegment->ImpactPoint;
-		Segment.Direction = (Segment.End - Segment.Start).GetSafeNormal();
-		Segment.Length = FVector::Distance(Segment.Start, Segment.End);
+		if (BeamShape == EUOULightBeamShape::Cylinder)
+		{
+			// 원기둥 빛은 모든 광선이 광원 Forward와 평행합니다. 가장자리 샘플에서
+			// 반사가 시작돼도 중심 빔을 충돌점 쪽으로 꺾지 않고 원래 축을 유지합니다.
+			Segment.Direction = GetSourceForwardVector().GetSafeNormal();
+			Segment.Length = FMath::Max(
+				0.0f,
+				FVector::DotProduct(
+					FirstReflectionSegment->ImpactPoint - Segment.Start,
+					Segment.Direction));
+			Segment.End = Segment.Start + Segment.Direction * Segment.Length;
+		}
+		else
+		{
+			Segment.End = FirstReflectionSegment->ImpactPoint;
+			Segment.Direction = (Segment.End - Segment.Start).GetSafeNormal();
+			Segment.Length = FVector::Distance(Segment.Start, Segment.End);
+		}
 		Segment.Intensity = FirstReflectionSegment->IncomingIntensity;
 		Segment.HitType = EUOULightPathHitType::ReflectingSurface;
 		Segment.HitComponent = FirstReflectionSegment->Reflector;
@@ -2173,6 +2211,61 @@ void UUOULightExposureSourceComponent::RecordExposureCandidate(
 	Candidate.ExposureData = ExposureData;
 	Candidate.StablePathKey = StablePathKey;
 	Candidate.bReflected = bReflected;
+}
+
+bool UUOULightExposureSourceComponent::IsDirectExposureBehindUmbrellaReflection(
+	const FUOULightExposureData& ExposureData) const
+{
+	return IsWorldPositionBehindUmbrellaReflection(ExposureData.ReceiverPosition);
+}
+
+bool UUOULightExposureSourceComponent::IsWorldPositionBehindUmbrellaReflection(
+	const FVector& WorldPosition) const
+{
+	if (!bBlockDirectLightBehindUmbrellaReflection || ReflectionPaths.IsEmpty())
+	{
+		return false;
+	}
+
+	const FVector SourcePosition = GetSourceLocation();
+	const FVector SourceForward = GetSourceForwardVector().GetSafeNormal();
+	if (SourceForward.IsNearlyZero())
+	{
+		return false;
+	}
+
+	const float PositionAxialDistance = FVector::DotProduct(
+		WorldPosition - SourcePosition,
+		SourceForward);
+	for (const FUOULightReflectionPathData& ReflectionPath : ReflectionPaths)
+	{
+		if (ReflectionPath.Segments.IsEmpty())
+		{
+			continue;
+		}
+
+		const FUOULightReflectionSegmentData& FirstSegment = ReflectionPath.Segments[0];
+		const UUOULightInteractionSurfaceComponent* Reflector = FirstSegment.Reflector;
+		const AActor* ReflectorOwner = Reflector != nullptr ? Reflector->GetOwner() : nullptr;
+		const UUOUUmbrellaLightShadeVolumeComponent* UmbrellaShade = ReflectorOwner != nullptr
+			? ReflectorOwner->FindComponentByClass<UUOUUmbrellaLightShadeVolumeComponent>()
+			: nullptr;
+		if (UmbrellaShade == nullptr || !UmbrellaShade->CanShadeLight())
+		{
+			continue;
+		}
+
+		const float ReflectionAxialDistance = FVector::DotProduct(
+			FirstSegment.ImpactPoint - SourcePosition,
+			SourceForward);
+		if (ReflectionAxialDistance > KINDA_SMALL_NUMBER &&
+			PositionAxialDistance > ReflectionAxialDistance + 1.0f)
+		{
+			return true;
+		}
+	}
+
+	return false;
 }
 
 void UUOULightExposureSourceComponent::DeliverPendingExposures(
