@@ -117,6 +117,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection", meta = (ToolTip = "빛 상호작용 표면이 반사된 게임플레이 빛을 발생시킬 수 있게 합니다."))
 	bool bEnableReflectedLight = true;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection", meta = (DisplayName = "우산 반사 뒤 직접광 차단", ToolTip = "우산이 빛 단면의 일부를 받아 반사하면 우산 뒤쪽으로 남아 있는 직접광 판정을 제거합니다."))
+	bool bBlockDirectLightBehindUmbrellaReflection = true;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection", meta = (ClampMin = "0", ToolTip = "한 틱에 처리할 최대 반사 표면 수입니다."))
 	int32 MaxReflectionSurfacesPerTick = 4;
 
@@ -310,6 +313,9 @@ protected:
 		bool bReflected,
 		const FString& StablePathKey,
 		FPendingExposureMap& PendingExposures) const;
+	bool IsDirectExposureBehindUmbrellaReflection(
+		const FUOULightExposureData& ExposureData) const;
+	bool IsWorldPositionBehindUmbrellaReflection(const FVector& WorldPosition) const;
 	void DeliverPendingExposures(const FPendingExposureMap& PendingExposures);
 	void EmitReflectedLightFromSurface(
 		UUOULightInteractionSurfaceComponent* SurfaceComponent,
