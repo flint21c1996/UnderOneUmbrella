@@ -13,6 +13,7 @@
 #if WITH_EDITOR
 #include "GameFramework/Actor.h"
 #include "UObject/UnrealType.h"
+#include "World/Rewards/UOURewardAppearanceMotionComponent.h"
 #include "World/Rewards/UOURewardCollectionMotionComponent.h"
 #endif
 
@@ -34,24 +35,27 @@ UUOURewardFeedbackComponent::GetCueRequests() const
 	return CueRequests;
 }
 
+const TArray<FUOURewardPresentationCue>&
+UUOURewardFeedbackComponent::GetAppearanceCueRequests() const
+{
+	return AppearanceFeedback.CueRequests;
+}
+
 #if WITH_EDITOR
 void UUOURewardFeedbackComponent::PostEditChangeChainProperty(
 	FPropertyChangedChainEvent& PropertyChangedEvent)
 {
 	Super::PostEditChangeChainProperty(PropertyChangedEvent);
 
-	const FName CueRequestsPropertyName =
-		GET_MEMBER_NAME_CHECKED(UUOURewardFeedbackComponent, CueRequests);
-	if (PropertyChangedEvent.GetMemberPropertyName() == CueRequestsPropertyName
-		|| PropertyChangedEvent.GetPropertyName() == CueRequestsPropertyName)
-	{
-		SynchronizeCueRequestsForEditor();
-	}
+	SynchronizeCueRequestsForEditor();
 }
 
 void UUOURewardFeedbackComponent::SynchronizeCueRequestsForEditor()
 {
-	const bool bRequestIdsChanged = NormalizeCueRequestIdsForEditor();
+	const bool bCollectionRequestIdsChanged =
+		NormalizeCueRequestIdsForEditor(CueRequests);
+	const bool bAppearanceRequestIdsChanged =
+		NormalizeCueRequestIdsForEditor(AppearanceFeedback.CueRequests);
 
 	AActor* RewardOwner = GetOwner();
 	if (RewardOwner == nullptr)
@@ -66,20 +70,27 @@ void UUOURewardFeedbackComponent::SynchronizeCueRequestsForEditor()
 		{
 			MotionComponent->SynchronizeCueTimelineForEditor(CueRequests);
 		}
+		if (UUOURewardAppearanceMotionComponent* MotionComponent =
+			RewardOwner->FindComponentByClass<UUOURewardAppearanceMotionComponent>())
+		{
+			MotionComponent->SynchronizeCueTimelineForEditor(
+				AppearanceFeedback.CueRequests);
+		}
 	}
 
-	if (bRequestIdsChanged)
+	if (bCollectionRequestIdsChanged || bAppearanceRequestIdsChanged)
 	{
 		MarkPackageDirty();
 	}
 }
 
-bool UUOURewardFeedbackComponent::NormalizeCueRequestIdsForEditor()
+bool UUOURewardFeedbackComponent::NormalizeCueRequestIdsForEditor(
+	TArray<FUOURewardPresentationCue>& Requests)
 {
 	TSet<FGuid> UsedRequestIds;
 	bool bChanged = false;
 
-	for (FUOURewardPresentationCue& CueRequest : CueRequests)
+	for (FUOURewardPresentationCue& CueRequest : Requests)
 	{
 		if (!CueRequest.RequestId.IsValid()
 			|| UsedRequestIds.Contains(CueRequest.RequestId))
@@ -108,7 +119,25 @@ bool UUOURewardFeedbackComponent::BeginFeedback(
 	AUOUCharacter* Collector,
 	FVector RewardWorldLocation)
 {
-	if (!bFeedbackEnabled
+	return BeginFeedbackInternal(Collector, RewardWorldLocation, false);
+}
+
+bool UUOURewardFeedbackComponent::BeginAppearanceFeedback(
+	AUOUCharacter* PlayerCharacter,
+	FVector RewardWorldLocation)
+{
+	return BeginFeedbackInternal(PlayerCharacter, RewardWorldLocation, true);
+}
+
+bool UUOURewardFeedbackComponent::BeginFeedbackInternal(
+	AUOUCharacter* Collector,
+	FVector RewardWorldLocation,
+	bool bForAppearance)
+{
+	const bool bPhaseEnabled = bForAppearance
+		? AppearanceFeedback.bEnabled
+		: bFeedbackEnabled;
+	if (!bPhaseEnabled
 		|| Collector == nullptr
 		|| bFeedbackPlaying)
 	{
@@ -118,6 +147,7 @@ bool UUOURewardFeedbackComponent::BeginFeedback(
 	bFeedbackPlaying = true;
 	bFeedbackSequenceCompleted = false;
 	bCollectionMontagePlaying = false;
+	bAppearanceFeedbackActive = bForAppearance;
 	ActiveCollector = Collector;
 	ActiveRewardWorldLocation = RewardWorldLocation;
 
@@ -156,22 +186,34 @@ bool UUOURewardFeedbackComponent::PlayPlayerAnimationFeedback()
 bool UUOURewardFeedbackComponent::SpawnNiagaraFeedback()
 {
 	UWorld* World = GetWorld();
-	if (!bFeedbackPlaying || CollectionEffect == nullptr || World == nullptr)
+	UNiagaraSystem* Effect = bAppearanceFeedbackActive
+		? AppearanceFeedback.NiagaraEffect.Get()
+		: CollectionEffect.Get();
+	if (!bFeedbackPlaying || Effect == nullptr || World == nullptr)
 	{
 		return false;
 	}
 
 	const FVector BaseLocation =
-		bSpawnEffectAtCollector && ActiveCollector != nullptr
+		(bAppearanceFeedbackActive
+			? AppearanceFeedback.bSpawnEffectAtPlayer
+			: bSpawnEffectAtCollector)
+			&& ActiveCollector != nullptr
 			? ActiveCollector->GetActorLocation()
 			: ActiveRewardWorldLocation;
+	const FVector LocationOffset = bAppearanceFeedbackActive
+		? AppearanceFeedback.EffectLocationOffset
+		: EffectLocationOffset;
+	const FVector SpawnScale = bAppearanceFeedbackActive
+		? AppearanceFeedback.EffectScale
+		: EffectScale;
 
 	UNiagaraComponent* EffectComponent = UNiagaraFunctionLibrary::SpawnSystemAtLocation(
 		World,
-		CollectionEffect,
-		BaseLocation + EffectLocationOffset,
+		Effect,
+		BaseLocation + LocationOffset,
 		FRotator::ZeroRotator,
-		EffectScale,
+		SpawnScale,
 		true,
 		false);
 
@@ -186,8 +228,11 @@ bool UUOURewardFeedbackComponent::SpawnNiagaraFeedback()
 
 bool UUOURewardFeedbackComponent::StartCameraFeedback()
 {
+	const bool bUseZoom = bAppearanceFeedbackActive
+		? AppearanceFeedback.bUseTemporaryCameraZoom
+		: bUseTemporaryCameraZoom;
 	if (!bFeedbackPlaying
-		|| !bUseTemporaryCameraZoom
+		|| !bUseZoom
 		|| ActiveCollector == nullptr)
 	{
 		return false;
@@ -205,9 +250,15 @@ bool UUOURewardFeedbackComponent::StartCameraFeedback()
 
 	ActiveCameraController->RequestTemporaryFocusZoom(
 		this,
-		CameraTargetDistance,
-		CameraTargetOrthoWidth,
-		CameraFocusOffset,
+		bAppearanceFeedbackActive
+			? AppearanceFeedback.CameraTargetDistance
+			: CameraTargetDistance,
+		bAppearanceFeedbackActive
+			? AppearanceFeedback.CameraTargetOrthoWidth
+			: CameraTargetOrthoWidth,
+		bAppearanceFeedbackActive
+			? AppearanceFeedback.CameraFocusOffset
+			: CameraFocusOffset,
 		true);
 	return ActiveCameraController->IsTemporaryZoomRequestedBy(this);
 }
@@ -228,6 +279,11 @@ void UUOURewardFeedbackComponent::FinishFeedback()
 	FinishFeedbackInternal(true);
 }
 
+void UUOURewardFeedbackComponent::CancelFeedback()
+{
+	FinishFeedbackInternal(false);
+}
+
 bool UUOURewardFeedbackComponent::IsFeedbackPlaying() const
 {
 	return bFeedbackPlaying;
@@ -241,25 +297,40 @@ void UUOURewardFeedbackComponent::ApplyPlayerInputBlock(AUOUCharacter* Collector
 	}
 
 	ActiveInputExecutor = Collector->GetInteractionExecutorComponent();
-	if (bBlockPlayerInput && ActiveInputExecutor != nullptr)
+	const bool bShouldBlockInput = bAppearanceFeedbackActive
+		? AppearanceFeedback.bBlockPlayerInput
+		: bBlockPlayerInput;
+	const bool bShouldStopMovement = bAppearanceFeedbackActive
+		? AppearanceFeedback.bStopMovementImmediately
+		: bStopMovementImmediately;
+	if (bShouldBlockInput && ActiveInputExecutor != nullptr)
 	{
-		ActiveInputExecutor->RequestPlayerInputBlock(this, bStopMovementImmediately);
+		ActiveInputExecutor->RequestPlayerInputBlock(this, bShouldStopMovement);
 	}
 }
 
 bool UUOURewardFeedbackComponent::StartCollectionMontage()
 {
+	UAnimMontage* Montage = bAppearanceFeedbackActive
+		? AppearanceFeedback.PlayerMontage.Get()
+		: CollectionMontage.Get();
 	if (bCollectionMontagePlaying
-		|| CollectionMontage == nullptr
+		|| Montage == nullptr
 		|| ActiveInputExecutor == nullptr)
 	{
 		return false;
 	}
 
 	FUOUPlayerInteractionRequest AnimationRequest;
-	AnimationRequest.PlayerMontage = CollectionMontage;
-	AnimationRequest.MontagePlayRate = FMath::Max(0.01f, MontagePlayRate);
-	AnimationRequest.MontageStartSection = MontageStartSection;
+	AnimationRequest.PlayerMontage = Montage;
+	AnimationRequest.MontagePlayRate = FMath::Max(
+		0.01f,
+		bAppearanceFeedbackActive
+			? AppearanceFeedback.MontagePlayRate
+			: MontagePlayRate);
+	AnimationRequest.MontageStartSection = bAppearanceFeedbackActive
+		? AppearanceFeedback.MontageStartSection
+		: MontageStartSection;
 	AnimationRequest.bHoldMontageLastPoseUntilInteractionEnds = true;
 
 	// 전체 피드백의 입력 잠금은 이 컴포넌트가 관리하므로 실행기는 몽타주 수명만 담당합니다.
@@ -325,6 +396,7 @@ void UUOURewardFeedbackComponent::FinishFeedbackInternal(bool bBroadcastFinished
 
 	bFeedbackPlaying = false;
 	bFeedbackSequenceCompleted = false;
+	bAppearanceFeedbackActive = false;
 	ActiveRewardWorldLocation = FVector::ZeroVector;
 	ReleasePlayerFeedback();
 

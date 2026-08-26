@@ -8,6 +8,7 @@
 #include "GameFramework/Actor.h"
 #include "Reward/SUOURewardCueTimeline.h"
 #include "Styling/AppStyle.h"
+#include "World/Rewards/UOURewardAppearanceMotionComponent.h"
 #include "World/Rewards/UOURewardCollectionMotionComponent.h"
 #include "World/Rewards/UOURewardFeedbackComponent.h"
 #include "Widgets/Layout/SBorder.h"
@@ -32,12 +33,20 @@ void FUOURewardCollectionMotionComponentDetails::CustomizeDetails(
 			? Cast<UUOURewardCollectionMotionComponent>(
 				CustomizedObjects[0].Get())
 			: nullptr;
-	AActor* RewardOwner = MotionComponent != nullptr
-		? MotionComponent->GetOwner()
+	UUOURewardAppearanceMotionComponent* AppearanceMotionComponent =
+		CustomizedObjects.Num() == 1
+			? Cast<UUOURewardAppearanceMotionComponent>(
+				CustomizedObjects[0].Get())
+			: nullptr;
+	UActorComponent* SelectedMotionComponent = MotionComponent != nullptr
+		? static_cast<UActorComponent*>(MotionComponent)
+		: static_cast<UActorComponent*>(AppearanceMotionComponent);
+	AActor* RewardOwner = SelectedMotionComponent != nullptr
+		? SelectedMotionComponent->GetOwner()
 		: nullptr;
-	if (RewardOwner == nullptr && MotionComponent != nullptr)
+	if (RewardOwner == nullptr && SelectedMotionComponent != nullptr)
 	{
-		RewardOwner = MotionComponent->GetTypedOuter<AActor>();
+		RewardOwner = SelectedMotionComponent->GetTypedOuter<AActor>();
 	}
 	UUOURewardFeedbackComponent* FeedbackComponent = RewardOwner != nullptr
 		? RewardOwner->FindComponentByClass<UUOURewardFeedbackComponent>()
@@ -51,10 +60,11 @@ void FUOURewardCollectionMotionComponentDetails::CustomizeDetails(
 			: LOCTEXT(
 				"MissingFeedbackMessage",
 				"같은 RewardActor에서 FeedbackComponent를 찾을 수 없습니다."));
-	if (MotionComponent != nullptr && FeedbackComponent != nullptr)
+	if (SelectedMotionComponent != nullptr && FeedbackComponent != nullptr)
 	{
 		TimelineContent = SNew(SUOURewardCueTimeline)
 			.MotionComponent(MotionComponent)
+			.AppearanceMotionComponent(AppearanceMotionComponent)
 			.FeedbackComponent(FeedbackComponent);
 	}
 

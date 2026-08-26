@@ -6,6 +6,7 @@
 #include "Rendering/DrawElements.h"
 #include "ScopedTransaction.h"
 #include "Styling/AppStyle.h"
+#include "World/Rewards/UOURewardAppearanceMotionComponent.h"
 #include "World/Rewards/UOURewardCollectionMotionComponent.h"
 #include "World/Rewards/UOURewardFeedbackComponent.h"
 
@@ -26,6 +27,7 @@ namespace UOURewardCueTimelinePrivate
 void SUOURewardCueTimeline::Construct(const FArguments& InArgs)
 {
 	MotionComponent = InArgs._MotionComponent;
+	AppearanceMotionComponent = InArgs._AppearanceMotionComponent;
 	FeedbackComponent = InArgs._FeedbackComponent;
 }
 
@@ -38,9 +40,7 @@ FVector2D SUOURewardCueTimeline::ComputeDesiredSize(
 	float LayoutScaleMultiplier) const
 {
 	const UUOURewardFeedbackComponent* Feedback = FeedbackComponent.Get();
-	const int32 CueCount = Feedback != nullptr
-		? Feedback->GetCueRequests().Num()
-		: 0;
+	const int32 CueCount = Feedback != nullptr ? GetCueRequests().Num() : 0;
 	const float DesiredHeight = FMath::Max(
 		110.0f,
 		UOURewardCueTimelinePrivate::FirstLaneY
@@ -70,7 +70,7 @@ int32 SUOURewardCueTimeline::OnPaint(
 
 	const UUOURewardFeedbackComponent* Feedback = FeedbackComponent.Get();
 	const int32 CueCount = Feedback != nullptr
-		? Feedback->GetCueRequests().Num()
+		? GetCueRequests().Num()
 		: 0;
 	const float GridBottom = CueCount > 0
 		? GetLaneY(CueCount - 1) + MarkerHeight * 0.5f
@@ -148,7 +148,7 @@ int32 SUOURewardCueTimeline::OnPaint(
 		const float CueTime = GetCueTime(CueIndex);
 		const float MarkerX = TimeToLocalX(CueTime, Width);
 		const FUOURewardPresentationCue& Cue =
-			Feedback->GetCueRequests()[CueIndex];
+			GetCueRequests()[CueIndex];
 		const bool bPresentationCue =
 			Cue.Channel == EUOURewardMotionCueChannel::Presentation;
 		const FLinearColor PresentationColor(0.12f, 0.58f, 0.95f, 1.0f);
@@ -309,27 +309,92 @@ void SUOURewardCueTimeline::OnMouseCaptureLost(
 float SUOURewardCueTimeline::GetMotionDuration() const
 {
 	const UUOURewardCollectionMotionComponent* Motion = MotionComponent.Get();
-	return Motion != nullptr
-		? FMath::Max(0.0f, Motion->GetMotionDurationForEditor())
-		: 0.0f;
+	const UUOURewardAppearanceMotionComponent* AppearanceMotion =
+		AppearanceMotionComponent.Get();
+	return FMath::Max(
+		0.0f,
+		Motion != nullptr
+			? Motion->GetMotionDurationForEditor()
+			: AppearanceMotion != nullptr
+				? AppearanceMotion->GetMotionDurationForEditor()
+				: 0.0f);
+}
+
+const TArray<FUOURewardPresentationCue>& SUOURewardCueTimeline::GetCueRequests() const
+{
+	static const TArray<FUOURewardPresentationCue> EmptyRequests;
+	const UUOURewardFeedbackComponent* Feedback = FeedbackComponent.Get();
+	if (Feedback == nullptr)
+	{
+		return EmptyRequests;
+	}
+	return AppearanceMotionComponent.IsValid()
+		? Feedback->GetAppearanceCueRequests()
+		: Feedback->GetCueRequests();
+}
+
+const TArray<FUOURewardMotionCueTiming>& SUOURewardCueTimeline::GetCueTimeline() const
+{
+	static const TArray<FUOURewardMotionCueTiming> EmptyTimeline;
+	if (const UUOURewardCollectionMotionComponent* Motion = MotionComponent.Get())
+	{
+		return Motion->GetCueTimelineForEditor();
+	}
+	if (const UUOURewardAppearanceMotionComponent* Motion = AppearanceMotionComponent.Get())
+	{
+		return Motion->GetCueTimelineForEditor();
+	}
+	return EmptyTimeline;
+}
+
+UObject* SUOURewardCueTimeline::GetMotionObject() const
+{
+	return MotionComponent.IsValid()
+		? static_cast<UObject*>(MotionComponent.Get())
+		: static_cast<UObject*>(AppearanceMotionComponent.Get());
+}
+
+void SUOURewardCueTimeline::SetCueTriggerTime(const FGuid& RequestId, float TriggerTime)
+{
+	if (UUOURewardCollectionMotionComponent* Motion = MotionComponent.Get())
+	{
+		Motion->SetCueTriggerTimeForEditor(RequestId, TriggerTime);
+	}
+	else if (UUOURewardAppearanceMotionComponent* Motion = AppearanceMotionComponent.Get())
+	{
+		Motion->SetCueTriggerTimeForEditor(RequestId, TriggerTime);
+	}
+}
+
+void SUOURewardCueTimeline::SetPresentationCloseTime(
+	const FGuid& RequestId,
+	float CloseTime)
+{
+	if (UUOURewardCollectionMotionComponent* Motion = MotionComponent.Get())
+	{
+		Motion->SetPresentationCloseTimeForEditor(RequestId, CloseTime);
+	}
+	else if (UUOURewardAppearanceMotionComponent* Motion = AppearanceMotionComponent.Get())
+	{
+		Motion->SetPresentationCloseTimeForEditor(RequestId, CloseTime);
+	}
 }
 
 float SUOURewardCueTimeline::GetCueTime(int32 CueIndex) const
 {
-	const UUOURewardCollectionMotionComponent* Motion = MotionComponent.Get();
 	const UUOURewardFeedbackComponent* Feedback = FeedbackComponent.Get();
-	if (Motion == nullptr
+	if (GetMotionObject() == nullptr
 		|| Feedback == nullptr
-		|| !Feedback->GetCueRequests().IsValidIndex(CueIndex))
+		|| !GetCueRequests().IsValidIndex(CueIndex))
 	{
 		return 0.0f;
 	}
 
-	const FUOURewardPresentationCue& Cue = Feedback->GetCueRequests()[CueIndex];
+	const FUOURewardPresentationCue& Cue = GetCueRequests()[CueIndex];
 	if (Cue.RequestId.IsValid())
 	{
 		const FUOURewardMotionCueTiming* Timing =
-			Motion->GetCueTimelineForEditor().FindByPredicate(
+			GetCueTimeline().FindByPredicate(
 				[&Cue](const FUOURewardMotionCueTiming& Candidate)
 				{
 					return Candidate.RequestId == Cue.RequestId;
@@ -348,20 +413,19 @@ float SUOURewardCueTimeline::GetCueTime(int32 CueIndex) const
 
 float SUOURewardCueTimeline::GetPresentationCloseTime(int32 CueIndex) const
 {
-	const UUOURewardCollectionMotionComponent* Motion = MotionComponent.Get();
 	const UUOURewardFeedbackComponent* Feedback = FeedbackComponent.Get();
-	if (Motion == nullptr
+	if (GetMotionObject() == nullptr
 		|| Feedback == nullptr
-		|| !Feedback->GetCueRequests().IsValidIndex(CueIndex))
+		|| !GetCueRequests().IsValidIndex(CueIndex))
 	{
 		return GetMotionDuration();
 	}
 
-	const FUOURewardPresentationCue& Cue = Feedback->GetCueRequests()[CueIndex];
+	const FUOURewardPresentationCue& Cue = GetCueRequests()[CueIndex];
 	if (Cue.RequestId.IsValid())
 	{
 		const FUOURewardMotionCueTiming* Timing =
-			Motion->GetCueTimelineForEditor().FindByPredicate(
+			GetCueTimeline().FindByPredicate(
 				[&Cue](const FUOURewardMotionCueTiming& Candidate)
 				{
 					return Candidate.RequestId == Cue.RequestId;
@@ -416,11 +480,11 @@ int32 SUOURewardCueTimeline::FindMarkerAt(
 	}
 
 	for (int32 CueIndex = 0;
-		CueIndex < Feedback->GetCueRequests().Num();
+		CueIndex < GetCueRequests().Num();
 		++CueIndex)
 	{
 		const FUOURewardPresentationCue& Cue =
-			Feedback->GetCueRequests()[CueIndex];
+			GetCueRequests()[CueIndex];
 		if (Cue.Channel == EUOURewardMotionCueChannel::Presentation)
 		{
 			const float CloseMarkerX = TimeToLocalX(
@@ -449,12 +513,12 @@ FText SUOURewardCueTimeline::GetCueLabel(int32 CueIndex) const
 {
 	const UUOURewardFeedbackComponent* Feedback = FeedbackComponent.Get();
 	if (Feedback == nullptr
-		|| !Feedback->GetCueRequests().IsValidIndex(CueIndex))
+		|| !GetCueRequests().IsValidIndex(CueIndex))
 	{
 		return FText::GetEmpty();
 	}
 
-	const FUOURewardPresentationCue& Cue = Feedback->GetCueRequests()[CueIndex];
+	const FUOURewardPresentationCue& Cue = GetCueRequests()[CueIndex];
 	if (Cue.Channel == EUOURewardMotionCueChannel::Feedback)
 	{
 		const UEnum* ActionEnum = StaticEnum<EUOURewardFeedbackCueAction>();
@@ -473,11 +537,11 @@ bool SUOURewardCueTimeline::BeginMarkerDrag(
 	int32 CueIndex,
 	bool bPresentationCloseMarker)
 {
-	UUOURewardCollectionMotionComponent* Motion = MotionComponent.Get();
 	UUOURewardFeedbackComponent* Feedback = FeedbackComponent.Get();
-	if (Motion == nullptr
+	UObject* MotionObject = GetMotionObject();
+	if (MotionObject == nullptr
 		|| Feedback == nullptr
-		|| !Feedback->GetCueRequests().IsValidIndex(CueIndex))
+		|| !GetCueRequests().IsValidIndex(CueIndex))
 	{
 		return false;
 	}
@@ -491,11 +555,11 @@ bool SUOURewardCueTimeline::BeginMarkerDrag(
 
 	// 기존 에셋의 고아 Timing도 마커를 편집하는 순간 같은 규칙으로 정리합니다.
 	Feedback->SynchronizeCueRequestsForEditor();
-	Motion->Modify();
+	MotionObject->Modify();
 	Feedback->Modify();
 
 	const FUOURewardPresentationCue& Cue =
-		Feedback->GetCueRequests()[CueIndex];
+		GetCueRequests()[CueIndex];
 	const bool bCanDragCloseMarker =
 		bPresentationCloseMarker
 		&& Cue.Channel == EUOURewardMotionCueChannel::Presentation;
@@ -505,11 +569,11 @@ bool SUOURewardCueTimeline::BeginMarkerDrag(
 
 	if (bCanDragCloseMarker)
 	{
-		Motion->SetPresentationCloseTimeForEditor(Cue.RequestId, CurrentTime);
+		SetPresentationCloseTime(Cue.RequestId, CurrentTime);
 	}
 	else
 	{
-		Motion->SetCueTriggerTimeForEditor(Cue.RequestId, CurrentTime);
+		SetCueTriggerTime(Cue.RequestId, CurrentTime);
 	}
 	DraggedCueIndex = CueIndex;
 	bDraggingPresentationCloseMarker = bCanDragCloseMarker;
@@ -519,27 +583,26 @@ bool SUOURewardCueTimeline::BeginMarkerDrag(
 
 void SUOURewardCueTimeline::UpdateDraggedMarker(float LocalX, float Width)
 {
-	UUOURewardCollectionMotionComponent* Motion = MotionComponent.Get();
 	UUOURewardFeedbackComponent* Feedback = FeedbackComponent.Get();
-	if (Motion == nullptr
+	if (GetMotionObject() == nullptr
 		|| Feedback == nullptr
-		|| !Feedback->GetCueRequests().IsValidIndex(DraggedCueIndex))
+		|| !GetCueRequests().IsValidIndex(DraggedCueIndex))
 	{
 		return;
 	}
 
 	const FGuid RequestId =
-		Feedback->GetCueRequests()[DraggedCueIndex].RequestId;
+		GetCueRequests()[DraggedCueIndex].RequestId;
 	if (bDraggingPresentationCloseMarker)
 	{
-		Motion->SetPresentationCloseTimeForEditor(
+		SetPresentationCloseTime(
 			RequestId,
 			LocalXToTime(LocalX, Width));
 	}
 	else
 	{
 		const FUOURewardPresentationCue& Cue =
-			Feedback->GetCueRequests()[DraggedCueIndex];
+			GetCueRequests()[DraggedCueIndex];
 		const float RequestedTime = LocalXToTime(LocalX, Width);
 		const float ClampedTime =
 			Cue.Channel == EUOURewardMotionCueChannel::Presentation
@@ -547,7 +610,7 @@ void SUOURewardCueTimeline::UpdateDraggedMarker(float LocalX, float Width)
 					RequestedTime,
 					GetPresentationCloseTime(DraggedCueIndex))
 				: RequestedTime;
-		Motion->SetCueTriggerTimeForEditor(
+		SetCueTriggerTime(
 			RequestId,
 			ClampedTime);
 	}
@@ -561,7 +624,7 @@ void SUOURewardCueTimeline::EndMarkerDrag()
 		return;
 	}
 
-	if (UUOURewardCollectionMotionComponent* Motion = MotionComponent.Get())
+	if (UObject* Motion = GetMotionObject())
 	{
 		Motion->MarkPackageDirty();
 	}

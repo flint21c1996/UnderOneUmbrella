@@ -3,9 +3,11 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "World/Rewards/UOURewardPresentationTypes.h"
 #include "Widgets/SLeafWidget.h"
 
 class FScopedTransaction;
+class UUOURewardAppearanceMotionComponent;
 class UUOURewardCollectionMotionComponent;
 class UUOURewardFeedbackComponent;
 
@@ -15,6 +17,7 @@ class SUOURewardCueTimeline : public SLeafWidget
 public:
 	SLATE_BEGIN_ARGS(SUOURewardCueTimeline) {}
 		SLATE_ARGUMENT(UUOURewardCollectionMotionComponent*, MotionComponent)
+		SLATE_ARGUMENT(UUOURewardAppearanceMotionComponent*, AppearanceMotionComponent)
 		SLATE_ARGUMENT(UUOURewardFeedbackComponent*, FeedbackComponent)
 	SLATE_END_ARGS()
 
@@ -44,6 +47,11 @@ public:
 
 private:
 	float GetMotionDuration() const;
+	const TArray<FUOURewardPresentationCue>& GetCueRequests() const;
+	const TArray<FUOURewardMotionCueTiming>& GetCueTimeline() const;
+	UObject* GetMotionObject() const;
+	void SetCueTriggerTime(const FGuid& RequestId, float TriggerTime);
+	void SetPresentationCloseTime(const FGuid& RequestId, float CloseTime);
 	float GetCueTime(int32 CueIndex) const;
 	// Presentation Cue에만 존재하는 두 번째 Outro 마커 시간을 반환합니다.
 	float GetPresentationCloseTime(int32 CueIndex) const;
@@ -61,6 +69,7 @@ private:
 	void EndMarkerDrag();
 
 	TWeakObjectPtr<UUOURewardCollectionMotionComponent> MotionComponent;
+	TWeakObjectPtr<UUOURewardAppearanceMotionComponent> AppearanceMotionComponent;
 	TWeakObjectPtr<UUOURewardFeedbackComponent> FeedbackComponent;
 	TUniquePtr<FScopedTransaction> ActiveTransaction;
 	int32 DraggedCueIndex = INDEX_NONE;
