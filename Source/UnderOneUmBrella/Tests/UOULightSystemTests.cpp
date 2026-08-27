@@ -7,9 +7,11 @@
 #include "Components/SpotLightComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "EditorWorldUtils.h"
+#include "Engine/StaticMesh.h"
 #include "EngineUtils.h"
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
+#include "Materials/Material.h"
 #include "Misc/AutomationTest.h"
 #include "NiagaraComponent.h"
 #include "Player/UOUUmbrellaLightInteractionComponent.h"
@@ -18,6 +20,7 @@
 #include "UObject/UnrealType.h"
 #include "World/Light/UOULightBeamVisualComponent.h"
 #include "World/Light/UOULightBeamMeshVisualActor.h"
+#include "World/Light/UOULightColorReceiverComponent.h"
 #include "World/Light/UOULightExposureReceiverComponent.h"
 #include "World/Light/UOULightExposureSourceComponent.h"
 #include "World/Light/UOULightInteractionSurfaceComponent.h"
@@ -127,6 +130,201 @@ namespace
 		bOutValue = Property->GetPropertyValue(ValueAddress);
 		return true;
 	}
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FUOULightColorAdditiveMixTest,
+	"UnderOneUmbrella.Light.Color.AdditiveRGBMix",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUOULightColorAdditiveMixTest::RunTest(const FString& Parameters)
+{
+	UWorld* UninitializedWorld = UWorld::CreateWorld(
+		EWorldType::Editor,
+		false,
+		TEXT("UOULightColorAdditiveMixWorld"),
+		nullptr,
+		false,
+		ERHIFeatureLevel::Num,
+		nullptr,
+		true);
+	FScopedEditorWorld ScopedWorld(
+		UninitializedWorld,
+		UWorld::InitializationValues()
+			.RequiresHitProxies(false)
+			.ShouldSimulatePhysics(false)
+			.EnableTraceCollision(false)
+			.CreateNavigation(false)
+			.CreateAISystem(false)
+			.AllowAudioPlayback(false)
+			.CreatePhysicsScene(false));
+	UWorld* World = ScopedWorld.GetWorld();
+	TestNotNull(TEXT("RGB 혼합 테스트 월드를 생성한다"), World);
+	if (World == nullptr)
+	{
+		return false;
+	}
+
+	AActor* ReceiverActor = World->SpawnActor<AActor>();
+	UUOULightColorReceiverComponent* Receiver = ReceiverActor != nullptr
+		? NewObject<UUOULightColorReceiverComponent>(ReceiverActor, TEXT("ColorReceiver"))
+		: nullptr;
+	TestNotNull(TEXT("색상 수신 액터를 생성한다"), ReceiverActor);
+	TestNotNull(TEXT("색상 수신 컴포넌트를 생성한다"), Receiver);
+	if (ReceiverActor == nullptr || Receiver == nullptr)
+	{
+		return false;
+	}
+
+	ReceiverActor->AddInstanceComponent(Receiver);
+	Receiver->bUseReceiverVolumeSampling = false;
+	Receiver->bWeightColorByExposureIntensity = false;
+	Receiver->bSmoothMaterialTransitions = false;
+	Receiver->RegisterComponent();
+
+	UStaticMeshComponent* TargetMesh = NewObject<UStaticMeshComponent>(
+		ReceiverActor,
+		TEXT("ColorStateTargetMesh"));
+	TestNotNull(TEXT("상태 머티리얼을 적용할 Mesh를 생성한다"), TargetMesh);
+	if (TargetMesh == nullptr)
+	{
+		return false;
+	}
+
+	ReceiverActor->AddInstanceComponent(TargetMesh);
+	TargetMesh->RegisterComponent();
+
+	TArray<UMaterial*> TestStateMaterials;
+	TestStateMaterials.Reserve(7);
+	for (int32 StateIndex = 0; StateIndex < 7; ++StateIndex)
+	{
+		UMaterial* StateMaterial = NewObject<UMaterial>(
+			GetTransientPackage(),
+			FName(*FString::Printf(TEXT("ColorStateMaterial_%d"), StateIndex)));
+		TestStateMaterials.Add(StateMaterial);
+		Receiver->StateMaterials[StateIndex] = StateMaterial;
+	}
+	UMaterial* OriginalMaterial = NewObject<UMaterial>(
+		GetTransientPackage(),
+		TEXT("ColorStateOriginalMaterial"));
+	UStaticMesh* TestStaticMesh = NewObject<UStaticMesh>(
+		GetTransientPackage(),
+		TEXT("ColorStateTestStaticMesh"));
+	TestStaticMesh->GetStaticMaterials().Add(FStaticMaterial(OriginalMaterial));
+	TargetMesh->SetStaticMesh(TestStaticMesh);
+	TargetMesh->SetMaterial(0, OriginalMaterial);
+	Receiver->RefreshTargetMaterials();
+
+	AActor* RedSource = World->SpawnActor<AActor>();
+	AActor* GreenSource = World->SpawnActor<AActor>();
+	AActor* BlueSource = World->SpawnActor<AActor>();
+	TestNotNull(TEXT("빨강 광원 식별자를 생성한다"), RedSource);
+	TestNotNull(TEXT("초록 광원 식별자를 생성한다"), GreenSource);
+	TestNotNull(TEXT("파랑 광원 식별자를 생성한다"), BlueSource);
+	if (RedSource == nullptr || GreenSource == nullptr || BlueSource == nullptr)
+	{
+		return false;
+	}
+
+	const auto MakeExposure = [](UObject* Source, const FLinearColor& Color)
+	{
+		return FUOULightExposureData(
+			Source,
+			FVector::ZeroVector,
+			FVector::ZeroVector,
+			FVector::ForwardVector,
+			100.0f,
+			0.25f,
+			1.0f,
+			1.0f,
+			0.1f,
+			Color);
+	};
+
+	Receiver->ReceiveLightExposure_Implementation(MakeExposure(RedSource, FLinearColor::Red));
+	TestTrue(
+		TEXT("빨강 빛 하나는 빨강으로 표시된다"),
+		Receiver->GetMixedLightColor().Equals(FLinearColor::Red, KINDA_SMALL_NUMBER));
+	TestEqual(
+		TEXT("빨강 빛은 0번 상태 머티리얼을 사용한다"),
+		Receiver->GetCurrentStateMaterialIndex(),
+		0);
+	TestEqual(
+		TEXT("빨강 빛은 0번 머티리얼을 적용한다"),
+		TargetMesh->GetMaterial(0),
+		static_cast<UMaterialInterface*>(TestStateMaterials[0]));
+
+	Receiver->ReceiveLightExposure_Implementation(MakeExposure(GreenSource, FLinearColor::Green));
+	TestTrue(
+		TEXT("빨강과 초록은 노랑으로 가산 혼합된다"),
+		Receiver->GetMixedLightColor().Equals(FLinearColor::Yellow, KINDA_SMALL_NUMBER));
+	TestEqual(
+		TEXT("빨강과 초록은 3번 상태 머티리얼을 사용한다"),
+		Receiver->GetCurrentStateMaterialIndex(),
+		3);
+	TestEqual(
+		TEXT("빨강과 초록은 3번 머티리얼을 적용한다"),
+		TargetMesh->GetMaterial(0),
+		static_cast<UMaterialInterface*>(TestStateMaterials[3]));
+
+	Receiver->ReceiveLightExposure_Implementation(MakeExposure(BlueSource, FLinearColor::Blue));
+	TestTrue(
+		TEXT("빨강, 초록, 파랑은 흰색으로 가산 혼합된다"),
+		Receiver->GetMixedLightColor().Equals(FLinearColor::White, KINDA_SMALL_NUMBER));
+	TestTrue(TEXT("흰색 상태에서 R 채널을 감지한다"), Receiver->bHasRedLight);
+	TestTrue(TEXT("흰색 상태에서 G 채널을 감지한다"), Receiver->bHasGreenLight);
+	TestTrue(TEXT("흰색 상태에서 B 채널을 감지한다"), Receiver->bHasBlueLight);
+	TestEqual(
+		TEXT("RGB 빛은 6번 상태 머티리얼을 사용한다"),
+		Receiver->GetCurrentStateMaterialIndex(),
+		6);
+	TestEqual(
+		TEXT("RGB 빛은 6번 머티리얼을 적용한다"),
+		TargetMesh->GetMaterial(0),
+		static_cast<UMaterialInterface*>(TestStateMaterials[6]));
+
+	Receiver->ClearColorExposures();
+	TestFalse(TEXT("노출 기록을 비우면 활성 색상 빛이 없다"), Receiver->HasAnyColorLight());
+	TestTrue(
+		TEXT("노출 기록을 비우면 혼합 색은 검정이다"),
+		Receiver->GetMixedLightColor().Equals(FLinearColor::Black, KINDA_SMALL_NUMBER));
+	TestEqual(
+		TEXT("노출 기록을 비우면 상태 머티리얼 인덱스가 -1이 된다"),
+		Receiver->GetCurrentStateMaterialIndex(),
+		INDEX_NONE);
+	TestEqual(
+		TEXT("노출 기록을 비우면 원래 머티리얼을 복원한다"),
+		TargetMesh->GetMaterial(0),
+		static_cast<UMaterialInterface*>(OriginalMaterial));
+
+	Receiver->ReceiveLightExposure_Implementation(MakeExposure(BlueSource, FLinearColor::Blue));
+	TestEqual(
+		TEXT("파랑 빛 하나는 사용자 지정 순서의 2번 상태 머티리얼을 사용한다"),
+		Receiver->GetCurrentStateMaterialIndex(),
+		2);
+	TestEqual(
+		TEXT("파랑 빛 하나는 2번 머티리얼을 적용한다"),
+		TargetMesh->GetMaterial(0),
+		static_cast<UMaterialInterface*>(TestStateMaterials[2]));
+
+	AUOULightSourceActor* PresetSource = World->SpawnActor<AUOULightSourceActor>();
+	TestNotNull(TEXT("색상 프리셋 광원을 생성한다"), PresetSource);
+	if (PresetSource != nullptr && PresetSource->SourceSpotLight != nullptr)
+	{
+		PresetSource->SetLightColorPreset(EUOULightColorPreset::Blue);
+		TestTrue(
+			TEXT("파랑 프리셋은 실제 SpotLight를 파랑으로 설정한다"),
+			PresetSource->SourceSpotLight->GetLightColor().Equals(
+				FLinearColor::Blue,
+				KINDA_SMALL_NUMBER));
+		TestTrue(
+			TEXT("게임플레이 노출도 같은 파랑을 전달한다"),
+			PresetSource->ExposureSource->GetGameplayLightColor().Equals(
+				FLinearColor::Blue,
+				KINDA_SMALL_NUMBER));
+	}
+
+	return true;
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
