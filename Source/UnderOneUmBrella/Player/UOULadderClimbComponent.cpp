@@ -113,19 +113,40 @@ bool UUOULadderClimbComponent::HandleMoveInput(const FVector2D& MovementVector, 
 {
 	const float InputMagnitude = FMath::Clamp(MovementVector.Size(), 0.0f, 1.0f);
 
+	if (!IsClimbing() && bBlockExitReentryUntilInputRelease)
+	{
+		if (InputMagnitude <= LadderInputDeadZone)
+		{
+			bBlockExitReentryUntilInputRelease = false;
+		}
+		else
+		{
+			// 퇴장에 사용한 입력은 일반 이동에는 허용하되, 같은 입력으로 사다리에 재진입하지 않는다.
+			return false;
+		}
+	}
+
 	if (IsClimbing())
 	{
-		if (ClimbState == EUOULadderClimbState::EnteringFromTop || bWaitForTopEntryInputRelease)
+		if (ClimbState == EUOULadderClimbState::ExitingAtBottom ||
+			ClimbState == EUOULadderClimbState::ExitingAtTop)
+		{
+			bBlockExitReentryUntilInputRelease = InputMagnitude > LadderInputDeadZone;
+		}
+
+		if (bWaitForTopEntryInputRelease)
 		{
 			if (InputMagnitude <= LadderInputDeadZone)
 			{
 				bWaitForTopEntryInputRelease = false;
-				CurrentClimbInput = 0.0f;
 			}
-			else
-			{
-				CurrentClimbInput = -InputMagnitude;
-			}
+
+			// 위쪽 진입에 사용한 입력으로 곧바로 하강하지 않도록, 키를 놓을 때까지 이동을 막는다.
+			CurrentClimbInput = 0.0f;
+		}
+		else if (ClimbState == EUOULadderClimbState::EnteringFromTop)
+		{
+			CurrentClimbInput = 0.0f;
 		}
 		else if (ClimbState == EUOULadderClimbState::EnteringFromBottom)
 		{
@@ -160,7 +181,7 @@ bool UUOULadderClimbComponent::HandleMoveInput(const FVector2D& MovementVector, 
 	bool bEnterFromTop = false;
 	if (AUOULadderActor* EntryLadder = FindEntryLadder(DesiredWorldDirection, bEnterFromTop))
 	{
-		BeginClimbing(EntryLadder, bEnterFromTop, InputMagnitude);
+		BeginClimbing(EntryLadder, bEnterFromTop);
 		return true;
 	}
 
@@ -281,8 +302,7 @@ AUOULadderActor* UUOULadderClimbComponent::FindEntryLadder(
 
 void UUOULadderClimbComponent::BeginClimbing(
 	AUOULadderActor* Ladder,
-	bool bEnterFromTop,
-	float InputMagnitude)
+	bool bEnterFromTop)
 {
 	if (OwnerCharacter == nullptr || Ladder == nullptr)
 	{
@@ -312,10 +332,13 @@ void UUOULadderClimbComponent::BeginClimbing(
 		? Ladder->GetTopClimbRotation()
 		: Ladder->GetBottomClimbRotation();
 	TransitionElapsed = 0.0f;
-	TransitionDuration = EntryTransitionDuration;
-	// Do not carry the approach input into bottom climbing; subsequent input events update it.
-	CurrentClimbInput = bEnterFromTop ? -InputMagnitude : 0.0f;
+	TransitionDuration = bEnterFromTop
+		? TopEntryTransitionDuration
+		: EntryTransitionDuration;
+	// 진입에 사용한 입력은 등반 이동으로 이어받지 않고, 이후 입력 이벤트에서 새로 갱신한다.
+	CurrentClimbInput = 0.0f;
 	bWaitForTopEntryInputRelease = bEnterFromTop;
+	bBlockExitReentryUntilInputRelease = false;
 	SetClimbState(bEnterFromTop
 		? EUOULadderClimbState::EnteringFromTop
 		: EUOULadderClimbState::EnteringFromBottom);
@@ -342,8 +365,11 @@ void UUOULadderClimbComponent::BeginExit(bool bExitAtTop)
 		? CurrentLadder->GetTopExitRotation()
 		: CurrentLadder->GetBottomExitRotation();
 	TransitionElapsed = 0.0f;
-	TransitionDuration = ExitTransitionDuration;
+	TransitionDuration = bExitAtTop
+		? TopExitTransitionDuration
+		: ExitTransitionDuration;
 	CurrentClimbInput = 0.0f;
+	bBlockExitReentryUntilInputRelease = true;
 	SetClimbState(bExitAtTop
 		? EUOULadderClimbState::ExitingAtTop
 		: EUOULadderClimbState::ExitingAtBottom);
@@ -374,6 +400,7 @@ void UUOULadderClimbComponent::JumpOffLadder()
 	CurrentLadder = nullptr;
 	CurrentClimbInput = 0.0f;
 	bWaitForTopEntryInputRelease = false;
+	bBlockExitReentryUntilInputRelease = false;
 	SetClimbState(EUOULadderClimbState::None);
 }
 

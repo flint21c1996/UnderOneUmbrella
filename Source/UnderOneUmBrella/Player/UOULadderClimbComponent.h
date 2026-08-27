@@ -71,11 +71,19 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Ladder|Entry", meta=(ClampMin="-1.0", ClampMax="1.0"))
 	float EntryDirectionDotThreshold = 0.45f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Ladder|Entry", meta=(ClampMin="0.05"))
-	float EntryTransitionDuration = 0.3f;
+	// 기존 블루프린트 설정값 호환을 위해 이름은 유지하며, 아래쪽에서 올라갈 때 사용한다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Ladder|Entry", meta=(ClampMin="0.05", DisplayName="아래쪽 진입 전환 시간", ToolTip="사다리 아래쪽에서 올라가기 시작할 때 등반 위치로 이동하는 시간입니다."))
+	float EntryTransitionDuration = 0.6f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Ladder|Exit", meta=(ClampMin="0.05"))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Ladder|Entry", meta=(ClampMin="0.05", DisplayName="위쪽 진입 전환 시간", ToolTip="사다리 위쪽에서 내려가기 시작할 때 등반 위치로 이동하는 시간입니다."))
+	float TopEntryTransitionDuration = 1.3f;
+
+	// 기존 블루프린트 설정값 호환을 위해 이름은 유지하며, 아래쪽으로 나갈 때 사용한다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Ladder|Exit", meta=(ClampMin="0.05", DisplayName="아래쪽 퇴장 전환 시간", ToolTip="사다리 아래쪽으로 내려온 뒤 바닥 위치로 이동하는 시간입니다."))
 	float ExitTransitionDuration = 0.45f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Ladder|Exit", meta=(ClampMin="0.05", DisplayName="위쪽 퇴장 전환 시간", ToolTip="사다리 꼭대기에서 플랫폼 위로 올라가는 시간입니다."))
+	float TopExitTransitionDuration = 1.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Ladder|Movement", meta=(ClampMin="0.0"))
 	float AlignmentStrength = 10.0f;
@@ -110,7 +118,7 @@ private:
 		int32 OtherBodyIndex);
 
 	AUOULadderActor* FindEntryLadder(const FVector& DesiredWorldDirection, bool& bOutEnterFromTop) const;
-	void BeginClimbing(AUOULadderActor* Ladder, bool bEnterFromTop, float InputMagnitude);
+	void BeginClimbing(AUOULadderActor* Ladder, bool bEnterFromTop);
 	void BeginExit(bool bExitAtTop);
 	void FinishExit();
 	void JumpOffLadder();
@@ -147,4 +155,6 @@ private:
 	uint8 SavedCustomMovementMode = 0;
 	bool bSavedOrientRotationToMovement = true;
 	bool bWaitForTopEntryInputRelease = false;
+	// 사다리 퇴장에 사용한 이동 입력이 해제되기 전까지 자동 재진입을 막는다.
+	bool bBlockExitReentryUntilInputRelease = false;
 };
