@@ -526,6 +526,19 @@ void UUOULightExposureSourceComponent::Configure(float NewConeAngle, float NewIn
 	ValidateSettings();
 }
 
+FLinearColor UUOULightExposureSourceComponent::GetGameplayLightColor() const
+{
+	if (bUseSourceSpotLightColor)
+	{
+		if (const USpotLightComponent* SourceSpotLight = GetSourceSpotLightComponent())
+		{
+			return SourceSpotLight->GetLightColor();
+		}
+	}
+
+	return GameplayLightColor;
+}
+
 void UUOULightExposureSourceComponent::ValidateSettings()
 {
 	FallbackOuterConeAngle = FMath::Clamp(FallbackOuterConeAngle, 1.0f, 89.0f);
@@ -1428,7 +1441,8 @@ bool UUOULightExposureSourceComponent::TryBuildExposureDataAtPosition(
 		FinalIntensity,
 		DistanceFactor,
 		ShapeFactor,
-		DeltaTime);
+		DeltaTime,
+		GetGameplayLightColor());
 
 	return true;
 }
@@ -2992,7 +3006,8 @@ bool UUOULightExposureSourceComponent::TryBuildReflectedExposureDataAtPosition(
 		FinalIntensity,
 		DistanceFactor,
 		AngleFactor,
-		DeltaTime);
+		DeltaTime,
+		GetGameplayLightColor());
 
 	return true;
 }

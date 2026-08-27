@@ -5,6 +5,17 @@
 #include "CoreMinimal.h"
 #include "UOULightExposureTypes.generated.h"
 
+// 통합 광원 액터에서 빠르게 선택할 수 있는 가산 혼합용 색상 프리셋입니다.
+UENUM(BlueprintType)
+enum class EUOULightColorPreset : uint8
+{
+	UseSourceSpotLight UMETA(DisplayName = "Source SpotLight 색상 유지"),
+	Red UMETA(DisplayName = "빨강 (R)"),
+	Green UMETA(DisplayName = "초록 (G)"),
+	Blue UMETA(DisplayName = "파랑 (B)"),
+	Custom UMETA(DisplayName = "사용자 지정")
+};
+
 // 수신체에 도달한 게임플레이 빛 샘플 하나의 데이터입니다.
 USTRUCT(BlueprintType, meta = (ToolTip = "게임플레이 빛이 수신체에 도달했을 때 전달되는 데이터입니다."))
 struct FUOULightExposureData
@@ -22,7 +33,8 @@ struct FUOULightExposureData
 		float InIntensity,
 		float InDistanceFactor,
 		float InAngleFactor,
-		float InDeltaTime)
+		float InDeltaTime,
+		const FLinearColor& InLightColor = FLinearColor::White)
 		: Source(InSource)
 		, SourcePosition(InSourcePosition)
 		, ReceiverPosition(InReceiverPosition)
@@ -32,6 +44,7 @@ struct FUOULightExposureData
 		, DistanceFactor(InDistanceFactor)
 		, AngleFactor(InAngleFactor)
 		, DeltaTime(InDeltaTime)
+		, LightColor(InLightColor)
 	{
 	}
 
@@ -61,4 +74,8 @@ struct FUOULightExposureData
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Exposure", meta = (ToolTip = "이 노출 샘플이 나타내는 DeltaTime입니다."))
 	float DeltaTime = 0.0f;
+
+	// 렌더링용 SpotLight와 같은 색입니다. 여러 광원의 게임플레이 색상 혼합에 사용합니다.
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Exposure", meta = (ToolTip = "이 노출을 발생시킨 광원의 선형 색상입니다."))
+	FLinearColor LightColor = FLinearColor::White;
 };
