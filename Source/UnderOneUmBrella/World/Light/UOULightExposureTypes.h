@@ -13,7 +13,8 @@ enum class EUOULightColorPreset : uint8
 	Red UMETA(DisplayName = "빨강 (R)"),
 	Green UMETA(DisplayName = "초록 (G)"),
 	Blue UMETA(DisplayName = "파랑 (B)"),
-	Custom UMETA(DisplayName = "사용자 지정")
+	Custom UMETA(DisplayName = "사용자 지정"),
+	White UMETA(DisplayName = "흰색 (RGB / 물감 제거)")
 };
 
 // 수신체에 도달한 게임플레이 빛 샘플 하나의 데이터입니다.

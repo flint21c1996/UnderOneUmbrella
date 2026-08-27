@@ -46,7 +46,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Light|Color")
 	void SetLightColorPreset(EUOULightColorPreset NewPreset);
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Color", meta = (ToolTip = "빨강·초록·파랑 프리셋을 선택합니다. Source SpotLight 색상 유지는 기존 BP의 조명 색을 덮어쓰지 않습니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Color", meta = (ToolTip = "빨강·초록·파랑 또는 물감 제거용 흰색 프리셋을 선택합니다. Source SpotLight 색상 유지는 기존 BP의 조명 색을 덮어쓰지 않습니다."))
 	EUOULightColorPreset LightColorPreset = EUOULightColorPreset::UseSourceSpotLight;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Color", meta = (EditCondition = "LightColorPreset == EUOULightColorPreset::Custom", EditConditionHides, ToolTip = "사용자 지정 프리셋에서 적용할 색상입니다."))

@@ -7,11 +7,9 @@
 #include "Components/SpotLightComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "EditorWorldUtils.h"
-#include "Engine/StaticMesh.h"
 #include "EngineUtils.h"
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
-#include "Materials/Material.h"
 #include "Misc/AutomationTest.h"
 #include "NiagaraComponent.h"
 #include "Player/UOUUmbrellaLightInteractionComponent.h"
@@ -179,41 +177,10 @@ bool FUOULightColorAdditiveMixTest::RunTest(const FString& Parameters)
 	ReceiverActor->AddInstanceComponent(Receiver);
 	Receiver->bUseReceiverVolumeSampling = false;
 	Receiver->bWeightColorByExposureIntensity = false;
-	Receiver->bSmoothMaterialTransitions = false;
+	Receiver->bApplyPaintTint = false;
+	Receiver->MaterialTransitionDuration = 0.0f;
+	Receiver->MinimumPaintChannel = 0.15f;
 	Receiver->RegisterComponent();
-
-	UStaticMeshComponent* TargetMesh = NewObject<UStaticMeshComponent>(
-		ReceiverActor,
-		TEXT("ColorStateTargetMesh"));
-	TestNotNull(TEXT("상태 머티리얼을 적용할 Mesh를 생성한다"), TargetMesh);
-	if (TargetMesh == nullptr)
-	{
-		return false;
-	}
-
-	ReceiverActor->AddInstanceComponent(TargetMesh);
-	TargetMesh->RegisterComponent();
-
-	TArray<UMaterial*> TestStateMaterials;
-	TestStateMaterials.Reserve(7);
-	for (int32 StateIndex = 0; StateIndex < 7; ++StateIndex)
-	{
-		UMaterial* StateMaterial = NewObject<UMaterial>(
-			GetTransientPackage(),
-			FName(*FString::Printf(TEXT("ColorStateMaterial_%d"), StateIndex)));
-		TestStateMaterials.Add(StateMaterial);
-		Receiver->StateMaterials[StateIndex] = StateMaterial;
-	}
-	UMaterial* OriginalMaterial = NewObject<UMaterial>(
-		GetTransientPackage(),
-		TEXT("ColorStateOriginalMaterial"));
-	UStaticMesh* TestStaticMesh = NewObject<UStaticMesh>(
-		GetTransientPackage(),
-		TEXT("ColorStateTestStaticMesh"));
-	TestStaticMesh->GetStaticMaterials().Add(FStaticMaterial(OriginalMaterial));
-	TargetMesh->SetStaticMesh(TestStaticMesh);
-	TargetMesh->SetMaterial(0, OriginalMaterial);
-	Receiver->RefreshTargetMaterials();
 
 	AActor* RedSource = World->SpawnActor<AActor>();
 	AActor* GreenSource = World->SpawnActor<AActor>();
@@ -246,26 +213,28 @@ bool FUOULightColorAdditiveMixTest::RunTest(const FString& Parameters)
 		TEXT("빨강 빛 하나는 빨강으로 표시된다"),
 		Receiver->GetMixedLightColor().Equals(FLinearColor::Red, KINDA_SMALL_NUMBER));
 	TestEqual(
-		TEXT("빨강 빛은 0번 상태 머티리얼을 사용한다"),
+		TEXT("빨강 빛은 0번 RGB 상태를 사용한다"),
 		Receiver->GetCurrentStateMaterialIndex(),
 		0);
-	TestEqual(
-		TEXT("빨강 빛은 0번 머티리얼을 적용한다"),
-		TargetMesh->GetMaterial(0),
-		static_cast<UMaterialInterface*>(TestStateMaterials[0]));
+	TestTrue(
+		TEXT("빨강 물감은 G와 B만 최소 채널까지 낮춘다"),
+		Receiver->CurrentPaintTint.Equals(
+			FLinearColor(1.0f, 0.15f, 0.15f, 1.0f),
+			KINDA_SMALL_NUMBER));
 
 	Receiver->ReceiveLightExposure_Implementation(MakeExposure(GreenSource, FLinearColor::Green));
 	TestTrue(
 		TEXT("빨강과 초록은 노랑으로 가산 혼합된다"),
 		Receiver->GetMixedLightColor().Equals(FLinearColor::Yellow, KINDA_SMALL_NUMBER));
 	TestEqual(
-		TEXT("빨강과 초록은 3번 상태 머티리얼을 사용한다"),
+		TEXT("빨강과 초록은 3번 RGB 상태를 사용한다"),
 		Receiver->GetCurrentStateMaterialIndex(),
 		3);
-	TestEqual(
-		TEXT("빨강과 초록은 3번 머티리얼을 적용한다"),
-		TargetMesh->GetMaterial(0),
-		static_cast<UMaterialInterface*>(TestStateMaterials[3]));
+	TestTrue(
+		TEXT("빨강과 초록 물감은 B만 최소 채널까지 낮춘다"),
+		Receiver->CurrentPaintTint.Equals(
+			FLinearColor(1.0f, 1.0f, 0.15f, 1.0f),
+			KINDA_SMALL_NUMBER));
 
 	Receiver->ReceiveLightExposure_Implementation(MakeExposure(BlueSource, FLinearColor::Blue));
 	TestTrue(
@@ -275,13 +244,12 @@ bool FUOULightColorAdditiveMixTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("흰색 상태에서 G 채널을 감지한다"), Receiver->bHasGreenLight);
 	TestTrue(TEXT("흰색 상태에서 B 채널을 감지한다"), Receiver->bHasBlueLight);
 	TestEqual(
-		TEXT("RGB 빛은 6번 상태 머티리얼을 사용한다"),
+		TEXT("RGB 빛은 6번 RGB 상태를 사용한다"),
 		Receiver->GetCurrentStateMaterialIndex(),
 		6);
-	TestEqual(
-		TEXT("RGB 빛은 6번 머티리얼을 적용한다"),
-		TargetMesh->GetMaterial(0),
-		static_cast<UMaterialInterface*>(TestStateMaterials[6]));
+	TestTrue(
+		TEXT("RGB 흰색 빛은 원래 알베도를 쓰는 흰색 Tint로 복구한다"),
+		Receiver->CurrentPaintTint.Equals(FLinearColor::White, KINDA_SMALL_NUMBER));
 
 	Receiver->ClearColorExposures();
 	TestFalse(TEXT("노출 기록을 비우면 활성 색상 빛이 없다"), Receiver->HasAnyColorLight());
@@ -292,20 +260,28 @@ bool FUOULightColorAdditiveMixTest::RunTest(const FString& Parameters)
 		TEXT("노출 기록을 비우면 상태 머티리얼 인덱스가 -1이 된다"),
 		Receiver->GetCurrentStateMaterialIndex(),
 		INDEX_NONE);
-	TestEqual(
-		TEXT("노출 기록을 비우면 원래 머티리얼을 복원한다"),
-		TargetMesh->GetMaterial(0),
-		static_cast<UMaterialInterface*>(OriginalMaterial));
-
 	Receiver->ReceiveLightExposure_Implementation(MakeExposure(BlueSource, FLinearColor::Blue));
 	TestEqual(
-		TEXT("파랑 빛 하나는 사용자 지정 순서의 2번 상태 머티리얼을 사용한다"),
+		TEXT("파랑 빛 하나는 2번 RGB 상태를 사용한다"),
 		Receiver->GetCurrentStateMaterialIndex(),
 		2);
-	TestEqual(
-		TEXT("파랑 빛 하나는 2번 머티리얼을 적용한다"),
-		TargetMesh->GetMaterial(0),
-		static_cast<UMaterialInterface*>(TestStateMaterials[2]));
+	const FLinearColor BluePaintTint(0.15f, 0.15f, 1.0f, 1.0f);
+	TestTrue(
+		TEXT("파랑 빛은 R과 G만 최소 채널까지 낮춘다"),
+		Receiver->CurrentPaintTint.Equals(BluePaintTint, KINDA_SMALL_NUMBER));
+
+	Receiver->ClearColorExposures();
+	TestTrue(
+		TEXT("빛 밖으로 나가도 마지막 파랑 물감색을 유지한다"),
+		Receiver->CurrentPaintTint.Equals(BluePaintTint, KINDA_SMALL_NUMBER));
+	TestTrue(
+		TEXT("빛이 사라지면 목표값도 현재 물감색에 고정된다"),
+		Receiver->TargetPaintTint.Equals(BluePaintTint, KINDA_SMALL_NUMBER));
+
+	Receiver->ReceiveLightExposure_Implementation(MakeExposure(RedSource, FLinearColor::White));
+	TestTrue(
+		TEXT("흰색 빛을 다시 받으면 원래 알베도용 흰색 Tint로 복구한다"),
+		Receiver->CurrentPaintTint.Equals(FLinearColor::White, KINDA_SMALL_NUMBER));
 
 	AUOULightSourceActor* PresetSource = World->SpawnActor<AUOULightSourceActor>();
 	TestNotNull(TEXT("색상 프리셋 광원을 생성한다"), PresetSource);
@@ -321,6 +297,13 @@ bool FUOULightColorAdditiveMixTest::RunTest(const FString& Parameters)
 			TEXT("게임플레이 노출도 같은 파랑을 전달한다"),
 			PresetSource->ExposureSource->GetGameplayLightColor().Equals(
 				FLinearColor::Blue,
+				KINDA_SMALL_NUMBER));
+
+		PresetSource->SetLightColorPreset(EUOULightColorPreset::White);
+		TestTrue(
+			TEXT("흰색 프리셋은 물감 제거용 흰색 노출을 전달한다"),
+			PresetSource->ExposureSource->GetGameplayLightColor().Equals(
+				FLinearColor::White,
 				KINDA_SMALL_NUMBER));
 	}
 

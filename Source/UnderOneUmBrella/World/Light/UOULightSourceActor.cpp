@@ -145,6 +145,8 @@ FLinearColor AUOULightSourceActor::ResolveConfiguredLightColor() const
 		return FLinearColor::Green;
 	case EUOULightColorPreset::Blue:
 		return FLinearColor::Blue;
+	case EUOULightColorPreset::White:
+		return FLinearColor::White;
 	case EUOULightColorPreset::Custom:
 		return CustomLightColor;
 	case EUOULightColorPreset::UseSourceSpotLight:

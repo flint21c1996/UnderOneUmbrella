@@ -5,35 +5,17 @@
 #include "Components/MeshComponent.h"
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
-#include "Materials/MaterialInstance.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
 
 UUOULightColorReceiverComponent::UUOULightColorReceiverComponent()
 {
 	PrimaryComponentTick.bCanEverTick = true;
-	StateMaterials.SetNum(7);
 
 	// 색상 반응만 필요한 액터가 기존 온도 시스템까지 함께 갱신되지 않도록 합니다.
 	// 두 기능을 함께 쓰고 싶은 블루프린트에서는 이 값을 다시 설정할 수 있습니다.
 	TemperatureRisePerIntensity = 0.0f;
 	bRecoverToAmbientWhenNotExposed = false;
-}
-
-void UUOULightColorReceiverComponent::PostLoad()
-{
-	Super::PostLoad();
-
-	// 이전 버전은 0번에 기본 머티리얼, 1~7번에 RGB 상태를 저장했습니다.
-	// 저장된 BP/레벨 컴포넌트가 8칸이면 색 상태 머티리얼만 한 칸씩 당겨 이관합니다.
-	if (StateMaterials.Num() == 8)
-	{
-		for (int32 NewIndex = 0; NewIndex < 7; ++NewIndex)
-		{
-			StateMaterials[NewIndex] = StateMaterials[NewIndex + 1];
-		}
-	}
-	StateMaterials.SetNum(7);
 }
 
 void UUOULightColorReceiverComponent::BeginPlay()
@@ -45,7 +27,7 @@ void UUOULightColorReceiverComponent::BeginPlay()
 void UUOULightColorReceiverComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	ActiveColorExposures.Reset();
-	MaterialStateTargets.Reset();
+	PaintMaterialTargets.Reset();
 	Super::EndPlay(EndPlayReason);
 }
 
@@ -55,7 +37,7 @@ void UUOULightColorReceiverComponent::TickComponent(
 	FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
-	UpdateMaterialTransitions(DeltaTime);
+	UpdatePaintTransition(DeltaTime);
 
 	const int32 PreviousExposureCount = ActiveColorExposures.Num();
 	RemoveExpiredColorExposures();
@@ -92,6 +74,11 @@ void UUOULightColorReceiverComponent::ClearColorExposures()
 	RecalculateMixedLightColor(true);
 }
 
+void UUOULightColorReceiverComponent::ResetPaintTint(bool bImmediate)
+{
+	SetPaintTarget(FLinearColor::White, bImmediate);
+}
+
 int32 UUOULightColorReceiverComponent::GetCurrentStateMaterialIndex() const
 {
 	return ResolveStateMaterialIndex(CurrentColorState);
@@ -99,9 +86,9 @@ int32 UUOULightColorReceiverComponent::GetCurrentStateMaterialIndex() const
 
 void UUOULightColorReceiverComponent::RefreshTargetMaterials()
 {
-	MaterialStateTargets.Reset();
+	PaintMaterialTargets.Reset();
 
-	if (!bApplyStateMaterials)
+	if (!bApplyPaintTint)
 	{
 		return;
 	}
@@ -117,7 +104,7 @@ void UUOULightColorReceiverComponent::RefreshTargetMaterials()
 		AddMeshComponentTarget(Cast<UMeshComponent>(MeshReference.GetComponent(Owner)));
 	}
 
-	if (MaterialStateTargets.IsEmpty() && bAutoFindMeshComponents)
+	if (PaintMaterialTargets.IsEmpty() && bAutoFindMeshComponents)
 	{
 		TInlineComponentArray<UMeshComponent*> MeshComponents(Owner);
 		for (UMeshComponent* MeshComponent : MeshComponents)
@@ -126,7 +113,7 @@ void UUOULightColorReceiverComponent::RefreshTargetMaterials()
 		}
 	}
 
-	ApplyStateMaterial(CurrentColorState);
+	ApplyCurrentPaintTint();
 }
 
 void UUOULightColorReceiverComponent::RemoveExpiredColorExposures()
@@ -149,42 +136,36 @@ void UUOULightColorReceiverComponent::RemoveExpiredColorExposures()
 	}
 }
 
-void UUOULightColorReceiverComponent::UpdateMaterialTransitions(float DeltaTime)
+void UUOULightColorReceiverComponent::UpdatePaintTransition(float DeltaTime)
 {
-	if (DeltaTime <= 0.0f)
+	if (!bPaintTransitionActive || DeltaTime <= 0.0f)
 	{
 		return;
 	}
 
-	for (FMaterialStateTarget& Target : MaterialStateTargets)
+	const float SafeDuration = FMath::Max(0.0f, MaterialTransitionDuration);
+	if (SafeDuration <= KINDA_SMALL_NUMBER)
 	{
-		UMaterialInstanceDynamic* BlendMaterial = Target.BlendMaterial.Get();
-		UMaterialInstance* DestinationMaterial = Target.DestinationMaterial.Get();
-		UMeshComponent* MeshComponent = Target.Mesh.Get();
-		if (BlendMaterial == nullptr || DestinationMaterial == nullptr || MeshComponent == nullptr ||
-			Target.TransitionTimeRemaining <= 0.0f)
-		{
-			continue;
-		}
+		CurrentPaintTint = TargetPaintTint;
+		bPaintTransitionActive = false;
+		ApplyCurrentPaintTint();
+		return;
+	}
 
-		const float StepAlpha = FMath::Clamp(
-			DeltaTime / Target.TransitionTimeRemaining,
-			0.0f,
-			1.0f);
-		BlendMaterial->K2_InterpolateMaterialInstanceParams(
-			BlendMaterial,
-			DestinationMaterial,
-			StepAlpha);
-		Target.TransitionTimeRemaining = FMath::Max(
-			0.0f,
-			Target.TransitionTimeRemaining - DeltaTime);
+	PaintTransitionElapsed = FMath::Min(
+		PaintTransitionElapsed + DeltaTime,
+		SafeDuration);
+	const float Alpha = PaintTransitionElapsed / SafeDuration;
+	const float SmoothAlpha = Alpha * Alpha * (3.0f - 2.0f * Alpha);
+	CurrentPaintTint = FMath::Lerp(PaintTransitionStart, TargetPaintTint, SmoothAlpha);
+	CurrentPaintTint.A = 1.0f;
+	ApplyCurrentPaintTint();
 
-		if (Target.TransitionTimeRemaining <= KINDA_SMALL_NUMBER)
-		{
-			MeshComponent->SetMaterial(TargetMaterialSlotIndex, DestinationMaterial);
-			Target.BlendMaterial.Reset();
-			Target.DestinationMaterial.Reset();
-		}
+	if (Alpha >= 1.0f - KINDA_SMALL_NUMBER)
+	{
+		CurrentPaintTint = TargetPaintTint;
+		bPaintTransitionActive = false;
+		ApplyCurrentPaintTint();
 	}
 }
 
@@ -229,9 +210,14 @@ void UUOULightColorReceiverComponent::RecalculateMixedLightColor(bool bForceAppl
 	bHasGreenLight = bNewHasGreenLight;
 	bHasBlueLight = bNewHasBlueLight;
 
-	if (bForceApply || bColorStateChanged)
+	if (bNewHasAnyColorLight && (bForceApply || bColorStateChanged || bMixedColorChanged))
 	{
-		ApplyStateMaterial(CurrentColorState);
+		SetPaintTargetFromLight(MixedLightColor);
+	}
+	else if (!bNewHasAnyColorLight && (bForceApply || bAnyLightChanged))
+	{
+		// 빛이 사라지면 원래 색으로 복구하지 않고, 그 순간까지 묻은 색을 유지합니다.
+		HoldCurrentPaintTint();
 	}
 
 	if (bColorStateChanged)
@@ -247,81 +233,63 @@ void UUOULightColorReceiverComponent::RecalculateMixedLightColor(bool bForceAppl
 	}
 }
 
-void UUOULightColorReceiverComponent::ApplyStateMaterial(EUOULightColorState NewState)
+void UUOULightColorReceiverComponent::SetPaintTargetFromLight(
+	const FLinearColor& LightColor)
 {
-	if (!bApplyStateMaterials)
-	{
-		return;
-	}
-
-	const int32 StateIndex = ResolveStateMaterialIndex(NewState);
-	UMaterialInterface* StateMaterial = StateMaterials.IsValidIndex(StateIndex)
-		? StateMaterials[StateIndex].Get()
-		: nullptr;
-
-	for (FMaterialStateTarget& Target : MaterialStateTargets)
-	{
-		UMaterialInterface* MaterialToApply = NewState == EUOULightColorState::None
-			? Target.OriginalMaterial.Get()
-			: StateMaterial;
-		if (MaterialToApply != nullptr)
-		{
-			ApplyOrTransitionMaterial(Target, MaterialToApply);
-		}
-	}
+	SetPaintTarget(CalculatePaintTint(LightColor));
 }
 
-void UUOULightColorReceiverComponent::ApplyOrTransitionMaterial(
-	FMaterialStateTarget& Target,
-	UMaterialInterface* DesiredMaterial)
+void UUOULightColorReceiverComponent::SetPaintTarget(
+	const FLinearColor& NewTarget,
+	bool bImmediate)
 {
-	UMeshComponent* MeshComponent = Target.Mesh.Get();
-	if (MeshComponent == nullptr || DesiredMaterial == nullptr)
+	FLinearColor ClampedTarget = NewTarget.GetClamped(0.0f, 1.0f);
+	ClampedTarget.A = 1.0f;
+	if (!bImmediate && TargetPaintTint.Equals(ClampedTarget, KINDA_SMALL_NUMBER))
 	{
 		return;
 	}
 
-	UMaterialInterface* CurrentMaterial = MeshComponent->GetMaterial(TargetMaterialSlotIndex);
-	if (CurrentMaterial == DesiredMaterial)
+	TargetPaintTint = ClampedTarget;
+	if (bImmediate || MaterialTransitionDuration <= KINDA_SMALL_NUMBER)
 	{
-		Target.BlendMaterial.Reset();
-		Target.DestinationMaterial.Reset();
-		Target.TransitionTimeRemaining = 0.0f;
+		CurrentPaintTint = TargetPaintTint;
+		PaintTransitionStart = CurrentPaintTint;
+		PaintTransitionElapsed = 0.0f;
+		bPaintTransitionActive = false;
+		ApplyCurrentPaintTint();
 		return;
 	}
 
-	UMaterialInstance* DestinationInstance = Cast<UMaterialInstance>(DesiredMaterial);
-	const bool bCanInterpolate =
-		bSmoothMaterialTransitions &&
-		MaterialTransitionDuration > KINDA_SMALL_NUMBER &&
-		CurrentMaterial != nullptr &&
-		DestinationInstance != nullptr &&
-		CurrentMaterial->GetBaseMaterial() == DesiredMaterial->GetBaseMaterial();
-	if (!bCanInterpolate)
+	PaintTransitionStart = CurrentPaintTint;
+	PaintTransitionElapsed = 0.0f;
+	bPaintTransitionActive = true;
+}
+
+void UUOULightColorReceiverComponent::HoldCurrentPaintTint()
+{
+	TargetPaintTint = CurrentPaintTint;
+	PaintTransitionStart = CurrentPaintTint;
+	PaintTransitionElapsed = 0.0f;
+	bPaintTransitionActive = false;
+}
+
+void UUOULightColorReceiverComponent::ApplyCurrentPaintTint()
+{
+	if (!bApplyPaintTint || PaintTintParameterName.IsNone())
 	{
-		MeshComponent->SetMaterial(TargetMaterialSlotIndex, DesiredMaterial);
-		Target.BlendMaterial.Reset();
-		Target.DestinationMaterial.Reset();
-		Target.TransitionTimeRemaining = 0.0f;
 		return;
 	}
 
-	UMaterialInstanceDynamic* BlendMaterial = UMaterialInstanceDynamic::Create(
-		DesiredMaterial,
-		this);
-	if (BlendMaterial == nullptr)
+	for (FPaintMaterialTarget& Target : PaintMaterialTargets)
 	{
-		MeshComponent->SetMaterial(TargetMaterialSlotIndex, DesiredMaterial);
-		return;
+		if (UMaterialInstanceDynamic* DynamicMaterial = Target.DynamicMaterial.Get())
+		{
+			DynamicMaterial->SetVectorParameterValue(
+				PaintTintParameterName,
+				CurrentPaintTint);
+		}
 	}
-
-	// 현재 화면에 보이는 파라미터를 복사한 뒤 목표 Material Instance까지 보간합니다.
-	// 도중에 다른 색 상태가 들어와도 현재 중간값에서 다시 이어집니다.
-	BlendMaterial->K2_CopyMaterialInstanceParameters(CurrentMaterial, true);
-	MeshComponent->SetMaterial(TargetMaterialSlotIndex, BlendMaterial);
-	Target.BlendMaterial = BlendMaterial;
-	Target.DestinationMaterial = DestinationInstance;
-	Target.TransitionTimeRemaining = MaterialTransitionDuration;
 }
 
 void UUOULightColorReceiverComponent::AddMeshComponentTarget(UMeshComponent* MeshComponent)
@@ -333,8 +301,8 @@ void UUOULightColorReceiverComponent::AddMeshComponentTarget(UMeshComponent* Mes
 		return;
 	}
 
-	const bool bAlreadyAdded = MaterialStateTargets.ContainsByPredicate(
-		[MeshComponent](const FMaterialStateTarget& ExistingTarget)
+	const bool bAlreadyAdded = PaintMaterialTargets.ContainsByPredicate(
+		[MeshComponent](const FPaintMaterialTarget& ExistingTarget)
 		{
 			return ExistingTarget.Mesh.Get() == MeshComponent;
 		});
@@ -343,9 +311,45 @@ void UUOULightColorReceiverComponent::AddMeshComponentTarget(UMeshComponent* Mes
 		return;
 	}
 
-	FMaterialStateTarget& NewTarget = MaterialStateTargets.AddDefaulted_GetRef();
+	UMaterialInterface* SourceMaterial = MeshComponent->GetMaterial(TargetMaterialSlotIndex);
+	UMaterialInstanceDynamic* DynamicMaterial = MeshComponent->CreateDynamicMaterialInstance(
+		TargetMaterialSlotIndex,
+		SourceMaterial);
+	if (DynamicMaterial == nullptr)
+	{
+		return;
+	}
+
+	FPaintMaterialTarget& NewTarget = PaintMaterialTargets.AddDefaulted_GetRef();
 	NewTarget.Mesh = MeshComponent;
-	NewTarget.OriginalMaterial = MeshComponent->GetMaterial(TargetMaterialSlotIndex);
+	NewTarget.DynamicMaterial = DynamicMaterial;
+	DynamicMaterial->SetVectorParameterValue(PaintTintParameterName, CurrentPaintTint);
+}
+
+FLinearColor UUOULightColorReceiverComponent::CalculatePaintTint(
+	const FLinearColor& LightColor) const
+{
+	const float SafeThreshold = FMath::Clamp(ActiveChannelThreshold, 0.0f, 1.0f);
+	FLinearColor ActiveColor(
+		LightColor.R >= SafeThreshold ? LightColor.R : 0.0f,
+		LightColor.G >= SafeThreshold ? LightColor.G : 0.0f,
+		LightColor.B >= SafeThreshold ? LightColor.B : 0.0f,
+		1.0f);
+	const float MaxChannel = FMath::Max3(ActiveColor.R, ActiveColor.G, ActiveColor.B);
+	if (MaxChannel <= KINDA_SMALL_NUMBER)
+	{
+		return CurrentPaintTint;
+	}
+
+	ActiveColor.R /= MaxChannel;
+	ActiveColor.G /= MaxChannel;
+	ActiveColor.B /= MaxChannel;
+	const float SafeMinimumChannel = FMath::Clamp(MinimumPaintChannel, 0.0f, 1.0f);
+	return FLinearColor(
+		FMath::Lerp(SafeMinimumChannel, 1.0f, ActiveColor.R),
+		FMath::Lerp(SafeMinimumChannel, 1.0f, ActiveColor.G),
+		FMath::Lerp(SafeMinimumChannel, 1.0f, ActiveColor.B),
+		1.0f);
 }
 
 EUOULightColorState UUOULightColorReceiverComponent::ResolveColorState(

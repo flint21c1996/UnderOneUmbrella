@@ -7,8 +7,6 @@
 #include "World/Light/UOULightExposureReceiverComponent.h"
 #include "UOULightColorReceiverComponent.generated.h"
 
-class UMaterialInterface;
-class UMaterialInstance;
 class UMaterialInstanceDynamic;
 class UMeshComponent;
 
@@ -39,13 +37,13 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(
 	int32,
 	MaterialIndex);
 
-// 여러 게임플레이 광원의 RGB 조합을 판정하고 0~6번 상태 머티리얼을 대상 Mesh에 적용합니다.
+// 여러 게임플레이 광원의 RGB 조합을 판정하고 대상 Mesh의 PaintTint 파라미터에 누적합니다.
 UCLASS(
 	ClassGroup = (Light),
 	meta = (
 		BlueprintSpawnableComponent,
 		DisplayName = "UOU Light Color Receiver",
-		ToolTip = "받은 RGB 빛 조합에 맞춰 0~6번 상태 머티리얼을 적용하고 BP 이벤트를 발생시킵니다."))
+		ToolTip = "받은 RGB 빛을 물감처럼 머티리얼에 남기고 BP 이벤트를 발생시킵니다."))
 class UNDERONEUMBRELLA_API UUOULightColorReceiverComponent
 	: public UUOULightExposureReceiverComponent
 {
@@ -54,7 +52,6 @@ class UNDERONEUMBRELLA_API UUOULightColorReceiverComponent
 public:
 	UUOULightColorReceiverComponent();
 
-	virtual void PostLoad() override;
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void TickComponent(
@@ -101,27 +98,32 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Color|Runtime")
 	bool bHasBlueLight = false;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light|Color|Material", meta = (ToolTip = "켜면 RGB 조합이 바뀔 때 State Materials의 머티리얼을 대상 Mesh에 적용합니다."))
-	bool bApplyStateMaterials = true;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light|Color|Paint", meta = (ToolTip = "켜면 받은 RGB 빛을 대상 머티리얼의 Vector Parameter에 물감처럼 적용합니다."))
+	bool bApplyPaintTint = true;
 
-	// 0=R, 1=G, 2=B, 3=RG, 4=RB, 5=GB, 6=RGB입니다. 빛이 없으면 시작할 때 저장한 머티리얼을 복원합니다.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light|Color|Material", meta = (EditFixedSize, ToolTip = "RGB 조합별 머티리얼입니다. 0 R, 1 G, 2 B, 3 RG, 4 RB, 5 GB, 6 RGB 순서입니다."))
-	TArray<TObjectPtr<UMaterialInterface>> StateMaterials;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light|Color|Paint", meta = (ToolTip = "대상 머티리얼의 Base Color에 곱하도록 만든 Vector Parameter 이름입니다."))
+	FName PaintTintParameterName = TEXT("PaintTint");
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light|Color|Material", meta = (ToolTip = "머티리얼을 교체할 Mesh Component입니다. 비어 있으면 소유 액터의 Mesh들을 자동으로 찾습니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light|Color|Paint", meta = (ClampMin = "0.0", ClampMax = "1.0", ToolTip = "선택되지 않은 색 채널에 남길 최소값입니다. 0이면 완전히 제거되고 값이 높을수록 원본 질감과 밝기가 더 남습니다."))
+	float MinimumPaintChannel = 0.15f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light|Color|Paint", meta = (ToolTip = "PaintTint를 적용할 Mesh Component입니다. 비어 있으면 소유 액터의 Mesh들을 자동으로 찾습니다."))
 	TArray<FComponentReference> TargetMeshReferences;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light|Color|Material", meta = (ToolTip = "Target Mesh 목록이 비었을 때 소유 액터의 Mesh Component를 자동으로 찾습니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light|Color|Paint", meta = (ToolTip = "Target Mesh 목록이 비었을 때 소유 액터의 Mesh Component를 자동으로 찾습니다."))
 	bool bAutoFindMeshComponents = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light|Color|Material", meta = (ClampMin = "0", ToolTip = "각 대상 Mesh에서 실제로 교체할 Material Slot 번호입니다. State Materials 배열 인덱스와는 별개입니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light|Color|Paint", meta = (ClampMin = "0", ToolTip = "각 대상 Mesh에서 PaintTint를 적용할 Material Slot 번호입니다."))
 	int32 TargetMaterialSlotIndex = 0;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light|Color|Material|Transition", meta = (ToolTip = "같은 마스터를 사용하는 Material Instance 사이의 Scalar/Vector 파라미터를 서서히 보간합니다. 조건이 맞지 않으면 즉시 교체합니다."))
-	bool bSmoothMaterialTransitions = true;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light|Color|Material|Transition", meta = (ClampMin = "0.0", Units = "s", EditCondition = "bSmoothMaterialTransitions", ToolTip = "새 RGB 상태 머티리얼로 전환하는 시간입니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light|Color|Paint", meta = (ClampMin = "0.0", Units = "s", ToolTip = "현재 물감색에서 새 RGB 물감색까지 변하는 시간입니다. 0이면 즉시 적용합니다."))
 	float MaterialTransitionDuration = 0.25f;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Color|Paint|Runtime", meta = (ToolTip = "현재 머티리얼에 적용 중인 지속형 PaintTint입니다. 빛 밖으로 나가도 유지됩니다."))
+	FLinearColor CurrentPaintTint = FLinearColor::White;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Color|Paint|Runtime", meta = (ToolTip = "현재 RGB 빛으로부터 계산된 목표 PaintTint입니다."))
+	FLinearColor TargetPaintTint = FLinearColor::White;
 
 	UFUNCTION(BlueprintPure, Category = "Light|Color")
 	FLinearColor GetMixedLightColor() const { return MixedLightColor; }
@@ -135,11 +137,14 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Light|Color")
 	bool HasAnyColorLight() const { return bHasAnyColorLight; }
 
-	UFUNCTION(BlueprintCallable, Category = "Light|Color", meta = (ToolTip = "활성 광원 기록을 비우고 시작할 때 저장한 원래 머티리얼로 되돌립니다."))
+	UFUNCTION(BlueprintCallable, Category = "Light|Color", meta = (ToolTip = "활성 광원 기록만 비웁니다. 현재 물감색은 그대로 유지됩니다."))
 	void ClearColorExposures();
 
-	UFUNCTION(BlueprintCallable, Category = "Light|Color|Material", meta = (ToolTip = "현재 Target Mesh 설정을 다시 읽고 현재 RGB 상태의 머티리얼을 적용합니다."))
+	UFUNCTION(BlueprintCallable, Category = "Light|Color|Paint", meta = (ToolTip = "현재 Target Mesh 설정을 다시 읽고 동적 머티리얼과 현재 PaintTint를 적용합니다."))
 	void RefreshTargetMaterials();
+
+	UFUNCTION(BlueprintCallable, Category = "Light|Color|Paint", meta = (ToolTip = "현재 물감색을 흰색으로 되돌려 원래 알베도를 복구합니다. 흰색 RGB 빛도 같은 결과를 냅니다."))
+	void ResetPaintTint(bool bImmediate = false);
 
 protected:
 	struct FActiveColorExposure
@@ -149,24 +154,27 @@ protected:
 		float LastReceivedWorldTime = -BIG_NUMBER;
 	};
 
-	struct FMaterialStateTarget
+	struct FPaintMaterialTarget
 	{
 		TWeakObjectPtr<UMeshComponent> Mesh;
-		TWeakObjectPtr<UMaterialInterface> OriginalMaterial;
-		TWeakObjectPtr<UMaterialInstanceDynamic> BlendMaterial;
-		TWeakObjectPtr<UMaterialInstance> DestinationMaterial;
-		float TransitionTimeRemaining = 0.0f;
+		TWeakObjectPtr<UMaterialInstanceDynamic> DynamicMaterial;
 	};
 
 	TMap<TWeakObjectPtr<UObject>, FActiveColorExposure> ActiveColorExposures;
-	TArray<FMaterialStateTarget> MaterialStateTargets;
+	TArray<FPaintMaterialTarget> PaintMaterialTargets;
+	FLinearColor PaintTransitionStart = FLinearColor::White;
+	float PaintTransitionElapsed = 0.0f;
+	bool bPaintTransitionActive = false;
 
 	void RemoveExpiredColorExposures();
-	void UpdateMaterialTransitions(float DeltaTime);
+	void UpdatePaintTransition(float DeltaTime);
 	void RecalculateMixedLightColor(bool bForceApply = false);
-	void ApplyStateMaterial(EUOULightColorState NewState);
-	void ApplyOrTransitionMaterial(FMaterialStateTarget& Target, UMaterialInterface* DesiredMaterial);
+	void SetPaintTargetFromLight(const FLinearColor& LightColor);
+	void SetPaintTarget(const FLinearColor& NewTarget, bool bImmediate = false);
+	void HoldCurrentPaintTint();
+	void ApplyCurrentPaintTint();
 	void AddMeshComponentTarget(UMeshComponent* MeshComponent);
+	FLinearColor CalculatePaintTint(const FLinearColor& LightColor) const;
 	static EUOULightColorState ResolveColorState(bool bRed, bool bGreen, bool bBlue);
 	static int32 ResolveStateMaterialIndex(EUOULightColorState State);
 };
