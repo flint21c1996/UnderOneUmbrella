@@ -2,15 +2,25 @@
 
 #include "UI/UOUDialogueBoxWidget.h"
 
+#include "Components/Border.h"
 #include "Components/Button.h"
 #include "Components/TextBlock.h"
 #include "Components/Widget.h"
 #include "Engine/LocalPlayer.h"
 #include "UI/UOUUISubsystem.h"
 
+void UUOUDialogueBoxWidget::NativePreConstruct()
+{
+	Super::NativePreConstruct();
+
+	// BP 디자이너 미리보기에서도 실제 실행과 같은 크기와 9-Slice 설정을 확인할 수 있게 합니다.
+	RefreshAdaptiveLayout();
+}
+
 void UUOUDialogueBoxWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
+	RefreshAdaptiveLayout();
 
 	if (AdvanceButton != nullptr)
 	{
@@ -18,6 +28,27 @@ void UUOUDialogueBoxWidget::NativeConstruct()
 	}
 
 	SetDialogueBoxVisible(false);
+}
+
+void UUOUDialogueBoxWidget::RefreshAdaptiveLayout()
+{
+	if (DialoguePanel != nullptr)
+	{
+		DialoguePanel->SetPadding(ContentPadding);
+
+		if (bApplyNineSliceBrush)
+		{
+			FSlateBrush AppliedBrush = NineSliceBrush;
+			AppliedBrush.DrawAs = ESlateBrushDrawType::Box;
+			DialoguePanel->SetBrush(AppliedBrush);
+		}
+	}
+
+	if (DialogueText != nullptr)
+	{
+		DialogueText->SetAutoWrapText(bAutoWrapDialogueText);
+		DialogueText->SetWrapTextAt(DialogueWrapTextAt);
+	}
 }
 
 void UUOUDialogueBoxWidget::NativeDestruct()
