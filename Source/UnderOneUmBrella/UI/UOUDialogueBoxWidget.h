@@ -4,10 +4,13 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
+#include "Styling/SlateBrush.h"
 #include "UI/UOUUITypes.h"
 #include "UOUDialogueBoxWidget.generated.h"
 
+class UBorder;
 class UButton;
+class USizeBox;
 class UTextBlock;
 class UWidget;
 class UUOUUISubsystem;
@@ -22,6 +25,7 @@ class UNDERONEUMBRELLA_API UUOUDialogueBoxWidget : public UUserWidget
 	GENERATED_BODY()
 
 public:
+	virtual void NativePreConstruct() override;
 	virtual void NativeConstruct() override;
 	virtual void NativeDestruct() override;
 
@@ -41,6 +45,12 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Dialogue Box")
 	bool IsDialogueBoxVisible() const { return bDialogueBoxVisible; }
 
+	// 디자이너에서 연결한 9-Slice 배경과 본문 줄바꿈 설정을 다시 적용합니다.
+	// DialogueSizeBox의 크기 제한은 디자이너에서 설정한 값을 그대로 사용합니다.
+	// 런타임에 스타일 값을 바꾼 뒤 호출할 수도 있습니다.
+	UFUNCTION(BlueprintCallable, Category = "Dialogue Box|Adaptive Layout")
+	void RefreshAdaptiveLayout();
+
 	UPROPERTY(BlueprintAssignable, Category = "Dialogue Box")
 	FUOUDialogueBoxAdvanceRequestedSignature OnAdvanceRequested;
 
@@ -55,6 +65,15 @@ public:
 	// WBP에서 대사 본문 TextBlock으로 연결할 위젯입니다.
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional), Category = "Dialogue Box|Bind")
 	TObjectPtr<UTextBlock> DialogueText = nullptr;
+
+	// WBP에서 9-Slice 배경으로 사용할 Border입니다. 위젯 이름을 DialoguePanel로 맞추면 자동 연결됩니다.
+	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional), Category = "Dialogue Box|Bind")
+	TObjectPtr<UBorder> DialoguePanel = nullptr;
+
+	// 대화창의 크기를 디자이너에서 설정할 SizeBox입니다. 위젯 이름을 DialogueSizeBox로 맞추면 자동 연결됩니다.
+	// C++에서는 이 SizeBox의 너비/높이 오버라이드를 변경하지 않습니다.
+	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional), Category = "Dialogue Box|Bind")
+	TObjectPtr<USizeBox> DialogueSizeBox = nullptr;
 
 	// WBP에서 다음 대사 버튼으로 연결할 위젯입니다.
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional), Category = "Dialogue Box|Bind")
@@ -71,6 +90,26 @@ public:
 	// 버튼 클릭 시 UISubsystem에 다음 대사를 바로 요청할지 정합니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue Box|Input")
 	bool bAdvanceDialogueOnButtonClick = true;
+
+	// 켜면 NineSliceBrush를 DialoguePanel에 적용합니다. 끄면 디자이너에서 Border에 지정한 Brush를 그대로 사용합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dialogue Box|Adaptive Layout")
+	bool bApplyNineSliceBrush = false;
+
+	// Draw As는 실행 시 Box로 강제되어 모서리는 유지하고 중앙과 변만 늘어납니다.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dialogue Box|Adaptive Layout", meta = (EditCondition = "bApplyNineSliceBrush"))
+	FSlateBrush NineSliceBrush;
+
+	// 테두리와 실제 대사 내용 사이의 여백입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dialogue Box|Adaptive Layout")
+	FMargin ContentPadding = FMargin(32.0f, 24.0f);
+
+	// 본문 TextBlock의 자동 줄바꿈을 사용할지 정합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dialogue Box|Adaptive Layout")
+	bool bAutoWrapDialogueText = true;
+
+	// 본문이 줄바꿈될 실제 너비입니다. 보통 디자이너의 최대 원하는 너비에서 좌우 패딩을 뺀 값으로 둡니다. 0이면 명시적인 줄바꿈 너비를 쓰지 않습니다.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dialogue Box|Adaptive Layout", meta = (ClampMin = "0.0", UIMin = "0.0"))
+	float DialogueWrapTextAt = 836.0f;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Dialogue Box|Runtime")
 	TObjectPtr<AActor> CurrentSpeakerActor = nullptr;
