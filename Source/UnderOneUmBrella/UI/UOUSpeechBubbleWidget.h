@@ -63,6 +63,7 @@ private:
 	void SetBubbleVisible(bool bNewVisible);
 	void SetBubbleOpacity(float NewOpacity);
 	bool SetBubbleText(const FText& BubbleText) const;
+	UWidget* ResolveBubbleTextWidget() const;
 	UWidget* ResolveBubbleRootWidget() const;
 	UWorld* GetTimerWorld() const;
 

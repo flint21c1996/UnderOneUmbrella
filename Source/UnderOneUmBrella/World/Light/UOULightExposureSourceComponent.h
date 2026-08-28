@@ -84,6 +84,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Exposure", meta = (ClampMin = "0.0", ToolTip = "거리/각도 감쇠 전 수신체에 적용할 기본 게임플레이 빛 세기입니다."))
 	float Intensity = 1.0f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Exposure|Color", meta = (ToolTip = "게임플레이 색상 판정에 Source SpotLight의 색상을 사용합니다."))
+	bool bUseSourceSpotLightColor = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Exposure|Color", meta = (EditCondition = "!bUseSourceSpotLightColor", EditConditionHides, ToolTip = "Source SpotLight 색상을 사용하지 않거나 SpotLight가 없을 때 전달할 게임플레이 빛 색상입니다."))
+	FLinearColor GameplayLightColor = FLinearColor::White;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Exposure", meta = (ToolTip = "광원과의 거리에 따라 빛 세기를 줄입니다."))
 	bool bUseDistanceFalloff = true;
 
@@ -203,6 +209,9 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Light", meta = (ToolTip = "Fallback 원뿔 각도와 게임플레이 빛 세기를 한 번에 설정합니다."))
 	void Configure(float NewConeAngle, float NewIntensity);
+
+	UFUNCTION(BlueprintPure, Category = "Light|Exposure|Color", meta = (ToolTip = "수신체에 전달되는 현재 게임플레이 빛 색상을 반환합니다."))
+	FLinearColor GetGameplayLightColor() const;
 
 protected:
 	struct FPendingExposureCandidate
