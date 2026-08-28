@@ -299,6 +299,11 @@ protected:
 		const AActor* IgnoredShadeOwner = nullptr,
 		float BeamStartRadius = -1.0f,
 		float BeamConeAngle = 0.0f) const;
+	bool FindNearestCylinderInteractionSurfaceHit(
+		FHitResult& OutHit,
+		const FVector& TraceStart,
+		const FVector& TraceEnd,
+		float BeamRadius) const;
 	bool FindNearestUmbrellaLightShadeHit(
 		const FVector& TraceStart,
 		const FVector& TraceEnd,

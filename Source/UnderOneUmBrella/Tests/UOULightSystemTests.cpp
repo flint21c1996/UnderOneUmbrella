@@ -1570,6 +1570,28 @@ bool FUOULightWorldPathIntegrationTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("반사광이 수신 컴포넌트에 전달된다"), Receiver->IsReceivingLight());
 	TestTrue(TEXT("반사광 경로는 수신 대상 뒤까지 통과하지 않는다"), ReflectedSegment.End.X > -220.0f);
 
+	AActor* NearbyFloorActor = World->SpawnActor<AActor>();
+	TestNotNull(TEXT("원기둥 빛 주변 지형 테스트용 바닥을 생성한다"), NearbyFloorActor);
+	if (NearbyFloorActor == nullptr)
+	{
+		return false;
+	}
+	UBoxComponent* NearbyFloorBox =
+		NewObject<UBoxComponent>(NearbyFloorActor, TEXT("NearbyFloorBox"));
+	TestNotNull(TEXT("원기둥 빛 주변 지형 충돌체를 생성한다"), NearbyFloorBox);
+	if (NearbyFloorBox == nullptr)
+	{
+		return false;
+	}
+	NearbyFloorActor->AddInstanceComponent(NearbyFloorBox);
+	NearbyFloorActor->SetRootComponent(NearbyFloorBox);
+	NearbyFloorBox->SetBoxExtent(FVector(500.0f, 500.0f, 10.0f));
+	NearbyFloorBox->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+	NearbyFloorBox->SetCollisionResponseToAllChannels(ECR_Ignore);
+	NearbyFloorBox->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
+	NearbyFloorBox->RegisterComponent();
+	NearbyFloorActor->SetActorLocation(FVector(250.0f, 0.0f, -60.0f));
+
 	SourceActor->ExposureSource->BeamShape = EUOULightBeamShape::Cylinder;
 	SourceActor->ExposureSource->CylinderRadius = 50.0f;
 	SourceActor->ExposureSource->BeamLength = 1000.0f;
@@ -1586,10 +1608,35 @@ bool FUOULightWorldPathIntegrationTest::RunTest(const FString& Parameters)
 	const FUOULightPathSegmentData& CylinderReflectedSegment = LightPaths[0].Segments[1];
 	TestEqual(TEXT("원기둥 직접광의 시작 반지름을 유지한다"), CylinderIncomingSegment.StartRadius, 50.0f);
 	TestEqual(TEXT("원기둥 직접광의 끝 반지름을 유지한다"), CylinderIncomingSegment.EndRadius, 50.0f);
+	TestTrue(TEXT("빛 가장자리에 닿는 바닥이 원기둥 빛을 시작점에서 지우지 않는다"),
+		CylinderIncomingSegment.Length > 300.0f);
 	TestEqual(TEXT("원기둥 반사광은 확산각이 없다"), CylinderReflectedSegment.ConeAngle, 0.0f);
 	TestTrue(
 		TEXT("원기둥 반사광도 수신 대상에서 종료된다"),
 		CylinderReflectedSegment.HitType == EUOULightPathHitType::Receiver);
+
+	Surface->bRequireFullBeamFootprint = true;
+	Surface->BeamFootprintOverflowAllowancePercent = 0.0f;
+	Surface->bPassThroughWhenReflectionRejected = false;
+	SurfaceActor->SetActorRotation(FRotator(0.0f, 76.0f, 0.0f));
+	SourceActor->ExposureSource->EmitLight(0.1f);
+	LightPaths = SourceActor->ExposureSource->GetLightPaths();
+
+	TestTrue(TEXT("빛 단면 조건으로 반사가 실패해도 직접광 경로는 유지된다"), !LightPaths.IsEmpty());
+	if (LightPaths.IsEmpty() || LightPaths[0].Segments.IsEmpty())
+	{
+		return false;
+	}
+	TestEqual(
+		TEXT("통과 옵션을 끈 거울은 반사 실패 시 직접광을 차단한다"),
+		LightPaths[0].Segments[0].HitType,
+		EUOULightPathHitType::BlockingSurface);
+	TestEqual(TEXT("반사 실패 시 반사 구간은 생성하지 않는다"), LightPaths[0].Segments.Num(), 1);
+	TestTrue(TEXT("직접광은 반사에 실패한 거울 뒤까지 통과하지 않는다"),
+		LightPaths[0].Segments[0].End.X < 500.0f);
+
+	SurfaceActor->SetActorRotation(FRotator::ZeroRotator);
+	Surface->bRequireFullBeamFootprint = false;
 
 	SourceActor->ExposureSource->BeamShape = EUOULightBeamShape::Cone;
 	SourceActor->SourceSpotLight->SetOuterConeAngle(60.0f);

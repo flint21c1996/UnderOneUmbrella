@@ -44,7 +44,7 @@ AUOURotatableMirrorActor::AUOURotatableMirrorActor()
 	LightInteractionSurface->ReflectionNormalMode = EUOULightReflectionNormalMode::ComponentForward;
 	LightInteractionSurface->ReflectionFrontNormalMode =
 		EUOULightReflectionFrontNormalMode::ComponentForward;
-	// 거울보다 넓은 빛은 일부만 잘라 반사하지 않고 원래 경로로 통과시킵니다.
+	// 거울보다 넓은 빛은 일부만 잘라 반사하지 않으며, 일반 거울처럼 표면에서 차단합니다.
 	LightInteractionSurface->bRequireFullBeamFootprint = true;
 	LightInteractionSurface->MaximumReflectionIncidenceAngle = 89.0f;
 	LightInteractionSurface->RetainedMaximumReflectionIncidenceAngle = 95.0f;
