@@ -84,6 +84,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Exposure", meta = (ClampMin = "0.0", ToolTip = "거리/각도 감쇠 전 수신체에 적용할 기본 게임플레이 빛 세기입니다."))
 	float Intensity = 1.0f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Exposure|Color", meta = (ToolTip = "게임플레이 색상 판정에 Source SpotLight의 색상을 사용합니다."))
+	bool bUseSourceSpotLightColor = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Exposure|Color", meta = (EditCondition = "!bUseSourceSpotLightColor", EditConditionHides, ToolTip = "Source SpotLight 색상을 사용하지 않거나 SpotLight가 없을 때 전달할 게임플레이 빛 색상입니다."))
+	FLinearColor GameplayLightColor = FLinearColor::White;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Exposure", meta = (ToolTip = "광원과의 거리에 따라 빛 세기를 줄입니다."))
 	bool bUseDistanceFalloff = true;
 
@@ -116,6 +122,9 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection", meta = (ToolTip = "빛 상호작용 표면이 반사된 게임플레이 빛을 발생시킬 수 있게 합니다."))
 	bool bEnableReflectedLight = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection", meta = (DisplayName = "우산 반사 뒤 직접광 차단", ToolTip = "우산이 빛 단면의 일부를 받아 반사하면 우산 뒤쪽으로 남아 있는 직접광 판정을 제거합니다."))
+	bool bBlockDirectLightBehindUmbrellaReflection = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection", meta = (ClampMin = "0", ToolTip = "한 틱에 처리할 최대 반사 표면 수입니다."))
 	int32 MaxReflectionSurfacesPerTick = 4;
@@ -200,6 +209,9 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Light", meta = (ToolTip = "Fallback 원뿔 각도와 게임플레이 빛 세기를 한 번에 설정합니다."))
 	void Configure(float NewConeAngle, float NewIntensity);
+
+	UFUNCTION(BlueprintPure, Category = "Light|Exposure|Color", meta = (ToolTip = "수신체에 전달되는 현재 게임플레이 빛 색상을 반환합니다."))
+	FLinearColor GetGameplayLightColor() const;
 
 protected:
 	struct FPendingExposureCandidate
@@ -310,6 +322,9 @@ protected:
 		bool bReflected,
 		const FString& StablePathKey,
 		FPendingExposureMap& PendingExposures) const;
+	bool IsDirectExposureBehindUmbrellaReflection(
+		const FUOULightExposureData& ExposureData) const;
+	bool IsWorldPositionBehindUmbrellaReflection(const FVector& WorldPosition) const;
 	void DeliverPendingExposures(const FPendingExposureMap& PendingExposures);
 	void EmitReflectedLightFromSurface(
 		UUOULightInteractionSurfaceComponent* SurfaceComponent,
