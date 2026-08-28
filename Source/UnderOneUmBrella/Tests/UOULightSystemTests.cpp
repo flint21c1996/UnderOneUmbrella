@@ -18,6 +18,7 @@
 #include "UObject/UnrealType.h"
 #include "World/Light/UOULightBeamVisualComponent.h"
 #include "World/Light/UOULightBeamMeshVisualActor.h"
+#include "World/Light/UOULightColorReceiverComponent.h"
 #include "World/Light/UOULightExposureReceiverComponent.h"
 #include "World/Light/UOULightExposureSourceComponent.h"
 #include "World/Light/UOULightInteractionSurfaceComponent.h"
@@ -127,6 +128,186 @@ namespace
 		bOutValue = Property->GetPropertyValue(ValueAddress);
 		return true;
 	}
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FUOULightColorAdditiveMixTest,
+	"UnderOneUmbrella.Light.Color.AdditiveRGBMix",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUOULightColorAdditiveMixTest::RunTest(const FString& Parameters)
+{
+	UWorld* UninitializedWorld = UWorld::CreateWorld(
+		EWorldType::Editor,
+		false,
+		TEXT("UOULightColorAdditiveMixWorld"),
+		nullptr,
+		false,
+		ERHIFeatureLevel::Num,
+		nullptr,
+		true);
+	FScopedEditorWorld ScopedWorld(
+		UninitializedWorld,
+		UWorld::InitializationValues()
+			.RequiresHitProxies(false)
+			.ShouldSimulatePhysics(false)
+			.EnableTraceCollision(false)
+			.CreateNavigation(false)
+			.CreateAISystem(false)
+			.AllowAudioPlayback(false)
+			.CreatePhysicsScene(false));
+	UWorld* World = ScopedWorld.GetWorld();
+	TestNotNull(TEXT("RGB 혼합 테스트 월드를 생성한다"), World);
+	if (World == nullptr)
+	{
+		return false;
+	}
+
+	AActor* ReceiverActor = World->SpawnActor<AActor>();
+	UUOULightColorReceiverComponent* Receiver = ReceiverActor != nullptr
+		? NewObject<UUOULightColorReceiverComponent>(ReceiverActor, TEXT("ColorReceiver"))
+		: nullptr;
+	TestNotNull(TEXT("색상 수신 액터를 생성한다"), ReceiverActor);
+	TestNotNull(TEXT("색상 수신 컴포넌트를 생성한다"), Receiver);
+	if (ReceiverActor == nullptr || Receiver == nullptr)
+	{
+		return false;
+	}
+
+	ReceiverActor->AddInstanceComponent(Receiver);
+	Receiver->bUseReceiverVolumeSampling = false;
+	Receiver->bWeightColorByExposureIntensity = false;
+	Receiver->bApplyPaintTint = false;
+	Receiver->MaterialTransitionDuration = 0.0f;
+	Receiver->MinimumPaintChannel = 0.15f;
+	Receiver->RegisterComponent();
+
+	AActor* RedSource = World->SpawnActor<AActor>();
+	AActor* GreenSource = World->SpawnActor<AActor>();
+	AActor* BlueSource = World->SpawnActor<AActor>();
+	TestNotNull(TEXT("빨강 광원 식별자를 생성한다"), RedSource);
+	TestNotNull(TEXT("초록 광원 식별자를 생성한다"), GreenSource);
+	TestNotNull(TEXT("파랑 광원 식별자를 생성한다"), BlueSource);
+	if (RedSource == nullptr || GreenSource == nullptr || BlueSource == nullptr)
+	{
+		return false;
+	}
+
+	const auto MakeExposure = [](UObject* Source, const FLinearColor& Color)
+	{
+		return FUOULightExposureData(
+			Source,
+			FVector::ZeroVector,
+			FVector::ZeroVector,
+			FVector::ForwardVector,
+			100.0f,
+			0.25f,
+			1.0f,
+			1.0f,
+			0.1f,
+			Color);
+	};
+
+	Receiver->ReceiveLightExposure_Implementation(MakeExposure(RedSource, FLinearColor::Red));
+	TestTrue(
+		TEXT("빨강 빛 하나는 빨강으로 표시된다"),
+		Receiver->GetMixedLightColor().Equals(FLinearColor::Red, KINDA_SMALL_NUMBER));
+	TestEqual(
+		TEXT("빨강 빛은 0번 RGB 상태를 사용한다"),
+		Receiver->GetCurrentStateMaterialIndex(),
+		0);
+	TestTrue(
+		TEXT("빨강 물감은 G와 B만 최소 채널까지 낮춘다"),
+		Receiver->CurrentPaintTint.Equals(
+			FLinearColor(1.0f, 0.15f, 0.15f, 1.0f),
+			KINDA_SMALL_NUMBER));
+
+	Receiver->ReceiveLightExposure_Implementation(MakeExposure(GreenSource, FLinearColor::Green));
+	TestTrue(
+		TEXT("빨강과 초록은 노랑으로 가산 혼합된다"),
+		Receiver->GetMixedLightColor().Equals(FLinearColor::Yellow, KINDA_SMALL_NUMBER));
+	TestEqual(
+		TEXT("빨강과 초록은 3번 RGB 상태를 사용한다"),
+		Receiver->GetCurrentStateMaterialIndex(),
+		3);
+	TestTrue(
+		TEXT("빨강과 초록 물감은 B만 최소 채널까지 낮춘다"),
+		Receiver->CurrentPaintTint.Equals(
+			FLinearColor(1.0f, 1.0f, 0.15f, 1.0f),
+			KINDA_SMALL_NUMBER));
+
+	Receiver->ReceiveLightExposure_Implementation(MakeExposure(BlueSource, FLinearColor::Blue));
+	TestTrue(
+		TEXT("빨강, 초록, 파랑은 흰색으로 가산 혼합된다"),
+		Receiver->GetMixedLightColor().Equals(FLinearColor::White, KINDA_SMALL_NUMBER));
+	TestTrue(TEXT("흰색 상태에서 R 채널을 감지한다"), Receiver->bHasRedLight);
+	TestTrue(TEXT("흰색 상태에서 G 채널을 감지한다"), Receiver->bHasGreenLight);
+	TestTrue(TEXT("흰색 상태에서 B 채널을 감지한다"), Receiver->bHasBlueLight);
+	TestEqual(
+		TEXT("RGB 빛은 6번 RGB 상태를 사용한다"),
+		Receiver->GetCurrentStateMaterialIndex(),
+		6);
+	TestTrue(
+		TEXT("RGB 흰색 빛은 원래 알베도를 쓰는 흰색 Tint로 복구한다"),
+		Receiver->CurrentPaintTint.Equals(FLinearColor::White, KINDA_SMALL_NUMBER));
+
+	Receiver->ClearColorExposures();
+	TestFalse(TEXT("노출 기록을 비우면 활성 색상 빛이 없다"), Receiver->HasAnyColorLight());
+	TestTrue(
+		TEXT("노출 기록을 비우면 혼합 색은 검정이다"),
+		Receiver->GetMixedLightColor().Equals(FLinearColor::Black, KINDA_SMALL_NUMBER));
+	TestEqual(
+		TEXT("노출 기록을 비우면 상태 머티리얼 인덱스가 -1이 된다"),
+		Receiver->GetCurrentStateMaterialIndex(),
+		INDEX_NONE);
+	Receiver->ReceiveLightExposure_Implementation(MakeExposure(BlueSource, FLinearColor::Blue));
+	TestEqual(
+		TEXT("파랑 빛 하나는 2번 RGB 상태를 사용한다"),
+		Receiver->GetCurrentStateMaterialIndex(),
+		2);
+	const FLinearColor BluePaintTint(0.15f, 0.15f, 1.0f, 1.0f);
+	TestTrue(
+		TEXT("파랑 빛은 R과 G만 최소 채널까지 낮춘다"),
+		Receiver->CurrentPaintTint.Equals(BluePaintTint, KINDA_SMALL_NUMBER));
+
+	Receiver->ClearColorExposures();
+	TestTrue(
+		TEXT("빛 밖으로 나가도 마지막 파랑 물감색을 유지한다"),
+		Receiver->CurrentPaintTint.Equals(BluePaintTint, KINDA_SMALL_NUMBER));
+	TestTrue(
+		TEXT("빛이 사라지면 목표값도 현재 물감색에 고정된다"),
+		Receiver->TargetPaintTint.Equals(BluePaintTint, KINDA_SMALL_NUMBER));
+
+	Receiver->ReceiveLightExposure_Implementation(MakeExposure(RedSource, FLinearColor::White));
+	TestTrue(
+		TEXT("흰색 빛을 다시 받으면 원래 알베도용 흰색 Tint로 복구한다"),
+		Receiver->CurrentPaintTint.Equals(FLinearColor::White, KINDA_SMALL_NUMBER));
+
+	AUOULightSourceActor* PresetSource = World->SpawnActor<AUOULightSourceActor>();
+	TestNotNull(TEXT("색상 프리셋 광원을 생성한다"), PresetSource);
+	if (PresetSource != nullptr && PresetSource->SourceSpotLight != nullptr)
+	{
+		PresetSource->SetLightColorPreset(EUOULightColorPreset::Blue);
+		TestTrue(
+			TEXT("파랑 프리셋은 실제 SpotLight를 파랑으로 설정한다"),
+			PresetSource->SourceSpotLight->GetLightColor().Equals(
+				FLinearColor::Blue,
+				KINDA_SMALL_NUMBER));
+		TestTrue(
+			TEXT("게임플레이 노출도 같은 파랑을 전달한다"),
+			PresetSource->ExposureSource->GetGameplayLightColor().Equals(
+				FLinearColor::Blue,
+				KINDA_SMALL_NUMBER));
+
+		PresetSource->SetLightColorPreset(EUOULightColorPreset::White);
+		TestTrue(
+			TEXT("흰색 프리셋은 물감 제거용 흰색 노출을 전달한다"),
+			PresetSource->ExposureSource->GetGameplayLightColor().Equals(
+				FLinearColor::White,
+				KINDA_SMALL_NUMBER));
+	}
+
+	return true;
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
@@ -1735,6 +1916,20 @@ bool FUOUUmbrellaParallelCylinderEdgeReflectionTest::RunTest(const FString& Para
 		FRotator(0.0f, 90.0f, 0.0f));
 	UmbrellaSurface->SetLightInteractionMode(EUOULightInteractionMode::Reflecting);
 
+	UUOUUmbrellaLightShadeVolumeComponent* UmbrellaShade =
+		NewObject<UUOUUmbrellaLightShadeVolumeComponent>(UmbrellaActor, TEXT("ParallelUmbrellaShade"));
+	TestNotNull(TEXT("가장자리 반사 우산의 직접광 차단 볼륨을 생성한다"), UmbrellaShade);
+	if (UmbrellaShade == nullptr)
+	{
+		return false;
+	}
+	UmbrellaActor->AddInstanceComponent(UmbrellaShade);
+	UmbrellaShade->SetupAttachment(UmbrellaSurface);
+	UmbrellaShade->SetBoxExtent(FVector(6.0f, 70.0f, 70.0f));
+	UmbrellaShade->MaximumBlockingIncidenceAngle = 180.0f;
+	UmbrellaShade->RegisterComponent();
+	UmbrellaShade->SetShadeEnabled(true);
+
 	SourceActor->ExposureSource->EmitLight(0.1f);
 	const TArray<FUOULightReflectionPathData> ReflectionPaths =
 		SourceActor->ExposureSource->GetReflectionPaths();
@@ -1752,6 +1947,87 @@ bool FUOUUmbrellaParallelCylinderEdgeReflectionTest::RunTest(const FString& Para
 			TEXT("평행 입사광은 우산 소유 액터의 전방으로 반사된다"),
 			Segment.ReflectedDirection.Equals(FVector::RightVector, 0.01f));
 	}
+	const TArray<FUOULightPathData> EdgeReflectionLightPaths =
+		SourceActor->ExposureSource->GetLightPaths();
+	TestTrue(TEXT("가장자리 반사의 통합 빛 경로를 생성한다"), !EdgeReflectionLightPaths.IsEmpty());
+	if (!EdgeReflectionLightPaths.IsEmpty() && !EdgeReflectionLightPaths[0].Segments.IsEmpty())
+	{
+		const FUOULightPathSegmentData& DirectSegment = EdgeReflectionLightPaths[0].Segments[0];
+		TestTrue(
+			TEXT("원기둥 직접광은 가장자리 우산 충돌점 쪽으로 꺾이지 않고 광원 Forward를 유지한다"),
+			DirectSegment.Direction.Equals(FVector::ForwardVector, 0.01f));
+		TestTrue(
+			TEXT("원기둥 직접광 중심선은 광원에서 직선으로 진행한다"),
+			FMath::IsNearlyZero(DirectSegment.End.Y, 0.01f));
+	}
+
+	AActor* DisconnectedMirrorActor = World->SpawnActor<AActor>();
+	UUOULightInteractionSurfaceComponent* DisconnectedMirrorSurface =
+		DisconnectedMirrorActor != nullptr
+			? NewObject<UUOULightInteractionSurfaceComponent>(
+				DisconnectedMirrorActor,
+				TEXT("DisconnectedMirrorSurface"))
+			: nullptr;
+	TestNotNull(TEXT("우산 뒤 연결되지 않은 거울을 생성한다"), DisconnectedMirrorSurface);
+	if (DisconnectedMirrorActor == nullptr || DisconnectedMirrorSurface == nullptr)
+	{
+		return false;
+	}
+	DisconnectedMirrorActor->AddInstanceComponent(DisconnectedMirrorSurface);
+	DisconnectedMirrorActor->SetRootComponent(DisconnectedMirrorSurface);
+	DisconnectedMirrorSurface->SetBoxExtent(FVector(5.0f, 10.0f, 70.0f));
+	DisconnectedMirrorSurface->bUseSurfaceAreaSampling = false;
+	DisconnectedMirrorSurface->bReflectFrontFaceOnly = false;
+	DisconnectedMirrorSurface->ReflectionNormalMode =
+		EUOULightReflectionNormalMode::ComponentForward;
+	DisconnectedMirrorSurface->RegisterComponent();
+	DisconnectedMirrorActor->SetActorLocation(FVector(650.0f, 0.0f, 0.0f));
+	DisconnectedMirrorSurface->SetLightInteractionMode(EUOULightInteractionMode::Reflecting);
+
+	SourceActor->ExposureSource->EmitLight(0.1f);
+	bool bFoundDisconnectedMirrorReflection = false;
+	for (const FUOULightReflectionPathData& Path : SourceActor->ExposureSource->GetReflectionPaths())
+	{
+		for (const FUOULightReflectionSegmentData& Segment : Path.Segments)
+		{
+			bFoundDisconnectedMirrorReflection |= Segment.Reflector == DisconnectedMirrorSurface;
+		}
+	}
+	TestFalse(
+		TEXT("우산에서 거울로 이어지는 구간이 없으면 거울 반사가 독립적으로 시작되지 않는다"),
+		bFoundDisconnectedMirrorReflection);
+
+	AActor* ReceiverActor = World->SpawnActor<AActor>();
+	UBoxComponent* ReceiverBox = ReceiverActor != nullptr
+		? NewObject<UBoxComponent>(ReceiverActor, TEXT("BehindUmbrellaReceiverBox"))
+		: nullptr;
+	UUOULightExposureReceiverComponent* Receiver = ReceiverActor != nullptr
+		? NewObject<UUOULightExposureReceiverComponent>(ReceiverActor, TEXT("BehindUmbrellaReceiver"))
+		: nullptr;
+	TestNotNull(TEXT("우산 뒤 직접광 수신 액터를 생성한다"), ReceiverActor);
+	TestNotNull(TEXT("우산 뒤 직접광 수신 볼륨을 생성한다"), ReceiverBox);
+	TestNotNull(TEXT("우산 뒤 직접광 수신 컴포넌트를 생성한다"), Receiver);
+	if (ReceiverActor == nullptr || ReceiverBox == nullptr || Receiver == nullptr)
+	{
+		return false;
+	}
+
+	ReceiverActor->AddInstanceComponent(ReceiverBox);
+	ReceiverActor->SetRootComponent(ReceiverBox);
+	ReceiverBox->SetBoxExtent(FVector(10.0f));
+	ReceiverBox->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+	ReceiverBox->SetCollisionObjectType(ECC_WorldDynamic);
+	ReceiverBox->SetCollisionResponseToAllChannels(ECR_Ignore);
+	ReceiverBox->RegisterComponent();
+	ReceiverActor->SetActorLocation(FVector(700.0f, -40.0f, 0.0f));
+	ReceiverActor->AddInstanceComponent(Receiver);
+	Receiver->bUseReceiverVolumeSampling = false;
+	Receiver->RegisterComponent();
+
+	SourceActor->ExposureSource->EmitLight(0.1f);
+	TestFalse(
+		TEXT("우산 가장자리에서 반사가 성립하면 우산을 비껴간 직접광 샘플도 뒤쪽 수신체에 전달되지 않는다"),
+		Receiver->IsReceivingLight());
 	return true;
 }
 
