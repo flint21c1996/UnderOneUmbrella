@@ -84,6 +84,31 @@ int32 UUOULightColorReceiverComponent::GetCurrentStateMaterialIndex() const
 	return ResolveStateMaterialIndex(CurrentColorState);
 }
 
+FLinearColor UUOULightColorReceiverComponent::GetPaintTintForColorState(
+	EUOULightColorState ColorState) const
+{
+	switch (ColorState)
+	{
+	case EUOULightColorState::Red:
+		return CalculatePaintTint(FLinearColor::Red);
+	case EUOULightColorState::Green:
+		return CalculatePaintTint(FLinearColor::Green);
+	case EUOULightColorState::Blue:
+		return CalculatePaintTint(FLinearColor::Blue);
+	case EUOULightColorState::RedGreen:
+		return CalculatePaintTint(FLinearColor::Yellow);
+	case EUOULightColorState::RedBlue:
+		return CalculatePaintTint(FLinearColor(1.0f, 0.0f, 1.0f, 1.0f));
+	case EUOULightColorState::GreenBlue:
+		return CalculatePaintTint(FLinearColor(0.0f, 1.0f, 1.0f, 1.0f));
+	case EUOULightColorState::RedGreenBlue:
+		return FLinearColor::White;
+	case EUOULightColorState::None:
+	default:
+		return FLinearColor::White;
+	}
+}
+
 void UUOULightColorReceiverComponent::RefreshTargetMaterials()
 {
 	PaintMaterialTargets.Reset();
@@ -276,6 +301,8 @@ void UUOULightColorReceiverComponent::HoldCurrentPaintTint()
 
 void UUOULightColorReceiverComponent::ApplyCurrentPaintTint()
 {
+	OnPaintTintChanged.Broadcast(CurrentPaintTint);
+
 	if (!bApplyPaintTint || PaintTintParameterName.IsNone())
 	{
 		return;
