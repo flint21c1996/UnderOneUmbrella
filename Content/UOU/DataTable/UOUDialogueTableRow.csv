@@ -1,16 +1,16 @@
-﻿Name,ActorId,DialogueState,LineOrder,LineId,SpeakerName,ProximityBubbleText,BubbleText,DialogueText,Emotion,BubbleDuration,DialogueDuration,bWaitForInput,bShowBubbleFirst
-BoxNPC_Before_10,BoxNPC_01,BeforePuzzle,0,None,상자 씨,,오잉?,안녕? 넌 누구야?,None,1.5,5,TRUE,TRUE
-BoxNPC_Before_11,BoxNPC_01,BeforePuzzle,1,None,상자 씨,,잠깐만!,잠깐 이야기해도 될까?,None,1.5,3,TRUE,TRUE
-BoxNPC_After_00,BoxNPC_01,BeforePuzzle,2,None,상자 씨,,고마워!,모든 쥐들이 오르골을 돌리기 위해 노력하고 있어!,None,1.5,4,TRUE,TRUE
-BoxNPC_Before_20,BoxNPC_02,BeforePuzzle,0,None,상자 씨,?,흠..,비때문에 물레방아가 한쪽으로만 도네..,None,1.5,5,TRUE,TRUE
-BoxNPC_Before_21,BoxNPC_02,BeforePuzzle,1,None,상자 씨,,,비를 막거나.. 반대쪽에 부어보는건 어떨까?,None,1.5,5,TRUE,TRUE
-BoxNPC_Before_30,BoxNPC_03,BeforePuzzle,0,None,상자 씨,그거 알아?,,모든 퍼즐을 풀면 물레방아 안의 숨은 별이 나타난데!,None,1.5,5,TRUE,TRUE
-BoxNPC_Before_40,BoxNPC_04,BeforePuzzle,0,None,상자 씨,내 생각인데..,,빗물은 위에서 아래로 흐르니까..,None,1.5,5,TRUE,TRUE
-BoxNPC_Before_41,BoxNPC_04,BeforePuzzle,1,None,상자 씨,,,누군가 위에서 막아줄수도 있지 않을까?,None,1.5,5,TRUE,TRUE
-BoxNPC_Before_50,BoxNPC_05,BeforePuzzle,0,None,상자 씨,?,,웅덩이에 물을 부으면..,None,1.5,5,TRUE,TRUE
-BoxNPC_Before_51,BoxNPC_05,BeforePuzzle,1,None,상자 씨,,,나무 판자가 떠오를꺼 같아,None,1.5,5,TRUE,TRUE
-BoxNPC_Before_60,BoxNPC_06,BeforePuzzle,0,None,상자 씨,?,,난 별을 잡을 거야. 아주 작아도 괜찮아. 내 주머니에 쏙 들어갈 정도면 충분하거든.,None,1.5,5,TRUE,TRUE
-BoxNPC_Before_61,BoxNPC_06,BeforePuzzle,1,None,상자 씨,,,너도 포기하지 않길 바래!,None,1.5,5,TRUE,TRUE
-BoxNPC_Before_70,BoxNPC_07,BeforePuzzle,0,None,상자 씨,?,,"빗물이 흐르고 흘러 여기에 모이듯, 장마에 지친 이들도 여기로 오겠지.",None,1.5,5,TRUE,TRUE
-BoxNPC_Before_71,BoxNPC_07,BeforePuzzle,1,None,상자 씨,,,너도 잠깐 쉬다 가도 돼..,None,1.5,5,TRUE,TRUE
-BoxNPC_Before_80,BoxNPC_08,BeforePuzzle,0,None,상자 씨,?,,별은 원래 손에 안 잡히라고 있는 거야. 그래야 계속 쳐다보게 되니까,None,1.5,5,TRUE,TRUE
+Name,ActorId,DialogueState,LineOrder,LineId,SpeakerName,ProximityBubbleText,BubbleText,DialogueText,Emotion,PresentationStyle,BubbleDuration,DialogueDuration,bWaitForInput,bShowBubbleFirst
+BoxNPC_Before_10,BoxNPC_01,BeforePuzzle,0,None,상자 씨,,오잉?,안녕? 넌 누구야?,None,Hint,1.5,5,TRUE,TRUE
+BoxNPC_Before_11,BoxNPC_01,BeforePuzzle,1,None,상자 씨,,잠깐만!,잠깐 이야기해도 될까?,None,Hint,1.5,3,TRUE,TRUE
+BoxNPC_After_00,BoxNPC_01,AfterPuzzle,0,None,상자 씨,!,고마워!,모든 쥐들이 오르골을 돌리기 위해 노력하고 있어!,None,Success,1.5,4,TRUE,TRUE
+BoxNPC_Before_20,BoxNPC_02,BeforePuzzle,0,None,상자 씨,?,흠..,비때문에 물레방아가 한쪽으로만 도네..,None,Hint,1.5,5,TRUE,TRUE
+BoxNPC_Before_21,BoxNPC_02,BeforePuzzle,1,None,상자 씨,,,비를 막거나.. 반대쪽에 부어보는건 어떨까?,None,Hint,1.5,5,TRUE,TRUE
+BoxNPC_Before_30,BoxNPC_03,BeforePuzzle,0,None,상자 씨,그거 알아?,,모든 퍼즐을 풀면 물레방아 안의 숨은 별이 나타난데!,None,Hint,1.5,5,TRUE,TRUE
+BoxNPC_Before_40,BoxNPC_04,BeforePuzzle,0,None,상자 씨,내 생각인데..,,빗물은 위에서 아래로 흐르니까..,None,Hint,1.5,5,TRUE,TRUE
+BoxNPC_Before_41,BoxNPC_04,BeforePuzzle,1,None,상자 씨,,,누군가 위에서 막아줄수도 있지 않을까?,None,Hint,1.5,5,TRUE,TRUE
+BoxNPC_Before_50,BoxNPC_05,BeforePuzzle,0,None,상자 씨,?,,웅덩이에 물을 부으면..,None,Hint,1.5,5,TRUE,TRUE
+BoxNPC_Before_51,BoxNPC_05,BeforePuzzle,1,None,상자 씨,,,나무 판자가 떠오를꺼 같아,None,Hint,1.5,5,TRUE,TRUE
+BoxNPC_Before_60,BoxNPC_06,BeforePuzzle,0,None,상자 씨,?,,난 별을 잡을 거야. 아주 작아도 괜찮아. 내 주머니에 쏙 들어갈 정도면 충분하거든.,None,Hint,1.5,5,TRUE,TRUE
+BoxNPC_Before_61,BoxNPC_06,BeforePuzzle,1,None,상자 씨,,,너도 포기하지 않길 바래!,None,Hint,1.5,5,TRUE,TRUE
+BoxNPC_Before_70,BoxNPC_07,BeforePuzzle,0,None,상자 씨,?,,"빗물이 흐르고 흘러 여기에 모이듯, 장마에 지친 이들도 여기로 오겠지.",None,Hint,1.5,5,TRUE,TRUE
+BoxNPC_Before_71,BoxNPC_07,BeforePuzzle,1,None,상자 씨,,,너도 잠깐 쉬다 가도 돼..,None,Hint,1.5,5,TRUE,TRUE
+BoxNPC_Before_80,BoxNPC_08,BeforePuzzle,0,None,상자 씨,?,,별은 원래 손에 안 잡히라고 있는 거야. 그래야 계속 쳐다보게 되니까,None,Hint,1.5,5,TRUE,TRUE

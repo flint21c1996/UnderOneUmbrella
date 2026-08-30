@@ -1,6 +1,6 @@
-﻿Name,ActorId,DialogueState,LineOrder,BubbleText,BubbleDuration
-1_floor,Apt_01,Default,0,"상자에 물을 붓고, 이동시켜 버튼 위에 올려놓으세요.\n 우산이 펼쳐진 상태에서 R -뒤집기 \n 우산을 뒤집은 상태에서 마우스 우클릭 - 물 붓기\n 우산을 접은 상태에서 마우스 우클릭 누른 상태로 이동- 상자 잡기",10
-1_floor_0,Apt_02,Default,0,우산으로 몇 초간 비를 막아봐요. \n 마우스 좌클릭 - 우산 펼치기,10
-1_floor_1,Apt_03_1,Default,0,물레방아에 내리는 비를 막으면.....,10
-1_floor_2,Apt_03_2,Default,0,돌아가는 반대 방향으로 물을 부으면....,10
-1_floor_3,MS_Sign,Default,0,쥐에게 우산을 씌워주고 대화를 나눠보세요.,10
+Name,ActorId,DialogueState,LineOrder,BubbleText,PresentationStyle,BubbleDuration
+1_floor,Apt_01,Default,0,"상자에 물을 붓고, 이동시켜 버튼 위에 올려놓으세요.\n 우산이 펼쳐진 상태에서 R -뒤집기 \n 우산을 뒤집은 상태에서 마우스 우클릭 - 물 붓기\n 우산을 접은 상태에서 마우스 우클릭 누른 상태로 이동- 상자 잡기",Default,10
+1_floor_0,Apt_02,Default,0,우산으로 몇 초간 비를 막아봐요. \n 마우스 좌클릭 - 우산 펼치기,Default,10
+1_floor_1,Apt_03_1,Default,0,물레방아에 내리는 비를 막으면.....,Default,10
+1_floor_2,Apt_03_2,Default,0,돌아가는 반대 방향으로 물을 부으면....,Default,10
+1_floor_3,MS_Sign,Default,0,쥐에게 우산을 씌워주고 대화를 나눠보세요.,Default,10

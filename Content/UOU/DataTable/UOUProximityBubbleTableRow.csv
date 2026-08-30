@@ -1,3 +1,3 @@
-Name,ActorId,DialogueState,LineOrder,BubbleText,BubbleDuration
-BoxNPC_Before_Proximity_00,BoxNPC_01,BeforePuzzle,0,?,3
-BoxNPC_After_Proximity_00,BoxNPC_01,AfterPuzzle,0,!,3
+Name,ActorId,DialogueState,LineOrder,BubbleText,PresentationStyle,BubbleDuration
+BoxNPC_Before_Proximity_00,BoxNPC_01,BeforePuzzle,0,?,Hint,3
+BoxNPC_After_Proximity_00,BoxNPC_01,AfterPuzzle,0,!,Success,3
