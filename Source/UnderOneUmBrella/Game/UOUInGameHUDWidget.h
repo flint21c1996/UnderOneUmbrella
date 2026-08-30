@@ -90,6 +90,13 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintCosmetic, Category = "HUD|Dialogue")
 	void ShowNPCSpeechBubble(AActor* SpeakerActor, FText BubbleText, float Duration);
 
+	UFUNCTION(BlueprintCallable, BlueprintCosmetic, Category = "HUD|Dialogue")
+	void ShowNPCSpeechBubbleStyled(
+		AActor* SpeakerActor,
+		FText BubbleText,
+		float Duration,
+		FName PresentationStyle);
+
 	// BP에서 추가 연출이 필요할 때 사용하는 선택 진입점입니다. 기본 말풍선 표시는 C++에서 먼저 처리합니다.
 	UFUNCTION(BlueprintImplementableEvent, BlueprintCosmetic, Category = "HUD|Dialogue")
 	void BP_OnNPCSpeechBubbleRequested(AActor* SpeakerActor, const FText& BubbleText, float Duration);

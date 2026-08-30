@@ -349,7 +349,11 @@ void UUOUUISubsystem::BroadcastDialogueBubble(const FUOUDialogueLine& Line)
 		OnDialogueBubbleRequested.Broadcast(SpeakerActor, DisplayLine.BubbleText, DisplayLine.BubbleDuration);
 		if (RegisteredHUDWidget.IsValid())
 		{
-			RegisteredHUDWidget->ShowNPCSpeechBubble(SpeakerActor, DisplayLine.BubbleText, DisplayLine.BubbleDuration);
+			RegisteredHUDWidget->ShowNPCSpeechBubbleStyled(
+				SpeakerActor,
+				DisplayLine.BubbleText,
+				DisplayLine.BubbleDuration,
+				DisplayLine.PresentationStyle);
 		}
 	}
 }

@@ -100,12 +100,16 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue|Hint", meta = (EditCondition = "bEnableInteractionHint", ClampMin = "-1.0"))
 	double HintDuration = 3.0;
 
-	// 힌트 위젯 블루프린트에서 표시를 담당하는 함수 이름입니다.
+	// 대화 시작이 비활성화된 동안에도 퍼즐 힌트 Bubble은 보여줄지 명시적으로 정합니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue|Hint", meta = (EditCondition = "bEnableInteractionHint"))
+	bool bShowHintWhenInteractionDisabled = true;
+
+	// 힌트 위젯 블루프린트에서 표시를 담당하는 함수 이름입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue|Hint", meta = (AdvancedDisplay, EditCondition = "bEnableInteractionHint"))
 	FName HintShowFunctionName = TEXT("ShowBubble");
 
 	// 힌트 위젯 블루프린트에서 숨김을 담당하는 함수 이름입니다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue|Hint", meta = (EditCondition = "bEnableInteractionHint"))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue|Hint", meta = (AdvancedDisplay, EditCondition = "bEnableInteractionHint"))
 	FName HintHideFunctionName = TEXT("HideBubble");
 
 	// BeginPlay 때 힌트 위젯을 먼저 숨겨 처음부터 떠 있지 않게 합니다.
@@ -206,7 +210,11 @@ private:
 	void UnlockMovementForDialogue();
 	void ClearCoverProgress();
 	void SetHintWidgetComponentVisible(bool bNewVisible) const;
-	bool CallHintWidgetShowFunction(UUserWidget* UserWidget, const FText& DisplayHintText, double DisplayDuration) const;
+	bool CallHintWidgetShowFunction(
+		UUserWidget* UserWidget,
+		const FText& DisplayHintText,
+		double DisplayDuration,
+		FName PresentationStyle) const;
 	bool CallHintWidgetHideFunction(UUserWidget* UserWidget) const;
 	UUserWidget* GetHintUserWidget();
 	void ShowCoverDebugMessage(const FString& Message, const FColor& Color, float Duration = 1.5f) const;

@@ -27,6 +27,7 @@
 #include "NiagaraComponent.h"
 #include "Player/UOURainReceiverComponent.h"
 #include "Player/UOUWaterContainerComponent.h"
+#include "UObject/UObjectIterator.h"
 #include "World/Pour/UOUPourContentProfile.h"
 #include "World/Pour/UOUPourDropActor.h"
 #include "World/WaterTarget/UOUWaterBasinTargetComponent.h"
@@ -1435,7 +1436,25 @@ void UUOUUmbrellaComponent::EnsurePouringEffect()
 		PouringEffectComponent->AttachToComponent(AttachParent, FAttachmentTransformRules::KeepRelativeTransform, AttachSocketName);
 	}
 
+	const bool bStreamHeightDefinitionChanged = CachedPouringStreamHeightAsset.Get() != ContentProfile->StreamEffect
+		|| CachedPouringStreamHeightParameterName != ContentProfile->StreamHeightParameterName;
+
 	PouringEffectComponent->SetAsset(ContentProfile->StreamEffect);
+	if (bStreamHeightDefinitionChanged)
+	{
+		CachedPouringStreamHeightAsset = ContentProfile->StreamEffect;
+		CachedPouringStreamHeightParameterName = ContentProfile->StreamHeightParameterName;
+		DefaultPouringStreamHeight = 0.0f;
+		bHasDefaultPouringStreamHeight = false;
+
+		if (!ContentProfile->StreamHeightParameterName.IsNone())
+		{
+			DefaultPouringStreamHeight = PouringEffectComponent->GetVariableFloat(
+				ContentProfile->StreamHeightParameterName,
+				bHasDefaultPouringStreamHeight);
+		}
+	}
+
 	PouringEffectComponent->SetWorldScale3D(ContentProfile->StreamRelativeScale);
 	UpdatePouringEffectTransform();
 }
@@ -1549,9 +1568,97 @@ void UUOUUmbrellaComponent::UpdatePouringEffectTransform()
 	const FRotator RelativeRotation = ContentProfile != nullptr ? ContentProfile->StreamRelativeRotation : FRotator::ZeroRotator;
 	const FVector RelativeScale = ContentProfile != nullptr ? ContentProfile->StreamRelativeScale : FVector::OneVector;
 	const FQuat EffectRotation = DirectionRotation * FRotator(0.0f, RelativeRotation.Yaw, 0.0f).Quaternion();
+	FVector EffectScale = RelativeScale;
 
 	PouringEffectComponent->SetWorldLocationAndRotation(DropLocation, EffectRotation.Rotator());
-	PouringEffectComponent->SetWorldScale3D(RelativeScale);
+
+	if (ContentProfile == nullptr
+		|| !ContentProfile->bClampStreamToWaterBasinSurface
+		|| ContentProfile->StreamHeightParameterName.IsNone())
+	{
+		PouringEffectComponent->SetWorldScale3D(EffectScale);
+		return;
+	}
+
+	const bool bCanUseStableStreamHeight = bHasDefaultPouringStreamHeight
+		&& CachedPouringStreamHeightAsset.Get() == ContentProfile->StreamEffect
+		&& CachedPouringStreamHeightParameterName == ContentProfile->StreamHeightParameterName
+		&& DefaultPouringStreamHeight > KINDA_SMALL_NUMBER;
+
+	float StreamHeight = 0.0f;
+	if (TryGetPouringStreamHeightToWaterBasin(DropLocation, StreamHeight))
+	{
+		const float VerticalScale = FMath::Max(FMath::Abs(RelativeScale.Z), KINDA_SMALL_NUMBER);
+		const float LocalStreamHeight = FMath::Max(StreamHeight - ContentProfile->StreamSurfaceOffset, 0.0f) / VerticalScale;
+
+		if (bCanUseStableStreamHeight)
+		{
+			// 이 Niagara는 Height를 Particle Spawn에서만 읽으므로 실행 중 파라미터 변경만으로는
+			// 이미 생성된 물줄기의 길이가 바뀌지 않습니다. 파티클의 기준 길이는 고정하고,
+			// 매 프레임 갱신되는 현재 피벗-수면 거리 비율을 컴포넌트 Z 스케일에 적용합니다.
+			PouringEffectComponent->SetVariableFloat(ContentProfile->StreamHeightParameterName, DefaultPouringStreamHeight);
+			EffectScale.Z *= LocalStreamHeight / DefaultPouringStreamHeight;
+		}
+		else
+		{
+			// 기본 Height를 읽지 못한 다른 Niagara 에셋은 기존 파라미터 방식으로 안전하게 폴백합니다.
+			PouringEffectComponent->SetVariableFloat(ContentProfile->StreamHeightParameterName, LocalStreamHeight);
+		}
+	}
+	else if (bCanUseStableStreamHeight)
+	{
+		// Basin 밖으로 이동했을 때 직전에 적용한 짧은 길이가 남지 않도록 Niagara 원래 값을 복구합니다.
+		PouringEffectComponent->SetVariableFloat(ContentProfile->StreamHeightParameterName, DefaultPouringStreamHeight);
+	}
+
+	PouringEffectComponent->SetWorldScale3D(EffectScale);
+}
+
+bool UUOUUmbrellaComponent::TryGetPouringStreamHeightToWaterBasin(const FVector& StreamStart, float& OutWorldHeight) const
+{
+	const UWorld* World = GetWorld();
+	if (World == nullptr || !FMath::IsFinite(StreamStart.X) || !FMath::IsFinite(StreamStart.Y) || !FMath::IsFinite(StreamStart.Z))
+	{
+		return false;
+	}
+
+	const float MaxStreamHeight = FMath::Max(PourDistance, 0.0f);
+	float ClosestSurfaceDistance = TNumericLimits<float>::Max();
+
+	for (TObjectIterator<UUOUWaterBasinTargetComponent> It; It; ++It)
+	{
+		const UUOUWaterBasinTargetComponent* Target = *It;
+		if (!IsValid(Target) || Target->GetWorld() != World || !Target->IsRegistered())
+		{
+			continue;
+		}
+
+		const float SurfaceWorldZ = FMath::Max(Target->WaterSurfaceWorldZ, Target->GetBottomWorldZ());
+		const float SurfaceDistance = StreamStart.Z - SurfaceWorldZ;
+		if (!FMath::IsFinite(SurfaceDistance)
+			|| SurfaceDistance < 0.0f
+			|| SurfaceDistance > MaxStreamHeight
+			|| SurfaceDistance >= ClosestSurfaceDistance)
+		{
+			continue;
+		}
+
+		const FVector SurfacePoint(StreamStart.X, StreamStart.Y, SurfaceWorldZ);
+		if (!Target->IsWorldLocationInsideBasin(SurfacePoint))
+		{
+			continue;
+		}
+
+		ClosestSurfaceDistance = SurfaceDistance;
+	}
+
+	if (ClosestSurfaceDistance == TNumericLimits<float>::Max())
+	{
+		return false;
+	}
+
+	OutWorldHeight = ClosestSurfaceDistance;
+	return true;
 }
 
 bool UUOUUmbrellaComponent::TryGetPourDropSpawnPlacement(FVector& OutDropLocation, FVector& OutDropDirection) const

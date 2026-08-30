@@ -105,6 +105,15 @@ void UUOUSpeechBubbleWidget::NativeTick(const FGeometry& MyGeometry, float InDel
 
 void UUOUSpeechBubbleWidget::ShowBubble(FText BubbleText, double Duration)
 {
+	ShowBubbleStyled(BubbleText, Duration, NAME_None);
+}
+
+void UUOUSpeechBubbleWidget::ShowBubbleStyled(
+	FText BubbleText,
+	double Duration,
+	FName PresentationStyle)
+{
+	ApplyPresentationStyle(PresentationStyle);
 	SetBubbleText(BubbleText);
 
 	if (UWorld* World = GetTimerWorld())
@@ -134,6 +143,17 @@ void UUOUSpeechBubbleWidget::ShowBubble(FText BubbleText, double Duration)
 
 	SetBubbleOpacity(0.0f);
 	FadeState = EFadeState::FadingIn;
+}
+
+void UUOUSpeechBubbleWidget::ApplyPresentationStyle(FName NewPresentationStyle)
+{
+	if (CurrentPresentationStyle == NewPresentationStyle)
+	{
+		return;
+	}
+
+	CurrentPresentationStyle = NewPresentationStyle;
+	BP_OnPresentationStyleChanged(CurrentPresentationStyle);
 }
 
 void UUOUSpeechBubbleWidget::HideBubble()
