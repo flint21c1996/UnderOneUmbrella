@@ -185,6 +185,27 @@ float UUOUDialogueSourceComponent::GetProximityBubbleDuration() const
 	return 3.0f;
 }
 
+FName UUOUDialogueSourceComponent::GetProximityBubbleStyle() const
+{
+	if (ShouldUseProximityBubbleTable())
+	{
+		EnsureProximityBubbleTableCache();
+		return !CachedProximityBubbleStyle.IsNone()
+			? CachedProximityBubbleStyle
+			: GetResolvedProximityBubbleState();
+	}
+
+	if (ShouldUseDialogueTable())
+	{
+		EnsureDialogueTableCache();
+		return !CachedTableProximityBubbleStyle.IsNone()
+			? CachedTableProximityBubbleStyle
+			: DialogueState;
+	}
+
+	return DialogueState;
+}
+
 void UUOUDialogueSourceComponent::SetProximityBubbleEnabled(bool bNewEnabled)
 {
 	bEnableProximityBubble = bNewEnabled;
@@ -199,6 +220,12 @@ void UUOUDialogueSourceComponent::SetSpeechBubbleEnabled(bool bNewEnabled)
 {
 	SetProximityBubbleEnabled(bNewEnabled);
 	SetDialogueBubbleEnabled(bNewEnabled);
+}
+
+void UUOUDialogueSourceComponent::ResetDialoguePlayback()
+{
+	bHasPlayed = false;
+	LastStartTime = -1000.0f;
 }
 
 void UUOUDialogueSourceComponent::ApplyPuzzleResult_Implementation(EOUUPuzzleResultAction Action)
@@ -306,6 +333,7 @@ void UUOUDialogueSourceComponent::EnsureDialogueTableCache() const
 
 	CachedTableLines.Reset();
 	CachedTableProximityBubbleText = FText::GetEmpty();
+	CachedTableProximityBubbleStyle = NAME_None;
 	CachedTableSpeakerName = FText::GetEmpty();
 	bDialogueTableCacheDirty = false;
 
@@ -344,6 +372,9 @@ void UUOUDialogueSourceComponent::EnsureDialogueTableCache() const
 		if (CachedTableProximityBubbleText.IsEmpty() && !Row.ProximityBubbleText.IsEmpty())
 		{
 			CachedTableProximityBubbleText = NormalizeDialogueDisplayText(Row.ProximityBubbleText);
+			CachedTableProximityBubbleStyle = !Row.PresentationStyle.IsNone()
+				? Row.PresentationStyle
+				: DialogueState;
 		}
 
 		if (CachedTableSpeakerName.IsEmpty() && !Row.SpeakerName.IsEmpty())
@@ -357,6 +388,9 @@ void UUOUDialogueSourceComponent::EnsureDialogueTableCache() const
 		Line.BubbleText = NormalizeDialogueDisplayText(Row.BubbleText);
 		Line.DialogueText = NormalizeDialogueDisplayText(Row.DialogueText);
 		Line.Emotion = Row.Emotion;
+		Line.PresentationStyle = !Row.PresentationStyle.IsNone()
+			? Row.PresentationStyle
+			: DialogueState;
 		Line.BubbleDuration = Row.BubbleDuration;
 		Line.DialogueDuration = Row.DialogueDuration;
 		Line.bWaitForInput = Row.bWaitForInput;
@@ -374,6 +408,7 @@ void UUOUDialogueSourceComponent::EnsureProximityBubbleTableCache() const
 
 	CachedProximityBubbleText = FText::GetEmpty();
 	CachedProximityBubbleDuration = 3.0f;
+	CachedProximityBubbleStyle = NAME_None;
 	bProximityBubbleTableCacheDirty = false;
 
 	if (!ShouldUseProximityBubbleTable())
@@ -414,6 +449,9 @@ void UUOUDialogueSourceComponent::EnsureProximityBubbleTableCache() const
 		{
 			CachedProximityBubbleText = NormalizeDialogueDisplayText(Row.BubbleText);
 			CachedProximityBubbleDuration = Row.BubbleDuration;
+			CachedProximityBubbleStyle = !Row.PresentationStyle.IsNone()
+				? Row.PresentationStyle
+				: ResolvedState;
 			return;
 		}
 	}

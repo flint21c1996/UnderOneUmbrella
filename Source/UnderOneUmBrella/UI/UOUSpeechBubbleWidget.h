@@ -25,6 +25,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Speech Bubble")
 	void ShowBubble(FText BubbleText, double Duration);
 
+	// 같은 말풍선 WBP에서 퍼즐 전/후의 색상과 애니메이션을 다르게 적용할 수 있는 표시 함수입니다.
+	UFUNCTION(BlueprintCallable, Category = "Speech Bubble")
+	void ShowBubbleStyled(FText BubbleText, double Duration, FName PresentationStyle);
+
 	// 현재 말풍선을 FadeOutDuration 동안 서서히 사라지게 합니다.
 	UFUNCTION(BlueprintCallable, Category = "Speech Bubble")
 	void HideBubble();
@@ -33,7 +37,17 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Speech Bubble")
 	void HideBubbleImmediately();
 
+	UFUNCTION(BlueprintPure, Category = "Speech Bubble")
+	FName GetCurrentPresentationStyle() const { return CurrentPresentationStyle; }
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Speech Bubble|Style")
+	FName CurrentPresentationStyle = NAME_None;
+
 protected:
+	// BP에서 Style 이름에 맞춰 브러시, 색, 등장 애니메이션을 교체합니다.
+	UFUNCTION(BlueprintImplementableEvent, BlueprintCosmetic, Category = "Speech Bubble|Style")
+	void BP_OnPresentationStyleChanged(FName PresentationStyle);
+
 	// 보일 때 BubbleRoot에 적용할 Visibility입니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Speech Bubble|Display")
 	ESlateVisibility ShownVisibility = ESlateVisibility::SelfHitTestInvisible;
@@ -51,6 +65,7 @@ protected:
 	float FadeOutDuration = 0.18f;
 
 private:
+	void ApplyPresentationStyle(FName NewPresentationStyle);
 	enum class EFadeState : uint8
 	{
 		Hidden,

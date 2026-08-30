@@ -385,6 +385,15 @@ void UUOUInGameHUDWidget::BeginDialoguePresentation_Implementation(AActor* Speak
 
 void UUOUInGameHUDWidget::ShowNPCSpeechBubble(AActor* SpeakerActor, FText BubbleText, float Duration)
 {
+	ShowNPCSpeechBubbleStyled(SpeakerActor, BubbleText, Duration, NAME_None);
+}
+
+void UUOUInGameHUDWidget::ShowNPCSpeechBubbleStyled(
+	AActor* SpeakerActor,
+	FText BubbleText,
+	float Duration,
+	FName PresentationStyle)
+{
 	UWidgetComponent* SpeechBubbleWidgetComponent = ResolveSpeechBubbleWidgetComponent(SpeakerActor);
 	if (SpeechBubbleWidgetComponent == nullptr)
 	{
@@ -403,7 +412,7 @@ void UUOUInGameHUDWidget::ShowNPCSpeechBubble(AActor* SpeakerActor, FText Bubble
 
 	if (UUOUSpeechBubbleWidget* TypedSpeechBubbleWidget = Cast<UUOUSpeechBubbleWidget>(SpeechBubbleWidget))
 	{
-		TypedSpeechBubbleWidget->ShowBubble(BubbleText, Duration);
+		TypedSpeechBubbleWidget->ShowBubbleStyled(BubbleText, Duration, PresentationStyle);
 		return;
 	}
 
