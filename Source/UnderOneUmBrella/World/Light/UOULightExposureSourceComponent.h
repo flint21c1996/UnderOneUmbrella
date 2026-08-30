@@ -307,14 +307,21 @@ protected:
 		const FCollisionQueryParams& QueryParams,
 		const AActor* IgnoredShadeOwner = nullptr,
 		float BeamStartRadius = -1.0f,
-		float BeamConeAngle = 0.0f) const;
+		float BeamConeAngle = 0.0f,
+		const AActor* AdditionalIgnoredShadeOwner = nullptr) const;
+	bool FindNearestCylinderInteractionSurfaceHit(
+		FHitResult& OutHit,
+		const FVector& TraceStart,
+		const FVector& TraceEnd,
+		float BeamRadius) const;
 	bool FindNearestUmbrellaLightShadeHit(
 		const FVector& TraceStart,
 		const FVector& TraceEnd,
 		FHitResult& OutHit,
 		const AActor* IgnoredShadeOwner = nullptr,
 		float BeamStartRadius = -1.0f,
-		float BeamConeAngle = 0.0f) const;
+		float BeamConeAngle = 0.0f,
+		const AActor* AdditionalIgnoredShadeOwner = nullptr) const;
 	bool TryBuildLightInteractionSurfaceHit(UUOULightInteractionSurfaceComponent* SurfaceComponent, FHitResult& OutSurfaceHit) const;
 	void RecordExposureCandidate(
 		UObject* ReceiverObject,
