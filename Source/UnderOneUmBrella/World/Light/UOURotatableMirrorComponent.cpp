@@ -10,6 +10,7 @@
 #include "GameFramework/Character.h"
 #include "GameFramework/Pawn.h"
 #include "Components/CapsuleComponent.h"
+#include "World/Light/UOULightInteractionSurfaceComponent.h"
 
 UUOURotatableMirrorComponent::UUOURotatableMirrorComponent()
 {
@@ -116,6 +117,72 @@ void UUOURotatableMirrorComponent::GatherDevelopmentDebugDraw(
 		PivotLocation + RotationAxisWorld * 85.0f,
 		FString::Printf(TEXT("Mirror %.1f deg"), CurrentAngle),
 		FColor::Magenta);
+
+	const AActor* Owner = GetOwner();
+	const UUOULightInteractionSurfaceComponent* LightSurface = Owner != nullptr
+		? Owner->FindComponentByClass<UUOULightInteractionSurfaceComponent>()
+		: nullptr;
+	if (IsValid(LightSurface))
+	{
+		const EUOULightInteractionMode InteractionMode = LightSurface->LightInteractionMode;
+		const FColor SurfaceColor = InteractionMode == EUOULightInteractionMode::Reflecting
+			? FColor::Magenta
+			: (InteractionMode == EUOULightInteractionMode::Blocking
+				? FColor::Yellow
+				: FColor::Silver);
+		const FVector SurfaceLocation = LightSurface->GetComponentLocation();
+		const FVector SurfaceExtent = LightSurface->GetScaledBoxExtent();
+		const FVector SurfaceNormal = LightSurface->GetForwardVector().GetSafeNormal();
+
+		Context.DrawBox(
+			SurfaceLocation,
+			SurfaceExtent,
+			LightSurface->GetComponentQuat(),
+			SurfaceColor,
+			3.0f);
+		if (!SurfaceNormal.IsNearlyZero())
+		{
+			Context.DrawArrow(
+				SurfaceLocation,
+				SurfaceLocation + SurfaceNormal * 160.0f,
+				24.0f,
+				FColor::Cyan,
+				3.0f);
+			Context.DrawString(
+				SurfaceLocation + SurfaceNormal * 175.0f,
+				TEXT("Mirror Normal"),
+				FColor::Cyan,
+				0.9f);
+		}
+
+		TArray<FVector> ReflectionSamples;
+		LightSurface->GetReflectionSamplePositions(ReflectionSamples);
+		for (const FVector& SamplePosition : ReflectionSamples)
+		{
+			Context.DrawPoint(SamplePosition, 10.0f, FColor::Orange);
+		}
+
+		const TCHAR* ModeText = InteractionMode == EUOULightInteractionMode::Reflecting
+			? TEXT("Reflecting")
+			: (InteractionMode == EUOULightInteractionMode::Blocking
+				? TEXT("Blocking")
+				: TEXT("Disabled"));
+		Context.DrawString(
+			SurfaceLocation + FVector::UpVector * (SurfaceExtent.Z + 35.0f),
+			FString::Printf(
+				TEXT("Mirror Surface: %s\nExtent: %.1f %.1f %.1f\nAngle: %.1f / Retain %.1f\nCoverage: %.2f / Retain %.2f\nEdge Cylinder: %s"),
+				ModeText,
+				SurfaceExtent.X,
+				SurfaceExtent.Y,
+				SurfaceExtent.Z,
+				LightSurface->MaximumReflectionIncidenceAngle,
+				LightSurface->RetainedMaximumReflectionIncidenceAngle,
+				LightSurface->GetStartingBeamFootprintCoverageRatio(),
+				LightSurface->GetRetainedBeamFootprintCoverageRatio(),
+				LightSurface->bAllowEdgeOnlyCylinderReflection ? TEXT("On") : TEXT("Off")),
+			SurfaceColor,
+			0.85f);
+	}
 
 	const UPrimitiveComponent* PushVolumePtr = GetPushVolume();
 	if (!IsValid(PushVolumePtr))

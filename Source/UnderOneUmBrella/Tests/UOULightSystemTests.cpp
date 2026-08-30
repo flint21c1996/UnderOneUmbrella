@@ -435,7 +435,7 @@ bool FUOURotatableMirrorStableNormalTest::RunTest(const FString& Parameters)
 		MirrorDefaults->LightInteractionSurface->RetainedMaximumReflectionIncidenceAngle,
 		95.0f);
 	TestTrue(
-		TEXT("회전 거울은 빛 중심축이 빗나가도 단면이 걸치면 반사 후보로 사용한다"),
+		TEXT("회전 거울은 빛 중심축이 빗나가도 충분한 단면이 걸치면 반사 후보로 사용한다"),
 		MirrorDefaults->LightInteractionSurface->bAllowEdgeOnlyCylinderReflection);
 	return true;
 }
@@ -499,6 +499,19 @@ bool FUOURotatableMirrorSurfaceMeshSyncTest::RunTest(const FString& Parameters)
 		TEXT("반사 판정 박스 회전이 메시 회전을 따른다"),
 		Mirror->LightInteractionSurface->GetRelativeRotation().Equals(
 			Mirror->MirrorMesh->GetRelativeRotation(),
+			0.01f));
+
+	Mirror->MirrorMesh->SetRelativeScale3D(FVector(5.0f, 0.1f, 1.2f));
+	Mirror->OnConstruction(Mirror->GetActorTransform());
+	TestTrue(
+		TEXT("Y축이 가장 얇은 메시는 Y축을 반사면 법선과 두께로 사용한다"),
+		Mirror->LightInteractionSurface->GetUnscaledBoxExtent().Equals(
+			FVector(6.0f, 250.0f, 60.0f),
+			0.01f));
+	TestTrue(
+		TEXT("Y축 기반 메시의 반사면 앞 방향이 메시의 로컬 Y축을 따른다"),
+		Mirror->LightInteractionSurface->GetForwardVector().Equals(
+			Mirror->MirrorMesh->GetRightVector(),
 			0.01f));
 	Mirror->SetReflectionIncidenceAngles(75.0f, 85.0f);
 	TestEqual(
@@ -653,13 +666,59 @@ bool FUOUCylinderMultiReflectionDirectionTest::RunTest(const FString& Parameters
 	};
 
 	AUOURotatableMirrorActor* FirstMirror = SpawnMirror(FVector(0.0f, 600.0f, 10.0f));
-	AUOURotatableMirrorActor* SecondMirror = SpawnMirror(FVector(600.0f, 600.0f, 10.0f));
+	AActor* UmbrellaActor = World->SpawnActor<AActor>();
+	USceneComponent* UmbrellaRoot = UmbrellaActor != nullptr
+		? NewObject<USceneComponent>(UmbrellaActor, TEXT("ChainedUmbrellaRoot"))
+		: nullptr;
+	UUOULightInteractionSurfaceComponent* UmbrellaSurface = UmbrellaActor != nullptr
+		? NewObject<UUOULightInteractionSurfaceComponent>(
+			UmbrellaActor,
+			TEXT("ChainedUmbrellaSurface"))
+		: nullptr;
 	TestNotNull(TEXT("첫 번째 거울을 생성한다"), FirstMirror);
-	TestNotNull(TEXT("두 번째 거울을 생성한다"), SecondMirror);
-	if (FirstMirror == nullptr || SecondMirror == nullptr)
+	TestNotNull(TEXT("거울 반사광을 받을 우산 표면을 생성한다"), UmbrellaSurface);
+	if (FirstMirror == nullptr || UmbrellaActor == nullptr || UmbrellaRoot == nullptr ||
+		UmbrellaSurface == nullptr)
 	{
 		return false;
 	}
+
+	UmbrellaActor->AddInstanceComponent(UmbrellaRoot);
+	UmbrellaActor->SetRootComponent(UmbrellaRoot);
+	UmbrellaRoot->RegisterComponent();
+	UmbrellaActor->AddInstanceComponent(UmbrellaSurface);
+	UmbrellaSurface->SetupAttachment(UmbrellaRoot);
+	UmbrellaSurface->SetBoxExtent(FVector(80.0f, 30.0f, 6.0f));
+	UmbrellaSurface->bUseSurfaceAreaSampling = true;
+	UmbrellaSurface->bReflectFrontFaceOnly = false;
+	UmbrellaSurface->bAllowEdgeOnlyCylinderReflection = true;
+	UmbrellaSurface->ReflectionDirectionMode =
+		EUOULightReflectionDirectionMode::OwnerForward;
+	UmbrellaSurface->ReflectionNormalMode = EUOULightReflectionNormalMode::ComponentUp;
+	UmbrellaSurface->ReflectionFrontNormalMode =
+		EUOULightReflectionFrontNormalMode::ComponentUp;
+	UmbrellaSurface->RegisterComponent();
+	UmbrellaActor->SetActorLocationAndRotation(
+		FVector(600.0f, 700.0f, 10.0f),
+		FRotator(0.0f, 90.0f, 0.0f));
+	UmbrellaSurface->SetRelativeRotation(FRotator(0.0f, 0.0f, 90.0f));
+	UmbrellaSurface->SetLightInteractionMode(EUOULightInteractionMode::Reflecting);
+
+	UUOUUmbrellaLightShadeVolumeComponent* UmbrellaShade =
+		NewObject<UUOUUmbrellaLightShadeVolumeComponent>(
+			UmbrellaActor,
+			TEXT("ChainedUmbrellaShade"));
+	TestNotNull(TEXT("실제 캐릭터 우산처럼 반사면보다 두꺼운 차광 볼륨을 생성한다"), UmbrellaShade);
+	if (UmbrellaShade == nullptr)
+	{
+		return false;
+	}
+	UmbrellaActor->AddInstanceComponent(UmbrellaShade);
+	UmbrellaShade->SetupAttachment(UmbrellaSurface);
+	UmbrellaShade->SetBoxExtent(FVector(80.0f, 30.0f, 60.0f));
+	UmbrellaShade->MaximumBlockingIncidenceAngle = 180.0f;
+	UmbrellaShade->RegisterComponent();
+	UmbrellaShade->SetShadeEnabled(true);
 
 	SourceActor->ExposureSource->EmitLight(0.1f);
 	const TArray<FUOULightPathData> LightPaths = SourceActor->ExposureSource->GetLightPaths();
@@ -668,7 +727,7 @@ bool FUOUCylinderMultiReflectionDirectionTest::RunTest(const FString& Parameters
 		{
 			return Path.Segments.Num() >= 3;
 		});
-	TestNotNull(TEXT("두 번 반사되는 실린더 경로를 계산한다"), DoubleReflectionPath);
+	TestNotNull(TEXT("두꺼운 우산 차광 볼륨이 있어도 거울에서 우산으로 이어지는 두 번째 반사를 계산한다"), DoubleReflectionPath);
 	if (DoubleReflectionPath == nullptr)
 	{
 		return false;
@@ -676,6 +735,10 @@ bool FUOUCylinderMultiReflectionDirectionTest::RunTest(const FString& Parameters
 
 	const FUOULightPathSegmentData& FirstReflection = DoubleReflectionPath->Segments[1];
 	const FUOULightPathSegmentData& SecondReflection = DoubleReflectionPath->Segments[2];
+	TestEqual(
+		TEXT("거울 반사광의 가장자리 겹침이 우산 반사면으로 연결된다"),
+		FirstReflection.InteractionSurface.Get(),
+		UmbrellaSurface);
 	TestTrue(
 		TEXT("면 샘플을 맞힌 뒤에도 두 번째 입사 방향은 첫 반사의 평행 진행 방향을 유지한다"),
 		SecondReflection.IncomingDirection.Equals(FirstReflection.Direction, 0.001f));
