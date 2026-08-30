@@ -65,6 +65,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light|Reflection Visual", meta = (ToolTip = "보조 SpotLight가 동적 그림자를 생성하도록 합니다. 벽과 거울 뒤로 실제 조명이 새는 것을 줄여줍니다."))
 	bool bCastShadows = true;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light|Reflection Visual", meta = (ToolTip = "반사 경로가 존재하는 동안 직진하는 원본 SpotLight를 숨깁니다. 원본 조명이 거울을 통과해 뒤쪽 벽을 비추거나 거울 표면에 겹치는 현상을 막습니다."))
+	bool bSuppressSourceSpotLightWhileReflecting = true;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Reflection Visual", meta = (ToolTip = "현재 활성화된 반사 SpotLight 개수입니다."))
 	int32 ActiveSpotLightCount = 0;
 
@@ -78,7 +81,12 @@ protected:
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<USpotLightComponent>> SpotLightPool;
 
+	UPROPERTY(Transient)
+	TObjectPtr<USpotLightComponent> ManagedSourceSpotLight = nullptr;
+
 	bool bHasWarnedSpotLightLimit = false;
+	bool bSourceSpotLightWasVisible = false;
+	bool bIsSourceSpotLightSuppressed = false;
 
 	UFUNCTION()
 	void HandleLightPathsUpdated(const TArray<FUOULightPathData>& LightPaths);
@@ -90,5 +98,6 @@ protected:
 		const FUOULightPathSegmentData& SegmentData,
 		const FLinearColor& LightColor) const;
 	void HideUnusedSpotLights(int32 FirstUnusedIndex);
+	void SetSourceSpotLightSuppressed(bool bSuppress);
 	FLinearColor ResolveLightColor() const;
 };
