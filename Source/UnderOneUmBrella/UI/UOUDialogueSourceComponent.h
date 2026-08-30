@@ -71,6 +71,10 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Dialogue|Bubble")
 	float GetProximityBubbleDuration() const;
 
+	// 접근 말풍선의 UMG 스타일 키입니다. 데이터에 값이 없으면 현재 DialogueState를 사용합니다.
+	UFUNCTION(BlueprintPure, Category = "Dialogue|Bubble")
+	FName GetProximityBubbleStyle() const;
+
 	// 근처 접근 말풍선을 표시할 수 있는지 반환합니다.
 	UFUNCTION(BlueprintPure, Category = "Dialogue|Bubble")
 	bool IsProximityBubbleEnabled() const { return bEnableProximityBubble; }
@@ -91,6 +95,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Dialogue|Bubble")
 	void SetSpeechBubbleEnabled(bool bNewEnabled);
 
+	// 상태가 바뀐 뒤 bCanReplay=false 때문에 새 대화가 막히지 않도록 재생 기록을 초기화합니다.
+	UFUNCTION(BlueprintCallable, Category = "Dialogue|Rules")
+	void ResetDialoguePlayback();
+
 	virtual void ApplyPuzzleResult_Implementation(EOUUPuzzleResultAction Action) override;
 
 	const FUOUDialogueLine* GetLine(int32 LineIndex) const;
@@ -110,22 +118,22 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue|Table", meta = (EditCondition = "bUseDialogueTable"))
 	FName DialogueState = TEXT("Default");
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue|Proximity Bubble")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue|Proximity Bubble", meta = (AdvancedDisplay))
 	bool bUseProximityBubbleTable = false;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue|Proximity Bubble", meta = (EditCondition = "bUseProximityBubbleTable"))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue|Proximity Bubble", meta = (AdvancedDisplay, EditCondition = "bUseProximityBubbleTable"))
 	TObjectPtr<UDataTable> ProximityBubbleTable = nullptr;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue|Proximity Bubble", meta = (EditCondition = "bUseProximityBubbleTable"))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue|Proximity Bubble", meta = (AdvancedDisplay, EditCondition = "bUseProximityBubbleTable"))
 	FName ProximityBubbleActorId = NAME_None;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue|Proximity Bubble", meta = (EditCondition = "bUseProximityBubbleTable"))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue|Proximity Bubble", meta = (AdvancedDisplay, EditCondition = "bUseProximityBubbleTable"))
 	FName ProximityBubbleState = NAME_None;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue", meta = (AdvancedDisplay))
 	TObjectPtr<UUOUDialogueSequenceData> DialogueSequence = nullptr;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue", meta = (AdvancedDisplay))
 	TArray<FUOUDialogueLine> InlineLines;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue")
@@ -173,10 +181,12 @@ private:
 
 	mutable TArray<FUOUDialogueLine> CachedTableLines;
 	mutable FText CachedTableProximityBubbleText;
+	mutable FName CachedTableProximityBubbleStyle = NAME_None;
 	mutable FText CachedTableSpeakerName;
 	mutable bool bDialogueTableCacheDirty = true;
 
 	mutable FText CachedProximityBubbleText;
 	mutable float CachedProximityBubbleDuration = 3.0f;
+	mutable FName CachedProximityBubbleStyle = NAME_None;
 	mutable bool bProximityBubbleTableCacheDirty = true;
 };

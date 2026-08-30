@@ -240,12 +240,14 @@ void UUOUDialogueTriggerComponent::ShowInteractionHint()
 
 	FText DisplayHintText = HintText;
 	double DisplayDuration = HintDuration > 0.0 ? HintDuration : 3.0;
+	FName PresentationStyle = NAME_None;
 	if (const UUOUDialogueSourceComponent* Source = ResolveDialogueSource())
 	{
 		// ????뚯뒪媛 ?덈뒗 ??곸? CSV??洹쇱젒 留먰뭾?좊쭔 ?ъ슜?⑸땲??
 		// 媛믪씠 鍮꾩뼱 ?덉쑝硫?湲곕낯 臾쇱쓬?쒕줈 ?섎룎?꾧?吏 ?딄퀬 ?쒖떆?섏? ?딆뒿?덈떎.
 		DisplayHintText = Source->GetProximityBubbleText();
 		DisplayDuration = Source->GetProximityBubbleDuration();
+		PresentationStyle = Source->GetProximityBubbleStyle();
 	}
 
 	if (DisplayHintText.IsEmpty())
@@ -277,7 +279,7 @@ void UUOUDialogueTriggerComponent::ShowInteractionHint()
 		return;
 	}
 
-	if (!CallHintWidgetShowFunction(UserWidget, DisplayHintText, DisplayDuration))
+	if (!CallHintWidgetShowFunction(UserWidget, DisplayHintText, DisplayDuration, PresentationStyle))
 	{
 		SetHintWidgetComponentVisible(false);
 		LastHintDebugStatus = FString::Printf(TEXT("Failed:ShowFunction Widget:%s Function:%s"),
@@ -375,6 +377,10 @@ void UUOUDialogueTriggerComponent::SetDialogueInteractionEnabled(bool bNewEnable
 	if (!bDialogueInteractionEnabled)
 	{
 		ClearCoverProgress();
+		if (!bShowHintWhenInteractionDisabled)
+		{
+			HideInteractionHint();
+		}
 		return;
 	}
 
@@ -413,8 +419,10 @@ void UUOUDialogueTriggerComponent::RefreshOverlappingInteraction()
 			continue;
 		}
 
-		// 접근 Bubble은 실제 대화 활성 상태와 무관하게 먼저 표시합니다.
-		ShowInteractionHint();
+		if (bDialogueInteractionEnabled || bShowHintWhenInteractionDisabled)
+		{
+			ShowInteractionHint();
+		}
 		if (!bDialogueInteractionEnabled)
 		{
 			return;
@@ -491,7 +499,10 @@ void UUOUDialogueTriggerComponent::HandleTrackedActorEnter(AActor* OtherActor, U
 
 	if (!bDialogueInteractionEnabled)
 	{
-		ShowInteractionHint();
+		if (bShowHintWhenInteractionDisabled)
+		{
+			ShowInteractionHint();
+		}
 		return;
 	}
 
@@ -974,7 +985,11 @@ void UUOUDialogueTriggerComponent::SetHintWidgetComponentVisible(bool bNewVisibl
 	HintWidgetComponent->SetHiddenInGame(!bNewVisible, true);
 }
 
-bool UUOUDialogueTriggerComponent::CallHintWidgetShowFunction(UUserWidget* UserWidget, const FText& DisplayHintText, double DisplayDuration) const
+bool UUOUDialogueTriggerComponent::CallHintWidgetShowFunction(
+	UUserWidget* UserWidget,
+	const FText& DisplayHintText,
+	double DisplayDuration,
+	FName PresentationStyle) const
 {
 	if (UserWidget == nullptr)
 	{
@@ -983,7 +998,7 @@ bool UUOUDialogueTriggerComponent::CallHintWidgetShowFunction(UUserWidget* UserW
 
 	if (UUOUSpeechBubbleWidget* SpeechBubbleWidget = Cast<UUOUSpeechBubbleWidget>(UserWidget))
 	{
-		SpeechBubbleWidget->ShowBubble(DisplayHintText, DisplayDuration);
+		SpeechBubbleWidget->ShowBubbleStyled(DisplayHintText, DisplayDuration, PresentationStyle);
 		return true;
 	}
 
