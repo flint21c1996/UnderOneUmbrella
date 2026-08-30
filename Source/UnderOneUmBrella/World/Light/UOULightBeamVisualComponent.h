@@ -9,7 +9,10 @@
 #include "UOULightBeamVisualComponent.generated.h"
 
 class AActor;
+class UDecalComponent;
 class ULightComponent;
+class UMaterialInstanceDynamic;
+class UMaterialInterface;
 class USpotLightComponent;
 class UUOULightExposureSourceComponent;
 
@@ -75,6 +78,33 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light|Visual", meta = (ToolTip = "VFX BP 내부에 포함된 Light 컴포넌트를 끄고 통합 광원 액터의 SpotLight만 사용합니다."))
 	bool bDisableEmbeddedVFXLights = true;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light|Visual|Range Decal", meta = (DisplayName = "끝단 범위 데칼 사용", ToolTip = "빛이 표면에 닿아 끝나는 위치에 표면 굴곡을 따라가는 범위 데칼을 표시합니다."))
+	bool bEnableEndRangeDecal = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light|Visual|Range Decal", meta = (EditCondition = "bEnableEndRangeDecal", DisplayName = "끝단 범위 데칼 머티리얼", ToolTip = "Deferred Decal 도메인의 머티리얼을 지정합니다. BeamColor와 Opacity 파라미터가 있으면 광원 색상과 투명도를 자동 적용합니다."))
+	TObjectPtr<UMaterialInterface> EndRangeDecalMaterial;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light|Visual|Range Decal", meta = (ClampMin = "0.01", EditCondition = "bEnableEndRangeDecal", DisplayName = "끝단 범위 크기 배율", ToolTip = "계산된 빛 끝 반지름에 적용할 데칼 크기 배율입니다."))
+	float EndRangeDecalRadiusScale = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light|Visual|Range Decal", meta = (ClampMin = "1.0", Units = "cm", EditCondition = "bEnableEndRangeDecal", DisplayName = "데칼 투영 깊이", ToolTip = "표면 요철을 감싸는 데칼 박스 깊이입니다. 너무 크면 뒤쪽 표면까지 투영될 수 있습니다."))
+	float EndRangeDecalDepth = 24.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light|Visual|Range Decal", meta = (ClampMin = "0.0", Units = "cm", EditCondition = "bEnableEndRangeDecal", DisplayName = "표면 띄움 거리", ToolTip = "Z-Fighting을 피하기 위해 충돌 표면 법선 방향으로 데칼 중심을 띄우는 거리입니다."))
+	float EndRangeDecalSurfaceOffset = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light|Visual|Range Decal", meta = (ClampMin = "0.0", ClampMax = "1.0", EditCondition = "bEnableEndRangeDecal", DisplayName = "끝단 범위 투명도"))
+	float EndRangeDecalOpacity = 0.08f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light|Visual|Range Decal", meta = (EditCondition = "bEnableEndRangeDecal", DisplayName = "거리 종료 시 지면 투영", ToolTip = "빛이 장애물이 아닌 최대 거리에서 끝나면 끝점 아래의 표면을 찾아 범위 데칼을 투영합니다."))
+	bool bProjectRangeEndDecalToGround = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light|Visual|Range Decal", meta = (ClampMin = "0.0", Units = "cm", EditCondition = "bEnableEndRangeDecal && bProjectRangeEndDecalToGround", DisplayName = "지면 탐색 시작 높이"))
+	float RangeEndGroundTraceHeight = 100.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light|Visual|Range Decal", meta = (ClampMin = "1.0", Units = "cm", EditCondition = "bEnableEndRangeDecal && bProjectRangeEndDecalToGround", DisplayName = "지면 탐색 거리"))
+	float RangeEndGroundTraceDistance = 500.0f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light|Visual|Overrides", meta = (ClampMin = "0.0", DisplayName = "개별 밝기 배율", ToolTip = "이 광원 인스턴스의 정규화된 빛줄기 밝기 배율입니다. 1이 권장 기본값이며 퍼즐 판정용 빛 세기에는 영향을 주지 않습니다."))
 	float VisualBrightnessMultiplier = 1.0f;
 
@@ -106,6 +136,18 @@ protected:
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<AActor>> ReflectionVFXPool;
 
+	UPROPERTY(Transient)
+	TObjectPtr<UDecalComponent> DirectEndRangeDecal = nullptr;
+
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UDecalComponent>> ReflectionEndRangeDecalPool;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInstanceDynamic> DirectEndRangeDecalMaterial = nullptr;
+
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UMaterialInstanceDynamic>> ReflectionEndRangeDecalMaterials;
+
 	TSet<TWeakObjectPtr<UClass>> WarnedIncompatibleVFXClasses;
 	bool bHasWarnedReflectionVFXLimit = false;
 
@@ -125,6 +167,14 @@ protected:
 		const TArray<FUOULightPathData>& LightPaths,
 		float ReferenceVisualLength);
 	void HideUnusedReflectionVFX(int32 FirstUnusedIndex);
+	void UpdateEndRangeDecal(
+		TObjectPtr<UDecalComponent>& DecalComponent,
+		TObjectPtr<UMaterialInstanceDynamic>& DynamicMaterial,
+		const FUOULightPathSegmentData& SegmentData,
+		const FLinearColor& LightColor,
+		int32 SortOrder);
+	void HideUnusedReflectionEndRangeDecals(int32 FirstUnusedIndex);
+	void DestroyEndRangeDecals();
 	void ApplySegmentToVFX(AActor* VFXActor, const FUOULightBeamVisualSegmentData& SegmentData);
 	bool ApplySegmentToLazyGodray(AActor* VFXActor, const FUOULightBeamVisualSegmentData& SegmentData);
 	void UpdateCrossedLazyGodrayCard(AActor* VFXActor, const FVector& WorldBeamDirection) const;

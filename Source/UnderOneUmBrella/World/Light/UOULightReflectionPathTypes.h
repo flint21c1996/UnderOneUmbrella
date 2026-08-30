@@ -56,10 +56,16 @@ struct FUOULightReflectionSegmentData
 	FVector ImpactPoint = FVector::ZeroVector;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Reflection Path")
+	FVector ImpactNormal = FVector::ZeroVector;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Reflection Path")
 	FVector ReflectionStart = FVector::ZeroVector;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Reflection Path")
 	FVector SegmentEnd = FVector::ZeroVector;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Reflection Path")
+	FVector SegmentEndNormal = FVector::ZeroVector;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Reflection Path")
 	FVector IncomingDirection = FVector::ForwardVector;
@@ -125,6 +131,9 @@ struct FUOULightPathSegmentData
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Path")
 	FVector End = FVector::ZeroVector;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Path", meta = (ToolTip = "빛 구간이 충돌 표면에서 끝날 때의 월드 공간 표면 법선입니다."))
+	FVector EndSurfaceNormal = FVector::ZeroVector;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Path")
 	FVector Direction = FVector::ForwardVector;

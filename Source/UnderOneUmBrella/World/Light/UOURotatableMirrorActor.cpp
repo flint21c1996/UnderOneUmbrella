@@ -44,11 +44,13 @@ AUOURotatableMirrorActor::AUOURotatableMirrorActor()
 	LightInteractionSurface->ReflectionNormalMode = EUOULightReflectionNormalMode::ComponentForward;
 	LightInteractionSurface->ReflectionFrontNormalMode =
 		EUOULightReflectionFrontNormalMode::ComponentForward;
-	// 거울보다 넓은 빛은 일부만 잘라 반사하지 않고 원래 경로로 통과시킵니다.
+	// 거울보다 넓은 빛은 일부만 잘라 반사하지 않으며, 일반 거울처럼 표면에서 차단합니다.
 	LightInteractionSurface->bRequireFullBeamFootprint = true;
 	LightInteractionSurface->MaximumReflectionIncidenceAngle = 89.0f;
 	LightInteractionSurface->RetainedMaximumReflectionIncidenceAngle = 95.0f;
 	LightInteractionSurface->BeamFootprintOverflowAllowancePercent = 20.0f;
+	// 평행광 중심축이 거울을 조금 빗나가도 실제 빛 단면이 충분히 걸치면 반사합니다.
+	// 단면 수용 비율은 bRequireFullBeamFootprint와 돌출 허용값으로 별도 제한합니다.
 	LightInteractionSurface->bAllowEdgeOnlyCylinderReflection = true;
 
 	PushVolume = CreateDefaultSubobject<UBoxComponent>(TEXT("PushVolume"));
@@ -83,8 +85,7 @@ void AUOURotatableMirrorActor::OnConstruction(const FTransform& Transform)
 	Super::OnConstruction(Transform);
 	if (LightInteractionSurface != nullptr)
 	{
-		// 기존 Blueprint가 예전 false 기본값을 저장하고 있어도 거울의 돌출 허용 판정은
-		// 중심축이 메시 밖으로 나간 뒤까지 실제 단면 겹침 비율로 계속 검사합니다.
+		// 기존 Blueprint 컴포넌트 템플릿에 false가 저장되어 있어도 회전 거울 정책을 일관되게 적용합니다.
 		LightInteractionSurface->bAllowEdgeOnlyCylinderReflection = true;
 	}
 	SyncLightInteractionSurfaceToMirrorMesh();
@@ -130,12 +131,46 @@ void AUOURotatableMirrorActor::SyncLightInteractionSurfaceToMirrorMesh() const
 	const FVector MeshScale = MeshRelativeTransform.GetScale3D().GetAbs();
 	const FVector SurfaceCenter =
 		MeshRelativeTransform.TransformPosition(MeshLocalBounds.GetCenter());
-	FVector SurfaceExtent = MeshLocalBounds.GetExtent() * MeshScale;
+	const FVector MeshExtent = MeshLocalBounds.GetExtent() * MeshScale;
+
+	EUOUMirrorSurfaceNormalAxis ResolvedNormalAxis = LightSurfaceNormalAxis;
+	if (ResolvedNormalAxis == EUOUMirrorSurfaceNormalAxis::Auto)
+	{
+		ResolvedNormalAxis = EUOUMirrorSurfaceNormalAxis::X;
+		if (MeshExtent.Y < MeshExtent.X && MeshExtent.Y <= MeshExtent.Z)
+		{
+			ResolvedNormalAxis = EUOUMirrorSurfaceNormalAxis::Y;
+		}
+		else if (MeshExtent.Z < MeshExtent.X && MeshExtent.Z < MeshExtent.Y)
+		{
+			ResolvedNormalAxis = EUOUMirrorSurfaceNormalAxis::Z;
+		}
+	}
+
+	FQuat SurfaceRotation = MeshRelativeTransform.GetRotation();
+	FVector SurfaceExtent = MeshExtent;
+	switch (ResolvedNormalAxis)
+	{
+	case EUOUMirrorSurfaceNormalAxis::Y:
+		// 반사 컴포넌트의 로컬 +X를 메시의 로컬 +Y에 맞춥니다.
+		SurfaceRotation *= FQuat(FVector::UpVector, HALF_PI);
+		SurfaceExtent = FVector(MeshExtent.Y, MeshExtent.X, MeshExtent.Z);
+		break;
+	case EUOUMirrorSurfaceNormalAxis::Z:
+		// 반사 컴포넌트의 로컬 +X를 메시의 로컬 +Z에 맞춥니다.
+		SurfaceRotation *= FQuat::FindBetweenNormals(FVector::ForwardVector, FVector::UpVector);
+		SurfaceExtent = FVector(MeshExtent.Z, MeshExtent.Y, MeshExtent.X);
+		break;
+	case EUOUMirrorSurfaceNormalAxis::X:
+	case EUOUMirrorSurfaceNormalAxis::Auto:
+	default:
+		break;
+	}
 	SurfaceExtent.X += FMath::Max(0.0f, LightSurfaceThicknessPadding);
 
 	LightInteractionSurface->SetRelativeLocationAndRotation(
 		SurfaceCenter,
-		MeshRelativeTransform.GetRotation());
+		SurfaceRotation);
 	LightInteractionSurface->SetRelativeScale3D(FVector::OneVector);
 	LightInteractionSurface->SetBoxExtent(SurfaceExtent);
 }

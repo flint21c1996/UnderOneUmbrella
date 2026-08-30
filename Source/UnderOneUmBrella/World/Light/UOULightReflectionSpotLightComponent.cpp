@@ -18,6 +18,11 @@ void UUOULightReflectionSpotLightComponent::BeginPlay()
 	Super::BeginPlay();
 
 	BoundSourceComponent = ResolveSourceComponent();
+	if (AActor* Owner = GetOwner())
+	{
+		// 반사 보조 SpotLight 풀을 만들기 전에 원본 컴포넌트를 고정해 둡니다.
+		ManagedSourceSpotLight = Owner->FindComponentByClass<USpotLightComponent>();
+	}
 	if (BoundSourceComponent == nullptr)
 	{
 		HideUnusedSpotLights(0);
@@ -47,6 +52,8 @@ void UUOULightReflectionSpotLightComponent::EndPlay(const EEndPlayReason::Type E
 		}
 	}
 	SpotLightPool.Reset();
+	SetSourceSpotLightSuppressed(false);
+	ManagedSourceSpotLight = nullptr;
 	ActiveSpotLightCount = 0;
 	bHasWarnedSpotLightLimit = false;
 	BoundSourceComponent = nullptr;
@@ -63,6 +70,7 @@ void UUOULightReflectionSpotLightComponent::RefreshSpotLights()
 
 	if (!bEnabled || BoundSourceComponent == nullptr || MaxSpotLightCount <= 0)
 	{
+		SetSourceSpotLightSuppressed(false);
 		HideUnusedSpotLights(0);
 		return;
 	}
@@ -75,6 +83,7 @@ void UUOULightReflectionSpotLightComponent::HandleLightPathsUpdated(
 {
 	if (!bEnabled)
 	{
+		SetSourceSpotLightSuppressed(false);
 		HideUnusedSpotLights(0);
 		return;
 	}
@@ -93,6 +102,11 @@ void UUOULightReflectionSpotLightComponent::HandleLightPathsUpdated(
 			}
 		}
 	}
+
+	// 실제 원본 SpotLight는 커스텀 반사 경로를 알지 못해 거울 뒤까지 직진합니다.
+	// 반사가 성립한 동안에는 원본을 숨기고, 아래의 경로 기반 보조 조명만 사용합니다.
+	SetSourceSpotLightSuppressed(
+		bSuppressSourceSpotLightWhileReflecting && EligibleSegmentCount > 0);
 
 	if (EligibleSegmentCount > MaxSpotLightCount)
 	{
@@ -241,6 +255,47 @@ void UUOULightReflectionSpotLightComponent::HideUnusedSpotLights(int32 FirstUnus
 	}
 
 	ActiveSpotLightCount = FMath::Clamp(FirstUnusedIndex, 0, SpotLightPool.Num());
+}
+
+void UUOULightReflectionSpotLightComponent::SetSourceSpotLightSuppressed(const bool bSuppress)
+{
+	if (bSuppress)
+	{
+		if (bIsSourceSpotLightSuppressed)
+		{
+			if (ManagedSourceSpotLight != nullptr)
+			{
+				ManagedSourceSpotLight->SetVisibility(false);
+			}
+			return;
+		}
+
+		if (ManagedSourceSpotLight == nullptr)
+		{
+			return;
+		}
+
+		bSourceSpotLightWasVisible = ManagedSourceSpotLight->IsVisible();
+		bIsSourceSpotLightSuppressed = true;
+		ManagedSourceSpotLight->SetVisibility(false);
+		return;
+	}
+
+	if (!bIsSourceSpotLightSuppressed)
+	{
+		return;
+	}
+
+	if (ManagedSourceSpotLight != nullptr)
+	{
+		const bool bSourceStillEmitsLight = BoundSourceComponent == nullptr ||
+			BoundSourceComponent->bEmitLight;
+		ManagedSourceSpotLight->SetVisibility(
+			bSourceSpotLightWasVisible && bSourceStillEmitsLight);
+	}
+
+	bSourceSpotLightWasVisible = false;
+	bIsSourceSpotLightSuppressed = false;
 }
 
 FLinearColor UUOULightReflectionSpotLightComponent::ResolveLightColor() const
