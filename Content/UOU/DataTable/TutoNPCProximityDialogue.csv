@@ -1,5 +1,5 @@
-﻿Name,ActorId,DialogueState,LineOrder,BubbleText,BubbleDuration
-1_floor,NPC_01,Default,0,앞의 실링을 눌러 상호작용 하세요.,10
-2_floor,NPC_02,Default,0,점프 - Space,10
-3_floor,NPC_03,Default,0,Q/E - 화면 회전,10
-4_floor,NPC_04,Default,0,"숨겨진 실링을 찾고, /n상호 작용 하세요.",10
+Name,ActorId,DialogueState,LineOrder,BubbleText,PresentationStyle,BubbleDuration
+1_floor,NPC_01,Default,0,앞의 실링을 눌러 상호작용 하세요.,Default,10
+2_floor,NPC_02,Default,0,점프 - Space,Default,10
+3_floor,NPC_03,Default,0,Q/E - 화면 회전,Default,10
+4_floor,NPC_04,Default,0,"숨겨진 실링을 찾고, /n상호 작용 하세요.",Default,10

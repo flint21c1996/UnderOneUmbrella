@@ -73,4 +73,13 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pour Content|Stream Visual", meta = (ClampMin = "0.0", ToolTip = "Stream Niagara의 월드 스케일입니다. 부모 소켓/스켈레탈 메쉬 scale의 영향을 받지 않고 이 값이 최종 크기로 적용됩니다."))
 	FVector StreamRelativeScale = FVector::OneVector;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pour Content|Stream Visual", meta = (ToolTip = "켜면 물줄기 아래의 WaterBasinTarget 수면까지 거리를 매 프레임 계산해 물줄기 길이를 맞춥니다."))
+	bool bClampStreamToWaterBasinSurface = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pour Content|Stream Visual", meta = (EditCondition = "bClampStreamToWaterBasinSurface", EditConditionHides, ToolTip = "Niagara 물줄기의 기준 길이를 나타내는 float 사용자 변수입니다. 예: User.Height. None이면 길이를 갱신하지 않습니다."))
+	FName StreamHeightParameterName = TEXT("User.Height");
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pour Content|Stream Visual", meta = (ClampMin = "0.0", EditCondition = "bClampStreamToWaterBasinSurface", EditConditionHides, ToolTip = "물줄기 끝이 수면 안으로 파고들지 않도록 수면보다 위에서 멈추게 할 월드 거리(cm)입니다."))
+	float StreamSurfaceOffset = 2.0f;
 };
