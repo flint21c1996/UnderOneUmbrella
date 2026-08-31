@@ -82,7 +82,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light|Reflection|Facing", meta = (ClampMin = "0.0", ClampMax = "180.0", Units = "deg", DisplayName = "반사 유지 최대 입사각", ToolTip = "이미 반사 중일 때 허용할 최대 입사각입니다. 시작 각도보다 크게 두면 각도 경계에서 반사가 깜빡이지 않습니다."))
 	float RetainedMaximumReflectionIncidenceAngle = 95.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection|Facing", meta = (ToolTip = "반사 각도 조건을 만족하지 못한 빛을 막지 않고 통과시킵니다. 우산처럼 유효한 각도에서만 빛과 상호작용해야 하는 표면에 사용합니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection|Facing", meta = (ToolTip = "입사각 또는 빛 단면 포함 조건 때문에 반사가 거절된 빛을 막지 않고 통과시킵니다. 우산처럼 유효한 조건에서만 빛과 상호작용해야 하는 표면에 사용합니다."))
 	bool bPassThroughWhenReflectionRejected = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection", meta = (ToolTip = "입사 광원의 확산각을 유지할지, 이 반사면의 각도를 사용할지 결정합니다."))
@@ -113,7 +113,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection|Aperture", meta = (ClampMin = "0.0", ClampMax = "1.0", EditCondition = "bLimitReflectionByImpactOffset", ToolTip = "입사광 반지름 대비 남은 반사 반지름의 최소 비율입니다. 이 값보다 적게 걸친 빛은 반사하지 않습니다."))
 	float MinimumReflectionCoverageRatio = 0.3f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection|Aperture", meta = (ToolTip = "켜면 거울에 투영된 빛 단면이 지정한 최소 비율 이상 Box 범위 안에 들어올 때만 빛을 반사하거나 차단합니다. 범위를 벗어나면 입사광은 그대로 통과합니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection|Aperture", meta = (ToolTip = "켜면 거울에 투영된 빛 단면이 지정한 최소 비율 이상 Box 범위 안에 들어올 때만 반사합니다. 부족할 때 통과할지는 '반사 실패 시 통과' 설정을 따릅니다."))
 	bool bRequireFullBeamFootprint = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Reflection|Aperture", meta = (ClampMin = "0.0", Units = "cm", EditCondition = "bRequireFullBeamFootprint", ToolTip = "빛 단면 전체 포함 판정에서 거울 가장자리로부터 제외할 안전 여백입니다."))

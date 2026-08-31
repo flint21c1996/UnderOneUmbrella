@@ -14,6 +14,7 @@
 #include "NiagaraComponent.h"
 #include "Player/UOUUmbrellaLightInteractionComponent.h"
 #include "Player/UOUUmbrellaLightShadeVolumeComponent.h"
+#include "Puzzle/Light/UOULightPaintColorConditionComponent.h"
 #include "UObject/FieldIterator.h"
 #include "UObject/UnrealType.h"
 #include "World/Light/UOULightBeamVisualComponent.h"
@@ -22,6 +23,7 @@
 #include "World/Light/UOULightExposureSourceComponent.h"
 #include "World/Light/UOULightInteractionSurfaceComponent.h"
 #include "World/Light/UOULightCountBulbActor.h"
+#include "World/Light/UOULightColorReceiverComponent.h"
 #include "World/Light/UOULightReflectionPathTypes.h"
 #include "World/Light/UOULightReflectionSpotLightComponent.h"
 #include "World/Light/UOULightSourceActor.h"
@@ -274,6 +276,297 @@ bool FUOULightCountBulbBeamOverlapTest::RunTest(const FString& Parameters)
 			TEXT("초록 경로에 사용하는 실제 도달 목록에 전구 Receiver가 포함된다"),
 			LightPaths[0].Segments[0].ReachedReceivers.Contains(BulbActor->LightReceiver.Get()));
 	}
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FUOULightColorAdditiveMixTest,
+	"UnderOneUmbrella.Light.Color.AdditiveRGBMix",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUOULightColorAdditiveMixTest::RunTest(const FString& Parameters)
+{
+	UWorld* UninitializedWorld = UWorld::CreateWorld(
+		EWorldType::Editor,
+		false,
+		TEXT("UOULightColorAdditiveMixWorld"),
+		nullptr,
+		false,
+		ERHIFeatureLevel::Num,
+		nullptr,
+		true);
+	FScopedEditorWorld ScopedWorld(
+		UninitializedWorld,
+		UWorld::InitializationValues()
+			.RequiresHitProxies(false)
+			.ShouldSimulatePhysics(false)
+			.EnableTraceCollision(false)
+			.CreateNavigation(false)
+			.CreateAISystem(false)
+			.AllowAudioPlayback(false)
+			.CreatePhysicsScene(false));
+	UWorld* World = ScopedWorld.GetWorld();
+	TestNotNull(TEXT("RGB 혼합 테스트 월드를 생성한다"), World);
+	if (World == nullptr)
+	{
+		return false;
+	}
+
+	AActor* ReceiverActor = World->SpawnActor<AActor>();
+	UUOULightColorReceiverComponent* Receiver = ReceiverActor != nullptr
+		? NewObject<UUOULightColorReceiverComponent>(ReceiverActor, TEXT("ColorReceiver"))
+		: nullptr;
+	TestNotNull(TEXT("색상 수신 액터를 생성한다"), ReceiverActor);
+	TestNotNull(TEXT("색상 수신 컴포넌트를 생성한다"), Receiver);
+	if (ReceiverActor == nullptr || Receiver == nullptr)
+	{
+		return false;
+	}
+
+	ReceiverActor->AddInstanceComponent(Receiver);
+	Receiver->bUseReceiverVolumeSampling = false;
+	Receiver->bWeightColorByExposureIntensity = false;
+	Receiver->bApplyPaintTint = false;
+	Receiver->MaterialTransitionDuration = 0.0f;
+	Receiver->MinimumPaintChannel = 0.15f;
+	Receiver->RegisterComponent();
+
+	AActor* RedSource = World->SpawnActor<AActor>();
+	AActor* GreenSource = World->SpawnActor<AActor>();
+	AActor* BlueSource = World->SpawnActor<AActor>();
+	TestNotNull(TEXT("빨강 광원 식별자를 생성한다"), RedSource);
+	TestNotNull(TEXT("초록 광원 식별자를 생성한다"), GreenSource);
+	TestNotNull(TEXT("파랑 광원 식별자를 생성한다"), BlueSource);
+	if (RedSource == nullptr || GreenSource == nullptr || BlueSource == nullptr)
+	{
+		return false;
+	}
+
+	const auto MakeExposure = [](UObject* Source, const FLinearColor& Color)
+	{
+		return FUOULightExposureData(
+			Source,
+			FVector::ZeroVector,
+			FVector::ZeroVector,
+			FVector::ForwardVector,
+			100.0f,
+			0.25f,
+			1.0f,
+			1.0f,
+			0.1f,
+			Color);
+	};
+
+	Receiver->ReceiveLightExposure_Implementation(MakeExposure(RedSource, FLinearColor::Red));
+	TestTrue(
+		TEXT("빨강 빛 하나는 빨강으로 표시된다"),
+		Receiver->GetMixedLightColor().Equals(FLinearColor::Red, KINDA_SMALL_NUMBER));
+	TestEqual(
+		TEXT("빨강 빛은 0번 RGB 상태를 사용한다"),
+		Receiver->GetCurrentStateMaterialIndex(),
+		0);
+	TestTrue(
+		TEXT("빨강 물감은 G와 B만 최소 채널까지 낮춘다"),
+		Receiver->CurrentPaintTint.Equals(
+			FLinearColor(1.0f, 0.15f, 0.15f, 1.0f),
+			KINDA_SMALL_NUMBER));
+
+	Receiver->ReceiveLightExposure_Implementation(MakeExposure(GreenSource, FLinearColor::Green));
+	TestTrue(
+		TEXT("빨강과 초록은 노랑으로 가산 혼합된다"),
+		Receiver->GetMixedLightColor().Equals(FLinearColor::Yellow, KINDA_SMALL_NUMBER));
+	TestEqual(
+		TEXT("빨강과 초록은 3번 RGB 상태를 사용한다"),
+		Receiver->GetCurrentStateMaterialIndex(),
+		3);
+	TestTrue(
+		TEXT("빨강과 초록 물감은 B만 최소 채널까지 낮춘다"),
+		Receiver->CurrentPaintTint.Equals(
+			FLinearColor(1.0f, 1.0f, 0.15f, 1.0f),
+			KINDA_SMALL_NUMBER));
+
+	Receiver->ReceiveLightExposure_Implementation(MakeExposure(BlueSource, FLinearColor::Blue));
+	TestTrue(
+		TEXT("빨강, 초록, 파랑은 흰색으로 가산 혼합된다"),
+		Receiver->GetMixedLightColor().Equals(FLinearColor::White, KINDA_SMALL_NUMBER));
+	TestTrue(TEXT("흰색 상태에서 R 채널을 감지한다"), Receiver->bHasRedLight);
+	TestTrue(TEXT("흰색 상태에서 G 채널을 감지한다"), Receiver->bHasGreenLight);
+	TestTrue(TEXT("흰색 상태에서 B 채널을 감지한다"), Receiver->bHasBlueLight);
+	TestEqual(
+		TEXT("RGB 빛은 6번 RGB 상태를 사용한다"),
+		Receiver->GetCurrentStateMaterialIndex(),
+		6);
+	TestTrue(
+		TEXT("RGB 흰색 빛은 원래 알베도를 쓰는 흰색 Tint로 복구한다"),
+		Receiver->CurrentPaintTint.Equals(FLinearColor::White, KINDA_SMALL_NUMBER));
+
+	Receiver->ClearColorExposures();
+	TestFalse(TEXT("노출 기록을 비우면 활성 색상 빛이 없다"), Receiver->HasAnyColorLight());
+	TestTrue(
+		TEXT("노출 기록을 비우면 혼합 색은 검정이다"),
+		Receiver->GetMixedLightColor().Equals(FLinearColor::Black, KINDA_SMALL_NUMBER));
+	TestEqual(
+		TEXT("노출 기록을 비우면 상태 머티리얼 인덱스가 -1이 된다"),
+		Receiver->GetCurrentStateMaterialIndex(),
+		INDEX_NONE);
+	Receiver->ReceiveLightExposure_Implementation(MakeExposure(BlueSource, FLinearColor::Blue));
+	TestEqual(
+		TEXT("파랑 빛 하나는 2번 RGB 상태를 사용한다"),
+		Receiver->GetCurrentStateMaterialIndex(),
+		2);
+	const FLinearColor BluePaintTint(0.15f, 0.15f, 1.0f, 1.0f);
+	TestTrue(
+		TEXT("파랑 빛은 R과 G만 최소 채널까지 낮춘다"),
+		Receiver->CurrentPaintTint.Equals(BluePaintTint, KINDA_SMALL_NUMBER));
+
+	Receiver->ClearColorExposures();
+	TestTrue(
+		TEXT("빛 밖으로 나가도 마지막 파랑 물감색을 유지한다"),
+		Receiver->CurrentPaintTint.Equals(BluePaintTint, KINDA_SMALL_NUMBER));
+	TestTrue(
+		TEXT("빛이 사라지면 목표값도 현재 물감색에 고정된다"),
+		Receiver->TargetPaintTint.Equals(BluePaintTint, KINDA_SMALL_NUMBER));
+
+	Receiver->ReceiveLightExposure_Implementation(MakeExposure(RedSource, FLinearColor::White));
+	TestTrue(
+		TEXT("흰색 빛을 다시 받으면 원래 알베도용 흰색 Tint로 복구한다"),
+		Receiver->CurrentPaintTint.Equals(FLinearColor::White, KINDA_SMALL_NUMBER));
+
+	AUOULightSourceActor* PresetSource = World->SpawnActor<AUOULightSourceActor>();
+	TestNotNull(TEXT("색상 프리셋 광원을 생성한다"), PresetSource);
+	if (PresetSource != nullptr && PresetSource->SourceSpotLight != nullptr)
+	{
+		PresetSource->SetLightColorPreset(EUOULightColorPreset::Blue);
+		TestTrue(
+			TEXT("파랑 프리셋은 실제 SpotLight를 파랑으로 설정한다"),
+			PresetSource->SourceSpotLight->GetLightColor().Equals(
+				FLinearColor::Blue,
+				KINDA_SMALL_NUMBER));
+		TestTrue(
+			TEXT("게임플레이 노출도 같은 파랑을 전달한다"),
+			PresetSource->ExposureSource->GetGameplayLightColor().Equals(
+				FLinearColor::Blue,
+				KINDA_SMALL_NUMBER));
+
+		PresetSource->SetLightColorPreset(EUOULightColorPreset::White);
+		TestTrue(
+			TEXT("흰색 프리셋은 물감 제거용 흰색 노출을 전달한다"),
+			PresetSource->ExposureSource->GetGameplayLightColor().Equals(
+				FLinearColor::White,
+				KINDA_SMALL_NUMBER));
+	}
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FUOULightPaintColorConditionTest,
+	"UnderOneUmbrella.Light.Color.PaintConditionAdapter",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUOULightPaintColorConditionTest::RunTest(const FString& Parameters)
+{
+	UWorld* UninitializedWorld = UWorld::CreateWorld(
+		EWorldType::Editor,
+		false,
+		TEXT("UOULightPaintColorConditionWorld"),
+		nullptr,
+		false,
+		ERHIFeatureLevel::Num,
+		nullptr,
+		true);
+	FScopedEditorWorld ScopedWorld(
+		UninitializedWorld,
+		UWorld::InitializationValues()
+			.RequiresHitProxies(false)
+			.ShouldSimulatePhysics(false)
+			.EnableTraceCollision(false)
+			.CreateNavigation(false)
+			.CreateAISystem(false)
+			.AllowAudioPlayback(false)
+			.CreatePhysicsScene(false));
+	UWorld* World = ScopedWorld.GetWorld();
+	TestNotNull(TEXT("물감색 조건 테스트 월드를 생성한다"), World);
+	if (World == nullptr)
+	{
+		return false;
+	}
+
+	AActor* PaintedActor = World->SpawnActor<AActor>();
+	UUOULightColorReceiverComponent* Receiver = PaintedActor != nullptr
+		? NewObject<UUOULightColorReceiverComponent>(PaintedActor, TEXT("ColorReceiver"))
+		: nullptr;
+	UUOULightPaintColorConditionComponent* Condition = PaintedActor != nullptr
+		? NewObject<UUOULightPaintColorConditionComponent>(PaintedActor, TEXT("PaintColorCondition"))
+		: nullptr;
+	TestNotNull(TEXT("물감색 조건 액터를 생성한다"), PaintedActor);
+	TestNotNull(TEXT("색상 수신 컴포넌트를 생성한다"), Receiver);
+	TestNotNull(TEXT("물감색 조건 컴포넌트를 생성한다"), Condition);
+	if (PaintedActor == nullptr || Receiver == nullptr || Condition == nullptr)
+	{
+		return false;
+	}
+
+	PaintedActor->AddInstanceComponent(Receiver);
+	Receiver->bUseReceiverVolumeSampling = false;
+	Receiver->bWeightColorByExposureIntensity = false;
+	Receiver->bApplyPaintTint = false;
+	Receiver->MaterialTransitionDuration = 0.0f;
+	Receiver->MinimumPaintChannel = 0.15f;
+	Receiver->RegisterComponent();
+
+	PaintedActor->AddInstanceComponent(Condition);
+	Condition->RequiredColorState = EUOULightColorState::Red;
+	Condition->MatchTolerance = 0.05f;
+	Condition->ReleaseTolerance = 0.08f;
+	Condition->RegisterComponent();
+	Condition->RefreshNow();
+	TestFalse(TEXT("흰색 초기 상태는 빨강 조건을 만족하지 않는다"), Condition->IsSatisfied());
+
+	AActor* RedSource = World->SpawnActor<AActor>();
+	AActor* GreenSource = World->SpawnActor<AActor>();
+	TestNotNull(TEXT("빨강 광원 식별자를 생성한다"), RedSource);
+	TestNotNull(TEXT("초록 광원 식별자를 생성한다"), GreenSource);
+	if (RedSource == nullptr || GreenSource == nullptr)
+	{
+		return false;
+	}
+
+	const auto MakeExposure = [](UObject* Source, const FLinearColor& Color)
+	{
+		return FUOULightExposureData(
+			Source,
+			FVector::ZeroVector,
+			FVector::ZeroVector,
+			FVector::ForwardVector,
+			100.0f,
+			0.25f,
+			1.0f,
+			1.0f,
+			0.1f,
+			Color);
+	};
+
+	Receiver->ReceiveLightExposure_Implementation(MakeExposure(RedSource, FLinearColor::Red));
+	TestTrue(TEXT("실제 PaintTint가 빨강에 도달하면 조건이 만족된다"), Condition->IsSatisfied());
+	TestTrue(
+		TEXT("조건이 수신체의 최소 채널 설정을 반영한 빨강 목표색을 사용한다"),
+		Condition->RequiredPaintTint.Equals(
+			FLinearColor(1.0f, 0.15f, 0.15f, 1.0f),
+			KINDA_SMALL_NUMBER));
+
+	Receiver->ClearColorExposures();
+	Receiver->ReceiveLightExposure_Implementation(MakeExposure(GreenSource, FLinearColor::Green));
+	TestFalse(TEXT("물감색이 초록으로 바뀌면 빨강 조건이 해제된다"), Condition->IsSatisfied());
+
+	Condition->bLatchOnceSatisfied = true;
+	Receiver->ClearColorExposures();
+	Receiver->ReceiveLightExposure_Implementation(MakeExposure(RedSource, FLinearColor::Red));
+	TestTrue(TEXT("래치 조건도 빨강에서 만족된다"), Condition->IsSatisfied());
+	Receiver->ClearColorExposures();
+	Receiver->ReceiveLightExposure_Implementation(MakeExposure(GreenSource, FLinearColor::Green));
+	TestTrue(TEXT("래치를 켜면 다른 색으로 바뀌어도 만족 상태를 유지한다"), Condition->IsSatisfied());
 
 	return true;
 }

@@ -30,6 +30,12 @@ AUOULightSourceActor::AUOULightSourceActor()
 	BeamVisual->VFXActorClass = AUOULightBeamMeshVisualActor::StaticClass();
 }
 
+void AUOULightSourceActor::OnConstruction(const FTransform& Transform)
+{
+	Super::OnConstruction(Transform);
+	ApplyConfiguredLightColor();
+}
+
 void AUOULightSourceActor::BeginPlay()
 {
 	Super::BeginPlay();
@@ -86,4 +92,67 @@ void AUOULightSourceActor::DisableLight()
 void AUOULightSourceActor::ToggleLight()
 {
 	SetLightEnabled(!bLightEnabled);
+}
+
+void AUOULightSourceActor::SetSourceLightColor(FLinearColor NewLightColor)
+{
+	NewLightColor.A = 1.0f;
+	if (SourceSpotLight != nullptr)
+	{
+		SourceSpotLight->SetLightColor(NewLightColor);
+	}
+
+	// Construction Script 중에는 컴포넌트 속성만 갱신합니다. 런타임 VFX 재생성은
+	// 실제 플레이가 시작된 뒤 색상이 변경될 때만 필요합니다.
+	if (!HasActorBegunPlay())
+	{
+		return;
+	}
+
+	if (BeamVisual != nullptr)
+	{
+		BeamVisual->RefreshVisuals();
+	}
+	if (ReflectionSpotLights != nullptr)
+	{
+		ReflectionSpotLights->RefreshSpotLights();
+	}
+}
+
+void AUOULightSourceActor::SetLightColorPreset(const EUOULightColorPreset NewPreset)
+{
+	LightColorPreset = NewPreset;
+	ApplyConfiguredLightColor();
+}
+
+void AUOULightSourceActor::ApplyConfiguredLightColor()
+{
+	if (LightColorPreset == EUOULightColorPreset::UseSourceSpotLight)
+	{
+		return;
+	}
+
+	SetSourceLightColor(ResolveConfiguredLightColor());
+}
+
+FLinearColor AUOULightSourceActor::ResolveConfiguredLightColor() const
+{
+	switch (LightColorPreset)
+	{
+	case EUOULightColorPreset::Red:
+		return FLinearColor::Red;
+	case EUOULightColorPreset::Green:
+		return FLinearColor::Green;
+	case EUOULightColorPreset::Blue:
+		return FLinearColor::Blue;
+	case EUOULightColorPreset::White:
+		return FLinearColor::White;
+	case EUOULightColorPreset::Custom:
+		return CustomLightColor;
+	case EUOULightColorPreset::UseSourceSpotLight:
+	default:
+		return SourceSpotLight != nullptr
+			? SourceSpotLight->GetLightColor()
+			: FLinearColor::White;
+	}
 }

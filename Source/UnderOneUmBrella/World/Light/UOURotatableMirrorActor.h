@@ -12,6 +12,15 @@ class UStaticMeshComponent;
 class UUOULightInteractionSurfaceComponent;
 class UUOURotatableMirrorComponent;
 
+UENUM(BlueprintType)
+enum class EUOUMirrorSurfaceNormalAxis : uint8
+{
+	Auto UMETA(DisplayName = "자동 (가장 얇은 축)", ToolTip = "스케일이 적용된 메시 바운드에서 가장 얇은 축을 반사면 법선으로 사용합니다."),
+	X UMETA(DisplayName = "X축", ToolTip = "메시의 로컬 X축을 반사면 법선으로 사용합니다."),
+	Y UMETA(DisplayName = "Y축", ToolTip = "메시의 로컬 Y축을 반사면 법선으로 사용합니다."),
+	Z UMETA(DisplayName = "Z축", ToolTip = "메시의 로컬 Z축을 반사면 법선으로 사용합니다.")
+};
+
 // 회전축, 거울 메시, 빛 반사면과 플레이어 밀기 영역을 한 번에 제공하는 기본 거울 액터입니다.
 UCLASS(Blueprintable)
 class AUOURotatableMirrorActor : public AActor
@@ -33,6 +42,10 @@ public:
 	// 켜면 거울 메시의 로컬 바운드와 트랜스폼을 빛 반사 판정 박스에 자동 적용합니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Mirror|Light Surface", meta = (DisplayName = "반사 판정 박스를 메시와 동기화", ToolTip = "거울 메시의 위치, 회전, 스케일 또는 메시 에셋이 바뀌면 반사 판정 박스도 같은 범위로 맞춥니다. 끄면 판정 박스를 직접 설정할 수 있습니다."))
 	bool bSyncLightSurfaceToMirrorMesh = true;
+
+	// 메시마다 다른 모델링 축을 사용할 수 있으므로 반사면의 두께 방향을 선택합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Mirror|Light Surface", meta = (EditCondition = "bSyncLightSurfaceToMirrorMesh", DisplayName = "반사면 법선 축", ToolTip = "자동은 스케일이 적용된 메시 바운드에서 가장 얇은 축을 찾아 반사면의 앞 방향과 판정 두께로 사용합니다."))
+	EUOUMirrorSurfaceNormalAxis LightSurfaceNormalAxis = EUOUMirrorSurfaceNormalAxis::Auto;
 
 	// 선 트레이스가 매우 얇은 메시를 안정적으로 맞히도록 메시 두께에 추가할 판정 여유입니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Mirror|Light Surface", meta = (ClampMin = "0.0", Units = "cm", EditCondition = "bSyncLightSurfaceToMirrorMesh", DisplayName = "반사 판정 두께 여유", ToolTip = "거울 앞뒤 방향의 판정 박스 두께에 추가할 여유입니다. 가로와 세로 크기에는 영향을 주지 않습니다."))

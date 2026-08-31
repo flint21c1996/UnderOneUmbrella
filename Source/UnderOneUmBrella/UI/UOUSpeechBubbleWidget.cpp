@@ -105,6 +105,15 @@ void UUOUSpeechBubbleWidget::NativeTick(const FGeometry& MyGeometry, float InDel
 
 void UUOUSpeechBubbleWidget::ShowBubble(FText BubbleText, double Duration)
 {
+	ShowBubbleStyled(BubbleText, Duration, NAME_None);
+}
+
+void UUOUSpeechBubbleWidget::ShowBubbleStyled(
+	FText BubbleText,
+	double Duration,
+	FName PresentationStyle)
+{
+	ApplyPresentationStyle(PresentationStyle);
 	SetBubbleText(BubbleText);
 
 	if (UWorld* World = GetTimerWorld())
@@ -134,6 +143,17 @@ void UUOUSpeechBubbleWidget::ShowBubble(FText BubbleText, double Duration)
 
 	SetBubbleOpacity(0.0f);
 	FadeState = EFadeState::FadingIn;
+}
+
+void UUOUSpeechBubbleWidget::ApplyPresentationStyle(FName NewPresentationStyle)
+{
+	if (CurrentPresentationStyle == NewPresentationStyle)
+	{
+		return;
+	}
+
+	CurrentPresentationStyle = NewPresentationStyle;
+	BP_OnPresentationStyleChanged(CurrentPresentationStyle);
 }
 
 void UUOUSpeechBubbleWidget::HideBubble()
@@ -196,15 +216,19 @@ void UUOUSpeechBubbleWidget::SetBubbleOpacity(float NewOpacity)
 
 bool UUOUSpeechBubbleWidget::SetBubbleText(const FText& BubbleText) const
 {
+	return SetSpeechBubbleWidgetText(ResolveBubbleTextWidget(), BubbleText);
+}
+
+UWidget* UUOUSpeechBubbleWidget::ResolveBubbleTextWidget() const
+{
 	if (WidgetTree == nullptr)
 	{
-		return false;
+		return nullptr;
 	}
 
-	UWidget* NamedWidget = WidgetTree->FindWidget(FName(TEXT("TXT_BubbleText")));
-	if (SetSpeechBubbleWidgetText(NamedWidget, BubbleText))
+	if (UWidget* NamedWidget = WidgetTree->FindWidget(FName(TEXT("TXT_BubbleText"))))
 	{
-		return true;
+		return NamedWidget;
 	}
 
 	UWidget* FirstSupportedTextWidget = nullptr;
@@ -222,7 +246,7 @@ bool UUOUSpeechBubbleWidget::SetBubbleText(const FText& BubbleText) const
 		}
 	});
 
-	return SetSpeechBubbleWidgetText(FirstSupportedTextWidget, BubbleText);
+	return FirstSupportedTextWidget;
 }
 
 UWidget* UUOUSpeechBubbleWidget::ResolveBubbleRootWidget() const
