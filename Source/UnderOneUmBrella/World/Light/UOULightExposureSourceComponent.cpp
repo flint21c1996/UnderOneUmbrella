@@ -352,6 +352,12 @@ void UUOULightExposureSourceComponent::GatherDevelopmentDebugDraw(
 				break;
 			}
 
+			if (!Segment.ReachedReceivers.IsEmpty() &&
+				Segment.HitType != EUOULightPathHitType::ReflectingSurface)
+			{
+				SegmentColor = FColor::Green;
+			}
+
 			DrawDevelopmentLightPathSegment(Context, Segment, SegmentColor);
 
 			for (UObject* ReceiverObject : Segment.ReachedReceivers)
@@ -405,6 +411,7 @@ void UUOULightExposureSourceComponent::EmitLight(float DeltaTime)
 	LastReflectionBounceCount = 0;
 	LastReflectionPath = TEXT("None");
 	ReflectionPaths.Reset();
+	LastDirectReachedReceivers.Reset();
 
 	UWorld* World = GetWorld();
 	const float ExposureRange = GetExposureRange();
@@ -464,6 +471,7 @@ void UUOULightExposureSourceComponent::EmitLight(float DeltaTime)
 			FHitResult BlockingHit;
 			if (TryBuildExposureData(ReceiverObject, DeltaTime, ExposureData, BlockingHit))
 			{
+				LastDirectReachedReceivers.AddUnique(ReceiverObject);
 				RecordExposureCandidate(
 					ReceiverObject,
 					ExposureData,
@@ -690,13 +698,14 @@ void UUOULightExposureSourceComponent::RebuildLightPaths()
 					ReflectionSegment.BlockingComponent->GetOwner(),
 					ReflectionSegment.BlockingComponent,
 					HitReceivers);
-				for (UObject* Receiver : HitReceivers)
-				{
-					Segment.ReachedReceivers.AddUnique(Receiver);
-				}
-				Segment.HitType = HitReceivers.IsEmpty()
-					? EUOULightPathHitType::BlockingSurface
-					: EUOULightPathHitType::Receiver;
+				const bool bReachedHitReceiver = HitReceivers.ContainsByPredicate(
+					[&Segment](const UObject* Receiver)
+					{
+						return Segment.ReachedReceivers.Contains(Receiver);
+					});
+				Segment.HitType = bReachedHitReceiver
+					? EUOULightPathHitType::Receiver
+					: EUOULightPathHitType::BlockingSurface;
 			}
 
 			const bool bIsLastSegment = SegmentIndex == ReflectionPath.Segments.Num() - 1;
@@ -720,6 +729,7 @@ FUOULightPathSegmentData UUOULightExposureSourceComponent::BuildDirectLightPathS
 	Segment.Direction = GetSourceForwardVector().GetSafeNormal();
 	Segment.Intensity = Intensity;
 	Segment.EndReason = EUOULightReflectionPathEndReason::RangeEnded;
+	Segment.ReachedReceivers = LastDirectReachedReceivers;
 
 	if (FirstReflectionSegment != nullptr)
 	{
@@ -807,15 +817,28 @@ FUOULightPathSegmentData UUOULightExposureSourceComponent::BuildDirectLightPathS
 				Segment.HitComponent = Hit.GetComponent();
 				Segment.EndSurfaceNormal = Hit.ImpactNormal.GetSafeNormal();
 				UUOULightInteractionSurfaceComponent* HitInteractionSurface = nullptr;
-				Segment.HitType = bHasCylinderSurfaceHit
-					? EUOULightPathHitType::BlockingSurface
-					: ClassifyLightPathHit(
-						Hit,
-						HitInteractionSurface,
-						Segment.ReachedReceivers);
+				Segment.ReachedReceivers = LastDirectReachedReceivers;
 				if (bHasCylinderSurfaceHit)
 				{
+					Segment.HitType = EUOULightPathHitType::BlockingSurface;
 					HitInteractionSurface = Cast<UUOULightInteractionSurfaceComponent>(Hit.GetComponent());
+				}
+				else
+				{
+					TArray<TObjectPtr<UObject>> HitReceivers;
+					Segment.HitType = ClassifyLightPathHit(
+						Hit,
+						HitInteractionSurface,
+						HitReceivers);
+					if (Segment.HitType == EUOULightPathHitType::Receiver &&
+						!HitReceivers.ContainsByPredicate(
+							[&Segment](const UObject* Receiver)
+							{
+								return Segment.ReachedReceivers.Contains(Receiver);
+							}))
+					{
+						Segment.HitType = EUOULightPathHitType::BlockingSurface;
+					}
 				}
 				Segment.InteractionSurface = HitInteractionSurface;
 				Segment.EndReason = Segment.HitType == EUOULightPathHitType::ReflectingSurface
@@ -1448,6 +1471,41 @@ bool UUOULightExposureSourceComponent::TryBuildExposureData(
 		return false;
 	}
 
+	if (const UUOULightExposureReceiverComponent* ReceiverComponent =
+		Cast<UUOULightExposureReceiverComponent>(ReceiverObject);
+		ReceiverComponent != nullptr && ReceiverComponent->bUseBeamVolumeOverlap)
+	{
+		FVector ExposurePosition = FVector::ZeroVector;
+		float OverlapDepth = 0.0f;
+		if (!TryFindReceiverVolumeOverlapPoint(
+			ReceiverObject,
+			GetSourceLocation(),
+			GetSourceForwardVector(),
+			GetExposureRange(),
+			BeamShape == EUOULightBeamShape::Cylinder ? CylinderRadius : 0.0f,
+			BeamShape == EUOULightBeamShape::Cylinder ? 0.0f : GetEffectiveOuterConeAngle(),
+			ExposurePosition,
+			OverlapDepth))
+		{
+			return false;
+		}
+
+		const bool bBuiltExposure = TryBuildExposureDataAtPosition(
+			ReceiverObject,
+			ExposurePosition,
+			DeltaTime,
+			OutExposureData,
+			OutBlockingHit);
+		if (bBuiltExposure)
+		{
+			OutExposureData.bUsedReceiverVolumeOverlap = true;
+			OutExposureData.ReceiverVolumeOverlapDepth = OverlapDepth;
+			OutExposureData.RequiredReceiverVolumeOverlapDepth =
+				ReceiverComponent->MinimumBeamOverlapDepth;
+		}
+		return bBuiltExposure;
+	}
+
 	TArray<FVector> SamplePositions;
 	int32 RequiredHits = 1;
 	GetReceiverSamplePositions(
@@ -1494,6 +1552,82 @@ bool UUOULightExposureSourceComponent::TryBuildExposureData(
 		return false;
 	}
 
+	return true;
+}
+
+bool UUOULightExposureSourceComponent::TryFindReceiverVolumeOverlapPoint(
+	UObject* ReceiverObject,
+	const FVector& BeamOrigin,
+	const FVector& BeamDirection,
+	float MaximumDistance,
+	float BeamStartRadius,
+	float BeamConeAngle,
+	FVector& OutExposurePosition,
+	float& OutOverlapDepth) const
+{
+	OutExposurePosition = FVector::ZeroVector;
+	OutOverlapDepth = 0.0f;
+
+	UUOULightExposureReceiverComponent* ReceiverComponent =
+		Cast<UUOULightExposureReceiverComponent>(ReceiverObject);
+	const FVector SafeBeamDirection = BeamDirection.GetSafeNormal();
+	const float SafeMaximumDistance = FMath::Max(0.0f, MaximumDistance);
+	if (ReceiverComponent == nullptr ||
+		!ReceiverComponent->bUseBeamVolumeOverlap ||
+		SafeBeamDirection.IsNearlyZero() ||
+		SafeMaximumDistance <= KINDA_SMALL_NUMBER)
+	{
+		return false;
+	}
+
+	FVector ReceiverCenter = FVector::ZeroVector;
+	float ReceiverRadius = 0.0f;
+	if (!ReceiverComponent->GetLightReceiverVolumeSphere(ReceiverCenter, ReceiverRadius))
+	{
+		return false;
+	}
+
+	const float AxialDistance = FVector::DotProduct(
+		ReceiverCenter - BeamOrigin,
+		SafeBeamDirection);
+	if (AxialDistance <= KINDA_SMALL_NUMBER || AxialDistance > SafeMaximumDistance)
+	{
+		return false;
+	}
+
+	const FVector BeamAxisPosition = BeamOrigin + SafeBeamDirection * AxialDistance;
+	const FVector ReceiverOffset = ReceiverCenter - BeamAxisPosition;
+	const float CenterDistance = ReceiverOffset.Size();
+	const float ConeAngleRadians = FMath::DegreesToRadians(
+		FMath::Clamp(BeamConeAngle, 0.0f, 89.0f));
+	const float BeamRadius = FMath::Max(0.0f, BeamStartRadius) +
+		AxialDistance * FMath::Tan(ConeAngleRadians);
+	OutOverlapDepth = ReceiverRadius + BeamRadius - CenterDistance;
+	const bool bAccepted =
+		OutOverlapDepth + KINDA_SMALL_NUMBER >= ReceiverComponent->MinimumBeamOverlapDepth;
+	ReceiverComponent->RecordBeamVolumeOverlapEvaluation(OutOverlapDepth, bAccepted);
+	if (!bAccepted)
+	{
+		return false;
+	}
+
+	if (CenterDistance <= KINDA_SMALL_NUMBER)
+	{
+		OutExposurePosition = ReceiverCenter;
+		return true;
+	}
+
+	const FVector DirectionToReceiver = ReceiverOffset / CenterDistance;
+	const float SharedIntervalStart = FMath::Max(0.0f, CenterDistance - ReceiverRadius);
+	const float SharedIntervalEnd = FMath::Min(BeamRadius, CenterDistance + ReceiverRadius);
+	if (SharedIntervalEnd + KINDA_SMALL_NUMBER < SharedIntervalStart)
+	{
+		return false;
+	}
+
+	// 두 볼륨이 공유하는 구간의 중앙을 실제 세기와 가림을 검사할 대표 지점으로 사용합니다.
+	OutExposurePosition = BeamAxisPosition + DirectionToReceiver *
+		((SharedIntervalStart + SharedIntervalEnd) * 0.5f);
 	return true;
 }
 
@@ -3112,6 +3246,48 @@ bool UUOULightExposureSourceComponent::TryBuildReflectedExposureData(
 		!ReceiverObject->GetClass()->ImplementsInterface(UUOULightReceivableInterface::StaticClass()))
 	{
 		return false;
+	}
+
+	if (const UUOULightExposureReceiverComponent* ReceiverComponent =
+		Cast<UUOULightExposureReceiverComponent>(ReceiverObject);
+		ReceiverComponent != nullptr && ReceiverComponent->bUseBeamVolumeOverlap)
+	{
+		FVector ExposurePosition = FVector::ZeroVector;
+		float OverlapDepth = 0.0f;
+		if (!TryFindReceiverVolumeOverlapPoint(
+			ReceiverObject,
+			ReflectionOrigin,
+			ReflectedDirection,
+			MaximumDistance,
+			BeamStartRadius,
+			BeamConeAngle,
+			ExposurePosition,
+			OverlapDepth))
+		{
+			return false;
+		}
+
+		const bool bBuiltExposure = TryBuildReflectedExposureDataAtPosition(
+			ReceiverObject,
+			ExposurePosition,
+			SurfaceComponent,
+			ReflectionOrigin,
+			ReflectedDirection,
+			MaximumDistance,
+			BeamStartRadius,
+			BeamConeAngle,
+			SurfaceIntensity,
+			DeltaTime,
+			OutExposureData,
+			OutBlockingHit);
+		if (bBuiltExposure)
+		{
+			OutExposureData.bUsedReceiverVolumeOverlap = true;
+			OutExposureData.ReceiverVolumeOverlapDepth = OverlapDepth;
+			OutExposureData.RequiredReceiverVolumeOverlapDepth =
+				ReceiverComponent->MinimumBeamOverlapDepth;
+		}
+		return bBuiltExposure;
 	}
 
 	TArray<FVector> SamplePositions;

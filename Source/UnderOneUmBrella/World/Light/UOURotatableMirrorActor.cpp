@@ -77,6 +77,8 @@ AUOURotatableMirrorActor::AUOURotatableMirrorActor()
 	RotatableMirror->bAutoFindPushVolume = true;
 	RotatableMirror->PreferredPushVolumeName = PushVolume->GetFName();
 	RotatableMirror->bConfigurePushVolumeCollision = true;
+	// 기울어진 배치에서도 플레이어가 바닥을 따라 밀 수 있도록 월드 수직축을 사용합니다.
+	RotatableMirror->RotationAxisMode = EUOURotatableMirrorAxisMode::WorldUp;
 	RotatableMirror->LocalRotationAxis = FVector::UpVector;
 }
 
