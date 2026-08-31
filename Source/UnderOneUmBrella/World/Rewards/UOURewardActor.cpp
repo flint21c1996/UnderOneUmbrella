@@ -17,6 +17,7 @@
 #include "GameFramework/PlayerController.h"
 #include "NiagaraComponent.h"
 #include "Player/UOUCharacter.h"
+#include "Puzzle/Reward/UOURewardCollectedConditionComponent.h"
 #include "UI/UOUUISubsystem.h"
 #include "World/Rewards/UOURewardCollectionMotionComponent.h"
 #include "World/Rewards/UOURewardFeedbackComponent.h"
@@ -44,6 +45,16 @@ AUOURewardActor::AUOURewardActor()
 	VisualMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	VisualMesh->SetGenerateOverlapEvents(false);
 
+	AppearanceMotionPath = CreateDefaultSubobject<USplineComponent>(TEXT("AppearanceMotionPath"));
+	AppearanceMotionPath->bEditableWhenInherited = true;
+	AppearanceMotionPath->SetupAttachment(RootScene);
+	AppearanceMotionPath->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	AppearanceMotionPath->ClearSplinePoints(false);
+	AppearanceMotionPath->AddSplinePoint(FVector(0.0f, 0.0f, 300.0f), ESplineCoordinateSpace::Local, false);
+	AppearanceMotionPath->AddSplinePoint(FVector::ZeroVector, ESplineCoordinateSpace::Local, true);
+	AppearanceMotionPath->SetClosedLoop(false);
+	AppearanceMotionPath->SetHiddenInGame(true);
+
 	CollectionMotionPath = CreateDefaultSubobject<USplineComponent>(TEXT("CollectionMotionPath"));
 	CollectionMotionPath->bEditableWhenInherited = true;
 	CollectionMotionPath->SetupAttachment(RootScene);
@@ -59,6 +70,8 @@ AUOURewardActor::AUOURewardActor()
 	ObjectiveEffect->SetAutoActivate(true);
 
 	RewardFeedbackComponent = CreateDefaultSubobject<UUOURewardFeedbackComponent>(TEXT("RewardFeedbackComponent"));
+	RewardCollectedConditionComponent =
+		CreateDefaultSubobject<UUOURewardCollectedConditionComponent>(TEXT("RewardCollectedConditionComponent"));
 	RewardCollectionMotionComponent =
 		CreateDefaultSubobject<UUOURewardCollectionMotionComponent>(TEXT("RewardCollectionMotionComponent"));
 }
@@ -196,6 +209,12 @@ void AUOURewardActor::BeginPlay()
 	}
 	if (RewardCollectionMotionComponent != nullptr)
 	{
+		RewardCollectionMotionComponent->OnAppearanceMotionFinished.AddUniqueDynamic(
+			this,
+			&AUOURewardActor::HandleAppearanceMotionFinished);
+		RewardCollectionMotionComponent->OnAppearanceMotionCue.AddUniqueDynamic(
+			this,
+			&AUOURewardActor::HandleAppearanceMotionCue);
 		RewardCollectionMotionComponent->OnCollectionMotionFinished.AddUniqueDynamic(
 			this,
 			&AUOURewardActor::HandleCollectionMotionFinished);
@@ -203,6 +222,10 @@ void AUOURewardActor::BeginPlay()
 			this,
 			&AUOURewardActor::HandleCollectionMotionCue);
 	}
+
+	// 기본값과 같은 상태도 BeginPlay에서 실제 컴포넌트에 적용되도록 반대 상태에서 전환합니다.
+	bRewardActive = !bStartActive;
+	SetRewardActive(bStartActive);
 }
 
 void AUOURewardActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -223,6 +246,12 @@ void AUOURewardActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
 
 	if (RewardCollectionMotionComponent != nullptr)
 	{
+		RewardCollectionMotionComponent->OnAppearanceMotionFinished.RemoveDynamic(
+			this,
+			&AUOURewardActor::HandleAppearanceMotionFinished);
+		RewardCollectionMotionComponent->OnAppearanceMotionCue.RemoveDynamic(
+			this,
+			&AUOURewardActor::HandleAppearanceMotionCue);
 		RewardCollectionMotionComponent->OnCollectionMotionFinished.RemoveDynamic(
 			this,
 			&AUOURewardActor::HandleCollectionMotionFinished);
@@ -238,12 +267,12 @@ void AUOURewardActor::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 
-	if (bCollected || VisualMesh == nullptr)
+	if (!bRewardActive || bRewardAppearanceInProgress || bCollected || VisualMesh == nullptr)
 	{
 		return;
 	}
 
-	const float ElapsedTime = GetGameTimeSinceCreation();
+	const float ElapsedTime = FMath::Max(0.0f, GetGameTimeSinceCreation() - IdleMotionStartTime);
 
 	FVector RelativeLocation = BaseVisualRelativeLocation;
 	if (bUseHoverMotion)
@@ -262,7 +291,7 @@ void AUOURewardActor::Tick(float DeltaSeconds)
 
 bool AUOURewardActor::TryCollectReward(AActor* Collector)
 {
-	if (bCollected || !IsValidCollector(Collector))
+	if (!bRewardActive || bRewardAppearanceInProgress || bCollected || !IsValidCollector(Collector))
 	{
 		return false;
 	}
@@ -305,6 +334,214 @@ bool AUOURewardActor::IsCollected() const
 	return bCollected;
 }
 
+bool AUOURewardActor::IsCollectionCompleted() const
+{
+	return bCollectionCompleted;
+}
+
+void AUOURewardActor::SetRewardActive(bool bNewActive)
+{
+	// 수집이 시작된 뒤에는 조건 변화가 수집 연출이나 완료 처리를 되돌리지 않게 합니다.
+	if (bCollected || bRewardActive == bNewActive)
+	{
+		return;
+	}
+
+	bRewardActive = bNewActive;
+	bRewardAppearanceInProgress = false;
+	SetActorTickEnabled(false);
+
+	if (CollectionTrigger != nullptr)
+	{
+		// 등장 연출이 끝날 때까지 플레이어가 Reward를 먼저 수집하지 못하게 합니다.
+		CollectionTrigger->SetGenerateOverlapEvents(false);
+		CollectionTrigger->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	}
+
+	if (VisualMesh != nullptr)
+	{
+		VisualMesh->SetVisibility(bRewardActive, true);
+		VisualMesh->SetHiddenInGame(!bRewardActive, true);
+	}
+
+	if (ObjectiveEffect != nullptr)
+	{
+		ObjectiveEffect->SetVisibility(bRewardActive, true);
+		ObjectiveEffect->SetHiddenInGame(!bRewardActive, true);
+		if (bRewardActive)
+		{
+			if (!ObjectiveEffect->IsActive())
+			{
+				ObjectiveEffect->Activate(true);
+			}
+		}
+		else
+		{
+			ObjectiveEffect->Deactivate();
+		}
+	}
+
+	if (!bRewardActive)
+	{
+		bRewardAppearanceInProgress = false;
+		bWaitingForAppearanceMotion = false;
+		bWaitingForAppearanceFeedback = false;
+		if (RewardCollectionMotionComponent != nullptr)
+		{
+			RewardCollectionMotionComponent->StopAppearanceMotion(true);
+		}
+		if (RewardFeedbackComponent != nullptr
+			&& RewardFeedbackComponent->IsFeedbackPlaying())
+		{
+			RewardFeedbackComponent->CancelFeedback();
+		}
+		if (VisualMesh != nullptr)
+		{
+			// 재활성화 때 이전 idle 흔들림 위치가 새 등장 도착점으로 누적되지 않게 합니다.
+			VisualMesh->SetRelativeLocation(BaseVisualRelativeLocation);
+			VisualMesh->SetRelativeRotation(BaseVisualRelativeRotation);
+		}
+		return;
+	}
+
+	BeginRewardAppearance();
+}
+
+bool AUOURewardActor::IsRewardActive() const
+{
+	return bRewardActive && !bRewardAppearanceInProgress && !bCollected;
+}
+
+void AUOURewardActor::BeginRewardAppearance()
+{
+	bRewardAppearanceInProgress = true;
+	bWaitingForAppearanceMotion = false;
+	bWaitingForAppearanceFeedback = false;
+
+	AUOUCharacter* PlayerCharacter = nullptr;
+	if (UWorld* World = GetWorld())
+	{
+		if (APlayerController* PlayerController = World->GetFirstPlayerController())
+		{
+			PlayerCharacter = Cast<AUOUCharacter>(PlayerController->GetPawn());
+		}
+	}
+
+	if (RewardFeedbackComponent != nullptr)
+	{
+		bWaitingForAppearanceFeedback =
+			RewardFeedbackComponent->BeginAppearanceFeedback(
+				PlayerCharacter,
+				GetActorLocation());
+	}
+
+	const TArray<FUOURewardPresentationCue> EmptyCueRequests;
+	const TArray<FUOURewardPresentationCue>& CueRequests =
+		RewardFeedbackComponent != nullptr
+			? RewardFeedbackComponent->GetAppearanceCueRequests()
+			: EmptyCueRequests;
+
+	bWaitingForAppearanceMotion = RewardCollectionMotionComponent != nullptr;
+	if (bWaitingForAppearanceMotion
+		&& !RewardCollectionMotionComponent->StartAppearanceMotion(
+			VisualMesh,
+			AppearanceMotionPath,
+			CueRequests))
+	{
+		bWaitingForAppearanceMotion = false;
+	}
+
+	if (!bWaitingForAppearanceMotion
+		&& bWaitingForAppearanceFeedback
+		&& RewardFeedbackComponent != nullptr)
+	{
+		RewardFeedbackComponent->CompleteFeedbackSequence();
+	}
+
+	TryCompleteRewardAppearance();
+}
+
+void AUOURewardActor::TryCompleteRewardAppearance()
+{
+	if (!bRewardAppearanceInProgress
+		|| bWaitingForAppearanceMotion
+		|| bWaitingForAppearanceFeedback)
+	{
+		return;
+	}
+
+	CompleteRewardAppearance();
+}
+
+void AUOURewardActor::CompleteRewardAppearance()
+{
+	if (!bRewardActive || bCollected)
+	{
+		return;
+	}
+
+	bRewardAppearanceInProgress = false;
+	if (VisualMesh != nullptr)
+	{
+		// 등장 연출이 VisualMesh의 기준 Transform을 바꿨다면 그 위치에서 idle 움직임을 이어갑니다.
+		BaseVisualRelativeLocation = VisualMesh->GetRelativeLocation();
+		BaseVisualRelativeRotation = VisualMesh->GetRelativeRotation();
+	}
+	IdleMotionStartTime = GetGameTimeSinceCreation();
+
+	SetActorTickEnabled(true);
+	if (CollectionTrigger != nullptr)
+	{
+		CollectionTrigger->SetGenerateOverlapEvents(true);
+		CollectionTrigger->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+	}
+}
+
+bool AUOURewardActor::IsRewardAppearanceInProgress() const
+{
+	return bRewardAppearanceInProgress;
+}
+
+void AUOURewardActor::HandleAppearanceMotionFinished()
+{
+	bWaitingForAppearanceMotion = false;
+	if (bWaitingForAppearanceFeedback && RewardFeedbackComponent != nullptr)
+	{
+		RewardFeedbackComponent->CompleteFeedbackSequence();
+	}
+	TryCompleteRewardAppearance();
+}
+
+void AUOURewardActor::HandleAppearanceMotionCue(
+	const FUOURewardPresentationCue& Cue)
+{
+	ExecuteMotionCue(Cue);
+}
+
+void AUOURewardActor::ApplyPuzzleResult_Implementation(EOUUPuzzleResultAction Action)
+{
+	switch (Action)
+	{
+	case EOUUPuzzleResultAction::Activate:
+	case EOUUPuzzleResultAction::Resume:
+		SetRewardActive(true);
+		break;
+
+	case EOUUPuzzleResultAction::Deactivate:
+	case EOUUPuzzleResultAction::Pause:
+		SetRewardActive(false);
+		break;
+
+	case EOUUPuzzleResultAction::Toggle:
+		SetRewardActive(!IsRewardActive());
+		break;
+
+	case EOUUPuzzleResultAction::None:
+	default:
+		break;
+	}
+}
+
 void AUOURewardActor::HandleCollectionTriggerBeginOverlap(
 	UPrimitiveComponent* OverlappedComponent,
 	AActor* OtherActor,
@@ -330,6 +567,8 @@ void AUOURewardActor::ApplyComponentSettings()
 
 void AUOURewardActor::DisableCollectionInteraction()
 {
+	bRewardActive = false;
+	bRewardAppearanceInProgress = false;
 	SetActorTickEnabled(false);
 
 	if (CollectionTrigger != nullptr)
@@ -389,6 +628,10 @@ bool AUOURewardActor::RoutePresentationCueToUI(
 	APlayerController* PlayerController = PlayerCharacter != nullptr
 		? Cast<APlayerController>(PlayerCharacter->GetController())
 		: nullptr;
+	if (PlayerController == nullptr && GetWorld() != nullptr)
+	{
+		PlayerController = GetWorld()->GetFirstPlayerController();
+	}
 	ULocalPlayer* LocalPlayer = PlayerController != nullptr
 		? PlayerController->GetLocalPlayer()
 		: nullptr;
@@ -450,6 +693,13 @@ bool AUOURewardActor::IsValidCollector(const AActor* Candidate) const
 
 void AUOURewardActor::HandleRewardFeedbackFinished()
 {
+	if (bRewardAppearanceInProgress)
+	{
+		bWaitingForAppearanceFeedback = false;
+		TryCompleteRewardAppearance();
+		return;
+	}
+
 	bWaitingForRewardFeedback = false;
 	TryCompleteCollection();
 }
@@ -465,6 +715,11 @@ void AUOURewardActor::HandleCollectionMotionFinished()
 }
 
 void AUOURewardActor::HandleCollectionMotionCue(const FUOURewardPresentationCue& Cue)
+{
+	ExecuteMotionCue(Cue);
+}
+
+void AUOURewardActor::ExecuteMotionCue(const FUOURewardPresentationCue& Cue)
 {
 	switch (Cue.Channel)
 	{

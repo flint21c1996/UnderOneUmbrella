@@ -12,6 +12,11 @@ bool UUOUPuzzleConditionSourceComponent::IsSatisfied() const
 	return bIsSatisfied;
 }
 
+bool UUOUPuzzleConditionSourceComponent::SetConditionSatisfied(bool bNewSatisfied)
+{
+	return SetSatisfiedState(bNewSatisfied, true);
+}
+
 #if UOU_WITH_PUZZLE_CHEATS
 bool UUOUPuzzleConditionSourceComponent::TryResolveInputForCheat(AActor* InputActor)
 {

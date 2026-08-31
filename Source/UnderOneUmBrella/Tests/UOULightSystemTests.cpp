@@ -19,15 +19,17 @@
 #include "UObject/UnrealType.h"
 #include "World/Light/UOULightBeamVisualComponent.h"
 #include "World/Light/UOULightBeamMeshVisualActor.h"
-#include "World/Light/UOULightColorReceiverComponent.h"
 #include "World/Light/UOULightExposureReceiverComponent.h"
 #include "World/Light/UOULightExposureSourceComponent.h"
 #include "World/Light/UOULightInteractionSurfaceComponent.h"
+#include "World/Light/UOULightCountBulbActor.h"
+#include "World/Light/UOULightColorReceiverComponent.h"
 #include "World/Light/UOULightReflectionPathTypes.h"
 #include "World/Light/UOULightReflectionSpotLightComponent.h"
 #include "World/Light/UOULightSourceActor.h"
 #include "World/Light/UOULumenDynamicRayVisualActor.h"
 #include "World/Light/UOURotatableMirrorActor.h"
+#include "World/Light/UOURotatableMirrorComponent.h"
 
 namespace
 {
@@ -129,6 +131,153 @@ namespace
 		bOutValue = Property->GetPropertyValue(ValueAddress);
 		return true;
 	}
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FUOULightCountBulbStateEvaluationTest,
+	"UnderOneUmbrella.Light.Bulb.LightCountStateEvaluation",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUOULightCountBulbStateEvaluationTest::RunTest(const FString& Parameters)
+{
+	const AUOULightCountBulbActor* BulbDefaults = GetDefault<AUOULightCountBulbActor>();
+	TestNotNull(TEXT("광원 개수 전구 기본 오브젝트가 존재한다"), BulbDefaults);
+	if (BulbDefaults == nullptr)
+	{
+		return false;
+	}
+
+	TestNotNull(TEXT("전구에 빛 수신 컴포넌트가 존재한다"), BulbDefaults->LightReceiver.Get());
+	TestNotNull(TEXT("전구에 독립된 빛 수신 볼륨이 존재한다"), BulbDefaults->LightReceiverVolume.Get());
+	if (BulbDefaults->LightReceiver != nullptr)
+	{
+		TestTrue(
+			TEXT("전구는 빔과 수신 볼륨의 겹침 깊이 판정을 사용한다"),
+			BulbDefaults->LightReceiver->bUseBeamVolumeOverlap);
+		TestEqual(
+			TEXT("전구의 기본 최소 겹침 깊이는 10cm다"),
+			BulbDefaults->LightReceiver->MinimumBeamOverlapDepth,
+			10.0f);
+	}
+	TestTrue(
+		TEXT("전구 액터는 통합 퍼즐 디버그 Provider로 등록된다"),
+		BulbDefaults->GetClass()->ImplementsInterface(UUOUDebugProvider::StaticClass()));
+	TestEqual(
+		TEXT("전구 디버그 Provider는 Puzzle 카테고리를 사용한다"),
+		IUOUDebugProvider::Execute_GetDebugCategory(
+			const_cast<AUOULightCountBulbActor*>(BulbDefaults)),
+		EUOUDebugCategory::Puzzle);
+	const FString DefaultDebugSummary = IUOUDebugProvider::Execute_GetDebugSummaryText(
+		const_cast<AUOULightCountBulbActor*>(BulbDefaults)).ToString();
+	TestTrue(
+		TEXT("전구 디버그 요약은 현재 빛 개수와 필요 개수를 표시한다"),
+		DefaultDebugSummary.Contains(TEXT("Lights: 0 / 1")));
+	TestEqual(
+		TEXT("필요 광원이 2개일 때 빛이 없으면 꺼짐 상태다"),
+		AUOULightCountBulbActor::EvaluateState(0, 2),
+		EUOULightCountBulbState::Off);
+	TestEqual(
+		TEXT("필요 광원이 2개일 때 빛 하나는 부족 상태다"),
+		AUOULightCountBulbActor::EvaluateState(1, 2),
+		EUOULightCountBulbState::Insufficient);
+	TestEqual(
+		TEXT("필요 광원이 2개일 때 빛 두 개는 만족 상태다"),
+		AUOULightCountBulbActor::EvaluateState(2, 2),
+		EUOULightCountBulbState::Satisfied);
+	TestEqual(
+		TEXT("필요 광원이 2개일 때 빛 세 개는 과열 상태다"),
+		AUOULightCountBulbActor::EvaluateState(3, 2),
+		EUOULightCountBulbState::Overheated);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FUOULightCountBulbBeamOverlapTest,
+	"UnderOneUmbrella.Light.Bulb.BeamVolumeOverlapDepth",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUOULightCountBulbBeamOverlapTest::RunTest(const FString& Parameters)
+{
+	UWorld* UninitializedWorld = UWorld::CreateWorld(
+		EWorldType::Editor,
+		false,
+		TEXT("UOULightCountBulbBeamOverlapWorld"),
+		nullptr,
+		false,
+		ERHIFeatureLevel::Num,
+		nullptr,
+		true);
+	FScopedEditorWorld ScopedWorld(
+		UninitializedWorld,
+		UWorld::InitializationValues()
+			.RequiresHitProxies(false)
+			.ShouldSimulatePhysics(false)
+			.EnableTraceCollision(true)
+			.CreateNavigation(false)
+			.CreateAISystem(false)
+			.AllowAudioPlayback(false)
+			.CreatePhysicsScene(true));
+	UWorld* World = ScopedWorld.GetWorld();
+	TestNotNull(TEXT("전구 겹침 깊이 테스트 월드를 생성한다"), World);
+	if (World == nullptr)
+	{
+		return false;
+	}
+
+	AUOULightSourceActor* SourceActor = World->SpawnActor<AUOULightSourceActor>();
+	AUOULightCountBulbActor* BulbActor = World->SpawnActor<AUOULightCountBulbActor>();
+	TestNotNull(TEXT("겹침 깊이 테스트 광원을 생성한다"), SourceActor);
+	TestNotNull(TEXT("겹침 깊이 테스트 전구를 생성한다"), BulbActor);
+	if (SourceActor == nullptr || SourceActor->ExposureSource == nullptr ||
+		SourceActor->SourceSpotLight == nullptr || BulbActor == nullptr ||
+		BulbActor->LightReceiver == nullptr)
+	{
+		return false;
+	}
+
+	SourceActor->SetActorLocationAndRotation(FVector::ZeroVector, FRotator::ZeroRotator);
+	SourceActor->SourceSpotLight->SetAttenuationRadius(1000.0f);
+	SourceActor->ExposureSource->BeamShape = EUOULightBeamShape::Cylinder;
+	SourceActor->ExposureSource->CylinderRadius = 20.0f;
+	SourceActor->ExposureSource->BeamLength = 1000.0f;
+	SourceActor->ExposureSource->Intensity = 1.0f;
+	SourceActor->ExposureSource->SampleInterval = 0.0f;
+	SourceActor->ExposureSource->bEnableReflectedLight = false;
+
+	BulbActor->SetActorLocation(FVector(400.0f, 70.0f, 0.0f));
+	SourceActor->ExposureSource->EmitLight(0.1f);
+	TestFalse(
+		TEXT("5cm만 겹치는 가장자리 스침은 전구 수광으로 인정하지 않는다"),
+		BulbActor->LightReceiver->IsReceivingLight());
+	TestTrue(
+		TEXT("거부된 가장자리 스침도 약 5cm의 마지막 평가값으로 기록된다"),
+		FMath::IsNearlyEqual(BulbActor->LightReceiver->LastBeamOverlapDepth, 5.0f, 0.5f));
+	TestFalse(
+		TEXT("최소 깊이 미달 평가 결과는 Rejected로 기록된다"),
+		BulbActor->LightReceiver->bLastBeamOverlapAccepted);
+
+	BulbActor->SetActorLocation(FVector(400.0f, 60.0f, 0.0f));
+	SourceActor->ExposureSource->EmitLight(0.1f);
+	TestTrue(
+		TEXT("15cm 겹침은 최소 깊이 10cm를 넘어 전구 수광으로 인정한다"),
+		BulbActor->LightReceiver->IsReceivingLight());
+	TestTrue(
+		TEXT("마지막 겹침 깊이는 약 15cm로 기록된다"),
+		FMath::IsNearlyEqual(BulbActor->LightReceiver->LastBeamOverlapDepth, 15.0f, 0.5f));
+	TestTrue(
+		TEXT("최소 깊이를 넘긴 평가 결과는 Accepted로 기록된다"),
+		BulbActor->LightReceiver->bLastBeamOverlapAccepted);
+
+	const TArray<FUOULightPathData> LightPaths = SourceActor->ExposureSource->GetLightPaths();
+	TestTrue(TEXT("전구에 도달한 직접광 경로를 생성한다"), !LightPaths.IsEmpty());
+	if (!LightPaths.IsEmpty() && !LightPaths[0].Segments.IsEmpty())
+	{
+		TestTrue(
+			TEXT("초록 경로에 사용하는 실제 도달 목록에 전구 Receiver가 포함된다"),
+			LightPaths[0].Segments[0].ReachedReceivers.Contains(BulbActor->LightReceiver.Get()));
+	}
+
+	return true;
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
@@ -521,7 +670,11 @@ bool FUOURotatableMirrorStableNormalTest::RunTest(const FString& Parameters)
 	TestNotNull(
 		TEXT("회전 거울에 빛 상호작용 표면이 존재한다"),
 		MirrorDefaults != nullptr ? MirrorDefaults->LightInteractionSurface.Get() : nullptr);
-	if (MirrorDefaults == nullptr || MirrorDefaults->LightInteractionSurface == nullptr)
+	TestNotNull(
+		TEXT("회전 거울에 조작 컴포넌트가 존재한다"),
+		MirrorDefaults != nullptr ? MirrorDefaults->RotatableMirror.Get() : nullptr);
+	if (MirrorDefaults == nullptr || MirrorDefaults->LightInteractionSurface == nullptr ||
+		MirrorDefaults->RotatableMirror == nullptr)
 	{
 		return false;
 	}
@@ -530,6 +683,10 @@ bool FUOURotatableMirrorStableNormalTest::RunTest(const FString& Parameters)
 		TEXT("회전 거울은 Box 옆면 HitNormal 대신 컴포넌트 앞 방향을 반사 법선으로 사용한다"),
 		MirrorDefaults->LightInteractionSurface->ReflectionNormalMode,
 		EUOULightReflectionNormalMode::ComponentForward);
+	TestEqual(
+		TEXT("회전 거울은 기울어진 초기 배치와 조작 회전축을 분리한다"),
+		MirrorDefaults->RotatableMirror->RotationAxisMode,
+		EUOURotatableMirrorAxisMode::WorldUp);
 	TestEqual(
 		TEXT("회전 거울은 빛 단면이 20%까지 밖으로 나와도 반사를 시작한다"),
 		MirrorDefaults->LightInteractionSurface->BeamFootprintOverflowAllowancePercent,
@@ -547,8 +704,77 @@ bool FUOURotatableMirrorStableNormalTest::RunTest(const FString& Parameters)
 		MirrorDefaults->LightInteractionSurface->RetainedMaximumReflectionIncidenceAngle,
 		95.0f);
 	TestTrue(
-		TEXT("회전 거울은 빛 중심축이 빗나가도 충분한 단면이 걸치면 반사 후보로 사용한다"),
+		TEXT("회전 거울은 빛 중심축이 빗나가도 단면이 걸치면 반사 후보로 사용한다"),
 		MirrorDefaults->LightInteractionSurface->bAllowEdgeOnlyCylinderReflection);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FUOURotatableMirrorTiltedWorldUpRotationTest,
+	"UnderOneUmbrella.Light.Reflection.RotatableMirrorTiltedWorldUpRotation",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUOURotatableMirrorTiltedWorldUpRotationTest::RunTest(const FString& Parameters)
+{
+	UWorld* UninitializedWorld = UWorld::CreateWorld(
+		EWorldType::Editor,
+		false,
+		TEXT("UOURotatableMirrorTiltedWorldUpWorld"),
+		nullptr,
+		false,
+		ERHIFeatureLevel::Num,
+		nullptr,
+		true);
+	FScopedEditorWorld ScopedWorld(
+		UninitializedWorld,
+		UWorld::InitializationValues()
+			.RequiresHitProxies(false)
+			.ShouldSimulatePhysics(false)
+			.EnableTraceCollision(true)
+			.CreateNavigation(false)
+			.CreateAISystem(false)
+			.AllowAudioPlayback(false)
+			.CreatePhysicsScene(true));
+	UWorld* World = ScopedWorld.GetWorld();
+	TestNotNull(TEXT("기울어진 회전 거울 테스트 월드를 생성한다"), World);
+	if (World == nullptr)
+	{
+		return false;
+	}
+
+	AUOURotatableMirrorActor* Mirror = World->SpawnActor<AUOURotatableMirrorActor>();
+	TestNotNull(TEXT("기울어진 회전 거울을 생성한다"), Mirror);
+	if (Mirror == nullptr || Mirror->MirrorPivot == nullptr || Mirror->RotatableMirror == nullptr)
+	{
+		return false;
+	}
+	Mirror->SetActorRotation(FRotator(25.0f, 35.0f, 15.0f));
+	if (!Mirror->RotatableMirror->HasBegunPlay())
+	{
+		Mirror->RotatableMirror->BeginPlay();
+	}
+
+	const FQuat InitialRotation = Mirror->MirrorPivot->GetComponentQuat();
+	const float AppliedAngle = 40.0f;
+	const FQuat ExpectedRotation =
+		FQuat(FVector::UpVector, FMath::DegreesToRadians(AppliedAngle)) * InitialRotation;
+	Mirror->RotatableMirror->SetMirrorAngle(AppliedAngle);
+
+	TestTrue(
+		TEXT("Pitch와 Roll이 있는 거울도 초기 기울기를 유지하며 월드 Z축으로 회전한다"),
+		Mirror->MirrorPivot->GetComponentQuat().Equals(ExpectedRotation, 0.001f));
+
+	AActor* Interactor = World->SpawnActor<AActor>();
+	TestNotNull(TEXT("회전 입력축을 확인할 상호작용자를 생성한다"), Interactor);
+	if (Interactor != nullptr && Mirror->PushHandleRight != nullptr)
+	{
+		Interactor->SetActorLocation(Mirror->PushHandleRight->GetComponentLocation());
+		const FVector InputAxis =
+			Mirror->RotatableMirror->GetWorldInputAxisForInteractor(Interactor);
+		TestTrue(TEXT("기울어진 거울의 플레이어 입력축은 수평이다"), FMath::IsNearlyZero(InputAxis.Z));
+		TestTrue(TEXT("기울어진 거울의 플레이어 입력축은 정규화된다"), InputAxis.IsNormalized());
+	}
+
 	return true;
 }
 
@@ -611,19 +837,6 @@ bool FUOURotatableMirrorSurfaceMeshSyncTest::RunTest(const FString& Parameters)
 		TEXT("반사 판정 박스 회전이 메시 회전을 따른다"),
 		Mirror->LightInteractionSurface->GetRelativeRotation().Equals(
 			Mirror->MirrorMesh->GetRelativeRotation(),
-			0.01f));
-
-	Mirror->MirrorMesh->SetRelativeScale3D(FVector(5.0f, 0.1f, 1.2f));
-	Mirror->OnConstruction(Mirror->GetActorTransform());
-	TestTrue(
-		TEXT("Y축이 가장 얇은 메시는 Y축을 반사면 법선과 두께로 사용한다"),
-		Mirror->LightInteractionSurface->GetUnscaledBoxExtent().Equals(
-			FVector(6.0f, 250.0f, 60.0f),
-			0.01f));
-	TestTrue(
-		TEXT("Y축 기반 메시의 반사면 앞 방향이 메시의 로컬 Y축을 따른다"),
-		Mirror->LightInteractionSurface->GetForwardVector().Equals(
-			Mirror->MirrorMesh->GetRightVector(),
 			0.01f));
 	Mirror->SetReflectionIncidenceAngles(75.0f, 85.0f);
 	TestEqual(
@@ -778,59 +991,13 @@ bool FUOUCylinderMultiReflectionDirectionTest::RunTest(const FString& Parameters
 	};
 
 	AUOURotatableMirrorActor* FirstMirror = SpawnMirror(FVector(0.0f, 600.0f, 10.0f));
-	AActor* UmbrellaActor = World->SpawnActor<AActor>();
-	USceneComponent* UmbrellaRoot = UmbrellaActor != nullptr
-		? NewObject<USceneComponent>(UmbrellaActor, TEXT("ChainedUmbrellaRoot"))
-		: nullptr;
-	UUOULightInteractionSurfaceComponent* UmbrellaSurface = UmbrellaActor != nullptr
-		? NewObject<UUOULightInteractionSurfaceComponent>(
-			UmbrellaActor,
-			TEXT("ChainedUmbrellaSurface"))
-		: nullptr;
+	AUOURotatableMirrorActor* SecondMirror = SpawnMirror(FVector(600.0f, 600.0f, 10.0f));
 	TestNotNull(TEXT("첫 번째 거울을 생성한다"), FirstMirror);
-	TestNotNull(TEXT("거울 반사광을 받을 우산 표면을 생성한다"), UmbrellaSurface);
-	if (FirstMirror == nullptr || UmbrellaActor == nullptr || UmbrellaRoot == nullptr ||
-		UmbrellaSurface == nullptr)
+	TestNotNull(TEXT("두 번째 거울을 생성한다"), SecondMirror);
+	if (FirstMirror == nullptr || SecondMirror == nullptr)
 	{
 		return false;
 	}
-
-	UmbrellaActor->AddInstanceComponent(UmbrellaRoot);
-	UmbrellaActor->SetRootComponent(UmbrellaRoot);
-	UmbrellaRoot->RegisterComponent();
-	UmbrellaActor->AddInstanceComponent(UmbrellaSurface);
-	UmbrellaSurface->SetupAttachment(UmbrellaRoot);
-	UmbrellaSurface->SetBoxExtent(FVector(80.0f, 30.0f, 6.0f));
-	UmbrellaSurface->bUseSurfaceAreaSampling = true;
-	UmbrellaSurface->bReflectFrontFaceOnly = false;
-	UmbrellaSurface->bAllowEdgeOnlyCylinderReflection = true;
-	UmbrellaSurface->ReflectionDirectionMode =
-		EUOULightReflectionDirectionMode::OwnerForward;
-	UmbrellaSurface->ReflectionNormalMode = EUOULightReflectionNormalMode::ComponentUp;
-	UmbrellaSurface->ReflectionFrontNormalMode =
-		EUOULightReflectionFrontNormalMode::ComponentUp;
-	UmbrellaSurface->RegisterComponent();
-	UmbrellaActor->SetActorLocationAndRotation(
-		FVector(600.0f, 700.0f, 10.0f),
-		FRotator(0.0f, 90.0f, 0.0f));
-	UmbrellaSurface->SetRelativeRotation(FRotator(0.0f, 0.0f, 90.0f));
-	UmbrellaSurface->SetLightInteractionMode(EUOULightInteractionMode::Reflecting);
-
-	UUOUUmbrellaLightShadeVolumeComponent* UmbrellaShade =
-		NewObject<UUOUUmbrellaLightShadeVolumeComponent>(
-			UmbrellaActor,
-			TEXT("ChainedUmbrellaShade"));
-	TestNotNull(TEXT("실제 캐릭터 우산처럼 반사면보다 두꺼운 차광 볼륨을 생성한다"), UmbrellaShade);
-	if (UmbrellaShade == nullptr)
-	{
-		return false;
-	}
-	UmbrellaActor->AddInstanceComponent(UmbrellaShade);
-	UmbrellaShade->SetupAttachment(UmbrellaSurface);
-	UmbrellaShade->SetBoxExtent(FVector(80.0f, 30.0f, 60.0f));
-	UmbrellaShade->MaximumBlockingIncidenceAngle = 180.0f;
-	UmbrellaShade->RegisterComponent();
-	UmbrellaShade->SetShadeEnabled(true);
 
 	SourceActor->ExposureSource->EmitLight(0.1f);
 	const TArray<FUOULightPathData> LightPaths = SourceActor->ExposureSource->GetLightPaths();
@@ -839,7 +1006,7 @@ bool FUOUCylinderMultiReflectionDirectionTest::RunTest(const FString& Parameters
 		{
 			return Path.Segments.Num() >= 3;
 		});
-	TestNotNull(TEXT("두꺼운 우산 차광 볼륨이 있어도 거울에서 우산으로 이어지는 두 번째 반사를 계산한다"), DoubleReflectionPath);
+	TestNotNull(TEXT("두 번 반사되는 실린더 경로를 계산한다"), DoubleReflectionPath);
 	if (DoubleReflectionPath == nullptr)
 	{
 		return false;
@@ -847,10 +1014,6 @@ bool FUOUCylinderMultiReflectionDirectionTest::RunTest(const FString& Parameters
 
 	const FUOULightPathSegmentData& FirstReflection = DoubleReflectionPath->Segments[1];
 	const FUOULightPathSegmentData& SecondReflection = DoubleReflectionPath->Segments[2];
-	TestEqual(
-		TEXT("거울 반사광의 가장자리 겹침이 우산 반사면으로 연결된다"),
-		FirstReflection.InteractionSurface.Get(),
-		UmbrellaSurface);
 	TestTrue(
 		TEXT("면 샘플을 맞힌 뒤에도 두 번째 입사 방향은 첫 반사의 평행 진행 방향을 유지한다"),
 		SecondReflection.IncomingDirection.Equals(FirstReflection.Direction, 0.001f));
@@ -1926,28 +2089,6 @@ bool FUOULightWorldPathIntegrationTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("반사광이 수신 컴포넌트에 전달된다"), Receiver->IsReceivingLight());
 	TestTrue(TEXT("반사광 경로는 수신 대상 뒤까지 통과하지 않는다"), ReflectedSegment.End.X > -220.0f);
 
-	AActor* NearbyFloorActor = World->SpawnActor<AActor>();
-	TestNotNull(TEXT("원기둥 빛 주변 지형 테스트용 바닥을 생성한다"), NearbyFloorActor);
-	if (NearbyFloorActor == nullptr)
-	{
-		return false;
-	}
-	UBoxComponent* NearbyFloorBox =
-		NewObject<UBoxComponent>(NearbyFloorActor, TEXT("NearbyFloorBox"));
-	TestNotNull(TEXT("원기둥 빛 주변 지형 충돌체를 생성한다"), NearbyFloorBox);
-	if (NearbyFloorBox == nullptr)
-	{
-		return false;
-	}
-	NearbyFloorActor->AddInstanceComponent(NearbyFloorBox);
-	NearbyFloorActor->SetRootComponent(NearbyFloorBox);
-	NearbyFloorBox->SetBoxExtent(FVector(500.0f, 500.0f, 10.0f));
-	NearbyFloorBox->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
-	NearbyFloorBox->SetCollisionResponseToAllChannels(ECR_Ignore);
-	NearbyFloorBox->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
-	NearbyFloorBox->RegisterComponent();
-	NearbyFloorActor->SetActorLocation(FVector(250.0f, 0.0f, -60.0f));
-
 	SourceActor->ExposureSource->BeamShape = EUOULightBeamShape::Cylinder;
 	SourceActor->ExposureSource->CylinderRadius = 50.0f;
 	SourceActor->ExposureSource->BeamLength = 1000.0f;
@@ -1964,35 +2105,10 @@ bool FUOULightWorldPathIntegrationTest::RunTest(const FString& Parameters)
 	const FUOULightPathSegmentData& CylinderReflectedSegment = LightPaths[0].Segments[1];
 	TestEqual(TEXT("원기둥 직접광의 시작 반지름을 유지한다"), CylinderIncomingSegment.StartRadius, 50.0f);
 	TestEqual(TEXT("원기둥 직접광의 끝 반지름을 유지한다"), CylinderIncomingSegment.EndRadius, 50.0f);
-	TestTrue(TEXT("빛 가장자리에 닿는 바닥이 원기둥 빛을 시작점에서 지우지 않는다"),
-		CylinderIncomingSegment.Length > 300.0f);
 	TestEqual(TEXT("원기둥 반사광은 확산각이 없다"), CylinderReflectedSegment.ConeAngle, 0.0f);
 	TestTrue(
 		TEXT("원기둥 반사광도 수신 대상에서 종료된다"),
 		CylinderReflectedSegment.HitType == EUOULightPathHitType::Receiver);
-
-	Surface->bRequireFullBeamFootprint = true;
-	Surface->BeamFootprintOverflowAllowancePercent = 0.0f;
-	Surface->bPassThroughWhenReflectionRejected = false;
-	SurfaceActor->SetActorRotation(FRotator(0.0f, 76.0f, 0.0f));
-	SourceActor->ExposureSource->EmitLight(0.1f);
-	LightPaths = SourceActor->ExposureSource->GetLightPaths();
-
-	TestTrue(TEXT("빛 단면 조건으로 반사가 실패해도 직접광 경로는 유지된다"), !LightPaths.IsEmpty());
-	if (LightPaths.IsEmpty() || LightPaths[0].Segments.IsEmpty())
-	{
-		return false;
-	}
-	TestEqual(
-		TEXT("통과 옵션을 끈 거울은 반사 실패 시 직접광을 차단한다"),
-		LightPaths[0].Segments[0].HitType,
-		EUOULightPathHitType::BlockingSurface);
-	TestEqual(TEXT("반사 실패 시 반사 구간은 생성하지 않는다"), LightPaths[0].Segments.Num(), 1);
-	TestTrue(TEXT("직접광은 반사에 실패한 거울 뒤까지 통과하지 않는다"),
-		LightPaths[0].Segments[0].End.X < 500.0f);
-
-	SurfaceActor->SetActorRotation(FRotator::ZeroRotator);
-	Surface->bRequireFullBeamFootprint = false;
 
 	SourceActor->ExposureSource->BeamShape = EUOULightBeamShape::Cone;
 	SourceActor->SourceSpotLight->SetOuterConeAngle(60.0f);

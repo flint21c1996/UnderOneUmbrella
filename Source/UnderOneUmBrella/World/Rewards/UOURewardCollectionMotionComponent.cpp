@@ -52,20 +52,61 @@ void UUOURewardCollectionMotionComponent::TickComponent(
 
 	if (!MotionTarget.IsValid() || !ActiveMotionPath.IsValid())
 	{
-		FinishCollectionMotion();
+		FinishMotion();
 		return;
 	}
 
 	ElapsedTime += DeltaTime;
-	const float SafeDuration = FMath::Max(MotionDuration, KINDA_SMALL_NUMBER);
+	const float PhaseDuration = GetMotionDuration(ActiveMotionPhase);
+	const float SafeDuration = FMath::Max(PhaseDuration, KINDA_SMALL_NUMBER);
 	const float NormalizedTime = FMath::Clamp(ElapsedTime / SafeDuration, 0.0f, 1.0f);
 	ApplyMotion(NormalizedTime);
-	BroadcastPassedCues(FMath::Min(ElapsedTime, MotionDuration));
+	BroadcastPassedCues(FMath::Min(ElapsedTime, PhaseDuration));
 
 	if (NormalizedTime >= 1.0f)
 	{
-		FinishCollectionMotion();
+		FinishMotion();
 	}
+}
+
+void UUOURewardCollectionMotionComponent::EndPlay(
+	const EEndPlayReason::Type EndPlayReason)
+{
+	ResetRuntimeState();
+	Super::EndPlay(EndPlayReason);
+}
+
+bool UUOURewardCollectionMotionComponent::StartAppearanceMotion(
+	USceneComponent* TargetComponent,
+	USplineComponent* MotionPath,
+	const TArray<FUOURewardPresentationCue>& CueRequests)
+{
+	return StartMotion(
+		EUOURewardMotionPhase::Appearance,
+		TargetComponent,
+		MotionPath,
+		CueRequests);
+}
+
+void UUOURewardCollectionMotionComponent::StopAppearanceMotion(
+	bool bRestoreFinalTransform)
+{
+	if (!bMotionPlaying || ActiveMotionPhase != EUOURewardMotionPhase::Appearance)
+	{
+		return;
+	}
+
+	if (bRestoreFinalTransform && MotionTarget.IsValid())
+	{
+		MotionTarget->SetRelativeTransform(ReferenceRelativeTransform);
+	}
+	ResetRuntimeState();
+}
+
+bool UUOURewardCollectionMotionComponent::IsAppearanceMotionPlaying() const
+{
+	return bMotionPlaying
+		&& ActiveMotionPhase == EUOURewardMotionPhase::Appearance;
 }
 
 bool UUOURewardCollectionMotionComponent::StartCollectionMotion(
@@ -73,7 +114,20 @@ bool UUOURewardCollectionMotionComponent::StartCollectionMotion(
 	USplineComponent* MotionPath,
 	const TArray<FUOURewardPresentationCue>& CueRequests)
 {
-	if (!bMotionEnabled
+	return StartMotion(
+		EUOURewardMotionPhase::Collection,
+		TargetComponent,
+		MotionPath,
+		CueRequests);
+}
+
+bool UUOURewardCollectionMotionComponent::StartMotion(
+	EUOURewardMotionPhase Phase,
+	USceneComponent* TargetComponent,
+	USplineComponent* MotionPath,
+	const TArray<FUOURewardPresentationCue>& CueRequests)
+{
+	if (!IsMotionEnabled(Phase)
 		|| !IsValid(TargetComponent)
 		|| !IsValid(MotionPath)
 		|| MotionPath->GetNumberOfSplinePoints() < 2
@@ -82,25 +136,34 @@ bool UUOURewardCollectionMotionComponent::StartCollectionMotion(
 		return false;
 	}
 
+	ActiveMotionPhase = Phase;
 	MotionTarget = TargetComponent;
 	ActiveMotionPath = MotionPath;
-	StartRelativeTransform = TargetComponent->GetRelativeTransform();
-	StartPathRelativeLocation = ConvertWorldLocationToTargetSpace(
+	ReferenceRelativeTransform = TargetComponent->GetRelativeTransform();
+	const float AnchorDistance = Phase == EUOURewardMotionPhase::Appearance
+		? MotionPath->GetSplineLength()
+		: 0.0f;
+	AnchorPathRelativeLocation = ConvertWorldLocationToTargetSpace(
 		TargetComponent,
-		MotionPath->GetLocationAtDistanceAlongSpline(0.0f, ESplineCoordinateSpace::World));
-	StartPathRelativeRotation = ConvertWorldRotationToTargetSpace(
+		MotionPath->GetLocationAtDistanceAlongSpline(
+			AnchorDistance,
+			ESplineCoordinateSpace::World));
+	AnchorPathRelativeRotation = ConvertWorldRotationToTargetSpace(
 		TargetComponent,
-		MotionPath->GetQuaternionAtDistanceAlongSpline(0.0f, ESplineCoordinateSpace::World));
+		MotionPath->GetQuaternionAtDistanceAlongSpline(
+			AnchorDistance,
+			ESplineCoordinateSpace::World));
 	ActiveCueRequests = CueRequests;
 	ElapsedTime = 0.0f;
 	bMotionPlaying = true;
 	BuildCueSchedule();
 
-	if (MotionDuration <= KINDA_SMALL_NUMBER)
+	const float PhaseDuration = GetMotionDuration(ActiveMotionPhase);
+	if (PhaseDuration <= KINDA_SMALL_NUMBER)
 	{
 		ApplyMotion(1.0f);
 		BroadcastPassedCues(0.0f);
-		FinishCollectionMotion();
+		FinishMotion();
 		return true;
 	}
 
@@ -110,8 +173,72 @@ bool UUOURewardCollectionMotionComponent::StartCollectionMotion(
 	return true;
 }
 
+bool UUOURewardCollectionMotionComponent::IsMotionEnabled(
+	EUOURewardMotionPhase Phase) const
+{
+	return Phase == EUOURewardMotionPhase::Appearance
+		? bAppearanceMotionEnabled
+		: bMotionEnabled;
+}
+
+float UUOURewardCollectionMotionComponent::GetMotionDuration(
+	EUOURewardMotionPhase Phase) const
+{
+	return Phase == EUOURewardMotionPhase::Appearance
+		? AppearanceMotionDuration
+		: MotionDuration;
+}
+
+float UUOURewardCollectionMotionComponent::GetEaseExponent(
+	EUOURewardMotionPhase Phase) const
+{
+	return Phase == EUOURewardMotionPhase::Appearance
+		? AppearanceEaseExponent
+		: EaseExponent;
+}
+
+bool UUOURewardCollectionMotionComponent::ShouldFollowSplineRotation(
+	EUOURewardMotionPhase Phase) const
+{
+	return Phase == EUOURewardMotionPhase::Appearance
+		? bFollowAppearanceSplineRotation
+		: bFollowSplineRotation;
+}
+
+const TArray<FUOURewardMotionCueTiming>&
+UUOURewardCollectionMotionComponent::GetCueTimeline(
+	EUOURewardMotionPhase Phase) const
+{
+	return Phase == EUOURewardMotionPhase::Appearance
+		? AppearanceCueTimeline
+		: CueTimeline;
+}
+
+TArray<FUOURewardMotionCueTiming>&
+UUOURewardCollectionMotionComponent::GetMutableCueTimeline(
+	EUOURewardMotionPhase Phase)
+{
+	return Phase == EUOURewardMotionPhase::Appearance
+		? AppearanceCueTimeline
+		: CueTimeline;
+}
+
 #if WITH_EDITOR
+float UUOURewardCollectionMotionComponent::GetMotionDurationForEditor(
+	EUOURewardMotionPhase Phase) const
+{
+	return GetMotionDuration(Phase);
+}
+
+const TArray<FUOURewardMotionCueTiming>&
+UUOURewardCollectionMotionComponent::GetCueTimelineForEditor(
+	EUOURewardMotionPhase Phase) const
+{
+	return GetCueTimeline(Phase);
+}
+
 bool UUOURewardCollectionMotionComponent::SynchronizeCueTimelineForEditor(
+	EUOURewardMotionPhase Phase,
 	const TArray<FUOURewardPresentationCue>& CueRequests)
 {
 	TMap<FGuid, EUOURewardMotionCueChannel> ActiveCueChannels;
@@ -124,15 +251,18 @@ bool UUOURewardCollectionMotionComponent::SynchronizeCueTimelineForEditor(
 		}
 	}
 
-	const float SafeMotionDuration = FMath::IsFinite(MotionDuration)
-		? FMath::Max(0.0f, MotionDuration)
+	const float PhaseDuration = GetMotionDuration(Phase);
+	const float SafeMotionDuration = FMath::IsFinite(PhaseDuration)
+		? FMath::Max(0.0f, PhaseDuration)
 		: 0.0f;
+	TArray<FUOURewardMotionCueTiming>& PhaseCueTimeline =
+		GetMutableCueTimeline(Phase);
 	TSet<FGuid> AddedRequestIds;
 	TArray<FUOURewardMotionCueTiming> SynchronizedTimeline;
 	SynchronizedTimeline.Reserve(
-		FMath::Min(CueTimeline.Num(), ActiveCueChannels.Num()));
+		FMath::Min(PhaseCueTimeline.Num(), ActiveCueChannels.Num()));
 
-	for (const FUOURewardMotionCueTiming& ExistingTiming : CueTimeline)
+	for (const FUOURewardMotionCueTiming& ExistingTiming : PhaseCueTimeline)
 	{
 		const EUOURewardMotionCueChannel* CueChannel =
 			ActiveCueChannels.Find(ExistingTiming.RequestId);
@@ -164,15 +294,15 @@ bool UUOURewardCollectionMotionComponent::SynchronizeCueTimelineForEditor(
 		}
 	}
 
-	bool bChanged = CueTimeline.Num() != SynchronizedTimeline.Num();
+	bool bChanged = PhaseCueTimeline.Num() != SynchronizedTimeline.Num();
 	if (!bChanged)
 	{
 		for (int32 TimingIndex = 0;
-			TimingIndex < CueTimeline.Num();
+			TimingIndex < PhaseCueTimeline.Num();
 			++TimingIndex)
 		{
 			const FUOURewardMotionCueTiming& ExistingTiming =
-				CueTimeline[TimingIndex];
+				PhaseCueTimeline[TimingIndex];
 			const FUOURewardMotionCueTiming& SynchronizedTiming =
 				SynchronizedTimeline[TimingIndex];
 			if (ExistingTiming.RequestId != SynchronizedTiming.RequestId
@@ -192,12 +322,13 @@ bool UUOURewardCollectionMotionComponent::SynchronizeCueTimelineForEditor(
 	}
 
 	Modify();
-	CueTimeline = MoveTemp(SynchronizedTimeline);
+	PhaseCueTimeline = MoveTemp(SynchronizedTimeline);
 	MarkPackageDirty();
 	return true;
 }
 
 void UUOURewardCollectionMotionComponent::SetCueTriggerTimeForEditor(
+	EUOURewardMotionPhase Phase,
 	const FGuid& RequestId,
 	float TriggerTime)
 {
@@ -206,24 +337,27 @@ void UUOURewardCollectionMotionComponent::SetCueTriggerTimeForEditor(
 		return;
 	}
 
-	FUOURewardMotionCueTiming* Timing = CueTimeline.FindByPredicate(
+	TArray<FUOURewardMotionCueTiming>& PhaseCueTimeline =
+		GetMutableCueTimeline(Phase);
+	FUOURewardMotionCueTiming* Timing = PhaseCueTimeline.FindByPredicate(
 		[&RequestId](const FUOURewardMotionCueTiming& Candidate)
 		{
 			return Candidate.RequestId == RequestId;
 		});
 	if (Timing == nullptr)
 	{
-		Timing = &CueTimeline.AddDefaulted_GetRef();
+		Timing = &PhaseCueTimeline.AddDefaulted_GetRef();
 		Timing->RequestId = RequestId;
 	}
 
 	Timing->TriggerTime = FMath::Clamp(
 		TriggerTime,
 		0.0f,
-		FMath::Max(0.0f, MotionDuration));
+		FMath::Max(0.0f, GetMotionDuration(Phase)));
 }
 
 void UUOURewardCollectionMotionComponent::SetPresentationCloseTimeForEditor(
+	EUOURewardMotionPhase Phase,
 	const FGuid& RequestId,
 	float CloseTime)
 {
@@ -232,18 +366,20 @@ void UUOURewardCollectionMotionComponent::SetPresentationCloseTimeForEditor(
 		return;
 	}
 
-	FUOURewardMotionCueTiming* Timing = CueTimeline.FindByPredicate(
+	TArray<FUOURewardMotionCueTiming>& PhaseCueTimeline =
+		GetMutableCueTimeline(Phase);
+	FUOURewardMotionCueTiming* Timing = PhaseCueTimeline.FindByPredicate(
 		[&RequestId](const FUOURewardMotionCueTiming& Candidate)
 		{
 			return Candidate.RequestId == RequestId;
 		});
 	if (Timing == nullptr)
 	{
-		Timing = &CueTimeline.AddDefaulted_GetRef();
+		Timing = &PhaseCueTimeline.AddDefaulted_GetRef();
 		Timing->RequestId = RequestId;
 	}
 
-	const float SafeMotionDuration = FMath::Max(0.0f, MotionDuration);
+	const float SafeMotionDuration = FMath::Max(0.0f, GetMotionDuration(Phase));
 	const float MinimumCloseTime = FMath::Clamp(
 		Timing->TriggerTime,
 		0.0f,
@@ -268,8 +404,7 @@ void UUOURewardCollectionMotionComponent::ApplyMotion(float NormalizedTime)
 		0.0f,
 		1.0f,
 		FMath::Clamp(NormalizedTime, 0.0f, 1.0f),
-		FMath::Max(1.0f, EaseExponent));
-
+		FMath::Max(1.0f, GetEaseExponent(ActiveMotionPhase)));
 	const float DistanceAlongSpline = MotionPath->GetSplineLength() * EasedTime;
 	const FVector PathRelativeLocation = ConvertWorldLocationToTargetSpace(
 		TargetComponent,
@@ -277,11 +412,11 @@ void UUOURewardCollectionMotionComponent::ApplyMotion(float NormalizedTime)
 			DistanceAlongSpline,
 			ESplineCoordinateSpace::World));
 	const FVector RelativeLocation =
-		StartRelativeTransform.GetLocation()
-		+ (PathRelativeLocation - StartPathRelativeLocation);
+		ReferenceRelativeTransform.GetLocation()
+		+ (PathRelativeLocation - AnchorPathRelativeLocation);
 
-	FQuat RelativeRotation = StartRelativeTransform.GetRotation();
-	if (bFollowSplineRotation)
+	FQuat RelativeRotation = ReferenceRelativeTransform.GetRotation();
+	if (ShouldFollowSplineRotation(ActiveMotionPhase))
 	{
 		const FQuat PathRelativeRotation = ConvertWorldRotationToTargetSpace(
 			TargetComponent,
@@ -289,20 +424,35 @@ void UUOURewardCollectionMotionComponent::ApplyMotion(float NormalizedTime)
 				DistanceAlongSpline,
 				ESplineCoordinateSpace::World));
 		const FQuat SplineRotationDelta =
-			PathRelativeRotation * StartPathRelativeRotation.Inverse();
+			PathRelativeRotation * AnchorPathRelativeRotation.Inverse();
 		RelativeRotation = SplineRotationDelta * RelativeRotation;
 	}
 
+	const bool bAppearance =
+		ActiveMotionPhase == EUOURewardMotionPhase::Appearance;
+	const float RotationAlpha = bAppearance ? 1.0f - EasedTime : EasedTime;
+	const FRotator& ConfiguredRotation = bAppearance
+		? AppearanceStartRotationOffset
+		: AdditionalRotation;
 	const FRotator CurrentAdditionalRotation(
-		AdditionalRotation.Pitch * EasedTime,
-		AdditionalRotation.Yaw * EasedTime,
-		AdditionalRotation.Roll * EasedTime);
+		ConfiguredRotation.Pitch * RotationAlpha,
+		ConfiguredRotation.Yaw * RotationAlpha,
+		ConfiguredRotation.Roll * RotationAlpha);
 	RelativeRotation *= CurrentAdditionalRotation.Quaternion();
 	RelativeRotation.Normalize();
 
-	const float SafeEndScaleMultiplier = FMath::Max(0.0f, EndScaleMultiplier);
-	const float ScaleMultiplier = FMath::Lerp(1.0f, SafeEndScaleMultiplier, EasedTime);
-	const FVector RelativeScale = StartRelativeTransform.GetScale3D() * ScaleMultiplier;
+	const float StartScaleMultiplier = bAppearance
+		? FMath::Max(0.0f, AppearanceStartScaleMultiplier)
+		: 1.0f;
+	const float TargetScaleMultiplier = bAppearance
+		? 1.0f
+		: FMath::Max(0.0f, EndScaleMultiplier);
+	const float ScaleMultiplier = FMath::Lerp(
+		StartScaleMultiplier,
+		TargetScaleMultiplier,
+		EasedTime);
+	const FVector RelativeScale =
+		ReferenceRelativeTransform.GetScale3D() * ScaleMultiplier;
 
 	TargetComponent->SetRelativeLocationAndRotation(RelativeLocation, RelativeRotation);
 	TargetComponent->SetRelativeScale3D(RelativeScale);
@@ -312,19 +462,22 @@ void UUOURewardCollectionMotionComponent::BuildCueSchedule()
 {
 	ActiveCueTimeline.Reset();
 	NextCueIndex = 0;
-	const float SafeMotionDuration = FMath::Max(0.0f, MotionDuration);
+	const float SafeMotionDuration = FMath::Max(
+		0.0f,
+		GetMotionDuration(ActiveMotionPhase));
+	const TArray<FUOURewardMotionCueTiming>& PhaseCueTimeline =
+		GetCueTimeline(ActiveMotionPhase);
 
 	for (int32 CueIndex = 0; CueIndex < ActiveCueRequests.Num(); ++CueIndex)
 	{
 		const FUOURewardPresentationCue& Cue = ActiveCueRequests[CueIndex];
-		const FUOURewardMotionCueTiming* ConfiguredTiming =
-			Cue.RequestId.IsValid()
-				? CueTimeline.FindByPredicate(
-					[&Cue](const FUOURewardMotionCueTiming& Timing)
-					{
-						return Timing.RequestId == Cue.RequestId;
-					})
-				: nullptr;
+		const FUOURewardMotionCueTiming* ConfiguredTiming = Cue.RequestId.IsValid()
+			? PhaseCueTimeline.FindByPredicate(
+				[&Cue](const FUOURewardMotionCueTiming& Timing)
+				{
+					return Timing.RequestId == Cue.RequestId;
+				})
+			: nullptr;
 
 		const float ShowTime = FMath::Clamp(
 			ConfiguredTiming != nullptr ? ConfiguredTiming->TriggerTime : 0.0f,
@@ -336,13 +489,11 @@ void UUOURewardCollectionMotionComponent::BuildCueSchedule()
 
 		if (Cue.Channel == EUOURewardMotionCueChannel::Presentation)
 		{
-			const float ConfiguredCloseTime =
-				ConfiguredTiming != nullptr
-					&& ConfiguredTiming->PresentationCloseTime >= 0.0f
-					? ConfiguredTiming->PresentationCloseTime
-					: SafeMotionDuration;
-			FActiveCueTiming& CloseTiming =
-				ActiveCueTimeline.AddDefaulted_GetRef();
+			const float ConfiguredCloseTime = ConfiguredTiming != nullptr
+				&& ConfiguredTiming->PresentationCloseTime >= 0.0f
+				? ConfiguredTiming->PresentationCloseTime
+				: SafeMotionDuration;
+			FActiveCueTiming& CloseTiming = ActiveCueTimeline.AddDefaulted_GetRef();
 			CloseTiming.CueIndex = CueIndex;
 			CloseTiming.TriggerTime = FMath::Clamp(
 				ConfiguredCloseTime,
@@ -369,7 +520,9 @@ void UUOURewardCollectionMotionComponent::BuildCueSchedule()
 
 void UUOURewardCollectionMotionComponent::BroadcastPassedCues(float CurrentTime)
 {
-	const float SafeMotionDuration = FMath::Max(0.0f, MotionDuration);
+	const float SafeMotionDuration = FMath::Max(
+		0.0f,
+		GetMotionDuration(ActiveMotionPhase));
 	const float SafeCurrentTime = FMath::Max(0.0f, CurrentTime);
 
 	while (ActiveCueTimeline.IsValidIndex(NextCueIndex))
@@ -381,8 +534,7 @@ void UUOURewardCollectionMotionComponent::BroadcastPassedCues(float CurrentTime)
 			continue;
 		}
 
-		const FUOURewardPresentationCue& Cue =
-			ActiveCueRequests[Timing.CueIndex];
+		const FUOURewardPresentationCue& Cue = ActiveCueRequests[Timing.CueIndex];
 		const float SafeTriggerTime =
 			FMath::Clamp(Timing.TriggerTime, 0.0f, SafeMotionDuration);
 		if (SafeTriggerTime > SafeCurrentTime + KINDA_SMALL_NUMBER)
@@ -399,26 +551,52 @@ void UUOURewardCollectionMotionComponent::BroadcastPassedCues(float CurrentTime)
 			CueEvent.PresentationPhase = Timing.bPresentationClose
 				? EUOURewardPresentationCuePhase::Close
 				: EUOURewardPresentationCuePhase::Show;
-			OnCollectionMotionCue.Broadcast(CueEvent);
+			if (ActiveMotionPhase == EUOURewardMotionPhase::Appearance)
+			{
+				OnAppearanceMotionCue.Broadcast(CueEvent);
+			}
+			else
+			{
+				OnCollectionMotionCue.Broadcast(CueEvent);
+			}
 		}
 	}
 }
 
-void UUOURewardCollectionMotionComponent::FinishCollectionMotion()
+void UUOURewardCollectionMotionComponent::FinishMotion()
 {
 	if (!bMotionPlaying)
 	{
 		return;
 	}
 
+	const EUOURewardMotionPhase FinishedPhase = ActiveMotionPhase;
+	if (FinishedPhase == EUOURewardMotionPhase::Appearance
+		&& MotionTarget.IsValid())
+	{
+		MotionTarget->SetRelativeTransform(ReferenceRelativeTransform);
+	}
+	ResetRuntimeState();
+
+	if (FinishedPhase == EUOURewardMotionPhase::Appearance)
+	{
+		OnAppearanceMotionFinished.Broadcast();
+	}
+	else
+	{
+		OnCollectionMotionFinished.Broadcast();
+	}
+}
+
+void UUOURewardCollectionMotionComponent::ResetRuntimeState()
+{
 	bMotionPlaying = false;
 	ElapsedTime = 0.0f;
 	MotionTarget.Reset();
 	ActiveMotionPath.Reset();
 	ActiveCueRequests.Reset();
 	ActiveCueTimeline.Reset();
+	ActiveMotionPhase = EUOURewardMotionPhase::Collection;
 	NextCueIndex = 0;
 	SetComponentTickEnabled(false);
-
-	OnCollectionMotionFinished.Broadcast();
 }
