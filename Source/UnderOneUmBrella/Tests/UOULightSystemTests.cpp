@@ -14,6 +14,7 @@
 #include "NiagaraComponent.h"
 #include "Player/UOUUmbrellaLightInteractionComponent.h"
 #include "Player/UOUUmbrellaLightShadeVolumeComponent.h"
+#include "Puzzle/Light/UOULightPaintColorConditionComponent.h"
 #include "UObject/FieldIterator.h"
 #include "UObject/UnrealType.h"
 #include "World/Light/UOULightBeamVisualComponent.h"
@@ -311,6 +312,117 @@ bool FUOULightColorAdditiveMixTest::RunTest(const FString& Parameters)
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FUOULightPaintColorConditionTest,
+	"UnderOneUmbrella.Light.Color.PaintConditionAdapter",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUOULightPaintColorConditionTest::RunTest(const FString& Parameters)
+{
+	UWorld* UninitializedWorld = UWorld::CreateWorld(
+		EWorldType::Editor,
+		false,
+		TEXT("UOULightPaintColorConditionWorld"),
+		nullptr,
+		false,
+		ERHIFeatureLevel::Num,
+		nullptr,
+		true);
+	FScopedEditorWorld ScopedWorld(
+		UninitializedWorld,
+		UWorld::InitializationValues()
+			.RequiresHitProxies(false)
+			.ShouldSimulatePhysics(false)
+			.EnableTraceCollision(false)
+			.CreateNavigation(false)
+			.CreateAISystem(false)
+			.AllowAudioPlayback(false)
+			.CreatePhysicsScene(false));
+	UWorld* World = ScopedWorld.GetWorld();
+	TestNotNull(TEXT("물감색 조건 테스트 월드를 생성한다"), World);
+	if (World == nullptr)
+	{
+		return false;
+	}
+
+	AActor* PaintedActor = World->SpawnActor<AActor>();
+	UUOULightColorReceiverComponent* Receiver = PaintedActor != nullptr
+		? NewObject<UUOULightColorReceiverComponent>(PaintedActor, TEXT("ColorReceiver"))
+		: nullptr;
+	UUOULightPaintColorConditionComponent* Condition = PaintedActor != nullptr
+		? NewObject<UUOULightPaintColorConditionComponent>(PaintedActor, TEXT("PaintColorCondition"))
+		: nullptr;
+	TestNotNull(TEXT("물감색 조건 액터를 생성한다"), PaintedActor);
+	TestNotNull(TEXT("색상 수신 컴포넌트를 생성한다"), Receiver);
+	TestNotNull(TEXT("물감색 조건 컴포넌트를 생성한다"), Condition);
+	if (PaintedActor == nullptr || Receiver == nullptr || Condition == nullptr)
+	{
+		return false;
+	}
+
+	PaintedActor->AddInstanceComponent(Receiver);
+	Receiver->bUseReceiverVolumeSampling = false;
+	Receiver->bWeightColorByExposureIntensity = false;
+	Receiver->bApplyPaintTint = false;
+	Receiver->MaterialTransitionDuration = 0.0f;
+	Receiver->MinimumPaintChannel = 0.15f;
+	Receiver->RegisterComponent();
+
+	PaintedActor->AddInstanceComponent(Condition);
+	Condition->RequiredColorState = EUOULightColorState::Red;
+	Condition->MatchTolerance = 0.05f;
+	Condition->ReleaseTolerance = 0.08f;
+	Condition->RegisterComponent();
+	Condition->RefreshNow();
+	TestFalse(TEXT("흰색 초기 상태는 빨강 조건을 만족하지 않는다"), Condition->IsSatisfied());
+
+	AActor* RedSource = World->SpawnActor<AActor>();
+	AActor* GreenSource = World->SpawnActor<AActor>();
+	TestNotNull(TEXT("빨강 광원 식별자를 생성한다"), RedSource);
+	TestNotNull(TEXT("초록 광원 식별자를 생성한다"), GreenSource);
+	if (RedSource == nullptr || GreenSource == nullptr)
+	{
+		return false;
+	}
+
+	const auto MakeExposure = [](UObject* Source, const FLinearColor& Color)
+	{
+		return FUOULightExposureData(
+			Source,
+			FVector::ZeroVector,
+			FVector::ZeroVector,
+			FVector::ForwardVector,
+			100.0f,
+			0.25f,
+			1.0f,
+			1.0f,
+			0.1f,
+			Color);
+	};
+
+	Receiver->ReceiveLightExposure_Implementation(MakeExposure(RedSource, FLinearColor::Red));
+	TestTrue(TEXT("실제 PaintTint가 빨강에 도달하면 조건이 만족된다"), Condition->IsSatisfied());
+	TestTrue(
+		TEXT("조건이 수신체의 최소 채널 설정을 반영한 빨강 목표색을 사용한다"),
+		Condition->RequiredPaintTint.Equals(
+			FLinearColor(1.0f, 0.15f, 0.15f, 1.0f),
+			KINDA_SMALL_NUMBER));
+
+	Receiver->ClearColorExposures();
+	Receiver->ReceiveLightExposure_Implementation(MakeExposure(GreenSource, FLinearColor::Green));
+	TestFalse(TEXT("물감색이 초록으로 바뀌면 빨강 조건이 해제된다"), Condition->IsSatisfied());
+
+	Condition->bLatchOnceSatisfied = true;
+	Receiver->ClearColorExposures();
+	Receiver->ReceiveLightExposure_Implementation(MakeExposure(RedSource, FLinearColor::Red));
+	TestTrue(TEXT("래치 조건도 빨강에서 만족된다"), Condition->IsSatisfied());
+	Receiver->ClearColorExposures();
+	Receiver->ReceiveLightExposure_Implementation(MakeExposure(GreenSource, FLinearColor::Green));
+	TestTrue(TEXT("래치를 켜면 다른 색으로 바뀌어도 만족 상태를 유지한다"), Condition->IsSatisfied());
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FUOULightMirrorReflectionTest,
 	"UnderOneUmbrella.Light.Reflection.MirrorByHitNormal",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
@@ -435,7 +547,7 @@ bool FUOURotatableMirrorStableNormalTest::RunTest(const FString& Parameters)
 		MirrorDefaults->LightInteractionSurface->RetainedMaximumReflectionIncidenceAngle,
 		95.0f);
 	TestTrue(
-		TEXT("회전 거울은 빛 중심축이 빗나가도 단면이 걸치면 반사 후보로 사용한다"),
+		TEXT("회전 거울은 빛 중심축이 빗나가도 충분한 단면이 걸치면 반사 후보로 사용한다"),
 		MirrorDefaults->LightInteractionSurface->bAllowEdgeOnlyCylinderReflection);
 	return true;
 }
@@ -499,6 +611,19 @@ bool FUOURotatableMirrorSurfaceMeshSyncTest::RunTest(const FString& Parameters)
 		TEXT("반사 판정 박스 회전이 메시 회전을 따른다"),
 		Mirror->LightInteractionSurface->GetRelativeRotation().Equals(
 			Mirror->MirrorMesh->GetRelativeRotation(),
+			0.01f));
+
+	Mirror->MirrorMesh->SetRelativeScale3D(FVector(5.0f, 0.1f, 1.2f));
+	Mirror->OnConstruction(Mirror->GetActorTransform());
+	TestTrue(
+		TEXT("Y축이 가장 얇은 메시는 Y축을 반사면 법선과 두께로 사용한다"),
+		Mirror->LightInteractionSurface->GetUnscaledBoxExtent().Equals(
+			FVector(6.0f, 250.0f, 60.0f),
+			0.01f));
+	TestTrue(
+		TEXT("Y축 기반 메시의 반사면 앞 방향이 메시의 로컬 Y축을 따른다"),
+		Mirror->LightInteractionSurface->GetForwardVector().Equals(
+			Mirror->MirrorMesh->GetRightVector(),
 			0.01f));
 	Mirror->SetReflectionIncidenceAngles(75.0f, 85.0f);
 	TestEqual(
@@ -653,13 +778,59 @@ bool FUOUCylinderMultiReflectionDirectionTest::RunTest(const FString& Parameters
 	};
 
 	AUOURotatableMirrorActor* FirstMirror = SpawnMirror(FVector(0.0f, 600.0f, 10.0f));
-	AUOURotatableMirrorActor* SecondMirror = SpawnMirror(FVector(600.0f, 600.0f, 10.0f));
+	AActor* UmbrellaActor = World->SpawnActor<AActor>();
+	USceneComponent* UmbrellaRoot = UmbrellaActor != nullptr
+		? NewObject<USceneComponent>(UmbrellaActor, TEXT("ChainedUmbrellaRoot"))
+		: nullptr;
+	UUOULightInteractionSurfaceComponent* UmbrellaSurface = UmbrellaActor != nullptr
+		? NewObject<UUOULightInteractionSurfaceComponent>(
+			UmbrellaActor,
+			TEXT("ChainedUmbrellaSurface"))
+		: nullptr;
 	TestNotNull(TEXT("첫 번째 거울을 생성한다"), FirstMirror);
-	TestNotNull(TEXT("두 번째 거울을 생성한다"), SecondMirror);
-	if (FirstMirror == nullptr || SecondMirror == nullptr)
+	TestNotNull(TEXT("거울 반사광을 받을 우산 표면을 생성한다"), UmbrellaSurface);
+	if (FirstMirror == nullptr || UmbrellaActor == nullptr || UmbrellaRoot == nullptr ||
+		UmbrellaSurface == nullptr)
 	{
 		return false;
 	}
+
+	UmbrellaActor->AddInstanceComponent(UmbrellaRoot);
+	UmbrellaActor->SetRootComponent(UmbrellaRoot);
+	UmbrellaRoot->RegisterComponent();
+	UmbrellaActor->AddInstanceComponent(UmbrellaSurface);
+	UmbrellaSurface->SetupAttachment(UmbrellaRoot);
+	UmbrellaSurface->SetBoxExtent(FVector(80.0f, 30.0f, 6.0f));
+	UmbrellaSurface->bUseSurfaceAreaSampling = true;
+	UmbrellaSurface->bReflectFrontFaceOnly = false;
+	UmbrellaSurface->bAllowEdgeOnlyCylinderReflection = true;
+	UmbrellaSurface->ReflectionDirectionMode =
+		EUOULightReflectionDirectionMode::OwnerForward;
+	UmbrellaSurface->ReflectionNormalMode = EUOULightReflectionNormalMode::ComponentUp;
+	UmbrellaSurface->ReflectionFrontNormalMode =
+		EUOULightReflectionFrontNormalMode::ComponentUp;
+	UmbrellaSurface->RegisterComponent();
+	UmbrellaActor->SetActorLocationAndRotation(
+		FVector(600.0f, 700.0f, 10.0f),
+		FRotator(0.0f, 90.0f, 0.0f));
+	UmbrellaSurface->SetRelativeRotation(FRotator(0.0f, 0.0f, 90.0f));
+	UmbrellaSurface->SetLightInteractionMode(EUOULightInteractionMode::Reflecting);
+
+	UUOUUmbrellaLightShadeVolumeComponent* UmbrellaShade =
+		NewObject<UUOUUmbrellaLightShadeVolumeComponent>(
+			UmbrellaActor,
+			TEXT("ChainedUmbrellaShade"));
+	TestNotNull(TEXT("실제 캐릭터 우산처럼 반사면보다 두꺼운 차광 볼륨을 생성한다"), UmbrellaShade);
+	if (UmbrellaShade == nullptr)
+	{
+		return false;
+	}
+	UmbrellaActor->AddInstanceComponent(UmbrellaShade);
+	UmbrellaShade->SetupAttachment(UmbrellaSurface);
+	UmbrellaShade->SetBoxExtent(FVector(80.0f, 30.0f, 60.0f));
+	UmbrellaShade->MaximumBlockingIncidenceAngle = 180.0f;
+	UmbrellaShade->RegisterComponent();
+	UmbrellaShade->SetShadeEnabled(true);
 
 	SourceActor->ExposureSource->EmitLight(0.1f);
 	const TArray<FUOULightPathData> LightPaths = SourceActor->ExposureSource->GetLightPaths();
@@ -668,7 +839,7 @@ bool FUOUCylinderMultiReflectionDirectionTest::RunTest(const FString& Parameters
 		{
 			return Path.Segments.Num() >= 3;
 		});
-	TestNotNull(TEXT("두 번 반사되는 실린더 경로를 계산한다"), DoubleReflectionPath);
+	TestNotNull(TEXT("두꺼운 우산 차광 볼륨이 있어도 거울에서 우산으로 이어지는 두 번째 반사를 계산한다"), DoubleReflectionPath);
 	if (DoubleReflectionPath == nullptr)
 	{
 		return false;
@@ -676,6 +847,10 @@ bool FUOUCylinderMultiReflectionDirectionTest::RunTest(const FString& Parameters
 
 	const FUOULightPathSegmentData& FirstReflection = DoubleReflectionPath->Segments[1];
 	const FUOULightPathSegmentData& SecondReflection = DoubleReflectionPath->Segments[2];
+	TestEqual(
+		TEXT("거울 반사광의 가장자리 겹침이 우산 반사면으로 연결된다"),
+		FirstReflection.InteractionSurface.Get(),
+		UmbrellaSurface);
 	TestTrue(
 		TEXT("면 샘플을 맞힌 뒤에도 두 번째 입사 방향은 첫 반사의 평행 진행 방향을 유지한다"),
 		SecondReflection.IncomingDirection.Equals(FirstReflection.Direction, 0.001f));
@@ -1751,6 +1926,28 @@ bool FUOULightWorldPathIntegrationTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("반사광이 수신 컴포넌트에 전달된다"), Receiver->IsReceivingLight());
 	TestTrue(TEXT("반사광 경로는 수신 대상 뒤까지 통과하지 않는다"), ReflectedSegment.End.X > -220.0f);
 
+	AActor* NearbyFloorActor = World->SpawnActor<AActor>();
+	TestNotNull(TEXT("원기둥 빛 주변 지형 테스트용 바닥을 생성한다"), NearbyFloorActor);
+	if (NearbyFloorActor == nullptr)
+	{
+		return false;
+	}
+	UBoxComponent* NearbyFloorBox =
+		NewObject<UBoxComponent>(NearbyFloorActor, TEXT("NearbyFloorBox"));
+	TestNotNull(TEXT("원기둥 빛 주변 지형 충돌체를 생성한다"), NearbyFloorBox);
+	if (NearbyFloorBox == nullptr)
+	{
+		return false;
+	}
+	NearbyFloorActor->AddInstanceComponent(NearbyFloorBox);
+	NearbyFloorActor->SetRootComponent(NearbyFloorBox);
+	NearbyFloorBox->SetBoxExtent(FVector(500.0f, 500.0f, 10.0f));
+	NearbyFloorBox->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+	NearbyFloorBox->SetCollisionResponseToAllChannels(ECR_Ignore);
+	NearbyFloorBox->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
+	NearbyFloorBox->RegisterComponent();
+	NearbyFloorActor->SetActorLocation(FVector(250.0f, 0.0f, -60.0f));
+
 	SourceActor->ExposureSource->BeamShape = EUOULightBeamShape::Cylinder;
 	SourceActor->ExposureSource->CylinderRadius = 50.0f;
 	SourceActor->ExposureSource->BeamLength = 1000.0f;
@@ -1767,10 +1964,35 @@ bool FUOULightWorldPathIntegrationTest::RunTest(const FString& Parameters)
 	const FUOULightPathSegmentData& CylinderReflectedSegment = LightPaths[0].Segments[1];
 	TestEqual(TEXT("원기둥 직접광의 시작 반지름을 유지한다"), CylinderIncomingSegment.StartRadius, 50.0f);
 	TestEqual(TEXT("원기둥 직접광의 끝 반지름을 유지한다"), CylinderIncomingSegment.EndRadius, 50.0f);
+	TestTrue(TEXT("빛 가장자리에 닿는 바닥이 원기둥 빛을 시작점에서 지우지 않는다"),
+		CylinderIncomingSegment.Length > 300.0f);
 	TestEqual(TEXT("원기둥 반사광은 확산각이 없다"), CylinderReflectedSegment.ConeAngle, 0.0f);
 	TestTrue(
 		TEXT("원기둥 반사광도 수신 대상에서 종료된다"),
 		CylinderReflectedSegment.HitType == EUOULightPathHitType::Receiver);
+
+	Surface->bRequireFullBeamFootprint = true;
+	Surface->BeamFootprintOverflowAllowancePercent = 0.0f;
+	Surface->bPassThroughWhenReflectionRejected = false;
+	SurfaceActor->SetActorRotation(FRotator(0.0f, 76.0f, 0.0f));
+	SourceActor->ExposureSource->EmitLight(0.1f);
+	LightPaths = SourceActor->ExposureSource->GetLightPaths();
+
+	TestTrue(TEXT("빛 단면 조건으로 반사가 실패해도 직접광 경로는 유지된다"), !LightPaths.IsEmpty());
+	if (LightPaths.IsEmpty() || LightPaths[0].Segments.IsEmpty())
+	{
+		return false;
+	}
+	TestEqual(
+		TEXT("통과 옵션을 끈 거울은 반사 실패 시 직접광을 차단한다"),
+		LightPaths[0].Segments[0].HitType,
+		EUOULightPathHitType::BlockingSurface);
+	TestEqual(TEXT("반사 실패 시 반사 구간은 생성하지 않는다"), LightPaths[0].Segments.Num(), 1);
+	TestTrue(TEXT("직접광은 반사에 실패한 거울 뒤까지 통과하지 않는다"),
+		LightPaths[0].Segments[0].End.X < 500.0f);
+
+	SurfaceActor->SetActorRotation(FRotator::ZeroRotator);
+	Surface->bRequireFullBeamFootprint = false;
 
 	SourceActor->ExposureSource->BeamShape = EUOULightBeamShape::Cone;
 	SourceActor->SourceSpotLight->SetOuterConeAngle(60.0f);

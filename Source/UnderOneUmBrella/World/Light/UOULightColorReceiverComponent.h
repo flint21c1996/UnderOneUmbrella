@@ -37,6 +37,11 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(
 	int32,
 	MaterialIndex);
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
+	FOnUOUPaintTintChangedSignature,
+	FLinearColor,
+	NewPaintTint);
+
 // 여러 게임플레이 광원의 RGB 조합을 판정하고 대상 Mesh의 PaintTint 파라미터에 누적합니다.
 UCLASS(
 	ClassGroup = (Light),
@@ -66,6 +71,9 @@ public:
 
 	UPROPERTY(BlueprintAssignable, Category = "Light|Color|Event", meta = (ToolTip = "R/G/B 조합 상태가 바뀔 때 한 번만 발생합니다. 빛 없음은 -1, R부터 RGB까지는 0~6번입니다."))
 	FOnUOULightColorStateChangedSignature OnLightColorStateChanged;
+
+	UPROPERTY(BlueprintAssignable, Category = "Light|Color|Event", meta = (ToolTip = "보간 중인 실제 PaintTint가 변경될 때 발생합니다. 지속형 색상 퍼즐 조건은 이 이벤트를 사용합니다."))
+	FOnUOUPaintTintChangedSignature OnPaintTintChanged;
 
 	// 꺼두면 빛의 세기와 무관하게 닿은 색 채널을 1로 더합니다. RGB 세 빛이 닿으면 정확히 흰색이 됩니다.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light|Color", meta = (ToolTip = "켜면 거리와 각도로 감쇠된 노출 세기를 색 밝기에 곱합니다. 끄면 닿은 색 자체만 합칩니다."))
@@ -133,6 +141,9 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Light|Color")
 	int32 GetCurrentStateMaterialIndex() const;
+
+	UFUNCTION(BlueprintPure, Category = "Light|Color|Paint", meta = (ToolTip = "현재 Minimum Paint Channel 설정을 기준으로 RGB 상태가 나타내는 목표 PaintTint를 반환합니다."))
+	FLinearColor GetPaintTintForColorState(EUOULightColorState ColorState) const;
 
 	UFUNCTION(BlueprintPure, Category = "Light|Color")
 	bool HasAnyColorLight() const { return bHasAnyColorLight; }

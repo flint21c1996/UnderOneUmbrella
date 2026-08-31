@@ -60,6 +60,10 @@ struct UNDERONEUMBRELLA_API FUOUDialogueLine
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "UI|Dialogue")
 	FName Emotion = NAME_None;
 
+	// UMG가 같은 위젯에서 퍼즐 전/후 색상과 애니메이션을 구분할 때 사용하는 스타일 키입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "UI|Dialogue")
+	FName PresentationStyle = NAME_None;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "UI|Dialogue", meta = (ClampMin = "0.0"))
 	float BubbleDuration = 1.5f;
 
@@ -107,6 +111,9 @@ struct UNDERONEUMBRELLA_API FUOUDialogueTableRow : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "UI|Dialogue")
 	FName Emotion = NAME_None;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "UI|Dialogue")
+	FName PresentationStyle = NAME_None;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "UI|Dialogue", meta = (ClampMin = "0.0"))
 	float BubbleDuration = 1.5f;
 
@@ -138,6 +145,9 @@ struct UNDERONEUMBRELLA_API FUOUProximityBubbleTableRow : public FTableRowBase
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "UI|Proximity Bubble")
 	FText BubbleText;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "UI|Proximity Bubble")
+	FName PresentationStyle = NAME_None;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "UI|Proximity Bubble", meta = (ClampMin = "0.0"))
 	float BubbleDuration = 3.0f;

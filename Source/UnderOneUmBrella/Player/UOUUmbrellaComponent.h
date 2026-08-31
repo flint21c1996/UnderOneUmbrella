@@ -13,6 +13,7 @@
 class UArrowComponent;
 class UMaterialInterface;
 class UNiagaraComponent;
+class UNiagaraSystem;
 class USceneComponent;
 class USkeletalMeshComponent;
 class UStaticMesh;
@@ -671,6 +672,9 @@ protected:
 
 	void UpdatePouringEffectTransform();
 
+	// 물줄기 시작점 바로 아래에 있는 가장 가까운 WaterBasinTarget 수면까지의 거리를 구합니다.
+	bool TryGetPouringStreamHeightToWaterBasin(const FVector& StreamStart, float& OutWorldHeight) const;
+
 	const USkeletalMeshComponent* ResolvePouringSocketSourceComponent() const;
 
 	const UUOUPourContentProfile* ResolvePourContentProfile() const;
@@ -745,6 +749,11 @@ protected:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UNiagaraComponent> PouringEffectComponent = nullptr;
+
+	TWeakObjectPtr<UNiagaraSystem> CachedPouringStreamHeightAsset;
+	FName CachedPouringStreamHeightParameterName = NAME_None;
+	float DefaultPouringStreamHeight = 0.0f;
+	bool bHasDefaultPouringStreamHeight = false;
 
 	float PendingPourDropVolume = 0.0f;
 

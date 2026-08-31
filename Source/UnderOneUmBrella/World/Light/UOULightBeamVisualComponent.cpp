@@ -3,13 +3,18 @@
 #include "World/Light/UOULightBeamVisualComponent.h"
 
 #include "Components/BoxComponent.h"
+#include "Components/DecalComponent.h"
 #include "Components/LightComponent.h"
 #include "Components/SpotLightComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Engine/EngineTypes.h"
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
+#include "Materials/MaterialInstanceDynamic.h"
+#include "Materials/MaterialInterface.h"
 #include "NiagaraComponent.h"
 #include "UObject/FieldIterator.h"
+#include "UObject/ConstructorHelpers.h"
 #include "UObject/UnrealType.h"
 #include "World/Light/UOULightBeamMeshVisualActor.h"
 #include "World/Light/UOULightBeamVisualInterface.h"
@@ -295,6 +300,13 @@ namespace
 UUOULightBeamVisualComponent::UUOULightBeamVisualComponent()
 {
 	PrimaryComponentTick.bCanEverTick = false;
+
+	static ConstructorHelpers::FObjectFinder<UMaterialInterface> EndRangeDecalMaterialFinder(
+		TEXT("/Game/UOU/Effects/StylizedLightFX/Materials/M_UOU_LightRangeDecal.M_UOU_LightRangeDecal"));
+	if (EndRangeDecalMaterialFinder.Succeeded())
+	{
+		EndRangeDecalMaterial = EndRangeDecalMaterialFinder.Object;
+	}
 }
 
 void UUOULightBeamVisualComponent::BeginPlay()
@@ -324,6 +336,7 @@ void UUOULightBeamVisualComponent::EndPlay(const EEndPlayReason::Type EndPlayRea
 	}
 
 	DestroyVFXActors();
+	DestroyEndRangeDecals();
 	WarnedIncompatibleVFXClasses.Reset();
 	bHasWarnedReflectionVFXLimit = false;
 	BoundSourceSpotLight = nullptr;
@@ -475,6 +488,10 @@ void UUOULightBeamVisualComponent::UpdateDirectVFX(
 	if (!bEnableDirectVFX || VFXActorClass == nullptr || BoundSourceComponent == nullptr)
 	{
 		SetVFXActive(DirectVFXActor, false);
+		if (DirectEndRangeDecal != nullptr)
+		{
+			DirectEndRangeDecal->SetVisibility(false);
+		}
 		return;
 	}
 
@@ -505,6 +522,10 @@ void UUOULightBeamVisualComponent::UpdateDirectVFX(
 	if (DirectSegment == nullptr)
 	{
 		SetVFXActive(DirectVFXActor, false);
+		if (DirectEndRangeDecal != nullptr)
+		{
+			DirectEndRangeDecal->SetVisibility(false);
+		}
 		return;
 	}
 
@@ -522,6 +543,12 @@ void UUOULightBeamVisualComponent::UpdateDirectVFX(
 			ReferenceVisualLength,
 			nullptr,
 			JunctionReflectedSegment));
+	UpdateEndRangeDecal(
+		DirectEndRangeDecal,
+		DirectEndRangeDecalMaterial,
+		*DirectSegment,
+		ResolveLightColor(),
+		0);
 }
 
 void UUOULightBeamVisualComponent::UpdateReflectionVFX(
@@ -531,6 +558,7 @@ void UUOULightBeamVisualComponent::UpdateReflectionVFX(
 	if (!bEnableReflectionVFX || VFXActorClass == nullptr || MaxReflectionVFXCount <= 0)
 	{
 		HideUnusedReflectionVFX(0);
+		HideUnusedReflectionEndRangeDecals(0);
 		return;
 	}
 
@@ -640,6 +668,18 @@ void UUOULightBeamVisualComponent::UpdateReflectionVFX(
 				NextReflectedSegment);
 			VisualData.Color = LightColor;
 			ApplySegmentToVFX(VFXActor, VisualData);
+
+			if (!ReflectionEndRangeDecalPool.IsValidIndex(VFXIndex))
+			{
+				ReflectionEndRangeDecalPool.SetNum(VFXIndex + 1);
+				ReflectionEndRangeDecalMaterials.SetNum(VFXIndex + 1);
+			}
+			UpdateEndRangeDecal(
+				ReflectionEndRangeDecalPool[VFXIndex],
+				ReflectionEndRangeDecalMaterials[VFXIndex],
+				SegmentData,
+				LightColor,
+				VFXIndex + 1);
 			++VFXIndex;
 		}
 
@@ -650,6 +690,7 @@ void UUOULightBeamVisualComponent::UpdateReflectionVFX(
 	}
 
 	HideUnusedReflectionVFX(VFXIndex);
+	HideUnusedReflectionEndRangeDecals(VFXIndex);
 	ActiveReflectionVFXCount = VFXIndex;
 }
 
@@ -660,6 +701,148 @@ void UUOULightBeamVisualComponent::HideUnusedReflectionVFX(int32 FirstUnusedInde
 		SetVFXActive(ReflectionVFXPool[PoolIndex], false);
 	}
 	ActiveReflectionVFXCount = FMath::Clamp(FirstUnusedIndex, 0, ReflectionVFXPool.Num());
+}
+
+void UUOULightBeamVisualComponent::UpdateEndRangeDecal(
+	TObjectPtr<UDecalComponent>& DecalComponent,
+	TObjectPtr<UMaterialInstanceDynamic>& DynamicMaterial,
+	const FUOULightPathSegmentData& SegmentData,
+	const FLinearColor& LightColor,
+	const int32 SortOrder)
+{
+	FVector DecalLocation = SegmentData.End;
+	FVector SurfaceNormal = SegmentData.EndSurfaceNormal.GetSafeNormal();
+	bool bHasProjectionSurface = !SurfaceNormal.IsNearlyZero() &&
+		SegmentData.HitType != EUOULightPathHitType::None &&
+		SegmentData.HitType != EUOULightPathHitType::ReflectingSurface;
+
+	if (!bHasProjectionSurface &&
+		bProjectRangeEndDecalToGround &&
+		SegmentData.EndReason == EUOULightReflectionPathEndReason::RangeEnded)
+	{
+		if (UWorld* World = GetWorld())
+		{
+			const float TraceHeight = FMath::Max(0.0f, RangeEndGroundTraceHeight);
+			const float TraceDistance = FMath::Max(1.0f, RangeEndGroundTraceDistance);
+			const FVector TraceStart = SegmentData.End + FVector::UpVector * TraceHeight;
+			const FVector TraceEnd = SegmentData.End - FVector::UpVector * TraceDistance;
+			FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(UOULightRangeEndGround), false, GetOwner());
+			if (GetOwner() != nullptr)
+			{
+				QueryParams.AddIgnoredActor(GetOwner());
+			}
+
+			FHitResult GroundHit;
+			if (World->LineTraceSingleByChannel(
+				GroundHit,
+				TraceStart,
+				TraceEnd,
+				ECC_Visibility,
+				QueryParams))
+			{
+				DecalLocation = GroundHit.ImpactPoint;
+				SurfaceNormal = GroundHit.ImpactNormal.GetSafeNormal();
+				bHasProjectionSurface = !SurfaceNormal.IsNearlyZero();
+			}
+		}
+	}
+
+	const bool bCanShowDecal = bEnableEndRangeDecal &&
+		EndRangeDecalMaterial != nullptr &&
+		bHasProjectionSurface &&
+		SegmentData.EndRadius > KINDA_SMALL_NUMBER;
+	if (!bCanShowDecal)
+	{
+		if (DecalComponent != nullptr)
+		{
+			DecalComponent->SetVisibility(false);
+		}
+		return;
+	}
+
+	AActor* Owner = GetOwner();
+	if (Owner == nullptr)
+	{
+		return;
+	}
+
+	if (DecalComponent == nullptr)
+	{
+		DecalComponent = NewObject<UDecalComponent>(Owner);
+		Owner->AddInstanceComponent(DecalComponent);
+		if (USceneComponent* OwnerRoot = Owner->GetRootComponent())
+		{
+			DecalComponent->SetupAttachment(OwnerRoot);
+		}
+		DecalComponent->RegisterComponent();
+		DecalComponent->SetFadeScreenSize(0.001f);
+	}
+
+	if (DynamicMaterial == nullptr || DecalComponent->GetDecalMaterial() != DynamicMaterial)
+	{
+		DynamicMaterial = UMaterialInstanceDynamic::Create(EndRangeDecalMaterial, this);
+		DecalComponent->SetDecalMaterial(DynamicMaterial);
+	}
+
+	if (DynamicMaterial != nullptr)
+	{
+		DynamicMaterial->SetVectorParameterValue(TEXT("BeamColor"), LightColor);
+		DynamicMaterial->SetVectorParameterValue(TEXT("Color"), LightColor);
+		DynamicMaterial->SetVectorParameterValue(TEXT("CircleColor"), LightColor);
+		DynamicMaterial->SetScalarParameterValue(
+			TEXT("Opacity"),
+			FMath::Clamp(EndRangeDecalOpacity, 0.0f, 1.0f));
+		DynamicMaterial->SetScalarParameterValue(
+			TEXT("CircleOpacity"),
+			FMath::Clamp(EndRangeDecalOpacity, 0.0f, 1.0f));
+	}
+
+	const float Radius = FMath::Max(
+		1.0f,
+		SegmentData.EndRadius * FMath::Max(0.01f, EndRangeDecalRadiusScale));
+	DecalComponent->DecalSize = FVector(
+		FMath::Max(1.0f, EndRangeDecalDepth),
+		Radius,
+		Radius);
+	DecalComponent->SetWorldLocationAndRotation(
+		DecalLocation + SurfaceNormal * FMath::Max(0.0f, EndRangeDecalSurfaceOffset),
+		SurfaceNormal.Rotation());
+	DecalComponent->SetSortOrder(SortOrder);
+	DecalComponent->SetVisibility(true);
+}
+
+void UUOULightBeamVisualComponent::HideUnusedReflectionEndRangeDecals(
+	const int32 FirstUnusedIndex)
+{
+	for (int32 PoolIndex = FMath::Max(0, FirstUnusedIndex);
+		PoolIndex < ReflectionEndRangeDecalPool.Num();
+		++PoolIndex)
+	{
+		if (ReflectionEndRangeDecalPool[PoolIndex] != nullptr)
+		{
+			ReflectionEndRangeDecalPool[PoolIndex]->SetVisibility(false);
+		}
+	}
+}
+
+void UUOULightBeamVisualComponent::DestroyEndRangeDecals()
+{
+	if (DirectEndRangeDecal != nullptr)
+	{
+		DirectEndRangeDecal->DestroyComponent();
+	}
+	DirectEndRangeDecal = nullptr;
+	DirectEndRangeDecalMaterial = nullptr;
+
+	for (UDecalComponent* DecalComponent : ReflectionEndRangeDecalPool)
+	{
+		if (DecalComponent != nullptr)
+		{
+			DecalComponent->DestroyComponent();
+		}
+	}
+	ReflectionEndRangeDecalPool.Reset();
+	ReflectionEndRangeDecalMaterials.Reset();
 }
 
 void UUOULightBeamVisualComponent::ApplySegmentToVFX(

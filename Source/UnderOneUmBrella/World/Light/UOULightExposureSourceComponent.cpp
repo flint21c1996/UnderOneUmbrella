@@ -48,6 +48,59 @@ namespace
 		return FVector::DotProduct(SafeA, SafeB) >= MinimumDot;
 	}
 
+	bool FindSegmentExpandedBoxEntry(
+		const FVector& LocalStart,
+		const FVector& LocalEnd,
+		const FVector& ExpandedExtent,
+		float& OutEntryTime,
+		FVector& OutEntryNormal)
+	{
+		const FVector Delta = LocalEnd - LocalStart;
+		float EntryTime = 0.0f;
+		float ExitTime = 1.0f;
+		FVector EntryNormal = -Delta.GetSafeNormal();
+
+		for (int32 Axis = 0; Axis < 3; ++Axis)
+		{
+			const float Start = LocalStart[Axis];
+			const float Direction = Delta[Axis];
+			const float Extent = ExpandedExtent[Axis];
+			if (FMath::IsNearlyZero(Direction))
+			{
+				if (Start < -Extent || Start > Extent)
+				{
+					return false;
+				}
+				continue;
+			}
+
+			float NearTime = (-Extent - Start) / Direction;
+			float FarTime = (Extent - Start) / Direction;
+			FVector NearNormal = FVector::ZeroVector;
+			NearNormal[Axis] = -1.0f;
+			if (NearTime > FarTime)
+			{
+				Swap(NearTime, FarTime);
+				NearNormal[Axis] = 1.0f;
+			}
+
+			if (NearTime > EntryTime)
+			{
+				EntryTime = NearTime;
+				EntryNormal = NearNormal;
+			}
+			ExitTime = FMath::Min(ExitTime, FarTime);
+			if (EntryTime > ExitTime)
+			{
+				return false;
+			}
+		}
+
+		OutEntryTime = FMath::Clamp(EntryTime, 0.0f, 1.0f);
+		OutEntryNormal = EntryNormal;
+		return ExitTime >= 0.0f && EntryTime <= 1.0f;
+	}
+
 	FVector ProjectBeamAxisToHitPlane(
 		const FVector& BeamAxisOrigin,
 		const FVector& BeamAxisDirection,
@@ -613,6 +666,7 @@ void UUOULightExposureSourceComponent::RebuildLightPaths()
 			Segment.bReflected = true;
 			Segment.Start = ReflectionSegment.ReflectionStart;
 			Segment.End = ReflectionSegment.SegmentEnd;
+			Segment.EndSurfaceNormal = ReflectionSegment.SegmentEndNormal;
 			Segment.Direction = ReflectionSegment.ReflectedDirection.GetSafeNormal();
 			Segment.IncomingDirection = ReflectionSegment.IncomingDirection.GetSafeNormal();
 			Segment.Length = ReflectionSegment.SegmentLength;
@@ -691,6 +745,7 @@ FUOULightPathSegmentData UUOULightExposureSourceComponent::BuildDirectLightPathS
 		Segment.HitType = EUOULightPathHitType::ReflectingSurface;
 		Segment.HitComponent = FirstReflectionSegment->Reflector;
 		Segment.InteractionSurface = FirstReflectionSegment->Reflector;
+		Segment.EndSurfaceNormal = FirstReflectionSegment->ImpactNormal;
 		Segment.EndReason = EUOULightReflectionPathEndReason::None;
 	}
 	else
@@ -708,23 +763,60 @@ FUOULightPathSegmentData UUOULightExposureSourceComponent::BuildDirectLightPathS
 			}
 
 			FHitResult Hit;
-			if (TraceLightPathSingle(
+			const bool bHasLineHit = TraceLightPathSingle(
 				Hit,
 				Segment.Start,
 				Segment.End,
 				QueryParams,
 				nullptr,
 				BeamShape == EUOULightBeamShape::Cylinder ? CylinderRadius : 0.0f,
-				BeamShape == EUOULightBeamShape::Cylinder ? 0.0f : GetEffectiveOuterConeAngle()))
+				BeamShape == EUOULightBeamShape::Cylinder ? 0.0f : GetEffectiveOuterConeAngle());
+			FHitResult CylinderSurfaceHit;
+			const bool bHasCylinderSurfaceHit =
+				BeamShape == EUOULightBeamShape::Cylinder &&
+				FindNearestCylinderInteractionSurfaceHit(
+					CylinderSurfaceHit,
+					Segment.Start,
+					Segment.End,
+					CylinderRadius) &&
+				(!bHasLineHit || CylinderSurfaceHit.Distance < Hit.Distance);
+			if (bHasCylinderSurfaceHit)
 			{
-				Segment.End = Hit.ImpactPoint;
-				Segment.Length = Hit.Distance;
+				Hit = CylinderSurfaceHit;
+			}
+
+			if (bHasLineHit || bHasCylinderSurfaceHit)
+			{
+				if (bHasCylinderSurfaceHit)
+				{
+					// 굵기 판정의 Beam Center 위치에서 메시를 끝내면 실제 표면보다
+					// 반지름만큼 일찍 잘립니다. 접촉면을 빔 중심축에 투영해 표면까지 채웁니다.
+					Segment.End = ProjectBeamAxisToHitPlane(
+						Segment.Start,
+						Segment.Direction,
+						Hit);
+					Segment.Length = FMath::Max(
+						0.0f,
+						FVector::DotProduct(Segment.End - Segment.Start, Segment.Direction));
+				}
+				else
+				{
+					Segment.End = Hit.ImpactPoint;
+					Segment.Length = Hit.Distance;
+				}
 				Segment.HitComponent = Hit.GetComponent();
+				Segment.EndSurfaceNormal = Hit.ImpactNormal.GetSafeNormal();
 				UUOULightInteractionSurfaceComponent* HitInteractionSurface = nullptr;
-				Segment.HitType = ClassifyLightPathHit(
-					Hit,
-					HitInteractionSurface,
-					Segment.ReachedReceivers);
+				Segment.HitType = bHasCylinderSurfaceHit
+					? EUOULightPathHitType::BlockingSurface
+					: ClassifyLightPathHit(
+						Hit,
+						HitInteractionSurface,
+						Segment.ReachedReceivers);
+				if (bHasCylinderSurfaceHit)
+				{
+					HitInteractionSurface = Cast<UUOULightInteractionSurfaceComponent>(Hit.GetComponent());
+				}
 				Segment.InteractionSurface = HitInteractionSurface;
 				Segment.EndReason = Segment.HitType == EUOULightPathHitType::ReflectingSurface
 					? EUOULightReflectionPathEndReason::None
@@ -762,11 +854,31 @@ EUOULightPathHitType UUOULightExposureSourceComponent::ClassifyLightPathHit(
 
 	if (OutInteractionSurface != nullptr)
 	{
-		return OutInteractionSurface->CanReflectLight() &&
+		const bool bCanReflectIncomingLight =
+			OutInteractionSurface->CanReflectLight() &&
 			OutInteractionSurface->CanReflectIncomingLightWithMaximumAngle(
 				GetSourceForwardVector(),
 				Hit.ImpactNormal,
-				ResolveMaximumReflectionIncidenceAngle(OutInteractionSurface))
+				ResolveMaximumReflectionIncidenceAngle(OutInteractionSurface));
+		const float IncomingBeamRadius = BeamShape == EUOULightBeamShape::Cylinder
+			? FMath::Max(0.0f, CylinderRadius)
+			: Hit.Distance * FMath::Tan(FMath::DegreesToRadians(
+				FMath::Clamp(GetEffectiveOuterConeAngle(), 0.0f, 89.0f)));
+		const FVector BeamFootprintCenter = BeamShape == EUOULightBeamShape::Cylinder
+			? ProjectBeamAxisToHitPlane(
+				GetSourceLocation(),
+				GetSourceForwardVector().GetSafeNormal(),
+				Hit)
+			: FVector(Hit.ImpactPoint);
+		const bool bHasReflectionCoverage =
+			OutInteractionSurface->HasMinimumBeamFootprintCoverage(
+				IncomingBeamRadius,
+				GetSourceForwardVector().GetSafeNormal(),
+				Hit.ImpactNormal,
+				BeamFootprintCenter,
+				ResolveRequiredBeamFootprintCoverageRatio(OutInteractionSurface));
+
+		return bCanReflectIncomingLight && bHasReflectionCoverage
 			? EUOULightPathHitType::ReflectingSurface
 			: EUOULightPathHitType::BlockingSurface;
 	}
@@ -825,6 +937,10 @@ bool UUOULightExposureSourceComponent::AreLightPathsEquivalent(
 				LeftSegment.bReflected != RightSegment.bReflected ||
 				!LeftSegment.Start.Equals(RightSegment.Start, ReflectionPathPositionTolerance) ||
 				!LeftSegment.End.Equals(RightSegment.End, ReflectionPathPositionTolerance) ||
+				!AreDirectionsNearlyEqual(
+					LeftSegment.EndSurfaceNormal,
+					RightSegment.EndSurfaceNormal,
+					ReflectionPathDirectionToleranceDegrees) ||
 				!AreDirectionsNearlyEqual(
 					LeftSegment.Direction,
 					RightSegment.Direction,
@@ -955,8 +1071,10 @@ bool UUOULightExposureSourceComponent::AreReflectionPathsEquivalent(
 				!HaveSameReceivers(LeftSegment.ReachedReceivers, RightSegment.ReachedReceivers) ||
 				!LeftSegment.IncomingStart.Equals(RightSegment.IncomingStart, ReflectionPathPositionTolerance) ||
 				!LeftSegment.ImpactPoint.Equals(RightSegment.ImpactPoint, ReflectionPathPositionTolerance) ||
+				!AreDirectionsNearlyEqual(LeftSegment.ImpactNormal, RightSegment.ImpactNormal, ReflectionPathDirectionToleranceDegrees) ||
 				!LeftSegment.ReflectionStart.Equals(RightSegment.ReflectionStart, ReflectionPathPositionTolerance) ||
 				!LeftSegment.SegmentEnd.Equals(RightSegment.SegmentEnd, ReflectionPathPositionTolerance) ||
+				!AreDirectionsNearlyEqual(LeftSegment.SegmentEndNormal, RightSegment.SegmentEndNormal, ReflectionPathDirectionToleranceDegrees) ||
 				!AreDirectionsNearlyEqual(LeftSegment.IncomingDirection, RightSegment.IncomingDirection, ReflectionPathDirectionToleranceDegrees) ||
 				!AreDirectionsNearlyEqual(LeftSegment.ReflectedDirection, RightSegment.ReflectedDirection, ReflectionPathDirectionToleranceDegrees) ||
 				!FMath::IsNearlyEqual(LeftSegment.SegmentLength, RightSegment.SegmentLength, ReflectionPathPositionTolerance) ||
@@ -1589,7 +1707,8 @@ bool UUOULightExposureSourceComponent::TraceLightPathSingle(
 	const FCollisionQueryParams& QueryParams,
 	const AActor* IgnoredShadeOwner,
 	float BeamStartRadius,
-	float BeamConeAngle) const
+	float BeamConeAngle,
+	const AActor* AdditionalIgnoredShadeOwner) const
 {
 	OutHit = FHitResult();
 	UWorld* World = GetWorld();
@@ -1638,20 +1757,26 @@ bool UUOULightExposureSourceComponent::TraceLightPathSingle(
 				UUOULightInteractionSurfaceComponent>();
 		}
 
-		if (SurfaceComponent == nullptr ||
-			(!SurfaceComponent->ShouldPassThroughIncomingLightWithMaximumAngle(
-				TraceDirection,
-				CandidateHit.ImpactNormal,
-				ResolveMaximumReflectionIncidenceAngle(SurfaceComponent)) &&
-				(BeamStartRadius < 0.0f ||
-				 SurfaceComponent->HasMinimumBeamFootprintCoverage(
-					FMath::Max(0.0f, BeamStartRadius) +
-						CandidateHit.Distance * FMath::Tan(FMath::DegreesToRadians(
-							FMath::Clamp(BeamConeAngle, 0.0f, 89.0f))),
+		const bool bShouldPassThroughRejectedReflection =
+			SurfaceComponent != nullptr &&
+			SurfaceComponent->bPassThroughWhenReflectionRejected &&
+			(
+				SurfaceComponent->ShouldPassThroughIncomingLightWithMaximumAngle(
 					TraceDirection,
 					CandidateHit.ImpactNormal,
-					CandidateHit.ImpactPoint,
-					ResolveRequiredBeamFootprintCoverageRatio(SurfaceComponent)))))
+					ResolveMaximumReflectionIncidenceAngle(SurfaceComponent)) ||
+				(BeamStartRadius >= 0.0f &&
+					!SurfaceComponent->HasMinimumBeamFootprintCoverage(
+						FMath::Max(0.0f, BeamStartRadius) +
+							CandidateHit.Distance * FMath::Tan(FMath::DegreesToRadians(
+								FMath::Clamp(BeamConeAngle, 0.0f, 89.0f))),
+						TraceDirection,
+						CandidateHit.ImpactNormal,
+						CandidateHit.ImpactPoint,
+						ResolveRequiredBeamFootprintCoverageRatio(SurfaceComponent)))
+			);
+
+		if (SurfaceComponent == nullptr || !bShouldPassThroughRejectedReflection)
 		{
 			CollisionHit = CandidateHit;
 			bHasCollisionHit = true;
@@ -1681,7 +1806,8 @@ bool UUOULightExposureSourceComponent::TraceLightPathSingle(
 		ShadeHit,
 		IgnoredShadeOwner,
 		BeamStartRadius,
-		BeamConeAngle);
+		BeamConeAngle,
+		AdditionalIgnoredShadeOwner);
 	if (!bHasCollisionHit && !bHasShadeHit)
 	{
 		return false;
@@ -1701,13 +1827,82 @@ bool UUOULightExposureSourceComponent::TraceLightPathSingle(
 	return bHasCollisionHit;
 }
 
+bool UUOULightExposureSourceComponent::FindNearestCylinderInteractionSurfaceHit(
+	FHitResult& OutHit,
+	const FVector& TraceStart,
+	const FVector& TraceEnd,
+	float BeamRadius) const
+{
+	OutHit = FHitResult();
+	UWorld* World = GetWorld();
+	const FVector TraceDelta = TraceEnd - TraceStart;
+	const float TraceLength = TraceDelta.Size();
+	if (World == nullptr || TraceLength <= KINDA_SMALL_NUMBER || BeamRadius <= KINDA_SMALL_NUMBER)
+	{
+		return false;
+	}
+
+	float NearestDistance = TNumericLimits<float>::Max();
+	for (TObjectIterator<UUOULightInteractionSurfaceComponent> SurfaceIt; SurfaceIt; ++SurfaceIt)
+	{
+		UUOULightInteractionSurfaceComponent* Surface = *SurfaceIt;
+		if (!IsValid(Surface) ||
+			Surface->GetWorld() != World ||
+			!Surface->IsRegistered() ||
+			!Surface->CanBlockLight() ||
+			(Surface->CanReflectLight() && !Surface->bAllowEdgeOnlyCylinderReflection) ||
+			(Surface->CanReflectLight() && Surface->bPassThroughWhenReflectionRejected))
+		{
+			continue;
+		}
+
+		const FQuat SurfaceRotation = Surface->GetComponentQuat();
+		const FVector SurfaceLocation = Surface->GetComponentLocation();
+		const FVector LocalStart = SurfaceRotation.UnrotateVector(TraceStart - SurfaceLocation);
+		const FVector LocalEnd = SurfaceRotation.UnrotateVector(TraceEnd - SurfaceLocation);
+		const FVector ExpandedExtent = Surface->GetScaledBoxExtent() + FVector(BeamRadius);
+		float EntryTime = 0.0f;
+		FVector LocalEntryNormal = FVector::ZeroVector;
+		if (!FindSegmentExpandedBoxEntry(
+			LocalStart,
+			LocalEnd,
+			ExpandedExtent,
+			EntryTime,
+			LocalEntryNormal))
+		{
+			continue;
+		}
+
+		const float Distance = TraceLength * EntryTime;
+		if (Distance >= NearestDistance)
+		{
+			continue;
+		}
+
+		NearestDistance = Distance;
+		const FVector BeamCenterAtHit = TraceStart + TraceDelta * EntryTime;
+		const FVector WorldNormal = SurfaceRotation.RotateVector(LocalEntryNormal).GetSafeNormal();
+		OutHit = FHitResult(Surface->GetOwner(), Surface, BeamCenterAtHit, WorldNormal);
+		OutHit.bBlockingHit = true;
+		OutHit.Time = EntryTime;
+		OutHit.Distance = Distance;
+		OutHit.Location = BeamCenterAtHit;
+		OutHit.ImpactPoint = BeamCenterAtHit - WorldNormal * BeamRadius;
+		OutHit.TraceStart = TraceStart;
+		OutHit.TraceEnd = TraceEnd;
+	}
+
+	return OutHit.bBlockingHit;
+}
+
 bool UUOULightExposureSourceComponent::FindNearestUmbrellaLightShadeHit(
 	const FVector& TraceStart,
 	const FVector& TraceEnd,
 	FHitResult& OutHit,
 	const AActor* IgnoredShadeOwner,
 	float BeamStartRadius,
-	float BeamConeAngle) const
+	float BeamConeAngle,
+	const AActor* AdditionalIgnoredShadeOwner) const
 {
 	OutHit = FHitResult();
 	UWorld* World = GetWorld();
@@ -1725,7 +1920,8 @@ bool UUOULightExposureSourceComponent::FindNearestUmbrellaLightShadeHit(
 		UUOUUmbrellaLightShadeVolumeComponent* ShadeVolume = *ShadeIt;
 		if (!IsValid(ShadeVolume) ||
 			ShadeVolume->GetWorld() != World ||
-			ShadeVolume->GetOwner() == IgnoredShadeOwner ||
+			(ShadeVolume->GetOwner() == IgnoredShadeOwner ||
+				ShadeVolume->GetOwner() == AdditionalIgnoredShadeOwner) ||
 			!ShadeVolume->IsRegistered() ||
 			!ShadeVolume->CanShadeLight() ||
 			!ShadeVolume->CanShadeIncomingLight(IncomingDirection) ||
@@ -2326,8 +2522,13 @@ void UUOULightExposureSourceComponent::EmitReflectedLightFromSurface(
 				NextSurfaceDistance,
 				NextSurfaceAngle);
 
+		// 평행 원기둥 빛이 다음 반사면의 가장자리에 걸친 경우 실제 적중점은
+		// 중심축에서 벗어나 있습니다. 현재 구간의 방향과 길이는 중심축 기준으로
+		// 유지하고, 다음 반사는 실제 표면 적중점에서 시작합니다.
 		FVector SegmentEnd = bHasNextSurface
-			? NextSurfaceHit.ImpactPoint
+			? (OutgoingBeamConeAngle <= KINDA_SMALL_NUMBER
+				? ReflectionOrigin + ReflectedDirection * NextSurfaceDistance
+				: NextSurfaceHit.ImpactPoint)
 			: ReflectionOrigin + ReflectedDirection * SegmentMaximumLength;
 		FHitResult SegmentBlockingHit;
 		if (!bHasNextSurface)
@@ -2400,8 +2601,12 @@ void UUOULightExposureSourceComponent::EmitReflectedLightFromSurface(
 		SegmentData.ReachedReceivers = MoveTemp(ReachedReceivers);
 		SegmentData.IncomingStart = CurrentRayOrigin;
 		SegmentData.ImpactPoint = CurrentSurfaceHit.ImpactPoint;
+		SegmentData.ImpactNormal = CurrentSurfaceHit.ImpactNormal.GetSafeNormal();
 		SegmentData.ReflectionStart = ReflectionOrigin;
 		SegmentData.SegmentEnd = SegmentEnd;
+		SegmentData.SegmentEndNormal = SegmentBlockingHit.bBlockingHit
+			? SegmentBlockingHit.ImpactNormal.GetSafeNormal()
+			: FVector::ZeroVector;
 		SegmentData.IncomingDirection = IncomingDirection;
 		SegmentData.ReflectedDirection = ReflectedDirection;
 		SegmentData.SegmentLength = SegmentLength;
@@ -2679,8 +2884,43 @@ bool UUOULightExposureSourceComponent::TryFindNextReflectionSurface(
 			TArray<FVector> CandidateSamplePositions;
 			CandidateSurface->GetReflectionSamplePositions(CandidateSamplePositions);
 
+			// 평행 원기둥 빔은 고정된 면 샘플 사이에 걸치면 실제로 겹쳐도 놓칠 수 있습니다.
+			// 빔 중심선과 확장된 반사 박스의 진입점을 실제 박스에 투영해 최근접 후보를 추가합니다.
+			if (bPreferAxisHit && BeamStartRadius > KINDA_SMALL_NUMBER)
+			{
+				const FQuat SurfaceRotation = CandidateSurface->GetComponentQuat();
+				const FVector SurfaceLocation = CandidateSurface->GetComponentLocation();
+				const FVector LocalStart = SurfaceRotation.UnrotateVector(
+					ReflectionOrigin - SurfaceLocation);
+				const FVector LocalEnd = SurfaceRotation.UnrotateVector(
+					ReflectionOrigin + SafeReflectedDirection * SearchRange - SurfaceLocation);
+				const FVector SurfaceExtent = CandidateSurface->GetScaledBoxExtent().GetAbs();
+				float ExpandedEntryTime = 0.0f;
+				FVector ExpandedEntryNormal = FVector::ZeroVector;
+				if (FindSegmentExpandedBoxEntry(
+					LocalStart,
+					LocalEnd,
+					SurfaceExtent + FVector(BeamStartRadius),
+					ExpandedEntryTime,
+					ExpandedEntryNormal))
+				{
+					const FVector ExpandedEntryPoint = FMath::Lerp(
+						LocalStart,
+						LocalEnd,
+						ExpandedEntryTime);
+					const FVector ClosestSurfacePoint(
+						FMath::Clamp(ExpandedEntryPoint.X, -SurfaceExtent.X, SurfaceExtent.X),
+						FMath::Clamp(ExpandedEntryPoint.Y, -SurfaceExtent.Y, SurfaceExtent.Y),
+						FMath::Clamp(ExpandedEntryPoint.Z, -SurfaceExtent.Z, SurfaceExtent.Z));
+					CandidateSamplePositions.AddUnique(
+						SurfaceLocation + SurfaceRotation.RotateVector(ClosestSurfacePoint));
+				}
+			}
+
 			// 반사 빔의 중심축이 표면 샘플 사이를 통과해도 다음 거울을 검출합니다.
 			FHitResult AxisHit;
+			// 실제 우산은 얇은 반사면과 더 두꺼운 차광 볼륨을 함께 가집니다.
+			// 이 후보를 검사하는 동안에는 같은 소유자의 차광 볼륨이 앞에서 가로막지 않게 합니다.
 			bool bAxisHitCandidate = TraceLightPathSingle(
 				AxisHit,
 				ReflectionOrigin,
@@ -2688,7 +2928,8 @@ bool UUOULightExposureSourceComponent::TryFindNextReflectionSurface(
 				TraceQueryParams,
 				CurrentSurface->GetOwner(),
 				BeamStartRadius,
-				BeamConeAngle) &&
+				BeamConeAngle,
+				CandidateSurface->GetOwner()) &&
 				AxisHit.GetComponent() == CandidateSurface &&
 				CandidateSurface->CanReflectIncomingLightWithMaximumAngle(
 					SafeReflectedDirection,
@@ -2724,6 +2965,13 @@ bool UUOULightExposureSourceComponent::TryFindNextReflectionSurface(
 					OutDistance = AxisHitDistance;
 					OutAngle = 0.0f;
 				}
+			}
+
+			// 평행 원기둥 빛은 표면이 명시적으로 가장자리 반사를 허용할 때만
+			// 중심축 밖의 면 샘플을 다음 반사체 후보로 사용합니다.
+			if (bPreferAxisHit && !CandidateSurface->bAllowEdgeOnlyCylinderReflection)
+			{
+				continue;
 			}
 
 			for (const FVector& CandidateSamplePosition : CandidateSamplePositions)
@@ -2764,7 +3012,8 @@ bool UUOULightExposureSourceComponent::TryFindNextReflectionSurface(
 					TraceQueryParams,
 					CurrentSurface->GetOwner(),
 					BeamStartRadius,
-					BeamConeAngle) &&
+					BeamConeAngle,
+					CandidateSurface->GetOwner()) &&
 					CandidateHit.GetComponent() == CandidateSurface &&
 					CandidateSurface->CanReflectIncomingLightWithMaximumAngle(
 						SafeReflectedDirection,
@@ -2792,12 +3041,13 @@ bool UUOULightExposureSourceComponent::TryFindNextReflectionSurface(
 				{
 					continue;
 				}
-				if (HitDistance < ClosestHitDistance)
+				const float PathDistance = bPreferAxisHit ? AxialDistance : HitDistance;
+				if (PathDistance < ClosestHitDistance)
 				{
-					ClosestHitDistance = HitDistance;
+					ClosestHitDistance = PathDistance;
 					OutSurface = CandidateSurface;
 					OutSurfaceHit = CandidateHit;
-					OutDistance = HitDistance;
+					OutDistance = PathDistance;
 					OutAngle = CandidateAngle;
 				}
 			}
@@ -2805,11 +3055,9 @@ bool UUOULightExposureSourceComponent::TryFindNextReflectionSurface(
 		}
 	}
 
-	if (bPreferAxisHit)
+	if (bPreferAxisHit && ClosestAxisSurface != nullptr)
 	{
-		// Keep chained cylinder paths on one representative center ray. If the
-		// center ray misses, an edge sample alone cannot define a connected path
-		// from the previous reflection point, so it must not create a VFX segment.
+		// 중심축과 면 샘플이 모두 적중하면 가장 안정적인 중심축 결과를 우선합니다.
 		OutSurface = ClosestAxisSurface;
 		OutSurfaceHit = ClosestAxisSurfaceHit;
 		OutDistance = ClosestAxisSurface != nullptr ? ClosestAxisHitDistance : 0.0f;
