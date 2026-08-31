@@ -19,7 +19,6 @@
 #include "Player/UOUCharacter.h"
 #include "Puzzle/Reward/UOURewardCollectedConditionComponent.h"
 #include "UI/UOUUISubsystem.h"
-#include "World/Rewards/UOURewardAppearanceMotionComponent.h"
 #include "World/Rewards/UOURewardCollectionMotionComponent.h"
 #include "World/Rewards/UOURewardFeedbackComponent.h"
 
@@ -73,8 +72,6 @@ AUOURewardActor::AUOURewardActor()
 	RewardFeedbackComponent = CreateDefaultSubobject<UUOURewardFeedbackComponent>(TEXT("RewardFeedbackComponent"));
 	RewardCollectedConditionComponent =
 		CreateDefaultSubobject<UUOURewardCollectedConditionComponent>(TEXT("RewardCollectedConditionComponent"));
-	RewardAppearanceMotionComponent =
-		CreateDefaultSubobject<UUOURewardAppearanceMotionComponent>(TEXT("RewardAppearanceMotionComponent"));
 	RewardCollectionMotionComponent =
 		CreateDefaultSubobject<UUOURewardCollectionMotionComponent>(TEXT("RewardCollectionMotionComponent"));
 }
@@ -210,17 +207,14 @@ void AUOURewardActor::BeginPlay()
 			this,
 			&AUOURewardActor::HandleRewardFeedbackFinished);
 	}
-	if (RewardAppearanceMotionComponent != nullptr)
-	{
-		RewardAppearanceMotionComponent->OnAppearanceMotionFinished.AddUniqueDynamic(
-			this,
-			&AUOURewardActor::HandleAppearanceMotionFinished);
-		RewardAppearanceMotionComponent->OnAppearanceMotionCue.AddUniqueDynamic(
-			this,
-			&AUOURewardActor::HandleAppearanceMotionCue);
-	}
 	if (RewardCollectionMotionComponent != nullptr)
 	{
+		RewardCollectionMotionComponent->OnAppearanceMotionFinished.AddUniqueDynamic(
+			this,
+			&AUOURewardActor::HandleAppearanceMotionFinished);
+		RewardCollectionMotionComponent->OnAppearanceMotionCue.AddUniqueDynamic(
+			this,
+			&AUOURewardActor::HandleAppearanceMotionCue);
 		RewardCollectionMotionComponent->OnCollectionMotionFinished.AddUniqueDynamic(
 			this,
 			&AUOURewardActor::HandleCollectionMotionFinished);
@@ -250,18 +244,14 @@ void AUOURewardActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
 			&AUOURewardActor::HandleRewardFeedbackFinished);
 	}
 
-	if (RewardAppearanceMotionComponent != nullptr)
-	{
-		RewardAppearanceMotionComponent->OnAppearanceMotionFinished.RemoveDynamic(
-			this,
-			&AUOURewardActor::HandleAppearanceMotionFinished);
-		RewardAppearanceMotionComponent->OnAppearanceMotionCue.RemoveDynamic(
-			this,
-			&AUOURewardActor::HandleAppearanceMotionCue);
-	}
-
 	if (RewardCollectionMotionComponent != nullptr)
 	{
+		RewardCollectionMotionComponent->OnAppearanceMotionFinished.RemoveDynamic(
+			this,
+			&AUOURewardActor::HandleAppearanceMotionFinished);
+		RewardCollectionMotionComponent->OnAppearanceMotionCue.RemoveDynamic(
+			this,
+			&AUOURewardActor::HandleAppearanceMotionCue);
 		RewardCollectionMotionComponent->OnCollectionMotionFinished.RemoveDynamic(
 			this,
 			&AUOURewardActor::HandleCollectionMotionFinished);
@@ -396,9 +386,9 @@ void AUOURewardActor::SetRewardActive(bool bNewActive)
 		bRewardAppearanceInProgress = false;
 		bWaitingForAppearanceMotion = false;
 		bWaitingForAppearanceFeedback = false;
-		if (RewardAppearanceMotionComponent != nullptr)
+		if (RewardCollectionMotionComponent != nullptr)
 		{
-			RewardAppearanceMotionComponent->StopAppearanceMotion(true);
+			RewardCollectionMotionComponent->StopAppearanceMotion(true);
 		}
 		if (RewardFeedbackComponent != nullptr
 			&& RewardFeedbackComponent->IsFeedbackPlaying())
@@ -451,9 +441,9 @@ void AUOURewardActor::BeginRewardAppearance()
 			? RewardFeedbackComponent->GetAppearanceCueRequests()
 			: EmptyCueRequests;
 
-	bWaitingForAppearanceMotion = RewardAppearanceMotionComponent != nullptr;
+	bWaitingForAppearanceMotion = RewardCollectionMotionComponent != nullptr;
 	if (bWaitingForAppearanceMotion
-		&& !RewardAppearanceMotionComponent->StartAppearanceMotion(
+		&& !RewardCollectionMotionComponent->StartAppearanceMotion(
 			VisualMesh,
 			AppearanceMotionPath,
 			CueRequests))

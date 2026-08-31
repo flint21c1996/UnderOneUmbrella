@@ -12,7 +12,6 @@ class AActor;
 class AUOURewardActor;
 class UPrimitiveComponent;
 class UNiagaraComponent;
-class UUOURewardAppearanceMotionComponent;
 class UUOURewardCollectedConditionComponent;
 class UUOURewardCollectionMotionComponent;
 class UUOURewardFeedbackComponent;
@@ -116,9 +115,6 @@ protected:
 	// 이 Reward의 최종 수집 완료 상태를 Puzzle Condition Group에 제공합니다.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Reward|Components")
 	TObjectPtr<UUOURewardCollectedConditionComponent> RewardCollectedConditionComponent = nullptr;
-
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Reward|Components")
-	TObjectPtr<UUOURewardAppearanceMotionComponent> RewardAppearanceMotionComponent = nullptr;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Reward|Components")
 	TObjectPtr<UUOURewardCollectionMotionComponent> RewardCollectionMotionComponent = nullptr;

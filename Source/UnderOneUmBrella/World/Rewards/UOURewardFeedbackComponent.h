@@ -89,7 +89,7 @@ public:
 	void SynchronizeCueRequestsForEditor();
 #endif
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Feedback")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Feedback|Collection")
 	bool bFeedbackEnabled = true;
 
 	// 등장 단계도 같은 Feedback 실행기를 사용하되 Collection과 설정 데이터는 분리합니다.
@@ -100,7 +100,7 @@ public:
 	UPROPERTY(
 		EditAnywhere,
 		BlueprintReadOnly,
-		Category = "Reward|Feedback|Timeline",
+		Category = "Reward|Feedback|Collection|Timeline",
 		meta = (DisplayName = "Cue Requests"))
 	TArray<FUOURewardPresentationCue> CueRequests;
 
@@ -108,49 +108,49 @@ public:
 	const TArray<FUOURewardPresentationCue>& GetCueRequests() const;
 	const TArray<FUOURewardPresentationCue>& GetAppearanceCueRequests() const;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Feedback|Effect")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Feedback|Collection|Effect")
 	TObjectPtr<UNiagaraSystem> CollectionEffect = nullptr;
 
 	// true면 플레이어 위치, false면 수집되기 직전 보상 위치를 파티클 기준점으로 사용합니다.
 	UPROPERTY(
 		EditAnywhere,
 		BlueprintReadOnly,
-		Category = "Reward|Feedback|Effect",
+		Category = "Reward|Feedback|Collection|Effect",
 		meta = (EditCondition = "CollectionEffect != nullptr", EditConditionHides))
 	bool bSpawnEffectAtCollector = true;
 
 	UPROPERTY(
 		EditAnywhere,
 		BlueprintReadOnly,
-		Category = "Reward|Feedback|Effect",
+		Category = "Reward|Feedback|Collection|Effect",
 		meta = (EditCondition = "CollectionEffect != nullptr", EditConditionHides))
 	FVector EffectLocationOffset = FVector(0.0f, 0.0f, 100.0f);
 
 	UPROPERTY(
 		EditAnywhere,
 		BlueprintReadOnly,
-		Category = "Reward|Feedback|Effect",
+		Category = "Reward|Feedback|Collection|Effect",
 		meta = (EditCondition = "CollectionEffect != nullptr", EditConditionHides))
 	FVector EffectScale = FVector::OneVector;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Feedback|Input")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Feedback|Collection|Input")
 	bool bBlockPlayerInput = true;
 
 	UPROPERTY(
 		EditAnywhere,
 		BlueprintReadOnly,
-		Category = "Reward|Feedback|Input",
+		Category = "Reward|Feedback|Collection|Input",
 		meta = (EditCondition = "bBlockPlayerInput", EditConditionHides))
 	bool bStopMovementImmediately = true;
 
 	// 플레이어가 보상을 획득했음을 몸동작으로 보여줄 전용 몽타주입니다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Feedback|Animation")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Feedback|Collection|Animation")
 	TObjectPtr<UAnimMontage> CollectionMontage = nullptr;
 
 	UPROPERTY(
 		EditAnywhere,
 		BlueprintReadOnly,
-		Category = "Reward|Feedback|Animation",
+		Category = "Reward|Feedback|Collection|Animation",
 		meta = (
 			ClampMin = "0.01",
 			EditCondition = "CollectionMontage != nullptr",
@@ -160,17 +160,17 @@ public:
 	UPROPERTY(
 		EditAnywhere,
 		BlueprintReadOnly,
-		Category = "Reward|Feedback|Animation",
+		Category = "Reward|Feedback|Collection|Animation",
 		meta = (EditCondition = "CollectionMontage != nullptr", EditConditionHides))
 	FName MontageStartSection = NAME_None;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Feedback|Camera")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Feedback|Collection|Camera")
 	bool bUseTemporaryCameraZoom = true;
 
 	UPROPERTY(
 		EditAnywhere,
 		BlueprintReadOnly,
-		Category = "Reward|Feedback|Camera",
+		Category = "Reward|Feedback|Collection|Camera",
 		meta = (
 			ClampMin = "0.0",
 			EditCondition = "bUseTemporaryCameraZoom",
@@ -181,7 +181,7 @@ public:
 	UPROPERTY(
 		EditAnywhere,
 		BlueprintReadOnly,
-		Category = "Reward|Feedback|Camera",
+		Category = "Reward|Feedback|Collection|Camera",
 		meta = (
 			ClampMin = "1.0",
 			EditCondition = "bUseTemporaryCameraZoom",
@@ -192,7 +192,7 @@ public:
 	UPROPERTY(
 		EditAnywhere,
 		BlueprintReadOnly,
-		Category = "Reward|Feedback|Camera",
+		Category = "Reward|Feedback|Collection|Camera",
 		meta = (
 			EditCondition = "bUseTemporaryCameraZoom",
 			EditConditionHides,

@@ -6,7 +6,6 @@
 #include "Rendering/DrawElements.h"
 #include "ScopedTransaction.h"
 #include "Styling/AppStyle.h"
-#include "World/Rewards/UOURewardAppearanceMotionComponent.h"
 #include "World/Rewards/UOURewardCollectionMotionComponent.h"
 #include "World/Rewards/UOURewardFeedbackComponent.h"
 
@@ -27,7 +26,7 @@ namespace UOURewardCueTimelinePrivate
 void SUOURewardCueTimeline::Construct(const FArguments& InArgs)
 {
 	MotionComponent = InArgs._MotionComponent;
-	AppearanceMotionComponent = InArgs._AppearanceMotionComponent;
+	MotionPhase = InArgs._MotionPhase;
 	FeedbackComponent = InArgs._FeedbackComponent;
 }
 
@@ -309,15 +308,11 @@ void SUOURewardCueTimeline::OnMouseCaptureLost(
 float SUOURewardCueTimeline::GetMotionDuration() const
 {
 	const UUOURewardCollectionMotionComponent* Motion = MotionComponent.Get();
-	const UUOURewardAppearanceMotionComponent* AppearanceMotion =
-		AppearanceMotionComponent.Get();
 	return FMath::Max(
 		0.0f,
 		Motion != nullptr
-			? Motion->GetMotionDurationForEditor()
-			: AppearanceMotion != nullptr
-				? AppearanceMotion->GetMotionDurationForEditor()
-				: 0.0f);
+			? Motion->GetMotionDurationForEditor(MotionPhase)
+			: 0.0f);
 }
 
 const TArray<FUOURewardPresentationCue>& SUOURewardCueTimeline::GetCueRequests() const
@@ -328,7 +323,7 @@ const TArray<FUOURewardPresentationCue>& SUOURewardCueTimeline::GetCueRequests()
 	{
 		return EmptyRequests;
 	}
-	return AppearanceMotionComponent.IsValid()
+	return MotionPhase == EUOURewardMotionPhase::Appearance
 		? Feedback->GetAppearanceCueRequests()
 		: Feedback->GetCueRequests();
 }
@@ -338,31 +333,21 @@ const TArray<FUOURewardMotionCueTiming>& SUOURewardCueTimeline::GetCueTimeline()
 	static const TArray<FUOURewardMotionCueTiming> EmptyTimeline;
 	if (const UUOURewardCollectionMotionComponent* Motion = MotionComponent.Get())
 	{
-		return Motion->GetCueTimelineForEditor();
-	}
-	if (const UUOURewardAppearanceMotionComponent* Motion = AppearanceMotionComponent.Get())
-	{
-		return Motion->GetCueTimelineForEditor();
+		return Motion->GetCueTimelineForEditor(MotionPhase);
 	}
 	return EmptyTimeline;
 }
 
 UObject* SUOURewardCueTimeline::GetMotionObject() const
 {
-	return MotionComponent.IsValid()
-		? static_cast<UObject*>(MotionComponent.Get())
-		: static_cast<UObject*>(AppearanceMotionComponent.Get());
+	return MotionComponent.Get();
 }
 
 void SUOURewardCueTimeline::SetCueTriggerTime(const FGuid& RequestId, float TriggerTime)
 {
 	if (UUOURewardCollectionMotionComponent* Motion = MotionComponent.Get())
 	{
-		Motion->SetCueTriggerTimeForEditor(RequestId, TriggerTime);
-	}
-	else if (UUOURewardAppearanceMotionComponent* Motion = AppearanceMotionComponent.Get())
-	{
-		Motion->SetCueTriggerTimeForEditor(RequestId, TriggerTime);
+		Motion->SetCueTriggerTimeForEditor(MotionPhase, RequestId, TriggerTime);
 	}
 }
 
@@ -372,11 +357,10 @@ void SUOURewardCueTimeline::SetPresentationCloseTime(
 {
 	if (UUOURewardCollectionMotionComponent* Motion = MotionComponent.Get())
 	{
-		Motion->SetPresentationCloseTimeForEditor(RequestId, CloseTime);
-	}
-	else if (UUOURewardAppearanceMotionComponent* Motion = AppearanceMotionComponent.Get())
-	{
-		Motion->SetPresentationCloseTimeForEditor(RequestId, CloseTime);
+		Motion->SetPresentationCloseTimeForEditor(
+			MotionPhase,
+			RequestId,
+			CloseTime);
 	}
 }
 

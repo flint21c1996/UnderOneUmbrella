@@ -13,7 +13,6 @@
 #if WITH_EDITOR
 #include "GameFramework/Actor.h"
 #include "UObject/UnrealType.h"
-#include "World/Rewards/UOURewardAppearanceMotionComponent.h"
 #include "World/Rewards/UOURewardCollectionMotionComponent.h"
 #endif
 
@@ -68,12 +67,11 @@ void UUOURewardFeedbackComponent::SynchronizeCueRequestsForEditor()
 		if (UUOURewardCollectionMotionComponent* MotionComponent =
 			RewardOwner->FindComponentByClass<UUOURewardCollectionMotionComponent>())
 		{
-			MotionComponent->SynchronizeCueTimelineForEditor(CueRequests);
-		}
-		if (UUOURewardAppearanceMotionComponent* MotionComponent =
-			RewardOwner->FindComponentByClass<UUOURewardAppearanceMotionComponent>())
-		{
 			MotionComponent->SynchronizeCueTimelineForEditor(
+				EUOURewardMotionPhase::Collection,
+				CueRequests);
+			MotionComponent->SynchronizeCueTimelineForEditor(
+				EUOURewardMotionPhase::Appearance,
 				AppearanceFeedback.CueRequests);
 		}
 	}
