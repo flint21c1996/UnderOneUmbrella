@@ -48,11 +48,19 @@ void UUOULightExposureReceiverComponent::TickComponent(
 
 FText UUOULightExposureReceiverComponent::GetDebugSummaryText_Implementation() const
 {
-	const TArray<FString> DebugLines = {
+	TArray<FString> DebugLines = {
 		FString::Printf(TEXT("Light Receiver: %s"), bIsReceivingLight ? TEXT("Lit") : TEXT("Not Lit")),
 		FString::Printf(TEXT("Temp: %.1f C"), CurrentTemperature),
 		FString::Printf(TEXT("Exposure: %.2f from %s"), LastExposureIntensity, *LastExposureSourceName)
 	};
+	if (bUseBeamVolumeOverlap)
+	{
+		DebugLines.Add(FString::Printf(
+			TEXT("Overlap: %.1f / %.1f cm (%s)"),
+			LastBeamOverlapDepth,
+			MinimumBeamOverlapDepth,
+			bLastBeamOverlapAccepted ? TEXT("Accepted") : TEXT("Rejected")));
+	}
 
 	return FText::FromString(FString::Join(DebugLines, LINE_TERMINATOR));
 }
@@ -70,11 +78,19 @@ void UUOULightExposureReceiverComponent::GatherDevelopmentDebugDraw(
 		IUOULightReceivableInterface::Execute_GetLightReceiverPosition(
 			const_cast<UUOULightExposureReceiverComponent*>(this))
 		+ FVector(0.0f, 0.0f, 100.0f);
-	const FString DebugText = FString::Printf(
+	FString DebugText = FString::Printf(
 		TEXT("Temp: %.1f C\nLight: %s\nIntensity: %.2f"),
 		CurrentTemperature,
 		bIsReceivingLight ? TEXT("On") : TEXT("Off"),
 		LastExposureIntensity);
+	if (bUseBeamVolumeOverlap)
+	{
+		DebugText += FString::Printf(
+			TEXT("\nOverlap: %.1f / %.1f cm (%s)"),
+			LastBeamOverlapDepth,
+			MinimumBeamOverlapDepth,
+			bLastBeamOverlapAccepted ? TEXT("Accepted") : TEXT("Rejected"));
+	}
 	const FColor TextColor = bIsReceivingLight ? FColor::Orange : FColor::Cyan;
 
 	Context.DrawString(DebugLocation, DebugText, TextColor, 1.0f);
@@ -171,6 +187,32 @@ int32 UUOULightExposureReceiverComponent::GetRequiredLightSampleHits(int32 Avail
 	return FMath::Clamp(RequiredSampleHits, 1, AvailableSampleCount);
 }
 
+bool UUOULightExposureReceiverComponent::GetLightReceiverVolumeSphere(
+	FVector& OutCenter,
+	float& OutRadius) const
+{
+	OutCenter = FVector::ZeroVector;
+	OutRadius = 0.0f;
+
+	const UPrimitiveComponent* ReceiverVolume = GetReceiverVolume();
+	if (ReceiverVolume == nullptr)
+	{
+		return false;
+	}
+
+	OutCenter = ReceiverVolume->Bounds.Origin;
+	OutRadius = FMath::Max(0.0f, ReceiverVolume->Bounds.SphereRadius);
+	return OutRadius > KINDA_SMALL_NUMBER;
+}
+
+void UUOULightExposureReceiverComponent::RecordBeamVolumeOverlapEvaluation(
+	float OverlapDepth,
+	bool bAccepted)
+{
+	LastBeamOverlapDepth = FMath::Max(0.0f, OverlapDepth);
+	bLastBeamOverlapAccepted = bAccepted;
+}
+
 void UUOULightExposureReceiverComponent::ReceiveLightExposure_Implementation(const FUOULightExposureData& ExposureData)
 {
 	if (ExposureData.Intensity <= 0.0f || ExposureData.DeltaTime <= 0.0f)
@@ -184,6 +226,9 @@ void UUOULightExposureReceiverComponent::ReceiveLightExposure_Implementation(con
 	}
 
 	LastExposureIntensity = ExposureData.Intensity;
+	bLastExposureUsedBeamVolumeOverlap = ExposureData.bUsedReceiverVolumeOverlap;
+	LastBeamOverlapDepth = ExposureData.ReceiverVolumeOverlapDepth;
+	bLastBeamOverlapAccepted = ExposureData.bUsedReceiverVolumeOverlap;
 	LastExposureSourceName = GetNameSafe(ExposureData.Source);
 	LastExposureSourceActor = Cast<AActor>(ExposureData.Source);
 	if (LastExposureSourceActor == nullptr)
@@ -230,6 +275,7 @@ bool UUOULightExposureReceiverComponent::IsReceivingLight() const
 
 void UUOULightExposureReceiverComponent::ValidateTemperatureSettings()
 {
+	MinimumBeamOverlapDepth = FMath::Max(0.0f, MinimumBeamOverlapDepth);
 	ReceiverSampleInset = FMath::Clamp(ReceiverSampleInset, 0.0f, 1.0f);
 	RequiredReceiverSampleHits = FMath::Clamp(RequiredReceiverSampleHits, 1, 5);
 	RequiredReceiverSampleHitsWhileLit = FMath::Clamp(RequiredReceiverSampleHitsWhileLit, 1, 5);

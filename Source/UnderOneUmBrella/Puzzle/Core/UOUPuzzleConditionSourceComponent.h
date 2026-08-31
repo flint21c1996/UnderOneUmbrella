@@ -10,9 +10,9 @@
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnPuzzleConditionChangedSignature, bool, bIsSatisfied);
 
-// 개별 퍼즐 조건의 만족 여부를 공통 방식으로 다루는 기반 컴포넌트입니다.
-// 버튼, 물, 저울 같은 조건 소스는 이 클래스를 상속받아 상태를 노출합니다.
-UCLASS(Abstract, BlueprintType, Blueprintable, ClassGroup=(Puzzle), meta=(BlueprintSpawnableComponent))
+// 개별 퍼즐 조건의 만족 여부를 공통 방식으로 다루는 컴포넌트입니다.
+// 버튼, 물, 저울 같은 전용 조건은 상속하고, 외부에서 판정을 끝낸 액터는 상태를 직접 전달합니다.
+UCLASS(BlueprintType, Blueprintable, ClassGroup=(Puzzle), meta=(BlueprintSpawnableComponent))
 class UNDERONEUMBRELLA_API UUOUPuzzleConditionSourceComponent
 	: public UActorComponent
 	, public IUOUDebugProvider
@@ -29,6 +29,10 @@ public:
 	// 현재 조건이 만족 상태인지 반환합니다.
 	UFUNCTION(BlueprintPure, Category = "Puzzle|Condition")
 	bool IsSatisfied() const;
+
+	// 소유 액터처럼 외부에서 조건 판정을 끝낸 시스템이 결과를 공통 조건 상태로 전달합니다.
+	UFUNCTION(BlueprintCallable, Category = "Puzzle|Condition")
+	bool SetConditionSatisfied(bool bNewSatisfied);
 
 #if UOU_WITH_PUZZLE_CHEATS
 	// HUD에서 선택한 외부 입력 액터를 해결하고 이 ConditionSource가 정상 이벤트 경로로 만족되게 합니다.

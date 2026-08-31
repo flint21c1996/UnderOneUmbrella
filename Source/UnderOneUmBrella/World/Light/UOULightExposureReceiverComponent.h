@@ -62,7 +62,13 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Receiver|Sampling", meta = (ToolTip = "한 점 대신 대상 볼륨의 중앙과 가장자리 샘플을 이용해 빛 수신 여부를 판정합니다."))
 	bool bUseReceiverVolumeSampling = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Receiver|Sampling", meta = (UseComponentPicker, AllowedClasses = "/Script/Engine.PrimitiveComponent", EditCondition = "bUseReceiverVolumeSampling", ToolTip = "빛 판정 샘플을 배치할 대상 볼륨입니다. 비워두면 Receiver Transform 또는 첫 Primitive Component를 사용합니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Receiver|Volume Overlap", meta = (ToolTip = "샘플 지점 대신 빔과 Receiver Volume의 겹침 깊이로 빛 수신 여부를 판정합니다."))
+	bool bUseBeamVolumeOverlap = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Receiver|Volume Overlap", meta = (ClampMin = "0.0", Units = "cm", EditCondition = "bUseBeamVolumeOverlap", ToolTip = "가장자리 스침을 제외하기 위해 빔과 Receiver Volume이 겹쳐야 하는 최소 깊이입니다."))
+	float MinimumBeamOverlapDepth = 10.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Receiver|Sampling", meta = (UseComponentPicker, AllowedClasses = "/Script/Engine.PrimitiveComponent", EditCondition = "bUseReceiverVolumeSampling || bUseBeamVolumeOverlap", ToolTip = "샘플 또는 빔 겹침 판정에 사용할 대상 볼륨입니다. 비워두면 Receiver Transform 또는 첫 Primitive Component를 사용합니다."))
 	FComponentReference ReceiverVolumeReference;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Receiver|Sampling", meta = (ClampMin = "0.0", ClampMax = "1.0", EditCondition = "bUseReceiverVolumeSampling", ToolTip = "판정 샘플을 볼륨 중심에서 가장자리 쪽으로 배치하는 비율입니다."))
@@ -119,6 +125,15 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Runtime", meta = (ToolTip = "마지막으로 이 수신체에 빛을 준 광원 액터입니다."))
 	TObjectPtr<AActor> LastExposureSourceActor = nullptr;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Runtime", meta = (Units = "cm", ToolTip = "마지막으로 수신한 빔과 Receiver Volume의 겹침 깊이입니다."))
+	float LastBeamOverlapDepth = 0.0f;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Runtime", meta = (ToolTip = "마지막 노출이 빔과 Receiver Volume의 겹침 깊이 판정을 사용했으면 true입니다."))
+	bool bLastExposureUsedBeamVolumeOverlap = false;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Runtime", meta = (ToolTip = "마지막 빔 겹침 평가가 최소 깊이를 통과했으면 true입니다."))
+	bool bLastBeamOverlapAccepted = false;
+
 	UFUNCTION(BlueprintCallable, Category = "Light|Temperature", meta = (ToolTip = "현재 온도를 설정합니다. Min Temperature와 Max Temperature 사이로 제한됩니다."))
 	void SetTemperature(float NewTemperature);
 
@@ -132,6 +147,10 @@ public:
 		const FVector& BeamDirection,
 		TArray<FVector>& OutSamplePositions) const;
 	int32 GetRequiredLightSampleHits(int32 AvailableSampleCount) const;
+	// 선택된 Receiver Volume의 월드 Bounds를 구형 겹침 계산에 사용할 중심과 반지름으로 반환합니다.
+	bool GetLightReceiverVolumeSphere(FVector& OutCenter, float& OutRadius) const;
+	// 성공 여부와 관계없이 마지막 겹침 깊이를 디버그 Runtime 값으로 기록합니다.
+	void RecordBeamVolumeOverlapEvaluation(float OverlapDepth, bool bAccepted);
 
 protected:
 	float LastExposureWorldTime = -BIG_NUMBER;

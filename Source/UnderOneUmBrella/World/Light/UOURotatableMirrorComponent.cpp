@@ -98,15 +98,8 @@ void UUOURotatableMirrorComponent::GatherDevelopmentDebugDraw(
 		return;
 	}
 
-	const FTransform& RotatingTransform = RotatingComponentPtr->GetComponentTransform();
-	const FVector PivotLocation = RotatingTransform.TransformPosition(LocalPivotOffset);
-	FVector RotationAxisWorld = RotatingTransform
-		.TransformVectorNoScale(LocalRotationAxis)
-		.GetSafeNormal();
-	if (RotationAxisWorld.IsNearlyZero())
-	{
-		RotationAxisWorld = FVector::UpVector;
-	}
+	const FVector PivotLocation = GetPivotWorldLocation();
+	const FVector RotationAxisWorld = GetRotationAxisWorld();
 
 	Context.DrawLine(
 		PivotLocation - RotationAxisWorld * 75.0f,
@@ -510,10 +503,23 @@ void UUOURotatableMirrorComponent::ApplyCurrentRotation()
 		return;
 	}
 
-	const FQuat LocalDeltaRotation(
-		LocalRotationAxis,
-		FMath::DegreesToRadians(CurrentAngle));
-	const FQuat NewRelativeRotation = InitialRelativeRotation * LocalDeltaRotation;
+	const float AngleRadians = FMath::DegreesToRadians(CurrentAngle);
+	FQuat NewRelativeRotation;
+	if (RotationAxisMode == EUOURotatableMirrorAxisMode::WorldUp)
+	{
+		// 상대 Transform에 월드 수직축 회전을 적용할 수 있도록 축만 부모 공간으로 변환합니다.
+		const USceneComponent* ParentComponent = RotatingComponent->GetAttachParent();
+		const FVector ParentSpaceWorldUp = ParentComponent != nullptr
+			? ParentComponent->GetComponentQuat().UnrotateVector(FVector::UpVector).GetSafeNormal()
+			: FVector::UpVector;
+		const FQuat ParentSpaceDeltaRotation(ParentSpaceWorldUp, AngleRadians);
+		NewRelativeRotation = ParentSpaceDeltaRotation * InitialRelativeRotation;
+	}
+	else
+	{
+		const FQuat LocalDeltaRotation(LocalRotationAxis, AngleRadians);
+		NewRelativeRotation = InitialRelativeRotation * LocalDeltaRotation;
+	}
 	const FVector InitialPivotLocation =
 		InitialRelativeLocation + InitialRelativeRotation.RotateVector(LocalPivotOffset);
 	const FVector NewRelativeLocation =
@@ -584,6 +590,11 @@ FVector UUOURotatableMirrorComponent::GetPivotWorldLocation() const
 
 FVector UUOURotatableMirrorComponent::GetRotationAxisWorld() const
 {
+	if (RotationAxisMode == EUOURotatableMirrorAxisMode::WorldUp)
+	{
+		return FVector::UpVector;
+	}
+
 	return RotatingComponent != nullptr
 		? RotatingComponent->GetComponentTransform().TransformVectorNoScale(LocalRotationAxis).GetSafeNormal()
 		: FVector::UpVector;

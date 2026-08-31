@@ -13,6 +13,13 @@ class UAnimMontage;
 class UPrimitiveComponent;
 class USceneComponent;
 
+UENUM(BlueprintType)
+enum class EUOURotatableMirrorAxisMode : uint8
+{
+	WorldUp UMETA(DisplayName = "World Up", ToolTip = "초기 기울기와 무관하게 월드 Z축을 중심으로 회전합니다."),
+	ComponentLocal UMETA(DisplayName = "Component Local", ToolTip = "회전 컴포넌트의 로컬 축을 중심으로 회전합니다.")
+};
+
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
 	FUOUMirrorRotationChangedSignature,
 	float,
@@ -77,7 +84,11 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Mirror|Components", meta = (ToolTip = "찾은 Push Volume을 Query Only 및 Pawn Overlap으로 자동 설정합니다."))
 	bool bConfigurePushVolumeCollision = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Mirror|Rotation", meta = (ToolTip = "회전 컴포넌트 로컬 공간에서 사용할 회전축입니다. 세워진 거울은 기본값인 Z축을 사용합니다."))
+	// 시각적인 초기 기울기와 플레이어가 조작할 회전축의 기준을 분리합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Mirror|Rotation", meta = (ToolTip = "World Up은 초기 Pitch/Roll을 유지한 채 월드 Z축으로 회전하며, Component Local은 기존 로컬 축 회전을 사용합니다."))
+	EUOURotatableMirrorAxisMode RotationAxisMode = EUOURotatableMirrorAxisMode::WorldUp;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Mirror|Rotation", meta = (EditCondition = "RotationAxisMode == EUOURotatableMirrorAxisMode::ComponentLocal", EditConditionHides, ToolTip = "Component Local 모드에서 회전 컴포넌트 로컬 공간에 사용할 회전축입니다."))
 	FVector LocalRotationAxis = FVector::UpVector;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Mirror|Rotation", meta = (ToolTip = "회전 컴포넌트 원점에서 실제 회전축까지의 로컬 위치 보정값입니다."))

@@ -18,6 +18,58 @@ struct FPropertyChangedChainEvent;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FUOURewardFeedbackFinishedSignature);
 
+// 동일한 Feedback 실행기가 Reward 등장 단계에서 사용할 별도 설정입니다.
+USTRUCT(BlueprintType)
+struct UNDERONEUMBRELLA_API FUOURewardAppearanceFeedbackSettings
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Feedback")
+	bool bEnabled = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Feedback|Timeline")
+	TArray<FUOURewardPresentationCue> CueRequests;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Feedback|Effect")
+	TObjectPtr<UNiagaraSystem> NiagaraEffect = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Feedback|Effect")
+	bool bSpawnEffectAtPlayer = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Feedback|Effect")
+	FVector EffectLocationOffset = FVector::ZeroVector;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Feedback|Effect")
+	FVector EffectScale = FVector::OneVector;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Feedback|Input")
+	bool bBlockPlayerInput = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Feedback|Input")
+	bool bStopMovementImmediately = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Feedback|Animation")
+	TObjectPtr<UAnimMontage> PlayerMontage = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Feedback|Animation", meta = (ClampMin = "0.01"))
+	float MontagePlayRate = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Feedback|Animation")
+	FName MontageStartSection = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Feedback|Camera")
+	bool bUseTemporaryCameraZoom = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Feedback|Camera", meta = (ClampMin = "0.0"))
+	float CameraTargetDistance = 300.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Feedback|Camera", meta = (ClampMin = "1.0"))
+	float CameraTargetOrthoWidth = 500.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Feedback|Camera")
+	FVector CameraFocusOffset = FVector(0.0f, 0.0f, 80.0f);
+};
+
 // 보상 수집 시 파티클, 입력 잠금, 카메라 줌을 하나의 짧은 연출 수명 주기로 관리합니다.
 UCLASS(ClassGroup=(Reward), meta=(BlueprintSpawnableComponent, DisplayName="UOU Reward Feedback"))
 class UNDERONEUMBRELLA_API UUOURewardFeedbackComponent : public UActorComponent
@@ -37,63 +89,68 @@ public:
 	void SynchronizeCueRequestsForEditor();
 #endif
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Feedback")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Feedback|Collection")
 	bool bFeedbackEnabled = true;
+
+	// 등장 단계도 같은 Feedback 실행기를 사용하되 Collection과 설정 데이터는 분리합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Feedback|Appearance")
+	FUOURewardAppearanceFeedbackSettings AppearanceFeedback;
 
 	// 하나의 Motion 시간축에서 실행할 Feedback 및 Presentation 요청 목록입니다.
 	UPROPERTY(
 		EditAnywhere,
 		BlueprintReadOnly,
-		Category = "Reward|Feedback|Timeline",
+		Category = "Reward|Feedback|Collection|Timeline",
 		meta = (DisplayName = "Cue Requests"))
 	TArray<FUOURewardPresentationCue> CueRequests;
 
 	// MotionComponent가 수집 시작 시 복사할 Cue 요청 목록을 제공합니다.
 	const TArray<FUOURewardPresentationCue>& GetCueRequests() const;
+	const TArray<FUOURewardPresentationCue>& GetAppearanceCueRequests() const;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Feedback|Effect")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Feedback|Collection|Effect")
 	TObjectPtr<UNiagaraSystem> CollectionEffect = nullptr;
 
 	// true면 플레이어 위치, false면 수집되기 직전 보상 위치를 파티클 기준점으로 사용합니다.
 	UPROPERTY(
 		EditAnywhere,
 		BlueprintReadOnly,
-		Category = "Reward|Feedback|Effect",
+		Category = "Reward|Feedback|Collection|Effect",
 		meta = (EditCondition = "CollectionEffect != nullptr", EditConditionHides))
 	bool bSpawnEffectAtCollector = true;
 
 	UPROPERTY(
 		EditAnywhere,
 		BlueprintReadOnly,
-		Category = "Reward|Feedback|Effect",
+		Category = "Reward|Feedback|Collection|Effect",
 		meta = (EditCondition = "CollectionEffect != nullptr", EditConditionHides))
 	FVector EffectLocationOffset = FVector(0.0f, 0.0f, 100.0f);
 
 	UPROPERTY(
 		EditAnywhere,
 		BlueprintReadOnly,
-		Category = "Reward|Feedback|Effect",
+		Category = "Reward|Feedback|Collection|Effect",
 		meta = (EditCondition = "CollectionEffect != nullptr", EditConditionHides))
 	FVector EffectScale = FVector::OneVector;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Feedback|Input")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Feedback|Collection|Input")
 	bool bBlockPlayerInput = true;
 
 	UPROPERTY(
 		EditAnywhere,
 		BlueprintReadOnly,
-		Category = "Reward|Feedback|Input",
+		Category = "Reward|Feedback|Collection|Input",
 		meta = (EditCondition = "bBlockPlayerInput", EditConditionHides))
 	bool bStopMovementImmediately = true;
 
 	// 플레이어가 보상을 획득했음을 몸동작으로 보여줄 전용 몽타주입니다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Feedback|Animation")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Feedback|Collection|Animation")
 	TObjectPtr<UAnimMontage> CollectionMontage = nullptr;
 
 	UPROPERTY(
 		EditAnywhere,
 		BlueprintReadOnly,
-		Category = "Reward|Feedback|Animation",
+		Category = "Reward|Feedback|Collection|Animation",
 		meta = (
 			ClampMin = "0.01",
 			EditCondition = "CollectionMontage != nullptr",
@@ -103,17 +160,17 @@ public:
 	UPROPERTY(
 		EditAnywhere,
 		BlueprintReadOnly,
-		Category = "Reward|Feedback|Animation",
+		Category = "Reward|Feedback|Collection|Animation",
 		meta = (EditCondition = "CollectionMontage != nullptr", EditConditionHides))
 	FName MontageStartSection = NAME_None;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Feedback|Camera")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Feedback|Collection|Camera")
 	bool bUseTemporaryCameraZoom = true;
 
 	UPROPERTY(
 		EditAnywhere,
 		BlueprintReadOnly,
-		Category = "Reward|Feedback|Camera",
+		Category = "Reward|Feedback|Collection|Camera",
 		meta = (
 			ClampMin = "0.0",
 			EditCondition = "bUseTemporaryCameraZoom",
@@ -124,7 +181,7 @@ public:
 	UPROPERTY(
 		EditAnywhere,
 		BlueprintReadOnly,
-		Category = "Reward|Feedback|Camera",
+		Category = "Reward|Feedback|Collection|Camera",
 		meta = (
 			ClampMin = "1.0",
 			EditCondition = "bUseTemporaryCameraZoom",
@@ -135,7 +192,7 @@ public:
 	UPROPERTY(
 		EditAnywhere,
 		BlueprintReadOnly,
-		Category = "Reward|Feedback|Camera",
+		Category = "Reward|Feedback|Collection|Camera",
 		meta = (
 			EditCondition = "bUseTemporaryCameraZoom",
 			EditConditionHides,
@@ -149,6 +206,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Reward|Feedback")
 	bool BeginFeedback(AUOUCharacter* Collector, FVector RewardWorldLocation);
 
+	// Reward 활성화 전 Appearance 타임라인이 사용할 Feedback 수명 주기를 시작합니다.
+	UFUNCTION(BlueprintCallable, Category = "Reward|Feedback")
+	bool BeginAppearanceFeedback(AUOUCharacter* PlayerCharacter, FVector RewardWorldLocation);
+
 	// Feedback Cue 목록에서 선택한 동작 하나만 실행합니다.
 	UFUNCTION(BlueprintCallable, Category = "Reward|Feedback|Cue")
 	bool ExecuteFeedbackCue(EUOURewardFeedbackCueAction FeedbackAction);
@@ -160,6 +221,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Reward|Feedback")
 	void FinishFeedback();
 
+	// 비활성화나 EndPlay처럼 상위 연출 자체가 취소될 때 완료 이벤트 없이 상태를 정리합니다.
+	UFUNCTION(BlueprintCallable, Category = "Reward|Feedback")
+	void CancelFeedback();
+
 	UFUNCTION(BlueprintPure, Category = "Reward|Feedback")
 	bool IsFeedbackPlaying() const;
 
@@ -169,8 +234,12 @@ protected:
 
 private:
 #if WITH_EDITOR
-	bool NormalizeCueRequestIdsForEditor();
+	bool NormalizeCueRequestIdsForEditor(TArray<FUOURewardPresentationCue>& Requests);
 #endif
+	bool BeginFeedbackInternal(
+		AUOUCharacter* Collector,
+		FVector RewardWorldLocation,
+		bool bForAppearance);
 
 	// ExecuteFeedbackCue가 선택한 개별 피드백 동작을 실제로 실행합니다.
 	bool PlayPlayerAnimationFeedback();
@@ -190,6 +259,8 @@ private:
 	// Motion 타임라인이 종료되어 예약된 Cue가 모두 전달되었는지 나타냅니다.
 	bool bFeedbackSequenceCompleted = false;
 	bool bCollectionMontagePlaying = false;
+	// 하나의 실행기를 공유하므로 현재 어떤 단계의 설정을 읽어야 하는지만 보존합니다.
+	bool bAppearanceFeedbackActive = false;
 	// Niagara를 Reward 위치에 생성할 때 사용하는 수집 시작 시점의 위치입니다.
 	FVector ActiveRewardWorldLocation = FVector::ZeroVector;
 
