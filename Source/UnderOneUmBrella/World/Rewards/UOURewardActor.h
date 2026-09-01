@@ -10,6 +10,7 @@
 
 class AActor;
 class AUOURewardActor;
+class UArrowComponent;
 class UPrimitiveComponent;
 class UNiagaraComponent;
 class UUOURewardCollectedConditionComponent;
@@ -86,6 +87,10 @@ public:
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Reward|Components")
 	TObjectPtr<USceneComponent> RootScene = nullptr;
+
+	// 수집 카메라 연출에서 플레이어가 바라볼 월드 정면을 에디터에 표시합니다.
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Reward|Components")
+	TObjectPtr<UArrowComponent> FeedbackFrontDirection = nullptr;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Reward|Components")
 	TObjectPtr<USphereComponent> CollectionTrigger = nullptr;
@@ -170,6 +175,7 @@ private:
 	void DisableCollectionInteraction();
 	void HideCollectedVisual();
 	void BeginRewardFeedback();
+	FVector GetFeedbackFrontDirection() const;
 	bool RoutePresentationCueToUI(const FUOURewardPresentationCue& Cue);
 	void ExecuteMotionCue(const FUOURewardPresentationCue& Cue);
 	void TryCompleteCollection();
