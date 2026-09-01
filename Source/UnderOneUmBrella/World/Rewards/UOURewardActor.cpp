@@ -2,6 +2,7 @@
 
 #include "World/Rewards/UOURewardActor.h"
 
+#include "Components/ArrowComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/SphereComponent.h"
 #include "Components/SplineComponent.h"
@@ -32,6 +33,13 @@ AUOURewardActor::AUOURewardActor()
 
 	RootScene = CreateDefaultSubobject<USceneComponent>(TEXT("RootScene"));
 	SetRootComponent(RootScene);
+
+	FeedbackFrontDirection = CreateDefaultSubobject<UArrowComponent>(TEXT("FeedbackFrontDirection"));
+	FeedbackFrontDirection->bEditableWhenInherited = true;
+	FeedbackFrontDirection->SetupAttachment(RootScene);
+	FeedbackFrontDirection->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	FeedbackFrontDirection->SetGenerateOverlapEvents(false);
+	FeedbackFrontDirection->SetHiddenInGame(true);
 
 	CollectionTrigger = CreateDefaultSubobject<USphereComponent>(TEXT("CollectionTrigger"));
 	CollectionTrigger->SetupAttachment(RootScene);
@@ -154,6 +162,19 @@ EDataValidationResult AUOURewardActor::IsDataValid(FDataValidationContext& Conte
 		AddValidationError(FText::Format(
 			FText::FromString(TEXT("RewardId '{0}'가 현재 스테이지의 RewardIds에 없습니다.")),
 			FText::FromName(RewardId)));
+	}
+
+	if (RewardFeedbackComponent != nullptr
+		&& RewardFeedbackComponent->bAlignCollectorToRewardFront
+		&& FeedbackFrontDirection != nullptr)
+	{
+		FVector PlanarFrontDirection = FeedbackFrontDirection->GetForwardVector();
+		PlanarFrontDirection.Z = 0.0f;
+		if (PlanarFrontDirection.IsNearlyZero())
+		{
+			AddValidationError(FText::FromString(
+				TEXT("FeedbackFrontDirection이 수직을 향해 수집 카메라용 평면 정면을 계산할 수 없습니다.")));
+		}
 	}
 
 	if (!RewardId.IsNone())
@@ -611,7 +632,8 @@ void AUOURewardActor::BeginRewardFeedback()
 
 	if (!RewardFeedbackComponent->BeginFeedback(
 			PlayerCharacter,
-			GetActorLocation()))
+			GetActorLocation(),
+			GetFeedbackFrontDirection()))
 	{
 		bWaitingForRewardFeedback = false;
 		TryCompleteCollection();
@@ -619,6 +641,22 @@ void AUOURewardActor::BeginRewardFeedback()
 	}
 
 	TryCompleteCollection();
+}
+
+FVector AUOURewardActor::GetFeedbackFrontDirection() const
+{
+	FVector FrontDirection = FeedbackFrontDirection != nullptr
+		? FeedbackFrontDirection->GetForwardVector()
+		: GetActorForwardVector();
+	FrontDirection.Z = 0.0f;
+	if (FrontDirection.Normalize())
+	{
+		return FrontDirection;
+	}
+
+	FrontDirection = GetActorForwardVector();
+	FrontDirection.Z = 0.0f;
+	return FrontDirection.GetSafeNormal(SMALL_NUMBER, FVector::ForwardVector);
 }
 
 bool AUOURewardActor::RoutePresentationCueToUI(

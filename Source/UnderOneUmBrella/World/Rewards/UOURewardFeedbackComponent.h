@@ -167,6 +167,16 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward|Feedback|Collection|Camera")
 	bool bUseTemporaryCameraZoom = true;
 
+	// 카메라 포커스 시작 직전에 플레이어 Yaw를 Reward의 FeedbackFrontDirection에 맞춥니다.
+	UPROPERTY(
+		EditAnywhere,
+		BlueprintReadOnly,
+		Category = "Reward|Feedback|Collection|Camera",
+		meta = (
+			EditCondition = "bUseTemporaryCameraZoom",
+			EditConditionHides))
+	bool bAlignCollectorToRewardFront = true;
+
 	UPROPERTY(
 		EditAnywhere,
 		BlueprintReadOnly,
@@ -204,7 +214,10 @@ public:
 
 	// 개별 피드백 동작을 실행하기 전에 플레이어 참조와 입력 차단 상태를 준비합니다.
 	UFUNCTION(BlueprintCallable, Category = "Reward|Feedback")
-	bool BeginFeedback(AUOUCharacter* Collector, FVector RewardWorldLocation);
+	bool BeginFeedback(
+		AUOUCharacter* Collector,
+		FVector RewardWorldLocation,
+		FVector RewardFrontDirection);
 
 	// Reward 활성화 전 Appearance 타임라인이 사용할 Feedback 수명 주기를 시작합니다.
 	UFUNCTION(BlueprintCallable, Category = "Reward|Feedback")
@@ -239,12 +252,14 @@ private:
 	bool BeginFeedbackInternal(
 		AUOUCharacter* Collector,
 		FVector RewardWorldLocation,
+		FVector RewardFrontDirection,
 		bool bForAppearance);
 
 	// ExecuteFeedbackCue가 선택한 개별 피드백 동작을 실제로 실행합니다.
 	bool PlayPlayerAnimationFeedback();
 	bool SpawnNiagaraFeedback();
 	bool StartCameraFeedback();
+	bool AlignCollectorToRewardFront();
 
 	void ApplyPlayerInputBlock(AUOUCharacter* Collector);
 	bool StartCollectionMontage();
@@ -263,6 +278,8 @@ private:
 	bool bAppearanceFeedbackActive = false;
 	// Niagara를 Reward 위치에 생성할 때 사용하는 수집 시작 시점의 위치입니다.
 	FVector ActiveRewardWorldLocation = FVector::ZeroVector;
+	// 수집 카메라 Cue가 플레이어 정렬에 사용할 Reward의 월드 평면 정면입니다.
+	FVector ActiveRewardFrontDirection = FVector::ForwardVector;
 
 	UPROPERTY(Transient)
 	TObjectPtr<AUOUCharacter> ActiveCollector = nullptr;
