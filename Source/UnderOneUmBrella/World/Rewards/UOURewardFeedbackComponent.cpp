@@ -115,21 +115,31 @@ bool UUOURewardFeedbackComponent::NormalizeCueRequestIdsForEditor(
 
 bool UUOURewardFeedbackComponent::BeginFeedback(
 	AUOUCharacter* Collector,
-	FVector RewardWorldLocation)
+	FVector RewardWorldLocation,
+	FVector RewardFrontDirection)
 {
-	return BeginFeedbackInternal(Collector, RewardWorldLocation, false);
+	return BeginFeedbackInternal(
+		Collector,
+		RewardWorldLocation,
+		RewardFrontDirection,
+		false);
 }
 
 bool UUOURewardFeedbackComponent::BeginAppearanceFeedback(
 	AUOUCharacter* PlayerCharacter,
 	FVector RewardWorldLocation)
 {
-	return BeginFeedbackInternal(PlayerCharacter, RewardWorldLocation, true);
+	return BeginFeedbackInternal(
+		PlayerCharacter,
+		RewardWorldLocation,
+		FVector::ForwardVector,
+		true);
 }
 
 bool UUOURewardFeedbackComponent::BeginFeedbackInternal(
 	AUOUCharacter* Collector,
 	FVector RewardWorldLocation,
+	FVector RewardFrontDirection,
 	bool bForAppearance)
 {
 	const bool bPhaseEnabled = bForAppearance
@@ -148,6 +158,17 @@ bool UUOURewardFeedbackComponent::BeginFeedbackInternal(
 	bAppearanceFeedbackActive = bForAppearance;
 	ActiveCollector = Collector;
 	ActiveRewardWorldLocation = RewardWorldLocation;
+	ActiveRewardFrontDirection = RewardFrontDirection;
+	ActiveRewardFrontDirection.Z = 0.0f;
+	if (!ActiveRewardFrontDirection.Normalize())
+	{
+		ActiveRewardFrontDirection = Collector->GetActorForwardVector();
+		ActiveRewardFrontDirection.Z = 0.0f;
+		if (!ActiveRewardFrontDirection.Normalize())
+		{
+			ActiveRewardFrontDirection = FVector::ForwardVector;
+		}
+	}
 
 	ApplyPlayerInputBlock(Collector);
 	return true;
@@ -236,6 +257,11 @@ bool UUOURewardFeedbackComponent::StartCameraFeedback()
 		return false;
 	}
 
+	if (!AlignCollectorToRewardFront())
+	{
+		return false;
+	}
+
 	if (ActiveCameraController == nullptr)
 	{
 		ActiveCameraController = ActiveCollector->GetCameraControllerComponent();
@@ -259,6 +285,29 @@ bool UUOURewardFeedbackComponent::StartCameraFeedback()
 			: CameraFocusOffset,
 		true);
 	return ActiveCameraController->IsTemporaryZoomRequestedBy(this);
+}
+
+bool UUOURewardFeedbackComponent::AlignCollectorToRewardFront()
+{
+	if (bAppearanceFeedbackActive || !bAlignCollectorToRewardFront)
+	{
+		return true;
+	}
+
+	if (ActiveCollector == nullptr)
+	{
+		return false;
+	}
+
+	FVector FlatFrontDirection = ActiveRewardFrontDirection;
+	FlatFrontDirection.Z = 0.0f;
+	if (!FlatFrontDirection.Normalize())
+	{
+		return false;
+	}
+
+	const FRotator TargetRotation(0.0f, FlatFrontDirection.Rotation().Yaw, 0.0f);
+	return ActiveCollector->SetActorRotation(TargetRotation);
 }
 
 void UUOURewardFeedbackComponent::CompleteFeedbackSequence()
@@ -396,6 +445,7 @@ void UUOURewardFeedbackComponent::FinishFeedbackInternal(bool bBroadcastFinished
 	bFeedbackSequenceCompleted = false;
 	bAppearanceFeedbackActive = false;
 	ActiveRewardWorldLocation = FVector::ZeroVector;
+	ActiveRewardFrontDirection = FVector::ForwardVector;
 	ReleasePlayerFeedback();
 
 	if (bBroadcastFinished)

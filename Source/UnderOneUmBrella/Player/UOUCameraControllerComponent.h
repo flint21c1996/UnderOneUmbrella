@@ -263,6 +263,14 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Camera|Runtime")
 	FVector TemporaryZoomFocusOffset = FVector::ZeroVector;
 
+	// 요청 순간 Owner 로컬 FocusOffset을 변환한 월드 보정값입니다.
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Camera|Runtime")
+	FVector TemporaryZoomWorldFocusOffset = FVector::ZeroVector;
+
+	// 임시 포커스 요청 순간 확정한 카메라 붐 Yaw입니다. 연출 중 플레이어 회전과 분리해 구도를 고정합니다.
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Camera|Runtime")
+	float TemporaryZoomTargetYaw = 0.0f;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Camera|Runtime")
 	bool bTemporaryZoomFaceOwnerFromFront = false;
 

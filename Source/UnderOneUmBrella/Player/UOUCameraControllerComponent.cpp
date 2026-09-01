@@ -41,6 +41,8 @@ void UUOUCameraControllerComponent::EndPlay(const EEndPlayReason::Type EndPlayRe
 {
 	TemporaryZoomRequestSource.Reset();
 	TemporaryZoomFocusOffset = FVector::ZeroVector;
+	TemporaryZoomWorldFocusOffset = FVector::ZeroVector;
+	TemporaryZoomTargetYaw = 0.0f;
 	bTemporaryZoomFaceOwnerFromFront = false;
 	AreaCameraOffset = FVector::ZeroVector;
 	RestoreAllOccludedMeshes();
@@ -185,6 +187,13 @@ void UUOUCameraControllerComponent::RequestTemporaryFocusZoom(
 	TemporaryZoomTargetDistance = FMath::Clamp(TargetDistance, MinCameraDistance, MaxCameraDistance);
 	TemporaryZoomTargetOrthoWidth = FMath::Max(1.0f, TargetOrthoWidth);
 	TemporaryZoomFocusOffset = FocusOffset;
+	const AActor* Owner = GetOwner();
+	TemporaryZoomWorldFocusOffset = Owner != nullptr
+		? Owner->GetActorTransform().TransformVectorNoScale(FocusOffset)
+		: FocusOffset;
+	TemporaryZoomTargetYaw = bFaceOwnerFromFront && Owner != nullptr
+		? FRotator::NormalizeAxis(Owner->GetActorRotation().Yaw + 180.0f)
+		: TargetCameraYaw;
 	bTemporaryZoomFaceOwnerFromFront = bFaceOwnerFromFront;
 }
 
@@ -197,6 +206,8 @@ void UUOUCameraControllerComponent::ReleaseTemporaryZoom(UObject* RequestSource)
 
 	TemporaryZoomRequestSource.Reset();
 	TemporaryZoomFocusOffset = FVector::ZeroVector;
+	TemporaryZoomWorldFocusOffset = FVector::ZeroVector;
+	TemporaryZoomTargetYaw = 0.0f;
 	bTemporaryZoomFaceOwnerFromFront = false;
 }
 
@@ -326,15 +337,13 @@ bool UUOUCameraControllerComponent::HasTemporaryZoomRequest() const
 
 float UUOUCameraControllerComponent::GetEffectiveTargetCameraYaw() const
 {
-	const AActor* Owner = GetOwner();
 	if (!HasTemporaryZoomRequest()
-		|| !bTemporaryZoomFaceOwnerFromFront
-		|| Owner == nullptr)
+		|| !bTemporaryZoomFaceOwnerFromFront)
 	{
 		return TargetCameraYaw;
 	}
 
-	return FRotator::NormalizeAxis(Owner->GetActorRotation().Yaw + 180.0f);
+	return TemporaryZoomTargetYaw;
 }
 
 float UUOUCameraControllerComponent::GetEffectiveTargetCameraDistance() const
@@ -349,14 +358,10 @@ float UUOUCameraControllerComponent::GetEffectiveTargetOrthoWidth() const
 
 FVector UUOUCameraControllerComponent::GetEffectiveTargetCameraOffset() const
 {
-	const AActor* Owner = GetOwner();
-	const FVector WorldFocusOffset = Owner != nullptr
-		? Owner->GetActorTransform().TransformVectorNoScale(TemporaryZoomFocusOffset)
-		: TemporaryZoomFocusOffset;
 	const FVector AreaAdjustedTargetOffset = TargetCameraOffset + AreaCameraOffset;
 
 	return HasTemporaryZoomRequest()
-		? AreaAdjustedTargetOffset + WorldFocusOffset
+		? AreaAdjustedTargetOffset + TemporaryZoomWorldFocusOffset
 		: AreaAdjustedTargetOffset;
 }
 
@@ -555,6 +560,10 @@ FVector UUOUCameraControllerComponent::GetCameraOcclusionTraceEnd(const AActor* 
 	if (bDialogueFocusActive)
 	{
 		return Owner->GetActorLocation() + TargetCameraOffset;
+	}
+	if (HasTemporaryZoomRequest())
+	{
+		return Owner->GetActorLocation() + GetEffectiveTargetCameraOffset();
 	}
 
 	return Owner->GetActorLocation() + OcclusionTargetOffset;
