@@ -52,6 +52,12 @@ bool UUOUDialogueSourceComponent::StartDialogue(AActor* InstigatorActor)
 	return true;
 }
 
+bool UUOUDialogueSourceComponent::StartBubbleOnlyDialogue()
+{
+	UUOUUISubsystem* UISubsystem = GetUISubsystem(nullptr);
+	return UISubsystem != nullptr && UISubsystem->StartBubbleOnlyDialogue(this);
+}
+
 bool UUOUDialogueSourceComponent::CanStartDialogue() const
 {
 	if (!bDialogueAvailable)
