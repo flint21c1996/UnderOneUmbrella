@@ -79,7 +79,7 @@ public:
 	bool bDisableEmbeddedVFXLights = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light|Visual|Range Decal", meta = (DisplayName = "끝단 범위 데칼 사용", ToolTip = "빛이 표면에 닿아 끝나는 위치에 표면 굴곡을 따라가는 범위 데칼을 표시합니다."))
-	bool bEnableEndRangeDecal = true;
+	bool bEnableEndRangeDecal = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light|Visual|Range Decal", meta = (EditCondition = "bEnableEndRangeDecal", DisplayName = "끝단 범위 데칼 머티리얼", ToolTip = "Deferred Decal 도메인의 머티리얼을 지정합니다. BeamColor와 Opacity 파라미터가 있으면 광원 색상과 투명도를 자동 적용합니다."))
 	TObjectPtr<UMaterialInterface> EndRangeDecalMaterial;
