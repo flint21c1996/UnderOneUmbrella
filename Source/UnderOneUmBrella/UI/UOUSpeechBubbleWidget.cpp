@@ -15,6 +15,12 @@
 
 namespace
 {
+	FSlateFontInfo WithFontSize(FSlateFontInfo Font, int32 FontSize)
+	{
+		Font.Size = FontSize;
+		return Font;
+	}
+
 	bool SetSpeechBubbleWidgetText(UWidget* Widget, const FText& BubbleText)
 	{
 		if (UTextBlock* TextBlock = Cast<UTextBlock>(Widget))
@@ -50,6 +56,60 @@ namespace
 		if (UMultiLineEditableText* MultiLineEditableText = Cast<UMultiLineEditableText>(Widget))
 		{
 			MultiLineEditableText->SetText(BubbleText);
+			return true;
+		}
+
+		return false;
+	}
+
+	bool SetSpeechBubbleWidgetFontSize(UWidget* Widget, int32 FontSize)
+	{
+		if (Widget == nullptr || FontSize <= 0)
+		{
+			return false;
+		}
+
+		if (UTextBlock* TextBlock = Cast<UTextBlock>(Widget))
+		{
+			TextBlock->SetFont(WithFontSize(TextBlock->GetFont(), FontSize));
+			return true;
+		}
+
+		if (URichTextBlock* RichTextBlock = Cast<URichTextBlock>(Widget))
+		{
+			FTextBlockStyle TextStyle = RichTextBlock->GetDefaultTextStyle();
+			TextStyle.SetFont(WithFontSize(TextStyle.Font, FontSize));
+			RichTextBlock->SetDefaultTextStyle(TextStyle);
+			return true;
+		}
+
+		if (UEditableText* EditableText = Cast<UEditableText>(Widget))
+		{
+			EditableText->SetFont(WithFontSize(EditableText->GetFont(), FontSize));
+			return true;
+		}
+
+		if (UMultiLineEditableText* MultiLineEditableText = Cast<UMultiLineEditableText>(Widget))
+		{
+			MultiLineEditableText->SetFont(WithFontSize(MultiLineEditableText->GetFont(), FontSize));
+			return true;
+		}
+
+		if (UEditableTextBox* EditableTextBox = Cast<UEditableTextBox>(Widget))
+		{
+			FEditableTextBoxStyle WidgetStyle = EditableTextBox->GetWidgetStyle();
+			FTextBlockStyle TextStyle = WidgetStyle.TextStyle;
+			TextStyle.SetFont(WithFontSize(TextStyle.Font, FontSize));
+			WidgetStyle.SetTextStyle(TextStyle);
+			EditableTextBox->SetWidgetStyle(WidgetStyle);
+			return true;
+		}
+
+		if (UMultiLineEditableTextBox* MultiLineEditableTextBox = Cast<UMultiLineEditableTextBox>(Widget))
+		{
+			FTextBlockStyle TextStyle = MultiLineEditableTextBox->WidgetStyle.TextStyle;
+			TextStyle.SetFont(WithFontSize(TextStyle.Font, FontSize));
+			MultiLineEditableTextBox->SetTextStyle(TextStyle);
 			return true;
 		}
 
@@ -191,6 +251,11 @@ void UUOUSpeechBubbleWidget::HideBubbleImmediately()
 	SetBubbleVisible(false);
 	FadeElapsedTime = 0.0f;
 	FadeState = EFadeState::Hidden;
+}
+
+bool UUOUSpeechBubbleWidget::SetBubbleFontSize(int32 NewFontSize)
+{
+	return SetSpeechBubbleWidgetFontSize(ResolveBubbleTextWidget(), NewFontSize);
 }
 
 void UUOUSpeechBubbleWidget::StartFadeOut()

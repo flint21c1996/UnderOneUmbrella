@@ -5,6 +5,7 @@
 #include "Blueprint/UserWidget.h"
 #include "GameFramework/Pawn.h"
 #include "Kismet/GameplayStatics.h"
+#include "UI/UOUSpeechBubbleWidget.h"
 
 namespace
 {
@@ -33,7 +34,11 @@ void UUOUInteractionHintComponent::BeginPlay()
 	OnComponentBeginOverlap.AddDynamic(this, &UUOUInteractionHintComponent::HandleBeginOverlap);
 	OnComponentEndOverlap.AddDynamic(this, &UUOUInteractionHintComponent::HandleEndOverlap);
 
-	ResolveHintWidgetComponent();
+	if (UWidgetComponent* ResolvedHintWidgetComponent = ResolveHintWidgetComponent())
+	{
+		// 처음 숨기기 전에 UserWidget을 생성해 첫 overlap에서도 ShowBubble을 호출할 수 있게 합니다.
+		ResolvedHintWidgetComponent->InitWidget();
+	}
 
 	if (bHideHintOnBeginPlay)
 	{
@@ -43,14 +48,36 @@ void UUOUInteractionHintComponent::BeginPlay()
 
 void UUOUInteractionHintComponent::ShowHint()
 {
-	UUserWidget* UserWidget = GetHintUserWidget();
-	if (UserWidget == nullptr)
+	UWidgetComponent* WidgetComponent = ResolveHintWidgetComponent();
+	if (WidgetComponent == nullptr)
 	{
 		return;
 	}
 
 	SetWidgetComponentVisible(true);
-	CallWidgetShowFunction(UserWidget);
+	WidgetComponent->InitWidget();
+
+	UUserWidget* UserWidget = WidgetComponent->GetUserWidgetObject();
+	if (UserWidget == nullptr)
+	{
+		SetWidgetComponentVisible(false);
+		return;
+	}
+
+	if (UUOUSpeechBubbleWidget* SpeechBubbleWidget = Cast<UUOUSpeechBubbleWidget>(UserWidget))
+	{
+		if (HintFontSizeOverride > 0)
+		{
+			SpeechBubbleWidget->SetBubbleFontSize(HintFontSizeOverride);
+		}
+
+		SpeechBubbleWidget->ShowBubble(HintText, HintDuration);
+	}
+	else
+	{
+		CallWidgetShowFunction(UserWidget);
+	}
+
 	bHintVisible = true;
 }
 
@@ -59,7 +86,14 @@ void UUOUInteractionHintComponent::HideHint()
 	UUserWidget* UserWidget = GetHintUserWidget();
 	if (UserWidget != nullptr)
 	{
-		CallWidgetHideFunction(UserWidget);
+		if (UUOUSpeechBubbleWidget* SpeechBubbleWidget = Cast<UUOUSpeechBubbleWidget>(UserWidget))
+		{
+			SpeechBubbleWidget->HideBubble();
+		}
+		else
+		{
+			CallWidgetHideFunction(UserWidget);
+		}
 	}
 
 	SetWidgetComponentVisible(false);

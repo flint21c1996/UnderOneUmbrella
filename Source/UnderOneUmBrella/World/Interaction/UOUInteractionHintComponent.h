@@ -46,12 +46,16 @@ public:
 	bool bAutoFindFirstWidgetComponent = true;
 
 	// 힌트 위젯에 전달할 텍스트입니다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Interaction Hint|Display")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Interaction Hint|Display", meta = (MultiLine = "true"))
 	FText HintText;
 
 	// ShowBubble 함수에 넘길 표시 시간입니다. 0보다 작으면 매우 긴 시간으로 처리합니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Interaction Hint|Display", meta = (ClampMin = "-1.0"))
 	float HintDuration = -1.0f;
+
+	// 0이면 WBP에 설정된 폰트 크기를 유지하고, 1 이상이면 이 액터의 말풍선 글자 크기로 사용합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Interaction Hint|Display", meta = (ClampMin = "0", UIMin = "0", UIMax = "96"))
+	int32 HintFontSizeOverride = 0;
 
 	// 위젯 블루프린트에서 힌트를 표시하는 함수 이름입니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Interaction Hint|Display")
