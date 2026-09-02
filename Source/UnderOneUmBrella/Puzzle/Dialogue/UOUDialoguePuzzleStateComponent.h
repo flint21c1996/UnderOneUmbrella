@@ -87,9 +87,25 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Puzzle|Dialogue State|Refresh")
 	bool bRefreshOverlappingInteraction = true;
 
+	// 해결 상태에서는 일반 대화 시작을 막고 접근 Bubble만 사용할지 정합니다.
+	// 퍼즐이 다시 불만족 상태가 되면 일반 대화 상호작용을 복구합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Puzzle|Dialogue State|Solved Bubble")
+	bool bUseBubbleOnlyWhenSolved = false;
+
+	// 퍼즐 해결 시 플레이어의 Trigger overlap 여부와 관계없이 AfterPuzzle 대사의 BubbleText를 즉시 재생합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Puzzle|Dialogue State|Solved Bubble")
+	bool bShowSolvedBubbleImmediately = false;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Puzzle|Dialogue State|Runtime")
 	bool bPuzzleSolved = false;
 
 private:
 	AActor* ResolveDialogueActor() const;
+
+	// 해결 상태 진입 전에 DialogueTrigger가 활성화되어 있었는지 저장합니다.
+	// 이 컴포넌트가 Bubble-only 처리를 위해 Trigger를 제어하는 동안만 유효한 런타임 상태입니다.
+	bool bSavedDialogueInteractionEnabled = false;
+
+	// 저장된 Trigger 상태가 있어 조건 해제 시 복구해야 하는지 기록합니다.
+	bool bHasSavedDialogueInteractionEnabled = false;
 };

@@ -27,6 +27,11 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Dialogue")
 	bool StartDialogue(AActor* InstigatorActor);
 
+	// 현재 DialogueState의 BubbleText만 순서대로 재생합니다.
+	// 일반 대화 UI와 카메라 연출, 입력 잠금, 대화 완료 이벤트는 시작하지 않습니다.
+	UFUNCTION(BlueprintCallable, Category = "Dialogue|Bubble")
+	bool StartBubbleOnlyDialogue();
+
 	// Checks repeat, cooldown, and line availability before playback.
 	UFUNCTION(BlueprintPure, Category = "Dialogue")
 	bool CanStartDialogue() const;

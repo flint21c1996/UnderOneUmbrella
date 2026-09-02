@@ -219,6 +219,51 @@ bool UUOUUISubsystem::IsDialoguePlaying() const
 	return ActiveDialogueSource.IsValid() && ActiveDialogueIndex != INDEX_NONE;
 }
 
+bool UUOUUISubsystem::StartBubbleOnlyDialogue(UUOUDialogueSourceComponent* DialogueSource)
+{
+	if (DialogueSource == nullptr
+		|| !DialogueSource->IsDialogueBubbleEnabled()
+		|| DialogueSource->GetLineCount() <= 0)
+	{
+		return false;
+	}
+
+	StopBubbleOnlyDialogueForSource(DialogueSource);
+	BubbleOnlyPlaybackStates.Add(DialogueSource);
+	return AdvanceBubbleOnlyDialogue(DialogueSource);
+}
+
+void UUOUUISubsystem::StopBubbleOnlyDialogue()
+{
+	if (UWorld* World = GetWorld())
+	{
+		for (TPair<TWeakObjectPtr<UUOUDialogueSourceComponent>, FUOUBubbleOnlyPlaybackState>& PlaybackEntry
+			: BubbleOnlyPlaybackStates)
+		{
+			World->GetTimerManager().ClearTimer(PlaybackEntry.Value.TimerHandle);
+		}
+	}
+
+	BubbleOnlyPlaybackStates.Reset();
+}
+
+void UUOUUISubsystem::StopBubbleOnlyDialogueForSource(UUOUDialogueSourceComponent* DialogueSource)
+{
+	if (DialogueSource == nullptr)
+	{
+		return;
+	}
+
+	ClearBubbleOnlyDialogueTimer(DialogueSource);
+	BubbleOnlyPlaybackStates.Remove(DialogueSource);
+}
+
+bool UUOUUISubsystem::IsBubbleOnlyDialoguePlayingForSource(
+	UUOUDialogueSourceComponent* DialogueSource) const
+{
+	return DialogueSource != nullptr && BubbleOnlyPlaybackStates.Contains(DialogueSource);
+}
+
 void UUOUUISubsystem::ShowTitle(const FUOUTitleDisplayData& TitleData)
 {
 	OnTitleRequested.Broadcast(TitleData);
@@ -321,6 +366,20 @@ void UUOUUISubsystem::ClearDialogueTimer()
 	}
 }
 
+void UUOUUISubsystem::ClearBubbleOnlyDialogueTimer(UUOUDialogueSourceComponent* DialogueSource)
+{
+	FUOUBubbleOnlyPlaybackState* PlaybackState = DialogueSource != nullptr
+		? BubbleOnlyPlaybackStates.Find(DialogueSource)
+		: nullptr;
+	if (PlaybackState != nullptr)
+	{
+		if (UWorld* World = GetWorld())
+		{
+			World->GetTimerManager().ClearTimer(PlaybackState->TimerHandle);
+		}
+	}
+}
+
 void UUOUUISubsystem::ScheduleAutoAdvanceIfNeeded(const FUOUDialogueLine& Line)
 {
 	if (Line.bWaitForInput || Line.DialogueDuration <= 0.0f)
@@ -381,4 +440,68 @@ void UUOUUISubsystem::ShowPendingDialogueLine()
 
 	BroadcastDialogueBoxLine(LineToShow);
 	ScheduleAutoAdvanceIfNeeded(LineToShow);
+}
+
+bool UUOUUISubsystem::AdvanceBubbleOnlyDialogue(
+	TWeakObjectPtr<UUOUDialogueSourceComponent> WeakDialogueSource)
+{
+	UUOUDialogueSourceComponent* DialogueSource = WeakDialogueSource.Get();
+	if (DialogueSource == nullptr || !DialogueSource->IsDialogueBubbleEnabled())
+	{
+		BubbleOnlyPlaybackStates.Remove(WeakDialogueSource);
+		return false;
+	}
+
+	FUOUBubbleOnlyPlaybackState* PlaybackState = BubbleOnlyPlaybackStates.Find(WeakDialogueSource);
+	if (PlaybackState == nullptr)
+	{
+		return false;
+	}
+
+	ClearBubbleOnlyDialogueTimer(DialogueSource);
+	while (PlaybackState->NextLineIndex >= 0
+		&& PlaybackState->NextLineIndex < DialogueSource->GetLineCount())
+	{
+		const FUOUDialogueLine* SourceLine = DialogueSource->GetLine(PlaybackState->NextLineIndex++);
+		if (SourceLine == nullptr)
+		{
+			continue;
+		}
+
+		const FUOUDialogueLine DisplayLine = NormalizeDialogueLineForDisplay(*SourceLine);
+		if (DisplayLine.BubbleText.IsEmpty() || DisplayLine.BubbleDuration <= 0.0f)
+		{
+			continue;
+		}
+
+		AActor* SpeakerActor = DialogueSource->GetSpeakerActor();
+		OnDialogueBubbleRequested.Broadcast(SpeakerActor, DisplayLine.BubbleText, DisplayLine.BubbleDuration);
+		if (RegisteredHUDWidget.IsValid())
+		{
+			RegisteredHUDWidget->ShowNPCSpeechBubbleStyled(
+				SpeakerActor,
+				DisplayLine.BubbleText,
+				DisplayLine.BubbleDuration,
+				DisplayLine.PresentationStyle);
+		}
+
+		if (UWorld* World = GetWorld())
+		{
+			const FTimerDelegate AdvanceDelegate = FTimerDelegate::CreateWeakLambda(
+				this,
+				[this, WeakDialogueSource]()
+				{
+					AdvanceBubbleOnlyDialogue(WeakDialogueSource);
+				});
+			World->GetTimerManager().SetTimer(
+				PlaybackState->TimerHandle,
+				AdvanceDelegate,
+				DisplayLine.BubbleDuration,
+				false);
+		}
+		return true;
+	}
+
+	StopBubbleOnlyDialogueForSource(DialogueSource);
+	return false;
 }
