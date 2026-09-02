@@ -29,6 +29,37 @@ AUOUAudioTriggerActor::AUOUAudioTriggerActor()
 	AudioCueComponent->SetupAttachment(RootScene);
 }
 
+void AUOUAudioTriggerActor::ApplyPuzzleResult_Implementation(EOUUPuzzleResultAction Action)
+{
+	switch (Action)
+	{
+	case EOUUPuzzleResultAction::Activate:
+	case EOUUPuzzleResultAction::Resume:
+		PlayAudioEvent();
+		break;
+
+	case EOUUPuzzleResultAction::Deactivate:
+	case EOUUPuzzleResultAction::Pause:
+		StopAudioEvent();
+		break;
+
+	case EOUUPuzzleResultAction::Toggle:
+		if (bIsAudioPlaybackActive)
+		{
+			StopAudioEvent();
+		}
+		else
+		{
+			PlayAudioEvent();
+		}
+		break;
+
+	case EOUUPuzzleResultAction::None:
+	default:
+		break;
+	}
+}
+
 void AUOUAudioTriggerActor::BeginPlay()
 {
 	Super::BeginPlay();
@@ -98,6 +129,7 @@ bool AUOUAudioTriggerActor::PlayAudioEvent()
 	if (bPlayed)
 	{
 		bHasPlayed = true;
+		bIsAudioPlaybackActive = true;
 	}
 
 	return bPlayed;
@@ -191,6 +223,10 @@ bool AUOUAudioTriggerActor::StopAudioEvent(float OverrideFadeOutTime)
 			bStopped = AudioSubsystem->StopAudioEvent(AudioEventId, ResolvedAudioInstanceId, OverrideFadeOutTime);
 		}
 	}
+
+	// 관리되지 않는 일회성 사운드는 이미 끝났을 수 있으므로 정지 성공 여부와 관계없이
+	// 퍼즐 결과가 요청한 재생 상태는 비활성으로 갱신합니다.
+	bIsAudioPlaybackActive = false;
 
 	return bStopped;
 }

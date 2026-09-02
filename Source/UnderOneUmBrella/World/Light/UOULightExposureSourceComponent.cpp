@@ -1475,10 +1475,9 @@ bool UUOULightExposureSourceComponent::TryBuildExposureData(
 		Cast<UUOULightExposureReceiverComponent>(ReceiverObject);
 		ReceiverComponent != nullptr)
 	{
-		// 우산은 개별 샘플이 아니라 수신 오브젝트의 중심 광로를 기준으로 색 채널 전체를 가립니다.
-		if ((ReceiverComponent->bUseReceiverVolumeSampling ||
-			ReceiverComponent->bUseBeamVolumeOverlap) &&
-			IsReceiverCenterOccludedByUmbrellaShade(ReceiverObject, OutBlockingHit))
+		// 우산 차폐는 일반 충돌 Line Of Sight나 볼륨 샘플링 설정과 무관한 게임플레이 규칙입니다.
+		// 수신 오브젝트의 중심 광로가 막히면 해당 광원의 색 채널 전체를 제거합니다.
+		if (IsReceiverCenterOccludedByUmbrellaShade(ReceiverObject, OutBlockingHit))
 		{
 			return false;
 		}

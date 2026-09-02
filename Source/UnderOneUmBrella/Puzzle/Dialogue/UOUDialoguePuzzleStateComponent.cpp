@@ -45,10 +45,34 @@ void UUOUDialoguePuzzleStateComponent::SetPuzzleSolved(bool bNewPuzzleSolved)
 			DialogueTrigger->ResetTrigger();
 		}
 
-		if (bRefreshOverlappingInteraction)
+		if (bUseBubbleOnlyWhenSolved && bPuzzleSolved)
+		{
+			if (!bHasSavedDialogueInteractionEnabled)
+			{
+				bSavedDialogueInteractionEnabled = DialogueTrigger->bDialogueInteractionEnabled;
+				bHasSavedDialogueInteractionEnabled = true;
+			}
+
+			DialogueTrigger->SetDialogueInteractionEnabled(false);
+		}
+		else if (bUseBubbleOnlyWhenSolved && bHasSavedDialogueInteractionEnabled)
+		{
+			DialogueTrigger->SetDialogueInteractionEnabled(bSavedDialogueInteractionEnabled);
+			bHasSavedDialogueInteractionEnabled = false;
+		}
+		else if (bRefreshOverlappingInteraction)
 		{
 			DialogueTrigger->RefreshOverlappingInteraction();
 		}
+
+	}
+
+	if (bStateChanged
+		&& bPuzzleSolved
+		&& bShowSolvedBubbleImmediately
+		&& DialogueSource != nullptr)
+	{
+		DialogueSource->StartBubbleOnlyDialogue();
 	}
 
 	OnDialoguePuzzleStateApplied.Broadcast(bPuzzleSolved, TargetState);

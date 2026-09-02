@@ -94,6 +94,24 @@ public:
 	UFUNCTION(BlueprintPure, Category = "UI|Dialogue")
 	int32 GetActiveDialogueIndex() const { return ActiveDialogueIndex; }
 
+	// DialogueSource의 현재 상태에서 BubbleText만 순서대로 재생합니다.
+	// 일반 대화 표시나 완료 이벤트와 독립적으로 동작합니다.
+	UFUNCTION(BlueprintCallable, Category = "UI|Dialogue Bubble")
+	bool StartBubbleOnlyDialogue(UUOUDialogueSourceComponent* DialogueSource);
+
+	UFUNCTION(BlueprintCallable, Category = "UI|Dialogue Bubble")
+	void StopBubbleOnlyDialogue();
+
+	// 지정한 DialogueSource의 Bubble-only 재생만 중단하고 다른 NPC의 재생은 유지합니다.
+	UFUNCTION(BlueprintCallable, Category = "UI|Dialogue Bubble")
+	void StopBubbleOnlyDialogueForSource(UUOUDialogueSourceComponent* DialogueSource);
+
+	UFUNCTION(BlueprintPure, Category = "UI|Dialogue Bubble")
+	bool IsBubbleOnlyDialoguePlaying() const { return !BubbleOnlyPlaybackStates.IsEmpty(); }
+
+	UFUNCTION(BlueprintPure, Category = "UI|Dialogue Bubble")
+	bool IsBubbleOnlyDialoguePlayingForSource(UUOUDialogueSourceComponent* DialogueSource) const;
+
 	UFUNCTION(BlueprintCallable, Category = "UI|Title")
 	void ShowTitle(const FUOUTitleDisplayData& TitleData);
 
@@ -124,9 +142,21 @@ private:
 	void BroadcastCurrentDialogueLine(const FUOUDialogueLine& Line);
 	void BroadcastDialogueBubble(const FUOUDialogueLine& Line);
 	void BroadcastDialogueBoxLine(const FUOUDialogueLine& Line);
+	void ClearBubbleOnlyDialogueTimer(UUOUDialogueSourceComponent* DialogueSource);
 
 	UFUNCTION()
 	void ShowPendingDialogueLine();
+
+	bool AdvanceBubbleOnlyDialogue(TWeakObjectPtr<UUOUDialogueSourceComponent> DialogueSource);
+
+	struct FUOUBubbleOnlyPlaybackState
+	{
+		// 이 Source에서 다음으로 검사할 Dialogue 줄 번호입니다.
+		int32 NextLineIndex = 0;
+
+		// 이 Source의 다음 Bubble 호출만 관리하는 독립 타이머입니다.
+		FTimerHandle TimerHandle;
+	};
 
 	TWeakObjectPtr<UUOUInGameHUDWidget> RegisteredHUDWidget;
 	TWeakObjectPtr<UUOUUmbrellaComponent> BoundUmbrellaComponent;
@@ -139,4 +169,7 @@ private:
 	int32 ActiveDialogueIndex = INDEX_NONE;
 	float LastRainBlockedAmount = 0.0f;
 	bool bHasPendingDialogueLine = false;
+
+	// NPC별 Bubble-only 재생 상태입니다. Source가 끝나거나 중단되면 해당 항목만 제거됩니다.
+	TMap<TWeakObjectPtr<UUOUDialogueSourceComponent>, FUOUBubbleOnlyPlaybackState> BubbleOnlyPlaybackStates;
 };
