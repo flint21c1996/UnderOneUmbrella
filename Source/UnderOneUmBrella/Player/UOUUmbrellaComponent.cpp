@@ -682,7 +682,21 @@ bool UUOUUmbrellaComponent::TryGetRainBlockerVolumeData(FVector& OutWorldCenter,
 
 	if (BlockerComponent != nullptr)
 	{
-		const FTransform BlockerTransform = BlockerComponent->GetComponentTransform();
+		FTransform BlockerTransform = BlockerComponent->GetComponentTransform();
+		if (bUseSkeletalBlocker && !RainBlockerSkeletalAnchorName.IsNone())
+		{
+			const USkeletalMeshComponent* SkeletalBlocker = SkeletalHeldVisual.Get();
+			const bool bHasAnchor = SkeletalBlocker != nullptr &&
+				(SkeletalBlocker->GetBoneIndex(RainBlockerSkeletalAnchorName) != INDEX_NONE ||
+				 SkeletalBlocker->DoesSocketExist(RainBlockerSkeletalAnchorName));
+			if (bHasAnchor)
+			{
+				BlockerTransform = SkeletalBlocker->GetSocketTransform(
+					RainBlockerSkeletalAnchorName,
+					RTS_World);
+			}
+		}
+
 		OutWorldCenter = BlockerTransform.TransformPosition(RainBlockerLocalOffset);
 		OutWorldRotation = BlockerTransform.Rotator();
 		OutHalfExtent = SafeHalfExtent;
