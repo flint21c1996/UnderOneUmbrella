@@ -588,6 +588,26 @@ bool FUOUUmbrellaShadeColorReceiverTest::RunTest(const FString& Parameters)
 		TEXT("혼합된 실제 빛 색도 파랑만 남는다"),
 		Receiver->GetMixedLightColor().Equals(FLinearColor::Blue, KINDA_SMALL_NUMBER));
 
+	// 튜토리얼처럼 별도 Line Of Sight와 볼륨 샘플링을 사용하지 않는 설정에서도
+	// 우산 차폐는 독립적인 게임플레이 규칙으로 적용되어야 합니다.
+	Receiver->ClearColorExposures();
+	Receiver->bUseReceiverVolumeSampling = false;
+	RedSource->ExposureSource->bRequireLineOfSight = false;
+	BlueSource->SetLightColorPreset(EUOULightColorPreset::Green);
+
+	RedSource->ExposureSource->EmitLight(0.1f);
+	BlueSource->ExposureSource->EmitLight(0.1f);
+
+	TestFalse(TEXT("Line Of Sight를 꺼도 우산에 막힌 빨강은 제거된다"), Receiver->bHasRedLight);
+	TestTrue(TEXT("우산을 비껴간 초록 채널은 유지된다"), Receiver->bHasGreenLight);
+	TestEqual(
+		TEXT("빨강 차단 후 상자는 노랑이 아니라 초록 상태가 된다"),
+		Receiver->GetCurrentColorState(),
+		EUOULightColorState::Green);
+	TestTrue(
+		TEXT("혼합된 실제 빛 색도 초록만 남는다"),
+		Receiver->GetMixedLightColor().Equals(FLinearColor::Green, KINDA_SMALL_NUMBER));
+
 	return true;
 }
 
