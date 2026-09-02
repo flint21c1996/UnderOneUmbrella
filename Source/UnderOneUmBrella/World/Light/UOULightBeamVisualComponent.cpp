@@ -710,6 +710,15 @@ void UUOULightBeamVisualComponent::UpdateEndRangeDecal(
 	const FLinearColor& LightColor,
 	const int32 SortOrder)
 {
+	if (!bEnableEndRangeDecal)
+	{
+		if (DecalComponent != nullptr)
+		{
+			DecalComponent->SetVisibility(false);
+		}
+		return;
+	}
+
 	FVector DecalLocation = SegmentData.End;
 	FVector SurfaceNormal = SegmentData.EndSurfaceNormal.GetSafeNormal();
 	bool bHasProjectionSurface = !SurfaceNormal.IsNearlyZero() &&
@@ -747,8 +756,7 @@ void UUOULightBeamVisualComponent::UpdateEndRangeDecal(
 		}
 	}
 
-	const bool bCanShowDecal = bEnableEndRangeDecal &&
-		EndRangeDecalMaterial != nullptr &&
+	const bool bCanShowDecal = EndRangeDecalMaterial != nullptr &&
 		bHasProjectionSurface &&
 		SegmentData.EndRadius > KINDA_SMALL_NUMBER;
 	if (!bCanShowDecal)
