@@ -461,6 +461,137 @@ bool FUOULightColorAdditiveMixTest::RunTest(const FString& Parameters)
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FUOUUmbrellaShadeColorReceiverTest,
+	"UnderOneUmbrella.Light.Color.UmbrellaShadeRemovesBlockedChannel",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUOUUmbrellaShadeColorReceiverTest::RunTest(const FString& Parameters)
+{
+	UWorld* UninitializedWorld = UWorld::CreateWorld(
+		EWorldType::Editor,
+		false,
+		TEXT("UOUUmbrellaShadeColorReceiverWorld"),
+		nullptr,
+		false,
+		ERHIFeatureLevel::Num,
+		nullptr,
+		true);
+	FScopedEditorWorld ScopedWorld(
+		UninitializedWorld,
+		UWorld::InitializationValues()
+			.RequiresHitProxies(false)
+			.ShouldSimulatePhysics(false)
+			.EnableTraceCollision(true)
+			.CreateNavigation(false)
+			.CreateAISystem(false)
+			.AllowAudioPlayback(false)
+			.CreatePhysicsScene(true));
+	UWorld* World = ScopedWorld.GetWorld();
+	TestNotNull(TEXT("우산 RGB 차단 테스트 월드를 생성한다"), World);
+	if (World == nullptr)
+	{
+		return false;
+	}
+
+	const FVector ReceiverLocation = FVector::ZeroVector;
+	AActor* ReceiverActor = World->SpawnActor<AActor>();
+	UBoxComponent* ReceiverBox = ReceiverActor != nullptr
+		? NewObject<UBoxComponent>(ReceiverActor, TEXT("ColorReceiverBox"))
+		: nullptr;
+	UUOULightColorReceiverComponent* Receiver = ReceiverActor != nullptr
+		? NewObject<UUOULightColorReceiverComponent>(ReceiverActor, TEXT("ColorReceiver"))
+		: nullptr;
+	TestNotNull(TEXT("색상 수신 상자를 생성한다"), ReceiverBox);
+	TestNotNull(TEXT("색상 수신 컴포넌트를 생성한다"), Receiver);
+	if (ReceiverActor == nullptr || ReceiverBox == nullptr || Receiver == nullptr)
+	{
+		return false;
+	}
+
+	ReceiverActor->AddInstanceComponent(ReceiverBox);
+	ReceiverActor->SetRootComponent(ReceiverBox);
+	ReceiverBox->SetBoxExtent(FVector(80.0f));
+	ReceiverBox->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+	ReceiverBox->SetCollisionObjectType(ECC_WorldDynamic);
+	ReceiverBox->SetCollisionResponseToAllChannels(ECR_Ignore);
+	ReceiverBox->RegisterComponent();
+	ReceiverActor->SetActorLocation(ReceiverLocation);
+	ReceiverActor->AddInstanceComponent(Receiver);
+	Receiver->bUseReceiverVolumeSampling = true;
+	Receiver->RequiredReceiverSampleHits = 2;
+	Receiver->bApplyPaintTint = false;
+	Receiver->MaterialTransitionDuration = 0.0f;
+	Receiver->RegisterComponent();
+
+	AActor* ShadeActor = World->SpawnActor<AActor>();
+	UUOUUmbrellaLightShadeVolumeComponent* ShadeVolume = ShadeActor != nullptr
+		? NewObject<UUOUUmbrellaLightShadeVolumeComponent>(ShadeActor, TEXT("UmbrellaShade"))
+		: nullptr;
+	TestNotNull(TEXT("빨간 빛을 막을 우산 그늘을 생성한다"), ShadeVolume);
+	if (ShadeActor == nullptr || ShadeVolume == nullptr)
+	{
+		return false;
+	}
+
+	ShadeActor->AddInstanceComponent(ShadeVolume);
+	ShadeActor->SetRootComponent(ShadeVolume);
+	ShadeVolume->SetBoxExtent(FVector(30.0f, 30.0f, 10.0f));
+	ShadeVolume->RegisterComponent();
+	ShadeActor->SetActorLocation(FVector(0.0f, 0.0f, 250.0f));
+	ShadeVolume->SetShadeEnabled(true);
+
+	const auto ConfigureSource = [ReceiverLocation](
+		AUOULightSourceActor* SourceActor,
+		const FVector& SourceLocation,
+		EUOULightColorPreset ColorPreset)
+	{
+		const FVector SourceDirection = (ReceiverLocation - SourceLocation).GetSafeNormal();
+		SourceActor->SetActorLocationAndRotation(SourceLocation, SourceDirection.Rotation());
+		SourceActor->SourceSpotLight->SetAttenuationRadius(1000.0f);
+		SourceActor->SourceSpotLight->SetOuterConeAngle(30.0f);
+		SourceActor->ExposureSource->BeamShape = EUOULightBeamShape::Cone;
+		SourceActor->ExposureSource->SampleInterval = 0.0f;
+		SourceActor->ExposureSource->bEnableReflectedLight = false;
+		SourceActor->SetLightColorPreset(ColorPreset);
+	};
+
+	AUOULightSourceActor* RedSource = World->SpawnActor<AUOULightSourceActor>();
+	AUOULightSourceActor* BlueSource = World->SpawnActor<AUOULightSourceActor>();
+	TestNotNull(TEXT("빨간 광원을 생성한다"), RedSource);
+	TestNotNull(TEXT("파란 광원을 생성한다"), BlueSource);
+	if (RedSource == nullptr || BlueSource == nullptr ||
+		RedSource->ExposureSource == nullptr || RedSource->SourceSpotLight == nullptr ||
+		BlueSource->ExposureSource == nullptr || BlueSource->SourceSpotLight == nullptr)
+	{
+		return false;
+	}
+
+	ConfigureSource(
+		RedSource,
+		FVector(0.0f, 0.0f, 500.0f),
+		EUOULightColorPreset::Red);
+	ConfigureSource(
+		BlueSource,
+		FVector(200.0f, 0.0f, 500.0f),
+		EUOULightColorPreset::Blue);
+
+	RedSource->ExposureSource->EmitLight(0.1f);
+	BlueSource->ExposureSource->EmitLight(0.1f);
+
+	TestFalse(TEXT("우산이 중심 광로를 막은 빨강 채널은 제거된다"), Receiver->bHasRedLight);
+	TestTrue(TEXT("우산을 비껴간 파랑 채널은 유지된다"), Receiver->bHasBlueLight);
+	TestEqual(
+		TEXT("빨강 차단 후 상자는 보라가 아니라 파랑 상태가 된다"),
+		Receiver->GetCurrentColorState(),
+		EUOULightColorState::Blue);
+	TestTrue(
+		TEXT("혼합된 실제 빛 색도 파랑만 남는다"),
+		Receiver->GetMixedLightColor().Equals(FLinearColor::Blue, KINDA_SMALL_NUMBER));
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FUOULightPaintColorConditionTest,
 	"UnderOneUmbrella.Light.Color.PaintConditionAdapter",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)

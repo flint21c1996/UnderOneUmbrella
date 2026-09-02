@@ -305,6 +305,10 @@ protected:
 		const FVector& BeamDirection,
 		TArray<FVector>& OutSamplePositions,
 		int32& OutRequiredHits) const;
+	// 볼륨 샘플 가장자리가 우산 옆으로 새더라도 중심 광로가 막혔다면 대상 전체를 그늘로 판정합니다.
+	bool IsReceiverCenterOccludedByUmbrellaShade(
+		UObject* ReceiverObject,
+		FHitResult& OutBlockingHit) const;
 	bool HasLineOfSight(UObject* ReceiverObject, const FVector& SourcePosition, const FVector& ReceiverPosition, FHitResult& OutBlockingHit) const;
 	bool HasLineOfSightFrom(
 		UObject* ReceiverObject,

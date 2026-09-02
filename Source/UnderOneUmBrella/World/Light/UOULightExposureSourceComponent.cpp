@@ -1473,37 +1473,48 @@ bool UUOULightExposureSourceComponent::TryBuildExposureData(
 
 	if (const UUOULightExposureReceiverComponent* ReceiverComponent =
 		Cast<UUOULightExposureReceiverComponent>(ReceiverObject);
-		ReceiverComponent != nullptr && ReceiverComponent->bUseBeamVolumeOverlap)
+		ReceiverComponent != nullptr)
 	{
-		FVector ExposurePosition = FVector::ZeroVector;
-		float OverlapDepth = 0.0f;
-		if (!TryFindReceiverVolumeOverlapPoint(
-			ReceiverObject,
-			GetSourceLocation(),
-			GetSourceForwardVector(),
-			GetExposureRange(),
-			BeamShape == EUOULightBeamShape::Cylinder ? CylinderRadius : 0.0f,
-			BeamShape == EUOULightBeamShape::Cylinder ? 0.0f : GetEffectiveOuterConeAngle(),
-			ExposurePosition,
-			OverlapDepth))
+		// 우산은 개별 샘플이 아니라 수신 오브젝트의 중심 광로를 기준으로 색 채널 전체를 가립니다.
+		if ((ReceiverComponent->bUseReceiverVolumeSampling ||
+			ReceiverComponent->bUseBeamVolumeOverlap) &&
+			IsReceiverCenterOccludedByUmbrellaShade(ReceiverObject, OutBlockingHit))
 		{
 			return false;
 		}
 
-		const bool bBuiltExposure = TryBuildExposureDataAtPosition(
-			ReceiverObject,
-			ExposurePosition,
-			DeltaTime,
-			OutExposureData,
-			OutBlockingHit);
-		if (bBuiltExposure)
+		if (ReceiverComponent->bUseBeamVolumeOverlap)
 		{
-			OutExposureData.bUsedReceiverVolumeOverlap = true;
-			OutExposureData.ReceiverVolumeOverlapDepth = OverlapDepth;
-			OutExposureData.RequiredReceiverVolumeOverlapDepth =
-				ReceiverComponent->MinimumBeamOverlapDepth;
+			FVector ExposurePosition = FVector::ZeroVector;
+			float OverlapDepth = 0.0f;
+			if (!TryFindReceiverVolumeOverlapPoint(
+				ReceiverObject,
+				GetSourceLocation(),
+				GetSourceForwardVector(),
+				GetExposureRange(),
+				BeamShape == EUOULightBeamShape::Cylinder ? CylinderRadius : 0.0f,
+				BeamShape == EUOULightBeamShape::Cylinder ? 0.0f : GetEffectiveOuterConeAngle(),
+				ExposurePosition,
+				OverlapDepth))
+			{
+				return false;
+			}
+
+			const bool bBuiltExposure = TryBuildExposureDataAtPosition(
+				ReceiverObject,
+				ExposurePosition,
+				DeltaTime,
+				OutExposureData,
+				OutBlockingHit);
+			if (bBuiltExposure)
+			{
+				OutExposureData.bUsedReceiverVolumeOverlap = true;
+				OutExposureData.ReceiverVolumeOverlapDepth = OverlapDepth;
+				OutExposureData.RequiredReceiverVolumeOverlapDepth =
+					ReceiverComponent->MinimumBeamOverlapDepth;
+			}
+			return bBuiltExposure;
 		}
-		return bBuiltExposure;
 	}
 
 	TArray<FVector> SamplePositions;
@@ -1553,6 +1564,62 @@ bool UUOULightExposureSourceComponent::TryBuildExposureData(
 	}
 
 	return true;
+}
+
+bool UUOULightExposureSourceComponent::IsReceiverCenterOccludedByUmbrellaShade(
+	UObject* ReceiverObject,
+	FHitResult& OutBlockingHit) const
+{
+	OutBlockingHit = FHitResult();
+	if (ReceiverObject == nullptr ||
+		!ReceiverObject->GetClass()->ImplementsInterface(UUOULightReceivableInterface::StaticClass()))
+	{
+		return false;
+	}
+
+	FVector ReceiverCenter =
+		IUOULightReceivableInterface::Execute_GetLightReceiverPosition(ReceiverObject);
+	if (const UUOULightExposureReceiverComponent* ReceiverComponent =
+		Cast<UUOULightExposureReceiverComponent>(ReceiverObject))
+	{
+		FVector ReceiverVolumeCenter = FVector::ZeroVector;
+		float ReceiverRadius = 0.0f;
+		if (ReceiverComponent->GetLightReceiverVolumeSphere(
+			ReceiverVolumeCenter,
+			ReceiverRadius))
+		{
+			ReceiverCenter = ReceiverVolumeCenter;
+		}
+	}
+
+	float Distance = 0.0f;
+	FVector Direction = FVector::ZeroVector;
+	float DistanceFactor = 0.0f;
+	float ShapeFactor = 0.0f;
+	if (!TryEvaluateSourceBeamPoint(
+		ReceiverCenter,
+		Distance,
+		Direction,
+		DistanceFactor,
+		ShapeFactor))
+	{
+		return false;
+	}
+
+	FVector TraceStart = GetSourceLocation();
+	if (BeamShape == EUOULightBeamShape::Cylinder)
+	{
+		const FVector SourceForward = GetSourceForwardVector().GetSafeNormal();
+		const float AxialDistance = FVector::DotProduct(
+			ReceiverCenter - TraceStart,
+			SourceForward);
+		TraceStart = ReceiverCenter - SourceForward * AxialDistance;
+	}
+
+	return FindNearestUmbrellaLightShadeHit(
+		TraceStart,
+		ReceiverCenter,
+		OutBlockingHit);
 }
 
 bool UUOULightExposureSourceComponent::TryFindReceiverVolumeOverlapPoint(
