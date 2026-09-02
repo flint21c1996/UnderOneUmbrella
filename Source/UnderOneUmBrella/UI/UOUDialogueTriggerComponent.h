@@ -10,6 +10,7 @@
 
 class UUserWidget;
 class UWidgetComponent;
+class USceneComponent;
 class UUOUDialogueSourceComponent;
 class UUOUDialogueCoverTargetComponent;
 class UUOUUmbrellaComponent;
@@ -167,6 +168,30 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue|Control", meta = (ClampMin = "0.0"))
 	float DialogueFocusEndDelay = 0.5f;
 
+	// 대화가 시작되면 실제 화자 액터가 대화를 시작한 플레이어를 바라봅니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue|Facing")
+	bool bFacePlayerDuringDialogue = true;
+
+	// 플레이어를 향해 회전하는 보간 속도입니다. 0이면 즉시 회전합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue|Facing", meta = (EditCondition = "bFacePlayerDuringDialogue", ClampMin = "0.0"))
+	float DialogueFacingInterpSpeed = 5.0f;
+
+	// 대화가 끝난 뒤 대화 시작 전 방향으로 돌아가는 보간 속도입니다. 0이면 즉시 복귀합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue|Facing", meta = (EditCondition = "bFacePlayerDuringDialogue", ClampMin = "0.0"))
+	float DialogueFacingReturnInterpSpeed = 5.0f;
+
+	// 캐릭터가 위아래로 기울지 않도록 Yaw 축만 회전합니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue|Facing", meta = (EditCondition = "bFacePlayerDuringDialogue"))
+	bool bDialogueFacingYawOnly = true;
+
+	// 실제로 회전시킬 외형 컴포넌트입니다. 비어 있으면 아래 이름 또는 첫 번째 SkeletalMesh를 자동으로 찾습니다.
+	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Dialogue|Facing", meta = (EditCondition = "bFacePlayerDuringDialogue", UseComponentPicker, AllowedClasses = "/Script/Engine.SceneComponent"))
+	TObjectPtr<USceneComponent> DialogueFacingComponent = nullptr;
+
+	// 자동 탐색할 외형 컴포넌트 이름입니다. 현재 NPC 블루프린트의 기본값은 SkeletalMesh입니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue|Facing", meta = (EditCondition = "bFacePlayerDuringDialogue"))
+	FName DialogueFacingComponentName = TEXT("SkeletalMesh");
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Dialogue|Runtime")
 	bool bHasTriggered = false;
 
@@ -206,6 +231,13 @@ private:
 	UUOUCameraControllerComponent* FindCameraControllerComponent(AActor* InstigatorActor) const;
 	void StartDialogueCameraFocus(AActor* InstigatorActor, AActor* SpeakerActor);
 	void StopDialogueCameraFocus();
+	void BeginDialogueFacing(AActor* SpeakerActor, AActor* InstigatorActor);
+	void BeginDialogueFacingRestore();
+	void UpdateDialogueFacing(float DeltaTime);
+	void RestoreDialogueFacingImmediately();
+	void ClearDialogueFacingState();
+	void RefreshTickEnabled();
+	USceneComponent* ResolveDialogueFacingComponent(AActor* SpeakerActor) const;
 	void LockMovementForDialogue(AActor* InstigatorActor);
 	void UnlockMovementForDialogue();
 	void ClearCoverProgress();
@@ -230,6 +262,15 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UUOUPlayerInteractionExecutorComponent> LockedInputExecutorComponent = nullptr;
 
+	UPROPERTY(Transient)
+	TObjectPtr<AActor> ActiveDialogueFacingSpeaker = nullptr;
+
+	UPROPERTY(Transient)
+	TObjectPtr<AActor> ActiveDialogueFacingTarget = nullptr;
+
+	UPROPERTY(Transient)
+	TObjectPtr<USceneComponent> ActiveDialogueFacingComponent = nullptr;
+
 	TMap<TWeakObjectPtr<AActor>, int32> ActiveOverlapCounts;
 
 	FTimerHandle DialogueFocusEndDelayTimerHandle;
@@ -239,4 +280,8 @@ private:
 	bool bDialogueMovementLocked = false;
 	bool bSavedCameraOcclusionEnabled = false;
 	bool bHasSavedCameraOcclusionEnabled = false;
+	bool bHasSavedDialogueSpeakerRotation = false;
+	bool bRestoringDialogueSpeakerRotation = false;
+	FRotator SavedDialogueFacingRelativeRotation = FRotator::ZeroRotator;
+	FRotator SavedDialogueSpeakerWorldRotation = FRotator::ZeroRotator;
 };
