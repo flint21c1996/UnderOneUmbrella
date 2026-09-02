@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "Puzzle/Core/UOUPuzzleResultReceiver.h"
 #include "UOUAudioTriggerActor.generated.h"
 
 class UBoxComponent;
@@ -13,12 +14,15 @@ class UUOUAudioCueComponent;
 class UUOUAudioSubsystem;
 
 UCLASS(meta=(DisplayName="UOU Audio Trigger Actor"))
-class UNDERONEUMBRELLA_API AUOUAudioTriggerActor : public AActor
+class UNDERONEUMBRELLA_API AUOUAudioTriggerActor : public AActor, public IUOUPuzzleResultReceiver
 {
 	GENERATED_BODY()
 
 public:
 	AUOUAudioTriggerActor();
+
+	// Condition Group의 결과 액션을 오디오 재생과 정지로 변환합니다.
+	virtual void ApplyPuzzleResult_Implementation(EOUUPuzzleResultAction Action) override;
 
 	UFUNCTION(BlueprintCallable, Category = "Audio", meta = (DisplayName = "오디오 이벤트 재생"))
 	bool PlayAudioEvent();
@@ -94,4 +98,5 @@ private:
 	UUOUAudioSubsystem* GetAudioSubsystem() const;
 
 	bool bHasPlayed = false;
+	bool bIsAudioPlaybackActive = false;
 };
