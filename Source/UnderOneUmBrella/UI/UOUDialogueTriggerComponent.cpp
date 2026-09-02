@@ -3,6 +3,8 @@
 #include "UI/UOUDialogueTriggerComponent.h"
 
 #include "Blueprint/UserWidget.h"
+#include "Components/SceneComponent.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "Components/WidgetComponent.h"
 #include "Engine/Engine.h"
 #include "Engine/LocalPlayer.h"
@@ -54,7 +56,7 @@ void UUOUDialogueTriggerComponent::BeginPlay()
 
 	OnComponentBeginOverlap.AddDynamic(this, &UUOUDialogueTriggerComponent::HandleBeginOverlap);
 	OnComponentEndOverlap.AddDynamic(this, &UUOUDialogueTriggerComponent::HandleEndOverlap);
-	SetComponentTickEnabled(bDialogueInteractionEnabled && bRequireUmbrellaCoverHold);
+	RefreshTickEnabled();
 
 	if (UUOUDialogueSourceComponent* Source = ResolveDialogueSource())
 	{
@@ -87,6 +89,7 @@ void UUOUDialogueTriggerComponent::EndPlay(const EEndPlayReason::Type EndPlayRea
 {
 	OnComponentBeginOverlap.RemoveDynamic(this, &UUOUDialogueTriggerComponent::HandleBeginOverlap);
 	OnComponentEndOverlap.RemoveDynamic(this, &UUOUDialogueTriggerComponent::HandleEndOverlap);
+	RestoreDialogueFacingImmediately();
 	StopDialogueCameraFocus();
 
 	Super::EndPlay(EndPlayReason);
@@ -95,6 +98,7 @@ void UUOUDialogueTriggerComponent::EndPlay(const EEndPlayReason::Type EndPlayRea
 void UUOUDialogueTriggerComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+	UpdateDialogueFacing(DeltaTime);
 
 	if (!bDialogueInteractionEnabled)
 	{
@@ -433,7 +437,7 @@ void UUOUDialogueTriggerComponent::RefreshOverlappingInteraction()
 			CurrentInstigatorActor = OverlappingActor;
 			CurrentCoverHoldTime = 0.0f;
 			bIsCurrentlyCoveredByUmbrella = false;
-			SetComponentTickEnabled(true);
+			RefreshTickEnabled();
 
 			const bool bPassesRules = PassesInstigatorRules(OverlappingActor);
 			const bool bCovered = IsOwnerCoveredByDialogueCover(OverlappingActor);
@@ -522,7 +526,7 @@ void UUOUDialogueTriggerComponent::HandleTrackedActorEnter(AActor* OtherActor, U
 			CurrentInstigatorActor = OtherActor;
 			CurrentCoverHoldTime = 0.0f;
 			bIsCurrentlyCoveredByUmbrella = false;
-			SetComponentTickEnabled(true);
+			RefreshTickEnabled();
 
 			ShowInteractionHint();
 
@@ -846,8 +850,22 @@ void UUOUDialogueTriggerComponent::StartDialogueCameraFocus(AActor* InstigatorAc
 		World->GetTimerManager().ClearTimer(DialogueFocusEndDelayTimerHandle);
 	}
 
+	if (SpeakerActor == nullptr)
+	{
+		return;
+	}
+
+	BeginDialogueFacing(SpeakerActor, InstigatorActor);
+
+	if (UUOUUISubsystem* UISubsystem = ResolveUISubsystem())
+	{
+		UISubsystem->OnDialogueEnded.RemoveDynamic(this, &UUOUDialogueTriggerComponent::HandleDialogueEnded);
+		UISubsystem->OnDialogueEnded.AddDynamic(this, &UUOUDialogueTriggerComponent::HandleDialogueEnded);
+		BoundUISubsystem = UISubsystem;
+	}
+
 	UUOUCameraControllerComponent* CameraController = FindCameraControllerComponent(InstigatorActor);
-	if (CameraController == nullptr || SpeakerActor == nullptr)
+	if (CameraController == nullptr)
 	{
 		return;
 	}
@@ -867,13 +885,6 @@ void UUOUDialogueTriggerComponent::StartDialogueCameraFocus(AActor* InstigatorAc
 	}
 
 	ActiveDialogueCameraController->StartDialogueFocus(SpeakerActor);
-
-	if (UUOUUISubsystem* UISubsystem = ResolveUISubsystem())
-	{
-		UISubsystem->OnDialogueEnded.RemoveDynamic(this, &UUOUDialogueTriggerComponent::HandleDialogueEnded);
-		UISubsystem->OnDialogueEnded.AddDynamic(this, &UUOUDialogueTriggerComponent::HandleDialogueEnded);
-		BoundUISubsystem = UISubsystem;
-	}
 }
 
 void UUOUDialogueTriggerComponent::StopDialogueCameraFocus()
@@ -907,6 +918,8 @@ void UUOUDialogueTriggerComponent::StopDialogueCameraFocus()
 
 void UUOUDialogueTriggerComponent::HandleDialogueEnded()
 {
+	BeginDialogueFacingRestore();
+
 	if (DialogueFocusEndDelay <= 0.0f)
 	{
 		StopDialogueCameraFocus();
@@ -925,6 +938,177 @@ void UUOUDialogueTriggerComponent::HandleDialogueEnded()
 	}
 
 	StopDialogueCameraFocus();
+}
+
+void UUOUDialogueTriggerComponent::BeginDialogueFacing(AActor* SpeakerActor, AActor* InstigatorActor)
+{
+	if (!bFacePlayerDuringDialogue || !IsValid(SpeakerActor) || !IsValid(InstigatorActor))
+	{
+		return;
+	}
+
+	USceneComponent* FacingComponent = ResolveDialogueFacingComponent(SpeakerActor);
+	if (!IsValid(FacingComponent))
+	{
+		return;
+	}
+
+	if (bHasSavedDialogueSpeakerRotation && ActiveDialogueFacingComponent != FacingComponent)
+	{
+		RestoreDialogueFacingImmediately();
+	}
+
+	ActiveDialogueFacingSpeaker = SpeakerActor;
+	ActiveDialogueFacingTarget = InstigatorActor;
+	ActiveDialogueFacingComponent = FacingComponent;
+	if (!bHasSavedDialogueSpeakerRotation)
+	{
+		SavedDialogueFacingRelativeRotation = FacingComponent->GetRelativeRotation();
+		SavedDialogueSpeakerWorldRotation = SpeakerActor->GetActorRotation();
+		bHasSavedDialogueSpeakerRotation = true;
+	}
+	SavedDialogueFacingRelativeRotation.Normalize();
+	SavedDialogueSpeakerWorldRotation.Normalize();
+
+	bRestoringDialogueSpeakerRotation = false;
+	RefreshTickEnabled();
+}
+
+void UUOUDialogueTriggerComponent::BeginDialogueFacingRestore()
+{
+	if (!bHasSavedDialogueSpeakerRotation || !IsValid(ActiveDialogueFacingComponent))
+	{
+		ClearDialogueFacingState();
+		return;
+	}
+
+	ActiveDialogueFacingTarget = nullptr;
+	bRestoringDialogueSpeakerRotation = true;
+	RefreshTickEnabled();
+}
+
+void UUOUDialogueTriggerComponent::UpdateDialogueFacing(float DeltaTime)
+{
+	if (!bHasSavedDialogueSpeakerRotation)
+	{
+		return;
+	}
+
+	USceneComponent* FacingComponent = ActiveDialogueFacingComponent.Get();
+	if (!IsValid(FacingComponent))
+	{
+		ClearDialogueFacingState();
+		return;
+	}
+
+	const FRotator CurrentRotation = FacingComponent->GetRelativeRotation();
+	FRotator TargetRotation = SavedDialogueFacingRelativeRotation;
+	float InterpSpeed = DialogueFacingReturnInterpSpeed;
+	if (!bRestoringDialogueSpeakerRotation)
+	{
+		const AActor* FacingTarget = ActiveDialogueFacingTarget.Get();
+		if (!IsValid(FacingTarget))
+		{
+			BeginDialogueFacingRestore();
+			return;
+		}
+
+		const FRotator LookAtWorldRotation =
+			(FacingTarget->GetActorLocation() - FacingComponent->GetComponentLocation()).Rotation();
+		const float FacingYawDelta = FMath::FindDeltaAngleDegrees(
+			SavedDialogueSpeakerWorldRotation.Yaw,
+			LookAtWorldRotation.Yaw);
+		TargetRotation.Yaw = SavedDialogueFacingRelativeRotation.Yaw + FacingYawDelta;
+		if (!bDialogueFacingYawOnly)
+		{
+			TargetRotation.Pitch += FMath::FindDeltaAngleDegrees(
+				SavedDialogueSpeakerWorldRotation.Pitch,
+				LookAtWorldRotation.Pitch);
+		}
+		InterpSpeed = DialogueFacingInterpSpeed;
+	}
+
+	if (bDialogueFacingYawOnly)
+	{
+		TargetRotation.Pitch = SavedDialogueFacingRelativeRotation.Pitch;
+		TargetRotation.Roll = SavedDialogueFacingRelativeRotation.Roll;
+	}
+	TargetRotation.Normalize();
+
+	const FRotator NewRotation = InterpSpeed <= 0.0f
+		? TargetRotation
+		: FMath::RInterpTo(CurrentRotation, TargetRotation, DeltaTime, InterpSpeed);
+	FacingComponent->SetRelativeRotation(NewRotation);
+
+	if (bRestoringDialogueSpeakerRotation && NewRotation.Equals(TargetRotation, 0.1f))
+	{
+		FacingComponent->SetRelativeRotation(SavedDialogueFacingRelativeRotation);
+		ClearDialogueFacingState();
+	}
+}
+
+void UUOUDialogueTriggerComponent::RestoreDialogueFacingImmediately()
+{
+	if (bHasSavedDialogueSpeakerRotation && IsValid(ActiveDialogueFacingComponent))
+	{
+		ActiveDialogueFacingComponent->SetRelativeRotation(SavedDialogueFacingRelativeRotation);
+	}
+
+	ClearDialogueFacingState();
+}
+
+void UUOUDialogueTriggerComponent::ClearDialogueFacingState()
+{
+	ActiveDialogueFacingSpeaker = nullptr;
+	ActiveDialogueFacingTarget = nullptr;
+	ActiveDialogueFacingComponent = nullptr;
+	SavedDialogueFacingRelativeRotation = FRotator::ZeroRotator;
+	SavedDialogueSpeakerWorldRotation = FRotator::ZeroRotator;
+	bHasSavedDialogueSpeakerRotation = false;
+	bRestoringDialogueSpeakerRotation = false;
+	RefreshTickEnabled();
+}
+
+void UUOUDialogueTriggerComponent::RefreshTickEnabled()
+{
+	const bool bNeedsCoverTick =
+		bDialogueInteractionEnabled && bRequireUmbrellaCoverHold && CurrentInstigatorActor != nullptr;
+	SetComponentTickEnabled(bNeedsCoverTick || bHasSavedDialogueSpeakerRotation);
+}
+
+USceneComponent* UUOUDialogueTriggerComponent::ResolveDialogueFacingComponent(AActor* SpeakerActor) const
+{
+	// 퍼즐 액터 전체 대신 캐릭터 외형만 회전하도록 명시 지정, 이름, SkeletalMesh 순서로 찾습니다.
+	if (IsValid(DialogueFacingComponent) && DialogueFacingComponent->GetOwner() == SpeakerActor)
+	{
+		return DialogueFacingComponent.Get();
+	}
+
+	if (!IsValid(SpeakerActor))
+	{
+		return nullptr;
+	}
+
+	TArray<USceneComponent*> SceneComponents;
+	SpeakerActor->GetComponents<USceneComponent>(SceneComponents);
+	if (!DialogueFacingComponentName.IsNone())
+	{
+		for (USceneComponent* SceneComponent : SceneComponents)
+		{
+			if (IsValid(SceneComponent) && SceneComponent->GetFName() == DialogueFacingComponentName)
+			{
+				return SceneComponent;
+			}
+		}
+	}
+
+	if (USkeletalMeshComponent* SkeletalMeshComponent =
+		SpeakerActor->FindComponentByClass<USkeletalMeshComponent>())
+	{
+		return SkeletalMeshComponent;
+	}
+
+	return SpeakerActor->GetRootComponent();
 }
 
 void UUOUDialogueTriggerComponent::LockMovementForDialogue(AActor* InstigatorActor)
@@ -968,10 +1152,7 @@ void UUOUDialogueTriggerComponent::ClearCoverProgress()
 	CurrentInstigatorActor = nullptr;
 	bIsCurrentlyCoveredByUmbrella = false;
 
-	if (bRequireUmbrellaCoverHold)
-	{
-		SetComponentTickEnabled(false);
-	}
+	RefreshTickEnabled();
 }
 
 void UUOUDialogueTriggerComponent::SetHintWidgetComponentVisible(bool bNewVisible) const
