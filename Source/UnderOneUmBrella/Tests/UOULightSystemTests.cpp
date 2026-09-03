@@ -1996,9 +1996,10 @@ bool FUOUUmbrellaReflectionAngleBoundaryTest::RunTest(const FString& Parameters)
 	}
 
 	Surface->SetLightInteractionMode(EUOULightInteractionMode::Reflecting);
-	Surface->ReflectionFrontNormalMode = EUOULightReflectionFrontNormalMode::ComponentForward;
+	Surface->ReflectionFrontNormalMode = EUOULightReflectionFrontNormalMode::OwnerForward;
 	Surface->bReflectFrontFaceOnly = true;
-	Surface->bPassThroughWhenReflectionRejected = true;
+	Surface->bPassThroughWhenReflectionRejected =
+		UmbrellaSettings->bPassLightThroughOutsideReflectionAngle;
 	Surface->MaximumReflectionIncidenceAngle =
 		UmbrellaSettings->MaximumUmbrellaReflectionIncidenceAngle;
 
@@ -2006,23 +2007,32 @@ bool FUOUUmbrellaReflectionAngleBoundaryTest::RunTest(const FString& Parameters)
 	const FVector ParallelIncomingDirection =
 		-FRotator(0.0f, 90.0f, 0.0f).RotateVector(FrontNormal);
 	const FVector BackfaceToleranceBoundaryDirection =
-		-FRotator(0.0f, 95.0f, 0.0f).RotateVector(FrontNormal);
+		-FRotator(0.0f, 100.0f, 0.0f).RotateVector(FrontNormal);
 	const FVector OutsideBackfaceToleranceDirection =
-		-FRotator(0.0f, 96.0f, 0.0f).RotateVector(FrontNormal);
+		-FRotator(0.0f, 101.0f, 0.0f).RotateVector(FrontNormal);
 
 	TestEqual(
-		TEXT("우산 기본 최대 반사 입사각은 95도이다"),
+		TEXT("우산 기본 최대 반사 입사각은 100도이다"),
 		UmbrellaSettings->MaximumUmbrellaReflectionIncidenceAngle,
-		95.0f);
+		100.0f);
+	TestFalse(
+		TEXT("우산은 반사 허용각 밖의 뒤쪽 빛을 통과시키지 않는다"),
+		UmbrellaSettings->bPassLightThroughOutsideReflectionAngle);
 	TestFalse(
 		TEXT("우산 반사면과 평행한 90도 입사광은 반사하므로 통과하지 않는다"),
 		Surface->ShouldPassThroughIncomingLight(ParallelIncomingDirection, FrontNormal));
 	TestFalse(
-		TEXT("우산 뒷면 쪽 5도인 입사광은 허용 경계이므로 통과하지 않는다"),
+		TEXT("플레이어 옆을 지나 뒤쪽 10도인 입사광은 허용 경계이므로 통과하지 않는다"),
 		Surface->ShouldPassThroughIncomingLight(BackfaceToleranceBoundaryDirection, FrontNormal));
-	TestTrue(
-		TEXT("우산 뒷면 쪽 6도인 입사광은 허용 범위를 벗어나므로 통과한다"),
+	TestFalse(
+		TEXT("플레이어 옆을 지나 뒤쪽 11도인 입사광은 반사되지 않는다"),
+		Surface->CanReflectIncomingLight(OutsideBackfaceToleranceDirection, FrontNormal));
+	TestFalse(
+		TEXT("반사가 거절된 뒤쪽 빛은 통과하지 않는다"),
 		Surface->ShouldPassThroughIncomingLight(OutsideBackfaceToleranceDirection, FrontNormal));
+	TestTrue(
+		TEXT("반사 상태의 우산은 뒤쪽 입사광을 차단한다"),
+		Surface->CanBlockLight());
 	return true;
 }
 
