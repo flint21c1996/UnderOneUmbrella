@@ -360,6 +360,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Rain Block", meta = (ToolTip = "비 차단 중심을 우산 표시 컴포넌트 기준으로 보정하는 로컬 오프셋입니다. 우산 문양 위치가 맞지 않을 때 조정합니다."))
 	FVector RainBlockerLocalOffset = FVector::ZeroVector;
 
+	// 스켈레탈 우산은 메시 피벗 대신 천 중심 본을 차폐 판정의 기준으로 사용할 수 있습니다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Rain Block", meta = (DisplayName = "차폐 기준 스켈레탈 본", ToolTip = "스켈레탈 우산에서 비와 빛 차폐 박스의 중심으로 사용할 본 또는 소켓입니다. 존재하지 않으면 우산 메시 피벗을 사용합니다."))
+	FName RainBlockerSkeletalAnchorName = TEXT("Umbrella");
+
 	// 우산 안에 모인 물을 저장하고 무게 계산에 넘기는 컨테이너입니다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Dependencies")
 	TObjectPtr<UUOUWaterContainerComponent> StoredWaterContainer = nullptr;

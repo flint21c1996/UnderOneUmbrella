@@ -107,6 +107,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Light Shade", meta = (DisplayName = "Shade Volume Relative Rotation", ToolTip = "우산 기준점에 대한 그늘 박스의 로컬 회전입니다."))
 	FRotator RuntimeShadeVolumeRelativeRotation = FRotator::ZeroRotator;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|Light Shade", meta = (DisplayName = "펼친 상태 빛 차폐 추가 월드 오프셋", ToolTip = "머리 위로 펼친 우산의 빛 차폐 판정만 추가로 이동합니다. 비 차단 판정과 빛 반사 상태에는 영향을 주지 않습니다."))
+	FVector SpreadLightShadeAdditionalWorldOffset = FVector::ZeroVector;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Umbrella|References")
 	TObjectPtr<UUOUUmbrellaComponent> UmbrellaComponent = nullptr;
 
@@ -126,6 +129,10 @@ protected:
 	USceneComponent* GetLightInteractionAttachParent() const;
 	void ApplyRuntimeLightSurfacePlacement() const;
 	void ApplyRuntimeLightShadeVolumePlacement() const;
+	bool TryResolveLightShadeAlignedTransform(
+		FVector& OutWorldCenter,
+		FRotator& OutWorldRotation,
+		FVector& OutHalfExtent) const;
 	bool TryResolveRainBlockerAlignedTransform(
 		FVector& OutWorldCenter,
 		FRotator& OutWorldRotation,

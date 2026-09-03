@@ -383,7 +383,7 @@ void UUOUUmbrellaLightInteractionComponent::ApplyRuntimeLightShadeVolumePlacemen
 	FVector WorldCenter = FVector::ZeroVector;
 	FRotator WorldRotation = FRotator::ZeroRotator;
 	FVector RainBlockerHalfExtent = FVector::ZeroVector;
-	const bool bUseRainBlockerPlacement = TryResolveRainBlockerAlignedTransform(
+	const bool bUseRainBlockerPlacement = TryResolveLightShadeAlignedTransform(
 		WorldCenter,
 		WorldRotation,
 		RainBlockerHalfExtent);
@@ -414,6 +414,37 @@ void UUOUUmbrellaLightInteractionComponent::ApplyRuntimeLightShadeVolumePlacemen
 		LightShadeVolumeComponent->SetRelativeLocation(RuntimeShadeVolumeRelativeLocation);
 		LightShadeVolumeComponent->SetRelativeRotation(RuntimeShadeVolumeRelativeRotation);
 	}
+}
+
+bool UUOUUmbrellaLightInteractionComponent::TryResolveLightShadeAlignedTransform(
+	FVector& OutWorldCenter,
+	FRotator& OutWorldRotation,
+	FVector& OutHalfExtent) const
+{
+	OutWorldCenter = FVector::ZeroVector;
+	OutWorldRotation = FRotator::ZeroRotator;
+	OutHalfExtent = FVector::ZeroVector;
+	if (!bAlignLightInteractionToRainBlocker || UmbrellaComponent == nullptr)
+	{
+		return false;
+	}
+
+	// 일반 차폐는 플레이어 중심이 아니라 실제로 화면에 보이는 우산 비주얼을 따라가야 합니다.
+	// 반사 상태는 기존의 플레이어 전방 고정 판정면을 그대로 사용합니다.
+	if (UmbrellaComponent->CurrentState != EUOUUmbrellaState::LightReflecting &&
+		UmbrellaComponent->TryGetRainBlockerVolumeData(
+			OutWorldCenter,
+			OutWorldRotation,
+			OutHalfExtent))
+	{
+		OutWorldCenter += SpreadLightShadeAdditionalWorldOffset;
+		return true;
+	}
+
+	return TryResolveRainBlockerAlignedTransform(
+		OutWorldCenter,
+		OutWorldRotation,
+		OutHalfExtent);
 }
 
 bool UUOUUmbrellaLightInteractionComponent::TryResolveRainBlockerAlignedTransform(

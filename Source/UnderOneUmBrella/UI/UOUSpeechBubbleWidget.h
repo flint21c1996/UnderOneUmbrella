@@ -37,6 +37,11 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Speech Bubble")
 	void HideBubbleImmediately();
 
+	// 말풍선 텍스트의 폰트 크기를 런타임에 변경합니다.
+	// TXT_BubbleText가 없으면 위젯 트리에서 처음 발견한 지원 텍스트 위젯에 적용합니다.
+	UFUNCTION(BlueprintCallable, Category = "Speech Bubble|Display")
+	bool SetBubbleFontSize(int32 NewFontSize);
+
 	UFUNCTION(BlueprintPure, Category = "Speech Bubble")
 	FName GetCurrentPresentationStyle() const { return CurrentPresentationStyle; }
 
