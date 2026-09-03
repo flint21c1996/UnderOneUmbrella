@@ -182,7 +182,6 @@ void UUOUUISubsystem::AdvanceDialogue()
 	}
 
 	BroadcastCurrentDialogueLine(DisplayLine);
-	ScheduleAutoAdvanceIfNeeded(DisplayLine);
 }
 
 void UUOUUISubsystem::EndDialogue()
@@ -380,19 +379,6 @@ void UUOUUISubsystem::ClearBubbleOnlyDialogueTimer(UUOUDialogueSourceComponent* 
 	}
 }
 
-void UUOUUISubsystem::ScheduleAutoAdvanceIfNeeded(const FUOUDialogueLine& Line)
-{
-	if (Line.bWaitForInput || Line.DialogueDuration <= 0.0f)
-	{
-		return;
-	}
-
-	if (UWorld* World = GetWorld())
-	{
-		World->GetTimerManager().SetTimer(DialogueTimerHandle, this, &UUOUUISubsystem::AdvanceDialogue, Line.DialogueDuration, false);
-	}
-}
-
 void UUOUUISubsystem::BroadcastCurrentDialogueLine(const FUOUDialogueLine& Line)
 {
 	BroadcastDialogueBubble(Line);
@@ -439,7 +425,6 @@ void UUOUUISubsystem::ShowPendingDialogueLine()
 	bHasPendingDialogueLine = false;
 
 	BroadcastDialogueBoxLine(LineToShow);
-	ScheduleAutoAdvanceIfNeeded(LineToShow);
 }
 
 bool UUOUUISubsystem::AdvanceBubbleOnlyDialogue(

@@ -45,7 +45,7 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Dialogue Box")
 	bool IsDialogueBoxVisible() const { return bDialogueBoxVisible; }
 
-	// 디자이너에서 연결한 9-Slice 배경과 본문 줄바꿈 설정을 다시 적용합니다.
+	// 디자이너에서 연결한 9-Slice 배경과 콘텐츠 여백을 다시 적용합니다.
 	// DialogueSizeBox의 크기 제한은 디자이너에서 설정한 값을 그대로 사용합니다.
 	// 런타임에 스타일 값을 바꾼 뒤 호출할 수도 있습니다.
 	UFUNCTION(BlueprintCallable, Category = "Dialogue Box|Adaptive Layout")
@@ -102,14 +102,6 @@ public:
 	// 테두리와 실제 대사 내용 사이의 여백입니다.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dialogue Box|Adaptive Layout")
 	FMargin ContentPadding = FMargin(32.0f, 24.0f);
-
-	// 본문 TextBlock의 자동 줄바꿈을 사용할지 정합니다.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dialogue Box|Adaptive Layout")
-	bool bAutoWrapDialogueText = true;
-
-	// 본문이 줄바꿈될 실제 너비입니다. 보통 디자이너의 최대 원하는 너비에서 좌우 패딩을 뺀 값으로 둡니다. 0이면 명시적인 줄바꿈 너비를 쓰지 않습니다.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dialogue Box|Adaptive Layout", meta = (ClampMin = "0.0", UIMin = "0.0"))
-	float DialogueWrapTextAt = 836.0f;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Dialogue Box|Runtime")
 	TObjectPtr<AActor> CurrentSpeakerActor = nullptr;

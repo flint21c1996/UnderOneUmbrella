@@ -679,7 +679,9 @@ void UUOUCameraControllerComponent::ApplyOcclusionToMesh(UMeshComponent* MeshCom
 
 	if (OccluderFadeMaterial == nullptr)
 	{
-		MeshComponent->SetVisibility(false, true);
+		// 카메라를 가린 메시만 숨깁니다. 자식 컴포넌트까지 전파하면 NPC 메시 아래의
+		// 상호작용 감지 구체나 월드 UI가 함께 숨겨졌다가 복원 과정에서 켜질 수 있습니다.
+		MeshComponent->SetVisibility(false, false);
 	}
 
 	OccludedMeshStates.Add(MeshComponent, MoveTemp(NewState));
@@ -709,7 +711,8 @@ void UUOUCameraControllerComponent::RestoreOcclusionFromMesh(UMeshComponent* Mes
 		}
 	}
 
-	MeshComponent->SetVisibility(State->bWasVisible, true);
+	// 가림 처리 대상이었던 메시의 상태만 복원하고 자식 컴포넌트의 고유 표시 상태는 보존합니다.
+	MeshComponent->SetVisibility(State->bWasVisible, false);
 	OccludedMeshStates.Remove(MeshComponent);
 }
 

@@ -43,12 +43,6 @@ void UUOUDialogueBoxWidget::RefreshAdaptiveLayout()
 			DialoguePanel->SetBrush(AppliedBrush);
 		}
 	}
-
-	if (DialogueText != nullptr)
-	{
-		DialogueText->SetAutoWrapText(bAutoWrapDialogueText);
-		DialogueText->SetWrapTextAt(DialogueWrapTextAt);
-	}
 }
 
 void UUOUDialogueBoxWidget::NativeDestruct()
