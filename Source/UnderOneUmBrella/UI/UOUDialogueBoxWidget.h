@@ -45,7 +45,7 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Dialogue Box")
 	bool IsDialogueBoxVisible() const { return bDialogueBoxVisible; }
 
-	// 디자이너에서 연결한 9-Slice 배경과 본문 줄바꿈 설정을 다시 적용합니다.
+	// 디자이너에서 연결한 9-Slice 배경과 콘텐츠 여백을 다시 적용합니다.
 	// DialogueSizeBox의 크기 제한은 디자이너에서 설정한 값을 그대로 사용합니다.
 	// 런타임에 스타일 값을 바꾼 뒤 호출할 수도 있습니다.
 	UFUNCTION(BlueprintCallable, Category = "Dialogue Box|Adaptive Layout")

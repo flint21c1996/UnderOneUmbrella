@@ -138,7 +138,6 @@ private:
 	FUOUUmbrellaHUDState BuildUmbrellaHUDState() const;
 	void BroadcastUmbrellaHUDState();
 	void ClearDialogueTimer();
-	void ScheduleAutoAdvanceIfNeeded(const FUOUDialogueLine& Line);
 	void BroadcastCurrentDialogueLine(const FUOUDialogueLine& Line);
 	void BroadcastDialogueBubble(const FUOUDialogueLine& Line);
 	void BroadcastDialogueBoxLine(const FUOUDialogueLine& Line);
