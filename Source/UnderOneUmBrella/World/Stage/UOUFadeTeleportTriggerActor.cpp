@@ -21,8 +21,7 @@ AUOUFadeTeleportTriggerActor::AUOUFadeTeleportTriggerActor()
 	TriggerVolume = CreateDefaultSubobject<UBoxComponent>(TEXT("TriggerVolume"));
 	TriggerVolume->SetupAttachment(RootScene);
 	TriggerVolume->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
-	TriggerVolume->SetCollisionResponseToAllChannels(ECR_Ignore);
-	TriggerVolume->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
+	TriggerVolume->SetCollisionResponseToAllChannels(ECR_Overlap);
 	TriggerVolume->SetGenerateOverlapEvents(true);
 	TriggerVolume->SetBoxExtent(TriggerExtent);
 }
@@ -68,13 +67,18 @@ bool AUOUFadeTeleportTriggerActor::TriggerTransition(AActor* InstigatorActor)
 		return false;
 	}
 
-	if (!ShouldAcceptTriggerActor(InstigatorActor) || DestinationActor == nullptr)
+	if (!ShouldAcceptTriggerActor(InstigatorActor))
 	{
 		return false;
 	}
 
-	APlayerController* PlayerController = ResolvePlayerController(InstigatorActor);
-	if (PlayerController == nullptr || PlayerController->PlayerCameraManager == nullptr)
+	const bool bUsesTargetLocation = TeleportTargetActor != nullptr && InstigatorActor == TeleportTargetActor;
+	if (!bUsesTargetLocation && DestinationActor == nullptr)
+	{
+		return false;
+	}
+
+	if (InstigatorActor == nullptr || InstigatorActor == this)
 	{
 		return false;
 	}
@@ -85,9 +89,28 @@ bool AUOUFadeTeleportTriggerActor::TriggerTransition(AActor* InstigatorActor)
 		return false;
 	}
 
+	const bool bShouldUseCameraFade = bUseCameraFade && TeleportTargetActor == nullptr;
+	APlayerController* PlayerController = nullptr;
+	if (bShouldUseCameraFade)
+	{
+		PlayerController = ResolvePlayerController(InstigatorActor);
+		if (PlayerController == nullptr || PlayerController->PlayerCameraManager == nullptr)
+		{
+			return false;
+		}
+	}
+
 	bHasTriggered = true;
 	bIsTransitioning = true;
 	PendingTransitionActor = InstigatorActor;
+
+	if (!bShouldUseCameraFade)
+	{
+		const bool bTeleported = TeleportPendingActor();
+		FinishTransition();
+		return bTeleported;
+	}
+
 	PendingPlayerController = PlayerController;
 
 	const float SafeFadeOutDuration = FMath::Max(0.0f, FadeOutDuration);
@@ -143,8 +166,7 @@ void AUOUFadeTeleportTriggerActor::ApplyTriggerSettings()
 
 	TriggerVolume->SetBoxExtent(TriggerExtent);
 	TriggerVolume->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
-	TriggerVolume->SetCollisionResponseToAllChannels(ECR_Ignore);
-	TriggerVolume->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
+	TriggerVolume->SetCollisionResponseToAllChannels(ECR_Overlap);
 	TriggerVolume->SetGenerateOverlapEvents(true);
 }
 
@@ -153,6 +175,11 @@ bool AUOUFadeTeleportTriggerActor::ShouldAcceptTriggerActor(const AActor* OtherA
 	if (OtherActor == nullptr || OtherActor == this)
 	{
 		return false;
+	}
+
+	if (TeleportTargetActor != nullptr)
+	{
+		return OtherActor == TeleportTargetActor;
 	}
 
 	if (!bPlayerOnly)
@@ -262,8 +289,14 @@ void AUOUFadeTeleportTriggerActor::HideTransitionMessage()
 bool AUOUFadeTeleportTriggerActor::TeleportPendingActor()
 {
 	AActor* TargetActor = PendingTransitionActor.Get();
+	if (TargetActor == nullptr)
+	{
+		return false;
+	}
+
+	const bool bUsesTargetLocation = TargetActor == TeleportTargetActor;
 	AActor* Destination = DestinationActor.Get();
-	if (TargetActor == nullptr || Destination == nullptr)
+	if (!bUsesTargetLocation && Destination == nullptr)
 	{
 		return false;
 	}
@@ -273,14 +306,36 @@ bool AUOUFadeTeleportTriggerActor::TeleportPendingActor()
 		StopActorMovement(TargetActor);
 	}
 
-	const FVector DestinationLocation = Destination->GetActorLocation();
-	const FRotator DestinationRotation = bUseDestinationRotation ? Destination->GetActorRotation() : TargetActor->GetActorRotation();
+	const FVector DestinationLocation = bUsesTargetLocation
+		? TeleportTargetLocation
+		: Destination->GetActorLocation();
+	const FRotator TargetRotation = bUsesTargetLocation
+		? TargetActor->GetActorRotation()
+		: Destination->GetActorRotation();
+	const FRotator DestinationRotation = bUseDestinationRotation ? TargetRotation : TargetActor->GetActorRotation();
 	const bool bTeleported = TargetActor->SetActorLocationAndRotation(
 		DestinationLocation,
 		DestinationRotation,
 		false,
 		nullptr,
 		ETeleportType::TeleportPhysics);
+
+	if (bTeleported && TeleportTargetActor != nullptr)
+	{
+		TInlineComponentArray<UPrimitiveComponent*> PrimitiveComponents(TargetActor);
+		for (UPrimitiveComponent* PrimitiveComponent : PrimitiveComponents)
+		{
+			if (PrimitiveComponent == nullptr || !PrimitiveComponent->IsSimulatingPhysics())
+			{
+				continue;
+			}
+
+			// Push/Pull 이동 잠금의 기준점을 텔레포트된 새 위치로 다시 설정합니다.
+			PrimitiveComponent->RecreatePhysicsState();
+			PrimitiveComponent->SetPhysicsLinearVelocity(FVector::ZeroVector);
+			PrimitiveComponent->SetPhysicsAngularVelocityInDegrees(FVector::ZeroVector);
+		}
+	}
 
 	if (bTeleported && bUseDestinationRotation)
 	{
@@ -296,13 +351,21 @@ bool AUOUFadeTeleportTriggerActor::TeleportPendingActor()
 void AUOUFadeTeleportTriggerActor::StopActorMovement(AActor* TargetActor) const
 {
 	ACharacter* Character = Cast<ACharacter>(TargetActor);
-	if (Character == nullptr)
+	if (Character != nullptr)
 	{
-		return;
+		if (UCharacterMovementComponent* CharacterMovement = Character->GetCharacterMovement())
+		{
+			CharacterMovement->StopMovementImmediately();
+		}
 	}
 
-	if (UCharacterMovementComponent* CharacterMovement = Character->GetCharacterMovement())
+	TInlineComponentArray<UPrimitiveComponent*> PrimitiveComponents(TargetActor);
+	for (UPrimitiveComponent* PrimitiveComponent : PrimitiveComponents)
 	{
-		CharacterMovement->StopMovementImmediately();
+		if (PrimitiveComponent != nullptr && PrimitiveComponent->IsSimulatingPhysics())
+		{
+			PrimitiveComponent->SetPhysicsLinearVelocity(FVector::ZeroVector);
+			PrimitiveComponent->SetPhysicsAngularVelocityInDegrees(FVector::ZeroVector);
+		}
 	}
 }

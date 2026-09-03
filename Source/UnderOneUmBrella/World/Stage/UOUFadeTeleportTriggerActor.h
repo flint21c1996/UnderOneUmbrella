@@ -37,8 +37,17 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Stage|Transition")
 	TObjectPtr<UBoxComponent> TriggerVolume = nullptr;
 
-	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Stage|Transition")
+	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Stage|Transition", meta = (ToolTip = "일반 텔레포트의 도착 지점입니다. 텔레포트 대상 액터를 지정한 경우에는 대상 복귀 위치를 사용합니다."))
 	TObjectPtr<AActor> DestinationActor = nullptr;
+
+	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Stage|Transition", meta = (DisplayName = "텔레포트 대상 액터", ToolTip = "지정하면 이 액터가 트리거 영역에 진입했을 때만 대상 복귀 위치로 이동시킵니다. 비워두면 기존 트리거 조건과 Destination Actor를 사용합니다."))
+	TObjectPtr<AActor> TeleportTargetActor = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Stage|Transition", meta = (DisplayName = "대상 복귀 위치", ToolTip = "텔레포트 대상 액터를 되돌릴 절대 월드 좌표입니다."))
+	FVector TeleportTargetLocation = FVector::ZeroVector;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Stage|Transition", meta = (DisplayName = "카메라 페이드 사용", ToolTip = "일반 텔레포트에서 카메라 페이드를 사용할지 결정합니다. 텔레포트 대상 액터를 지정한 경우에는 항상 페이드 없이 즉시 복귀합니다."))
+	bool bUseCameraFade = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Stage|Transition")
 	bool bTriggerOnce = true;
