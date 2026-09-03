@@ -341,14 +341,18 @@ void UUOUUmbrellaLightInteractionComponent::ApplyRuntimeLightSurfacePlacement() 
 	LightSurfaceComponent->ReflectionNormalMode = EUOULightReflectionNormalMode::ComponentUp;
 	// 우산 메시가 반사점을 가리므로 거울용 시각 여백을 적용하지 않고 입사광과 반사광을 바로 연결합니다.
 	LightSurfaceComponent->ReflectionStartPadding = 0.0f;
-	// 차단 박스와 동일한 회전을 사용하므로 로컬 Up이 실제 우산 면의 앞면입니다.
-	LightSurfaceComponent->ReflectionFrontNormalMode = EUOULightReflectionFrontNormalMode::ComponentUp;
+	// N·L 판정의 N은 판정 박스 회전과 무관하게 플레이어 전방을 직접 사용합니다.
+	// IncomingDirection은 빛 진행 방향이므로 L(표면에서 광원 쪽)은 그 반대 방향입니다.
+	LightSurfaceComponent->ReflectionFrontNormalMode = EUOULightReflectionFrontNormalMode::OwnerForward;
+	LightSurfaceComponent->bReflectFrontFaceOnly = true;
 	LightSurfaceComponent->bPassThroughWhenReflectionRejected =
 		bPassLightThroughOutsideReflectionAngle;
 	LightSurfaceComponent->MaximumReflectionIncidenceAngle = FMath::Clamp(
 		MaximumUmbrellaReflectionIncidenceAngle,
 		0.0f,
 		180.0f);
+	LightSurfaceComponent->RetainedMaximumReflectionIncidenceAngle =
+		LightSurfaceComponent->MaximumReflectionIncidenceAngle;
 	// 원기둥 빛의 중심축이 우산 옆을 지나더라도 실제 빛 단면이 우산에 걸치면
 	// 그 적중 샘플을 대표 반사점으로 사용합니다.
 	LightSurfaceComponent->bAllowEdgeOnlyCylinderReflection = true;
