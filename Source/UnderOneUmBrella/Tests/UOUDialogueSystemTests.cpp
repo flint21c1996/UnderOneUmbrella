@@ -4,6 +4,8 @@
 
 #include "Misc/AutomationTest.h"
 #include "Puzzle/Dialogue/UOUDialoguePuzzleStateComponent.h"
+#include "UI/UOUBubbleConversationComponent.h"
+#include "UI/UOUBubbleConversationData.h"
 #include "UI/UOUDialogueSourceComponent.h"
 #include "UI/UOUDialogueTriggerComponent.h"
 #include "UI/UOUUISubsystem.h"
@@ -162,6 +164,60 @@ bool FUOUBubbleOnlyDialoguePlaybackTest::RunTest(const FString& Parameters)
 	TestFalse(
 		TEXT("Stopping all bubble-only playback clears every source."),
 		UISubsystem->IsBubbleOnlyDialoguePlaying());
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FUOUBubbleConversationConfigurationTest,
+	"UnderOneUmbrella.UI.Dialogue.BubbleConversationConfiguration",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUOUBubbleConversationConfigurationTest::RunTest(const FString& Parameters)
+{
+	UUOUBubbleConversationComponent* Conversation = NewObject<UUOUBubbleConversationComponent>();
+	FUOUBubbleConversationLine InlineLine;
+	InlineLine.SpeakerId = TEXT("NPC_A");
+	InlineLine.BubbleText = FText::FromString(TEXT("Inline line."));
+	Conversation->InlineLines.Add(InlineLine);
+
+	TestEqual(
+		TEXT("A conversation uses inline lines when no reusable data asset is assigned."),
+		Conversation->GetConversationLineCount(),
+		1);
+
+	UUOUBubbleConversationData* ConversationData = NewObject<UUOUBubbleConversationData>();
+	FUOUBubbleConversationLine FirstDataLine;
+	FirstDataLine.SpeakerId = TEXT("NPC_A");
+	FirstDataLine.BubbleText = FText::FromString(TEXT("First data line."));
+	ConversationData->Lines.Add(FirstDataLine);
+	FUOUBubbleConversationLine SecondDataLine;
+	SecondDataLine.SpeakerId = TEXT("NPC_B");
+	SecondDataLine.BubbleText = FText::FromString(TEXT("Second data line."));
+	ConversationData->Lines.Add(SecondDataLine);
+	Conversation->ConversationData = ConversationData;
+
+	TestTrue(
+		TEXT("A reusable conversation data asset recognizes configured bubble lines."),
+		ConversationData->HasValidLines());
+	TestEqual(
+		TEXT("A valid conversation data asset takes precedence over inline lines."),
+		Conversation->GetConversationLineCount(),
+		2);
+
+	IUOUPuzzleResultReceiver::Execute_ApplyPuzzleResult(
+		Conversation,
+		EOUUPuzzleResultAction::Deactivate);
+	TestTrue(
+		TEXT("Deactivate immediately reports its conversation result as completed."),
+		IUOUPuzzleResultCompletionState::Execute_IsPuzzleResultCompleted(
+			Conversation,
+			EOUUPuzzleResultAction::Deactivate));
+	TestFalse(
+		TEXT("Deactivate clears the previous Activate completion state."),
+		IUOUPuzzleResultCompletionState::Execute_IsPuzzleResultCompleted(
+			Conversation,
+			EOUUPuzzleResultAction::Activate));
 
 	return true;
 }
