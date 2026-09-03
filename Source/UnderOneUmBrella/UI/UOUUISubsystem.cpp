@@ -2,6 +2,7 @@
 
 #include "UI/UOUUISubsystem.h"
 
+#include "Components/WidgetComponent.h"
 #include "Game/UOUInGameHUDWidget.h"
 #include "Player/UOUWaterContainerComponent.h"
 #include "TimerManager.h"
@@ -263,6 +264,85 @@ bool UUOUUISubsystem::IsBubbleOnlyDialoguePlayingForSource(
 	return DialogueSource != nullptr && BubbleOnlyPlaybackStates.Contains(DialogueSource);
 }
 
+bool UUOUUISubsystem::ShowSpeechBubble(
+	AActor* SpeakerActor,
+	FText BubbleText,
+	float Duration,
+	FName PresentationStyle)
+{
+	if (!IsValid(SpeakerActor) || BubbleText.IsEmpty() || Duration <= 0.0f)
+	{
+		return false;
+	}
+
+	const FText DisplayText = NormalizeUIDialogueDisplayText(BubbleText);
+	OnDialogueBubbleRequested.Broadcast(SpeakerActor, DisplayText, Duration);
+	if (RegisteredHUDWidget.IsValid())
+	{
+		RegisteredHUDWidget->ShowNPCSpeechBubbleStyled(
+			SpeakerActor,
+			DisplayText,
+			Duration,
+			PresentationStyle);
+	}
+
+	return true;
+}
+
+bool UUOUUISubsystem::ShowSpeechBubbleOnComponent(
+	AActor* SpeakerActor,
+	UWidgetComponent* SpeechBubbleWidgetComponent,
+	FText BubbleText,
+	float Duration,
+	FName PresentationStyle,
+	int32 FontSizeOverride)
+{
+	if (!IsValid(SpeakerActor)
+		|| !IsValid(SpeechBubbleWidgetComponent)
+		|| SpeechBubbleWidgetComponent->GetOwner() != SpeakerActor
+		|| BubbleText.IsEmpty()
+		|| Duration <= 0.0f
+		|| !RegisteredHUDWidget.IsValid())
+	{
+		return false;
+	}
+
+	const FText DisplayText = NormalizeUIDialogueDisplayText(BubbleText);
+	OnDialogueBubbleRequested.Broadcast(SpeakerActor, DisplayText, Duration);
+	return RegisteredHUDWidget->ShowNPCSpeechBubbleStyledOnComponent(
+		SpeakerActor,
+		SpeechBubbleWidgetComponent,
+		DisplayText,
+		Duration,
+		PresentationStyle,
+		FontSizeOverride);
+}
+
+void UUOUUISubsystem::HideSpeechBubble(AActor* SpeakerActor, bool bImmediately)
+{
+	if (IsValid(SpeakerActor) && RegisteredHUDWidget.IsValid())
+	{
+		RegisteredHUDWidget->HideNPCSpeechBubble(SpeakerActor, bImmediately);
+	}
+}
+
+void UUOUUISubsystem::HideSpeechBubbleOnComponent(
+	AActor* SpeakerActor,
+	UWidgetComponent* SpeechBubbleWidgetComponent,
+	bool bImmediately)
+{
+	if (IsValid(SpeakerActor)
+		&& IsValid(SpeechBubbleWidgetComponent)
+		&& SpeechBubbleWidgetComponent->GetOwner() == SpeakerActor
+		&& RegisteredHUDWidget.IsValid())
+	{
+		RegisteredHUDWidget->HideNPCSpeechBubbleOnComponent(
+			SpeakerActor,
+			SpeechBubbleWidgetComponent,
+			bImmediately);
+	}
+}
+
 void UUOUUISubsystem::ShowTitle(const FUOUTitleDisplayData& TitleData)
 {
 	OnTitleRequested.Broadcast(TitleData);
@@ -391,15 +471,11 @@ void UUOUUISubsystem::BroadcastDialogueBubble(const FUOUDialogueLine& Line)
 	AActor* SpeakerActor = ActiveDialogueSource.IsValid() ? ActiveDialogueSource->GetSpeakerActor() : nullptr;
 	if (ActiveDialogueSource.IsValid() && ActiveDialogueSource->IsDialogueBubbleEnabled() && !DisplayLine.BubbleText.IsEmpty())
 	{
-		OnDialogueBubbleRequested.Broadcast(SpeakerActor, DisplayLine.BubbleText, DisplayLine.BubbleDuration);
-		if (RegisteredHUDWidget.IsValid())
-		{
-			RegisteredHUDWidget->ShowNPCSpeechBubbleStyled(
-				SpeakerActor,
-				DisplayLine.BubbleText,
-				DisplayLine.BubbleDuration,
-				DisplayLine.PresentationStyle);
-		}
+		ShowSpeechBubble(
+			SpeakerActor,
+			DisplayLine.BubbleText,
+			DisplayLine.BubbleDuration,
+			DisplayLine.PresentationStyle);
 	}
 }
 
@@ -460,15 +536,11 @@ bool UUOUUISubsystem::AdvanceBubbleOnlyDialogue(
 		}
 
 		AActor* SpeakerActor = DialogueSource->GetSpeakerActor();
-		OnDialogueBubbleRequested.Broadcast(SpeakerActor, DisplayLine.BubbleText, DisplayLine.BubbleDuration);
-		if (RegisteredHUDWidget.IsValid())
-		{
-			RegisteredHUDWidget->ShowNPCSpeechBubbleStyled(
-				SpeakerActor,
-				DisplayLine.BubbleText,
-				DisplayLine.BubbleDuration,
-				DisplayLine.PresentationStyle);
-		}
+		ShowSpeechBubble(
+			SpeakerActor,
+			DisplayLine.BubbleText,
+			DisplayLine.BubbleDuration,
+			DisplayLine.PresentationStyle);
 
 		if (UWorld* World = GetWorld())
 		{

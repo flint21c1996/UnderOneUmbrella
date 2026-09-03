@@ -437,6 +437,144 @@ void UUOUInGameHUDWidget::ShowNPCSpeechBubbleStyled(
 	TrySetGenericSpeechBubbleText(SpeechBubbleWidget, BubbleText);
 }
 
+bool UUOUInGameHUDWidget::ShowNPCSpeechBubbleStyledOnComponent(
+	AActor* SpeakerActor,
+	UWidgetComponent* SpeechBubbleWidgetComponent,
+	FText BubbleText,
+	float Duration,
+	FName PresentationStyle,
+	int32 FontSizeOverride)
+{
+	if (!IsValid(SpeakerActor)
+		|| !IsValid(SpeechBubbleWidgetComponent)
+		|| SpeechBubbleWidgetComponent->GetOwner() != SpeakerActor)
+	{
+		return false;
+	}
+
+	SpeechBubbleWidgetComponent->SetVisibility(true, true);
+	SpeechBubbleWidgetComponent->SetHiddenInGame(false, true);
+	SpeechBubbleWidgetComponent->InitWidget();
+
+	UUserWidget* SpeechBubbleWidget = SpeechBubbleWidgetComponent->GetUserWidgetObject();
+	if (SpeechBubbleWidget == nullptr)
+	{
+		return false;
+	}
+
+	if (UUOUSpeechBubbleWidget* TypedSpeechBubbleWidget = Cast<UUOUSpeechBubbleWidget>(SpeechBubbleWidget))
+	{
+		if (FontSizeOverride > 0)
+		{
+			TypedSpeechBubbleWidget->SetBubbleFontSize(FontSizeOverride);
+		}
+		TypedSpeechBubbleWidget->ShowBubbleStyled(BubbleText, Duration, PresentationStyle);
+		return true;
+	}
+
+	UFunction* ShowFunction = SpeechBubbleWidget->FindFunction(TEXT("ShowBubble"));
+	if (ShowFunction == nullptr)
+	{
+		TrySetGenericSpeechBubbleText(SpeechBubbleWidget, BubbleText);
+		return true;
+	}
+
+	struct FShowBubbleParams
+	{
+		FText BubbleText;
+		double Duration = 0.0;
+	};
+
+	FShowBubbleParams Params;
+	Params.BubbleText = BubbleText;
+	Params.Duration = Duration;
+	SpeechBubbleWidget->ProcessEvent(ShowFunction, &Params);
+	TrySetGenericSpeechBubbleText(SpeechBubbleWidget, BubbleText);
+	return true;
+}
+
+void UUOUInGameHUDWidget::HideNPCSpeechBubble(AActor* SpeakerActor, bool bImmediately)
+{
+	UWidgetComponent* SpeechBubbleWidgetComponent = ResolveSpeechBubbleWidgetComponent(SpeakerActor);
+	if (SpeechBubbleWidgetComponent == nullptr)
+	{
+		return;
+	}
+
+	UUserWidget* SpeechBubbleWidget = SpeechBubbleWidgetComponent->GetUserWidgetObject();
+	if (SpeechBubbleWidget == nullptr)
+	{
+		return;
+	}
+
+	if (UUOUSpeechBubbleWidget* TypedSpeechBubbleWidget = Cast<UUOUSpeechBubbleWidget>(SpeechBubbleWidget))
+	{
+		if (bImmediately)
+		{
+			TypedSpeechBubbleWidget->HideBubbleImmediately();
+		}
+		else
+		{
+			TypedSpeechBubbleWidget->HideBubble();
+		}
+		return;
+	}
+
+	const FName HideFunctionName = bImmediately
+		? FName(TEXT("HideBubbleImmediately"))
+		: FName(TEXT("HideBubble"));
+	if (UFunction* HideFunction = SpeechBubbleWidget->FindFunction(HideFunctionName))
+	{
+		SpeechBubbleWidget->ProcessEvent(HideFunction, nullptr);
+		return;
+	}
+
+	SpeechBubbleWidget->SetVisibility(ESlateVisibility::Collapsed);
+}
+
+void UUOUInGameHUDWidget::HideNPCSpeechBubbleOnComponent(
+	AActor* SpeakerActor,
+	UWidgetComponent* SpeechBubbleWidgetComponent,
+	bool bImmediately)
+{
+	if (!IsValid(SpeakerActor)
+		|| !IsValid(SpeechBubbleWidgetComponent)
+		|| SpeechBubbleWidgetComponent->GetOwner() != SpeakerActor)
+	{
+		return;
+	}
+
+	UUserWidget* SpeechBubbleWidget = SpeechBubbleWidgetComponent->GetUserWidgetObject();
+	if (SpeechBubbleWidget == nullptr)
+	{
+		return;
+	}
+
+	if (UUOUSpeechBubbleWidget* TypedSpeechBubbleWidget = Cast<UUOUSpeechBubbleWidget>(SpeechBubbleWidget))
+	{
+		if (bImmediately)
+		{
+			TypedSpeechBubbleWidget->HideBubbleImmediately();
+		}
+		else
+		{
+			TypedSpeechBubbleWidget->HideBubble();
+		}
+		return;
+	}
+
+	const FName HideFunctionName = bImmediately
+		? FName(TEXT("HideBubbleImmediately"))
+		: FName(TEXT("HideBubble"));
+	if (UFunction* HideFunction = SpeechBubbleWidget->FindFunction(HideFunctionName))
+	{
+		SpeechBubbleWidget->ProcessEvent(HideFunction, nullptr);
+		return;
+	}
+
+	SpeechBubbleWidget->SetVisibility(ESlateVisibility::Collapsed);
+}
+
 void UUOUInGameHUDWidget::ShowDialogueLine_Implementation(AActor* SpeakerActor, const FUOUDialogueLine& Line)
 {
 	if (DialogueBoxWidget != nullptr)
