@@ -103,14 +103,6 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dialogue Box|Adaptive Layout")
 	FMargin ContentPadding = FMargin(32.0f, 24.0f);
 
-	// 본문 TextBlock의 자동 줄바꿈을 사용할지 정합니다.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dialogue Box|Adaptive Layout")
-	bool bAutoWrapDialogueText = true;
-
-	// 본문이 줄바꿈될 실제 너비입니다. 보통 디자이너의 최대 원하는 너비에서 좌우 패딩을 뺀 값으로 둡니다. 0이면 명시적인 줄바꿈 너비를 쓰지 않습니다.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dialogue Box|Adaptive Layout", meta = (ClampMin = "0.0", UIMin = "0.0"))
-	float DialogueWrapTextAt = 836.0f;
-
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Dialogue Box|Runtime")
 	TObjectPtr<AActor> CurrentSpeakerActor = nullptr;
 
