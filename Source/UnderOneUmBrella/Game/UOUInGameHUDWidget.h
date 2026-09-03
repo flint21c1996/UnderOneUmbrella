@@ -97,25 +97,6 @@ public:
 		float Duration,
 		FName PresentationStyle);
 
-	// 자동 탐색 대신 지정된 Widget Component에 말풍선을 표시합니다.
-	UFUNCTION(BlueprintCallable, BlueprintCosmetic, Category = "HUD|Dialogue")
-	bool ShowNPCSpeechBubbleStyledOnComponent(
-		AActor* SpeakerActor,
-		UWidgetComponent* SpeechBubbleWidgetComponent,
-		FText BubbleText,
-		float Duration,
-		FName PresentationStyle,
-		int32 FontSizeOverride = 0);
-
-	UFUNCTION(BlueprintCallable, BlueprintCosmetic, Category = "HUD|Dialogue")
-	void HideNPCSpeechBubble(AActor* SpeakerActor, bool bImmediately = true);
-
-	UFUNCTION(BlueprintCallable, BlueprintCosmetic, Category = "HUD|Dialogue")
-	void HideNPCSpeechBubbleOnComponent(
-		AActor* SpeakerActor,
-		UWidgetComponent* SpeechBubbleWidgetComponent,
-		bool bImmediately = true);
-
 	// BP에서 추가 연출이 필요할 때 사용하는 선택 진입점입니다. 기본 말풍선 표시는 C++에서 먼저 처리합니다.
 	UFUNCTION(BlueprintImplementableEvent, BlueprintCosmetic, Category = "HUD|Dialogue")
 	void BP_OnNPCSpeechBubbleRequested(AActor* SpeakerActor, const FText& BubbleText, float Duration);

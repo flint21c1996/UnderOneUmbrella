@@ -12,7 +12,6 @@
 class UUOUDialogueSourceComponent;
 class UUOUInGameHUDWidget;
 class UUOUWaterContainerComponent;
-class UWidgetComponent;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FUOUUmbrellaHUDStateChangedSignature, const FUOUUmbrellaHUDState&, State);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FUOUDialogueStartedSignature, AActor*, SpeakerActor, UUOUDialogueSourceComponent*, DialogueSource);
@@ -112,33 +111,6 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "UI|Dialogue Bubble")
 	bool IsBubbleOnlyDialoguePlayingForSource(UUOUDialogueSourceComponent* DialogueSource) const;
-
-	// Conversation 같은 외부 순서 관리자가 특정 월드 액터의 말풍선 한 줄만 표시할 때 사용합니다.
-	UFUNCTION(BlueprintCallable, Category = "UI|Dialogue Bubble")
-	bool ShowSpeechBubble(
-		AActor* SpeakerActor,
-		FText BubbleText,
-		float Duration,
-		FName PresentationStyle);
-
-	// 별도 Conversation 액터처럼 화자와 UI 컴포넌트를 명시적으로 연결한 경우 사용합니다.
-	UFUNCTION(BlueprintCallable, Category = "UI|Dialogue Bubble")
-	bool ShowSpeechBubbleOnComponent(
-		AActor* SpeakerActor,
-		UWidgetComponent* SpeechBubbleWidgetComponent,
-		FText BubbleText,
-		float Duration,
-		FName PresentationStyle,
-		int32 FontSizeOverride = 0);
-
-	UFUNCTION(BlueprintCallable, Category = "UI|Dialogue Bubble")
-	void HideSpeechBubble(AActor* SpeakerActor, bool bImmediately = true);
-
-	UFUNCTION(BlueprintCallable, Category = "UI|Dialogue Bubble")
-	void HideSpeechBubbleOnComponent(
-		AActor* SpeakerActor,
-		UWidgetComponent* SpeechBubbleWidgetComponent,
-		bool bImmediately = true);
 
 	UFUNCTION(BlueprintCallable, Category = "UI|Title")
 	void ShowTitle(const FUOUTitleDisplayData& TitleData);
