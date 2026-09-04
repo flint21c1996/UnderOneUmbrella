@@ -471,11 +471,15 @@ void UUOUUISubsystem::BroadcastDialogueBubble(const FUOUDialogueLine& Line)
 	AActor* SpeakerActor = ActiveDialogueSource.IsValid() ? ActiveDialogueSource->GetSpeakerActor() : nullptr;
 	if (ActiveDialogueSource.IsValid() && ActiveDialogueSource->IsDialogueBubbleEnabled() && !DisplayLine.BubbleText.IsEmpty())
 	{
-		ShowSpeechBubble(
-			SpeakerActor,
-			DisplayLine.BubbleText,
-			DisplayLine.BubbleDuration,
-			DisplayLine.PresentationStyle);
+		OnDialogueBubbleRequested.Broadcast(SpeakerActor, DisplayLine.BubbleText, DisplayLine.BubbleDuration);
+		if (RegisteredHUDWidget.IsValid())
+		{
+			RegisteredHUDWidget->ShowNPCSpeechBubbleStyled(
+				SpeakerActor,
+				DisplayLine.BubbleText,
+				DisplayLine.BubbleDuration,
+				DisplayLine.PresentationStyle);
+		}
 	}
 }
 
@@ -536,11 +540,15 @@ bool UUOUUISubsystem::AdvanceBubbleOnlyDialogue(
 		}
 
 		AActor* SpeakerActor = DialogueSource->GetSpeakerActor();
-		ShowSpeechBubble(
-			SpeakerActor,
-			DisplayLine.BubbleText,
-			DisplayLine.BubbleDuration,
-			DisplayLine.PresentationStyle);
+		OnDialogueBubbleRequested.Broadcast(SpeakerActor, DisplayLine.BubbleText, DisplayLine.BubbleDuration);
+		if (RegisteredHUDWidget.IsValid())
+		{
+			RegisteredHUDWidget->ShowNPCSpeechBubbleStyled(
+				SpeakerActor,
+				DisplayLine.BubbleText,
+				DisplayLine.BubbleDuration,
+				DisplayLine.PresentationStyle);
+		}
 
 		if (UWorld* World = GetWorld())
 		{
