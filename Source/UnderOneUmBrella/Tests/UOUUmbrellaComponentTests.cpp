@@ -1,5 +1,7 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
+#if WITH_DEV_AUTOMATION_TESTS && WITH_EDITOR
+
 #include "Player/UOUUmbrellaComponent.h"
 #include "Player/UOUUmbrellaRuntimeVisualPresenter.h"
 #include "Player/UOUUmbrellaSkeletalVisualPresenter.h"
@@ -13,8 +15,6 @@
 #include "Engine/StaticMesh.h"
 #include "GameFramework/Character.h"
 #include "Misc/AutomationTest.h"
-
-#if WITH_DEV_AUTOMATION_TESTS
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FUOUUmbrellaStateTransitionTest,
