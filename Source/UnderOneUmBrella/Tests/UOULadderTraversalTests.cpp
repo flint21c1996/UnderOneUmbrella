@@ -1,5 +1,7 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
+#if WITH_DEV_AUTOMATION_TESTS && WITH_EDITOR
+
 #include "World/Traversal/UOULadderActor.h"
 
 #include "Components/BoxComponent.h"
@@ -8,8 +10,6 @@
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
 #include "Misc/AutomationTest.h"
-
-#if WITH_DEV_AUTOMATION_TESTS
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FUOULadderModularHeightTest,
