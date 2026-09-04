@@ -2,6 +2,7 @@
 
 #include "UI/UOUStageSelectPopupWidget.h"
 
+#include "Components/Image.h"
 #include "Components/TextBlock.h"
 
 void UUOUStageSelectPopupWidget::NativeConstruct()
@@ -12,6 +13,7 @@ void UUOUStageSelectPopupWidget::NativeConstruct()
 	if (bHasStageData)
 	{
 		RefreshRewardProgressText();
+		RefreshRewardStatusImage();
 	}
 }
 
@@ -21,6 +23,7 @@ void UUOUStageSelectPopupWidget::SetStageData(const FUOUStageDefinition& InStage
 	bHasStageData = true;
 
 	RefreshRewardProgressText();
+	RefreshRewardStatusImage();
 	BP_OnStageDataChanged(StageData);
 }
 
@@ -38,4 +41,17 @@ void UUOUStageSelectPopupWidget::RefreshRewardProgressText()
 		FText::AsNumber(StageData.MissingRewardCount));
 
 	RewardProgressText->SetText(RewardProgress);
+}
+
+void UUOUStageSelectPopupWidget::RefreshRewardStatusImage()
+{
+	if (!RewardStatusImage)
+	{
+		return;
+	}
+
+	const FSlateBrush& RewardBrush = StageData.MissingRewardCount > 0
+		? EmptyRewardBrush
+		: CompletedRewardBrush;
+	RewardStatusImage->SetBrush(RewardBrush);
 }

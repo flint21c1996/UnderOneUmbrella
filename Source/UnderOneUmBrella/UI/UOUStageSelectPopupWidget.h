@@ -5,8 +5,10 @@
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
 #include "Game/UOUStageSelectTypes.h"
+#include "Styling/SlateBrush.h"
 #include "UOUStageSelectPopupWidget.generated.h"
 
+class UImage;
 class UTextBlock;
 
 /**
@@ -40,6 +42,18 @@ protected:
 	UPROPERTY(Transient, BlueprintReadOnly, meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> RewardProgressText;
 
+	/** WBP에 같은 이름의 Image가 있으면 Reward 수집 완료 여부에 맞는 Brush를 표시합니다. */
+	UPROPERTY(Transient, BlueprintReadOnly, meta = (BindWidgetOptional))
+	TObjectPtr<UImage> RewardStatusImage;
+
+	/** 아직 수집하지 못한 Reward가 하나라도 있을 때 표시할 Brush입니다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Stage Select|Rewards")
+	FSlateBrush EmptyRewardBrush;
+
+	/** 모든 Reward를 수집하여 MissingRewardCount가 0일 때 표시할 Brush입니다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Stage Select|Rewards")
+	FSlateBrush CompletedRewardBrush;
+
 	/** WBP에서 구현하여 텍스트, 이미지, 애니메이션 등 Blueprint 표현을 갱신합니다. */
 	UFUNCTION(BlueprintImplementableEvent, BlueprintCosmetic, Category = "Stage Select", meta = (DisplayName = "On Stage Data Changed"))
 	void BP_OnStageDataChanged(const FUOUStageDefinition& NewStageData);
@@ -47,6 +61,9 @@ protected:
 private:
 	/** 현재 StageData의 보상 수량을 RewardProgressText에 반영합니다. */
 	void RefreshRewardProgressText();
+
+	/** MissingRewardCount에 따라 RewardStatusImage의 Brush를 갱신합니다. */
+	void RefreshRewardStatusImage();
 
 	UPROPERTY(Transient)
 	bool bHasStageData = false;
