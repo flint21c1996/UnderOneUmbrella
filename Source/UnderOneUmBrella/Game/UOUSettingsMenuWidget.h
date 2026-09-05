@@ -25,6 +25,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Settings")
 	void ReturnToTitle();
 
+	UFUNCTION(BlueprintCallable, Category = "Settings", meta = (DisplayName = "스테이지 선택 화면으로"))
+	void OpenStageSelect();
+
 	UFUNCTION(BlueprintCallable, Category = "Settings", meta = (DisplayName = "현재 스테이지 재시작", ToolTip = "설정창에서 현재 스테이지를 다시 시작합니다."))
 	void RestartCurrentStage();
 
@@ -59,6 +62,7 @@ public:
 	void SaveAudioSettings();
 
 protected:
+	virtual void NativeOnInitialized() override;
 	virtual void NativeConstruct() override;
 	virtual void NativeDestruct() override;
 
