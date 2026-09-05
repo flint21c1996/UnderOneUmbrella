@@ -3,6 +3,7 @@
 #include "Game/UOUMapSelectPlayerController.h"
 
 #include "Blueprint/UserWidget.h"
+#include "Components/Widget.h"
 #include "Engine/GameInstance.h"
 #include "Game/UOULevelTransitionSubsystem.h"
 #include "Game/UOUPlayerProgressSubsystem.h"
@@ -39,6 +40,21 @@ void AUOUMapSelectPlayerController::BeginPlay()
 		if (MapSelectHUDWidget != nullptr)
 		{
 			MapSelectHUDWidget->AddToViewport();
+
+			// 공통 HUD의 다음/이전 레벨 영역은 스테이지 선택 화면에서만 숨깁니다.
+			// WBP_InGameHUD의 버튼과 문구를 함께 감싸는 SizeBox 이름입니다.
+			static const FName LevelNavigationWidgetNames[] =
+			{
+				TEXT("SB_Settings_1"),
+				TEXT("SB_Settings_2")
+			};
+			for (const FName WidgetName : LevelNavigationWidgetNames)
+			{
+				if (UWidget* NavigationWidget = MapSelectHUDWidget->GetWidgetFromName(WidgetName))
+				{
+					NavigationWidget->SetVisibility(ESlateVisibility::Collapsed);
+				}
+			}
 		}
 	}
 }
