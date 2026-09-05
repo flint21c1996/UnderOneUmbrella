@@ -62,6 +62,13 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|Preview")
 	bool bShowWindRangePreview = true;
 
+	// Named box mesh follows the same segments as the gameplay overlap/debug boxes.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|Range Visual")
+	bool bAutoFitWindRangeMesh = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|Range Visual")
+	FName WindRangeMeshComponentName = TEXT("Cube");
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wind|Gameplay")
 	bool bWindEnabled = true;
 
@@ -303,6 +310,9 @@ public:
 	TArray<FUOUWindPathSegment> GetWindPathSegments() const { return WindPathSegments; }
 
 private:
+	UStaticMeshComponent* FindWindRangeMesh() const;
+	void RefreshWindRangeMeshes();
+	void ClearGeneratedWindRangeMeshes();
 	void RebuildWindPathInternal(bool bIgnoreRuntimeWindState);
 	void ValidateSettings();
 	void UpdateWindRangePreview();
@@ -342,4 +352,7 @@ private:
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UNiagaraComponent>> GeneratedWindVFXComponents;
+
+	UPROPERTY(Transient, DuplicateTransient)
+	TArray<TObjectPtr<UStaticMeshComponent>> GeneratedWindRangeMeshes;
 };
