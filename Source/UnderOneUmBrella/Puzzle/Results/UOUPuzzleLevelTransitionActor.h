@@ -52,6 +52,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Puzzle|Level Transition", meta = (ToolTip = "켜져 있으면 한 번 전환을 시작한 뒤 같은 액터가 다시 전환을 시작하지 않습니다."))
 	bool bTriggerOnce = true;
 
+	/** 퍼즐 완료로 다음/대상 맵에 이동할 때 현재 스테이지를 먼저 저장합니다. 재시작과 이전 맵 이동에는 적용하지 않습니다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Puzzle|Level Transition", meta = (DisplayName = "전환 전 스테이지 클리어 저장"))
+	bool bCompleteStageBeforeTransition = true;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Puzzle|Runtime")
 	bool bHasTriggered = false;
 

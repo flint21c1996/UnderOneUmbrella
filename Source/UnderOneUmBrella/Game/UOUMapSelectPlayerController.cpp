@@ -112,14 +112,7 @@ bool AUOUMapSelectPlayerController::EnterStage(const FUOUStageDefinition& Stage)
 	}
 
 	bIsOpeningStage = TransitionSubsystem->RequestLevelTransition(Stage.Level, FUOULevelTransitionSettings());
-	if (bIsOpeningStage)
-	{
-		if (UUOUPlayerProgressSubsystem* ProgressSubsystem =
-			GameInstance->GetSubsystem<UUOUPlayerProgressSubsystem>())
-		{
-			ProgressSubsystem->BeginStageAttempt(Stage.StageId, Stage.Level, Stage.RewardIds);
-		}
-	}
+	// 스테이지 기록은 도착 월드의 로드 시점에 공통으로 시작합니다.
 	return bIsOpeningStage;
 }
 

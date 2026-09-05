@@ -3,6 +3,9 @@
 #include "Game/UOUPlayerProgressSubsystem.h"
 
 #include "Game/UOUPlayerProgressSaveGame.h"
+#include "Game/UOUStageDefinitionRegistry.h"
+#include "Game/UOUStageSelectTypes.h"
+#include "Engine/GameInstance.h"
 #include "Kismet/GameplayStatics.h"
 #include "Misc/PackageName.h"
 #include "UObject/UObjectGlobals.h"
@@ -108,6 +111,7 @@ bool UUOUPlayerProgressSubsystem::BeginStageAttempt(
 
 bool UUOUPlayerProgressSubsystem::RecordRewardCollected(const FName RewardId)
 {
+	EnsureStageAttemptForWorld(GetWorld());
 	if (ActiveStageId.IsNone() || RewardId.IsNone())
 	{
 		return false;
@@ -135,6 +139,7 @@ bool UUOUPlayerProgressSubsystem::RecordRewardCollected(const FName RewardId)
 
 bool UUOUPlayerProgressSubsystem::CommitCurrentStage()
 {
+	EnsureStageAttemptForWorld(GetWorld());
 	if (ActiveStageId.IsNone())
 	{
 		UE_LOG(LogUOUPlayerProgress, Warning, TEXT("Cannot commit progress without an active stage."));
@@ -279,28 +284,41 @@ const FUOUStageProgressRecord* UUOUPlayerProgressSubsystem::FindStageProgress(co
 
 void UUOUPlayerProgressSubsystem::HandlePostLoadMapWithWorld(UWorld* LoadedWorld)
 {
-	if (LoadedWorld == nullptr || !LoadedWorld->IsGameWorld())
+	EnsureStageAttemptForWorld(LoadedWorld);
+}
+
+bool UUOUPlayerProgressSubsystem::EnsureStageAttemptForWorld(UWorld* World)
+{
+	if (World == nullptr || !World->IsGameWorld() || World->GetGameInstance() != GetGameInstance())
 	{
-		return;
+		return false;
+	}
+	if (ActiveStageWorld.Get() == World)
+	{
+		return !ActiveStageId.IsNone();
 	}
 
-	PendingRewardIds.Reset();
-	if (ActiveStageId.IsNone())
+	ClearStageAttempt();
+	ActiveStageWorld = World;
+	int32 MatchCount = 0;
+	FName StageId;
+	const FUOUStageDefinitionRow* Stage =
+		FUOUStageDefinitionRegistry::FindStageByLevel(World, MatchCount, &StageId);
+	if (Stage == nullptr)
 	{
-		return;
+		if (MatchCount > 1)
+		{
+			UE_LOG(LogUOUPlayerProgress, Warning, TEXT("Multiple stage definitions reference map '%s'."), *World->GetMapName());
+		}
+		return false;
 	}
-
-	const FString LoadedMapName = UWorld::RemovePIEPrefix(LoadedWorld->GetMapName());
-	const FName LoadedLevelName(*FPackageName::GetShortName(LoadedMapName));
-	if (LoadedLevelName != ActiveStageLevelName)
-	{
-		ClearStageAttempt();
-	}
+	return BeginStageAttempt(StageId, Stage->Level, Stage->RewardIds);
 }
 
 void UUOUPlayerProgressSubsystem::ClearStageAttempt()
 {
 	ActiveStageId = NAME_None;
+	ActiveStageWorld.Reset();
 	ActiveStageLevelName = NAME_None;
 	ExpectedRewardIds.Reset();
 	PendingRewardIds.Reset();
