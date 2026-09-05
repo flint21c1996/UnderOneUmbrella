@@ -29,9 +29,19 @@ AUOUStageSelectNodeActor::AUOUStageSelectNodeActor()
 
 void AUOUStageSelectNodeActor::BeginPlay()
 {
+	if (!bStageSelectionEnabled)
+	{
+		if (StageSelectArea != nullptr)
+		{
+			StageSelectArea->SetGenerateOverlapEvents(false);
+			StageSelectArea->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		}
+		SetActorTickEnabled(false);
+	}
+
 	Super::BeginPlay();
 
-	if (StageSelectArea != nullptr)
+	if (bStageSelectionEnabled && StageSelectArea != nullptr)
 	{
 		StageSelectArea->OnPlayerEntered.AddUniqueDynamic(
 			this,
@@ -45,6 +55,10 @@ void AUOUStageSelectNodeActor::BeginPlay()
 bool AUOUStageSelectNodeActor::GetStageDefinition(FUOUStageDefinition& OutStageDefinition) const
 {
 	OutStageDefinition = FUOUStageDefinition();
+	if (!bStageSelectionEnabled)
+	{
+		return false;
+	}
 
 	const FName ResolvedStageId = ResolveStageId();
 	if (ResolvedStageId.IsNone())
@@ -115,6 +129,13 @@ EDataValidationResult AUOUStageSelectNodeActor::IsDataValid(FDataValidationConte
 		return ParentResult;
 	}
 
+	if (!bStageSelectionEnabled)
+	{
+		Context.AddWarning(FText::FromString(
+			TEXT("Stage Selection이 비활성화되어 이 노드는 런타임 동작과 StageId 검증에서 제외됩니다.")));
+		return bIsValid ? EDataValidationResult::Valid : EDataValidationResult::Invalid;
+	}
+
 	UDataTable* StageDefinitionTable =
 		FUOUStageDefinitionRegistry::LoadStageDefinitionTable();
 	if (StageDefinitionTable == nullptr)
@@ -162,6 +183,11 @@ EDataValidationResult AUOUStageSelectNodeActor::IsDataValid(FDataValidationConte
 
 bool AUOUStageSelectNodeActor::ActivateStage()
 {
+	if (!bStageSelectionEnabled)
+	{
+		return false;
+	}
+
 	FUOUStageDefinition StageDefinition;
 	if (!GetStageDefinition(StageDefinition))
 	{
@@ -182,6 +208,11 @@ FName AUOUStageSelectNodeActor::ResolveStageId() const
 
 void AUOUStageSelectNodeActor::HandlePlayerEnteredStageArea(APawn* PlayerPawn)
 {
+	if (!bStageSelectionEnabled)
+	{
+		return;
+	}
+
 	AUOUMapSelectPlayerController* MapSelectController = PlayerPawn != nullptr
 		? Cast<AUOUMapSelectPlayerController>(PlayerPawn->GetController())
 		: nullptr;
@@ -193,6 +224,11 @@ void AUOUStageSelectNodeActor::HandlePlayerEnteredStageArea(APawn* PlayerPawn)
 
 void AUOUStageSelectNodeActor::HandlePlayerExitedStageArea(APawn* PlayerPawn)
 {
+	if (!bStageSelectionEnabled)
+	{
+		return;
+	}
+
 	AUOUMapSelectPlayerController* MapSelectController = PlayerPawn != nullptr
 		? Cast<AUOUMapSelectPlayerController>(PlayerPawn->GetController())
 		: nullptr;
