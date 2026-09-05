@@ -3,10 +3,46 @@
 #include "UOUSettingsMenuWidget.h"
 
 #include "Audio/UOUAudioSubsystem.h"
+#include "Blueprint/WidgetTree.h"
+#include "Components/Button.h"
+#include "Components/CanvasPanelSlot.h"
+#include "Components/PanelWidget.h"
 #include "Components/Slider.h"
+#include "Components/TextBlock.h"
 #include "Engine/GameInstance.h"
 #include "UOUMenuPlayerController.h"
 #include "UOUPlayerController.h"
+
+void UUOUSettingsMenuWidget::NativeOnInitialized()
+{
+	Super::NativeOnInitialized();
+
+	if (WidgetTree == nullptr)
+	{
+		return;
+	}
+
+	UButton* TitleButton = Cast<UButton>(WidgetTree->FindWidget(TEXT("BTN_ReturnTitle")));
+	UTextBlock* TitleText = Cast<UTextBlock>(WidgetTree->FindWidget(TEXT("TXT_ReturnTitle")));
+	// Slate 생성 전에 기존 버튼과 같은 스타일/슬롯으로 스테이지 선택 버튼을 삽입합니다.
+	if (Cast<AUOUPlayerController>(GetOwningPlayer()) != nullptr && TitleButton != nullptr
+		&& TitleButton->GetParent() != nullptr && TitleText != nullptr)
+	{
+		UPanelWidget* ButtonPanel = TitleButton->GetParent();
+		UButton* StageButton = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("BTN_StageSelect"));
+		StageButton->SetStyle(TitleButton->GetStyle());
+		StageButton->SetColorAndOpacity(TitleButton->GetColorAndOpacity());
+		StageButton->SetBackgroundColor(TitleButton->GetBackgroundColor());
+		UTextBlock* StageText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("TXT_StageSelect"));
+		StageText->SetFont(TitleText->GetFont());
+		StageText->SetColorAndOpacity(TitleText->GetColorAndOpacity());
+		StageText->SetJustification(ETextJustify::Center);
+		StageText->SetText(NSLOCTEXT("UOUSettings", "StageSelect", "스테이지 선택"));
+		StageButton->AddChild(StageText, TitleText->Slot);
+		StageButton->OnClicked.AddUniqueDynamic(this, &UUOUSettingsMenuWidget::OpenStageSelect);
+		ButtonPanel->InsertChildAt(ButtonPanel->GetChildIndex(TitleButton), StageButton, TitleButton->Slot);
+	}
+}
 
 void UUOUSettingsMenuWidget::NativeConstruct()
 {
@@ -14,6 +50,34 @@ void UUOUSettingsMenuWidget::NativeConstruct()
 
 	BindAudioSliders();
 	InitializeAudioSliderValues();
+
+	if (WidgetTree != nullptr)
+	{
+		if (UTextBlock* TitleText = Cast<UTextBlock>(WidgetTree->FindWidget(TEXT("TXT_ReturnTitle"))))
+		{
+			TitleText->SetText(NSLOCTEXT("UOUSettings", "ReturnToTitle", "타이틀로"));
+		}
+		if (UWidget* TitleButton = WidgetTree->FindWidget(TEXT("BTN_ReturnTitle")))
+		{
+			TitleButton->SetVisibility(CanReturnToTitle() ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+		}
+
+		// 버튼이 늘어나도 고정 높이의 기존 패널 밖으로 내용이 넘치지 않게 합니다.
+		ForceLayoutPrepass();
+		if (UWidget* Panel = WidgetTree->FindWidget(TEXT("Panel_Root")))
+		{
+			if (UCanvasPanelSlot* PanelSlot = Cast<UCanvasPanelSlot>(Panel->Slot))
+			{
+				const FAnchors Anchors = PanelSlot->GetAnchors();
+				if (!PanelSlot->GetAutoSize() && Anchors.Minimum.Y == Anchors.Maximum.Y)
+				{
+					FVector2D Size = PanelSlot->GetSize();
+					Size.Y = FMath::Max(Size.Y, Panel->GetDesiredSize().Y);
+					PanelSlot->SetSize(Size);
+				}
+			}
+		}
+	}
 }
 
 void UUOUSettingsMenuWidget::NativeDestruct()
@@ -37,16 +101,17 @@ void UUOUSettingsMenuWidget::CloseSettingsMenu()
 
 void UUOUSettingsMenuWidget::ReturnToTitle()
 {
-	// 기존 WBP 이벤트 연결은 유지하되, 인게임에서만 목적지를 스테이지 선택 화면으로 바꿉니다.
-	if (AUOUPlayerController* InGamePlayerController = Cast<AUOUPlayerController>(GetOwningPlayer()))
-	{
-		InGamePlayerController->OpenStageSelect();
-		return;
-	}
-
 	if (AUOUMenuPlayerController* MenuPlayerController = GetMenuPlayerController())
 	{
 		MenuPlayerController->ReturnToTitle();
+	}
+}
+
+void UUOUSettingsMenuWidget::OpenStageSelect()
+{
+	if (AUOUPlayerController* InGamePlayerController = Cast<AUOUPlayerController>(GetOwningPlayer()))
+	{
+		InGamePlayerController->OpenStageSelect();
 	}
 }
 
