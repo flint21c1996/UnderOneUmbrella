@@ -12,6 +12,7 @@
 #include "Engine/Engine.h"
 #include "Engine/OverlapResult.h"
 #include "Engine/World.h"
+#include "Engine/StaticMesh.h"
 #include "GameFramework/Character.h"
 #include "Kismet/GameplayStatics.h"
 #include "NiagaraComponent.h"
@@ -162,6 +163,7 @@ void AUOUWindEmitterActor::BeginPlay()
 
 void AUOUWindEmitterActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	ClearGeneratedWindRangeMeshes();
 	ClearGeneratedWindVFX();
 	Super::EndPlay(EndPlayReason);
 }
@@ -176,6 +178,14 @@ void AUOUWindEmitterActor::Tick(float DeltaSeconds)
 		// Blueprint SCS 컴포넌트는 native OnConstruction 이후에 준비될 수 있으므로
 		// 에디터 프리뷰에서는 현재 Niagara 에셋과 범위를 계속 동기화합니다.
 		RefreshWindVFX();
+		if (bAutoFitWindRangeMesh && FindWindRangeMesh() != nullptr)
+		{
+			RebuildWindPathInternal(true);
+		}
+		else
+		{
+			ClearGeneratedWindRangeMeshes();
+		}
 		return;
 	}
 
@@ -378,6 +388,7 @@ void AUOUWindEmitterActor::RebuildWindPathInternal(
 		|| MaximumWindSpeed <= 0.0f)
 	{
 		ClearGeneratedWindVFX();
+		RefreshWindRangeMeshes();
 		OnWindPathChanged.Broadcast();
 		return;
 	}
@@ -455,6 +466,7 @@ void AUOUWindEmitterActor::RebuildWindPathInternal(
 	}
 
 	RefreshWindVFX();
+	RefreshWindRangeMeshes();
 	OnWindPathChanged.Broadcast();
 }
 
@@ -992,7 +1004,107 @@ void AUOUWindEmitterActor::ClearWindPath()
 	WindPathSegments.Reset();
 	LastAffectedReceiverCount = 0;
 	ClearGeneratedWindVFX();
+	RefreshWindRangeMeshes();
 	OnWindPathChanged.Broadcast();
+}
+
+UStaticMeshComponent* AUOUWindEmitterActor::FindWindRangeMesh() const
+{
+	TInlineComponentArray<UStaticMeshComponent*> Meshes(this);
+	for (UStaticMeshComponent* Mesh : Meshes)
+	{
+		if (IsValid(Mesh) && Mesh->GetFName() == WindRangeMeshComponentName)
+		{
+			return Mesh;
+		}
+	}
+	return nullptr;
+}
+
+void AUOUWindEmitterActor::ClearGeneratedWindRangeMeshes()
+{
+	for (UStaticMeshComponent* Mesh : GeneratedWindRangeMeshes)
+	{
+		if (IsValid(Mesh))
+		{
+			Mesh->DestroyComponent();
+		}
+	}
+	GeneratedWindRangeMeshes.Reset();
+}
+
+void AUOUWindEmitterActor::RefreshWindRangeMeshes()
+{
+	UStaticMeshComponent* Template = FindWindRangeMesh();
+	if (!bAutoFitWindRangeMesh || Template == nullptr || Template->GetStaticMesh() == nullptr)
+	{
+		ClearGeneratedWindRangeMeshes();
+		return;
+	}
+
+	const FBoxSphereBounds Bounds = Template->GetStaticMesh()->GetBounds();
+	Template->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Template->SetCanEverAffectNavigation(false);
+	Template->SetCastShadow(false);
+	const FVector SourceSize = Bounds.BoxExtent * 2.0;
+	if (SourceSize.GetMin() <= KINDA_SMALL_NUMBER)
+	{
+		Template->SetVisibility(false);
+		ClearGeneratedWindRangeMeshes();
+		return;
+	}
+
+	const bool bShow = bWindEnabled && (GetWorld() == nullptr || !GetWorld()->IsGameWorld() || IsWindBlowing());
+	const int32 SegmentCount = bShow ? WindPathSegments.Num() : 0;
+	Template->SetVisibility(SegmentCount > 0);
+	Template->SetHiddenInGame(SegmentCount == 0);
+	const int32 ExtraCount = FMath::Max(0, SegmentCount - 1);
+	for (int32 Index = GeneratedWindRangeMeshes.Num() - 1; Index >= 0; --Index)
+	{
+		if (!IsValid(GeneratedWindRangeMeshes[Index]))
+		{
+			GeneratedWindRangeMeshes.RemoveAt(Index);
+		}
+	}
+	while (GeneratedWindRangeMeshes.Num() > ExtraCount)
+	{
+		GeneratedWindRangeMeshes.Pop()->DestroyComponent();
+	}
+	while (GeneratedWindRangeMeshes.Num() < ExtraCount)
+	{
+		UStaticMeshComponent* Mesh = NewObject<UStaticMeshComponent>(this, NAME_None, RF_Transient);
+		Mesh->SetupAttachment(RootScene);
+		Mesh->SetMobility(EComponentMobility::Movable);
+		Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		Mesh->SetCanEverAffectNavigation(false);
+		Mesh->SetCastShadow(false);
+		Mesh->RegisterComponent();
+		GeneratedWindRangeMeshes.Add(Mesh);
+	}
+	for (int32 Index = 0; Index < SegmentCount; ++Index)
+	{
+		UStaticMeshComponent* Mesh = Index == 0 ? Template : GeneratedWindRangeMeshes[Index - 1].Get();
+		if (Index > 0)
+		{
+			Mesh->SetStaticMesh(Template->GetStaticMesh());
+			for (int32 MaterialIndex = 0; MaterialIndex < Template->GetNumMaterials(); ++MaterialIndex)
+			{
+				Mesh->SetMaterial(MaterialIndex, Template->GetMaterial(MaterialIndex));
+			}
+		}
+		Mesh->SetMobility(EComponentMobility::Movable);
+		Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		Mesh->SetCanEverAffectNavigation(false);
+		Mesh->SetCastShadow(false);
+		const FUOUWindPathSegment& Segment = WindPathSegments[Index];
+		const FVector Scale = FVector(Segment.GetLength(), WindRadius * 2.0f, WindRadius * 2.0f) / SourceSize;
+		const FQuat Rotation = FRotationMatrix::MakeFromX(Segment.Direction).ToQuat();
+		// Compensate for imported mesh pivots; world scale avoids parent-scale drift.
+		const FVector Location = (Segment.Start + Segment.End) * 0.5 - Rotation.RotateVector(Bounds.Origin * Scale);
+		Mesh->SetWorldTransform(FTransform(Rotation, Location, Scale));
+		Mesh->SetVisibility(true);
+		Mesh->SetHiddenInGame(false);
+	}
 }
 
 void AUOUWindEmitterActor::ApplyWindToReceivers(float DeltaSeconds)
