@@ -207,9 +207,13 @@ namespace
 	{
 		for (TFieldIterator<FProperty> PropertyIt(Class, EFieldIteratorFlags::IncludeSuper); PropertyIt; ++PropertyIt)
 		{
+			FString DisplayName;
+#if WITH_EDITOR
+			DisplayName = PropertyIt->GetDisplayNameText().ToString();
+#endif
 			if (IsMatchingBlueprintMember(
 				PropertyIt->GetName(),
-				PropertyIt->GetDisplayNameText().ToString(),
+				DisplayName,
 				NormalizedName))
 			{
 				return *PropertyIt;
@@ -285,9 +289,13 @@ namespace
 	{
 		for (TFieldIterator<UFunction> FunctionIt(Class, EFieldIteratorFlags::IncludeSuper); FunctionIt; ++FunctionIt)
 		{
+			FString DisplayName;
+#if WITH_EDITOR
+			DisplayName = FunctionIt->GetDisplayNameText().ToString();
+#endif
 			if (IsMatchingBlueprintMember(
 				FunctionIt->GetName(),
-				FunctionIt->GetDisplayNameText().ToString(),
+				DisplayName,
 				NormalizedName))
 			{
 				return *FunctionIt;

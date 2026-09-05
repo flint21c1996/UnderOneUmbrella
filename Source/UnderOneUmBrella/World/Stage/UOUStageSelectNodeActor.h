@@ -40,6 +40,10 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Stage Select")
 	TObjectPtr<UUOUStageSelectAreaComponent> StageSelectArea = nullptr;
 
+	/** false이면 이 노드는 Stage Select 등록, 팝업 표시, 스테이지 입장에 참여하지 않습니다. */
+	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Stage Select")
+	bool bStageSelectionEnabled = true;
+
 	/** 이 노드가 나타내는 스테이지입니다. 중앙 DataTable의 RowName과 같은 값입니다. */
 	UPROPERTY(
 		EditInstanceOnly,
