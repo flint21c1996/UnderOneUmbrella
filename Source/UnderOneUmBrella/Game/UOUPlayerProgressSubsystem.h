@@ -57,6 +57,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Player Progress|Stage Attempt")
 	bool CommitCurrentStage();
 
+	/** 진입 경로와 관계없이 현재 월드의 스테이지를 등록합니다. 같은 월드의 수집 기록은 유지합니다. */
+	bool EnsureStageAttemptForWorld(UWorld* World);
+
 	/** 현재 메모리에 로드된 진행도 객체를 설정된 SaveGame 슬롯에 기록합니다. */
 	UFUNCTION(BlueprintCallable, Category = "Player Progress|Save")
 	bool SaveProgress();
@@ -89,6 +92,9 @@ private:
 
 	/** PIE 접두사를 제거한 현재 스테이지 맵의 짧은 패키지 이름입니다. */
 	FName ActiveStageLevelName = NAME_None;
+
+	/** 같은 맵을 다시 시작한 경우에도 새 도전을 구분하는 월드 인스턴스입니다. */
+	TWeakObjectPtr<UWorld> ActiveStageWorld;
 
 	/** 현재 스테이지에서 수집 대상으로 인정하는 Reward ID 집합입니다. */
 	TSet<FName> ExpectedRewardIds;

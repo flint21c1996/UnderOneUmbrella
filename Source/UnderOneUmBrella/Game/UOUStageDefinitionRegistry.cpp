@@ -41,9 +41,14 @@ const FUOUStageDefinitionRow* FUOUStageDefinitionRegistry::FindStageById(
 
 const FUOUStageDefinitionRow* FUOUStageDefinitionRegistry::FindStageByLevel(
 	const UWorld* World,
-	int32& OutMatchCount)
+	int32& OutMatchCount,
+	FName* OutStageId)
 {
 	OutMatchCount = 0;
+	if (OutStageId != nullptr)
+	{
+		*OutStageId = NAME_None;
+	}
 	if (World == nullptr)
 	{
 		return nullptr;
@@ -55,13 +60,14 @@ const FUOUStageDefinitionRow* FUOUStageDefinitionRegistry::FindStageByLevel(
 		return nullptr;
 	}
 
-	const FString LevelPackageName = World->GetOutermost()->GetName();
+	const FString LevelPackageName = UWorld::RemovePIEPrefix(World->GetOutermost()->GetName());
 	if (LevelPackageName.IsEmpty())
 	{
 		return nullptr;
 	}
 
 	const FUOUStageDefinitionRow* MatchedRow = nullptr;
+	FName MatchedStageId = NAME_None;
 	for (const TPair<FName, uint8*>& RowPair : StageDefinitionTable->GetRowMap())
 	{
 		const FUOUStageDefinitionRow* Row =
@@ -74,10 +80,15 @@ const FUOUStageDefinitionRow* FUOUStageDefinitionRegistry::FindStageByLevel(
 		if (Row->Level.ToSoftObjectPath().GetLongPackageName() == LevelPackageName)
 		{
 			MatchedRow = Row;
+			MatchedStageId = RowPair.Key;
 			++OutMatchCount;
 		}
 	}
 
+	if (OutStageId != nullptr && OutMatchCount == 1)
+	{
+		*OutStageId = MatchedStageId;
+	}
 	return OutMatchCount == 1 ? MatchedRow : nullptr;
 }
 

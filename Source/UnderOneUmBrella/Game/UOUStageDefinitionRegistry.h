@@ -29,7 +29,8 @@ public:
 	/** 현재 레벨을 참조하는 스테이지 정의를 찾고, 일치하는 행의 수를 함께 반환합니다. */
 	static const FUOUStageDefinitionRow* FindStageByLevel(
 		const UWorld* World,
-		int32& OutMatchCount);
+		int32& OutMatchCount,
+		FName* OutStageId = nullptr);
 
 	/** Stage Select Node의 선택 목록으로 사용할 모든 StageId를 반환합니다. */
 	static TArray<FName> GetStageIds();
