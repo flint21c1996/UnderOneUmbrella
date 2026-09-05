@@ -52,6 +52,12 @@ protected:
 	TArray<FUOUStageDefinition> Stages;
 
 private:
+	UPROPERTY(EditDefaultsOnly, Config, Category = "HUD", meta = (DisplayName = "스테이지 선택 HUD"))
+	TSoftClassPtr<UUserWidget> MapSelectHUDWidgetClass;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UUserWidget> MapSelectHUDWidget;
+
 	void ApplyMapSelectInputMode();
 	void HandleStageConfirmInput();
 

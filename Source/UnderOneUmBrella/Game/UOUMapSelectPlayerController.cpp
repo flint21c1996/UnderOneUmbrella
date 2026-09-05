@@ -2,6 +2,7 @@
 
 #include "Game/UOUMapSelectPlayerController.h"
 
+#include "Blueprint/UserWidget.h"
 #include "Engine/GameInstance.h"
 #include "Game/UOULevelTransitionSubsystem.h"
 #include "Game/UOUPlayerProgressSubsystem.h"
@@ -13,7 +14,7 @@
 AUOUMapSelectPlayerController::AUOUMapSelectPlayerController()
 {
 	SetCanReturnToTitle(true);
-	SetCanRestartCurrentStage(false);
+	SetCanRestartCurrentStage(true);
 }
 
 void AUOUMapSelectPlayerController::BeginPlay()
@@ -21,6 +22,25 @@ void AUOUMapSelectPlayerController::BeginPlay()
 	Super::BeginPlay();
 
 	ApplyMapSelectInputMode();
+
+	if (!IsLocalController())
+	{
+		return;
+	}
+
+	TSubclassOf<UUserWidget> HUDClass = MapSelectHUDWidgetClass.LoadSynchronous();
+	if (HUDClass == nullptr)
+	{
+		HUDClass = LoadClass<UUserWidget>(nullptr, TEXT("/Game/UOU/UI/WBP_InGameHUD.WBP_InGameHUD_C"));
+	}
+	if (HUDClass != nullptr)
+	{
+		MapSelectHUDWidget = CreateWidget<UUserWidget>(this, HUDClass);
+		if (MapSelectHUDWidget != nullptr)
+		{
+			MapSelectHUDWidget->AddToViewport();
+		}
+	}
 }
 
 void AUOUMapSelectPlayerController::SetupInputComponent()
@@ -54,7 +74,7 @@ bool AUOUMapSelectPlayerController::EnterStageByIndex(const int32 StageIndex)
 
 bool AUOUMapSelectPlayerController::EnterStage(const FUOUStageDefinition& Stage)
 {
-	if (bIsOpeningStage || !Stage.bUnlocked || Stage.Level.IsNull())
+	if (IsSettingsMenuOpen() || bIsOpeningStage || !Stage.bUnlocked || Stage.Level.IsNull())
 	{
 		return false;
 	}
@@ -118,7 +138,7 @@ AUOUStageSelectNodeActor* AUOUMapSelectPlayerController::GetFocusedStageSelectNo
 
 bool AUOUMapSelectPlayerController::ConfirmFocusedStage()
 {
-	if (bIsOpeningStage)
+	if (IsSettingsMenuOpen() || bIsOpeningStage)
 	{
 		return false;
 	}

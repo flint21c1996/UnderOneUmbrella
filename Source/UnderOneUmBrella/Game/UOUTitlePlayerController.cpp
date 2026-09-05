@@ -23,6 +23,7 @@ constexpr TCHAR DefaultTitleMenuWidgetClassPath[] = TEXT("/Game/UOU/UI/WBP_Title
 
 AUOUTitlePlayerController::AUOUTitlePlayerController()
 {
+	SetCanRestartCurrentStage(true);
 	bShowMouseCursor = false;
 }
 
