@@ -45,6 +45,9 @@ public:
 	// 목표 회전과 거리로 부드럽게 보간하고 가림 처리를 갱신한다.
 	virtual void TickComponent(float DeltaTime, enum ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
+	// 캐릭터가 소유한 실제 플레이 카메라 릭을 명시적으로 연결한다.
+	void SetCameraRigComponents(USpringArmComponent* InCameraBoom, UCameraComponent* InFollowCamera);
+
 	// 카메라를 한 단계 왼쪽으로 돌린다.
 	void RotateCameraLeft();
 
@@ -118,25 +121,13 @@ public:
 	FVector GetAreaCameraOffset() const { return AreaCameraOffset; }
 
 protected:
-	// 참조를 수동으로 넣지 않아도 기본 카메라 구성을 자동으로 찾게 한다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Camera|References")
-	bool bAutoFindCameraComponents = true;
-
 	// 실제 길이와 회전을 가지는 카메라 붐이다.
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Camera|References")
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "Camera|References")
 	TObjectPtr<USpringArmComponent> CameraBoom = nullptr;
 
 	// 화면을 그리는 실제 카메라 컴포넌트다.
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Camera|References")
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "Camera|References")
 	TObjectPtr<UCameraComponent> FollowCamera = nullptr;
-
-	// 임시 테스트용 투영 모드다. 켜면 원근감 없이 오소그래픽으로 화면을 그린다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Camera|Projection")
-	bool bUseOrthographicProjection = true;
-
-	// 오소그래픽 카메라가 한 화면에 보여주는 월드 폭이다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Camera|Projection", meta = (ClampMin = "1.0"))
-	float OrthographicWidth = 1800.0f;
 
 	// 카메라가 내려다보는 기본 피치 각도다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Camera|Snap")
@@ -250,6 +241,10 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Camera|Runtime")
 	float TargetCameraDistance = 0.0f;
 
+	// FollowCamera에 설정된 기본 직교 폭을 임시 줌이 끝난 뒤 복원하기 위해 기억한다.
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "Camera|Runtime")
+	float DefaultOrthographicWidth = 1.0f;
+
 	// 현재 투명 처리 중인 메시와 원래 머티리얼 정보를 보관한다.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Camera|Runtime")
 	bool bDialogueFocusActive = false;
@@ -281,14 +276,8 @@ protected:
 	UPROPERTY(Transient)
 	TMap<TObjectPtr<UMeshComponent>, FOccludedMeshState> OccludedMeshStates;
 
-	// 소유 액터에서 카메라 관련 컴포넌트를 캐싱한다.
-	void CacheCameraComponents();
-
 	// 시작 시점에 기본 각도와 거리를 실제 카메라 릭에 반영한다.
 	void InitializeCameraRig();
-
-	// 디테일 창의 투영 설정을 실제 FollowCamera에 반영한다.
-	void ApplyCameraProjection();
 
 	// 목표 yaw와 거리로 현재 카메라를 부드럽게 갱신한다.
 	void UpdateSnapCamera(float DeltaSeconds);

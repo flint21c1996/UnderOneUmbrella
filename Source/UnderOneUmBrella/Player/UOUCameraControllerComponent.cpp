@@ -32,9 +32,32 @@ void UUOUCameraControllerComponent::BeginPlay()
 {
 	Super::BeginPlay();
 
-	CacheCameraComponents();
-	ApplyCameraProjection();
+	if (CameraBoom == nullptr || FollowCamera == nullptr)
+	{
+		UE_LOG(
+			LogTemp,
+			Error,
+			TEXT("[CameraController] Camera rig was not assigned for %s."),
+			*GetNameSafe(GetOwner()));
+		SetComponentTickEnabled(false);
+		return;
+	}
+
+	DefaultOrthographicWidth = FMath::Max(1.0f, FollowCamera->OrthoWidth);
 	InitializeCameraRig();
+}
+
+void UUOUCameraControllerComponent::SetCameraRigComponents(
+	USpringArmComponent* InCameraBoom,
+	UCameraComponent* InFollowCamera)
+{
+	CameraBoom = InCameraBoom;
+	FollowCamera = InFollowCamera;
+
+	if (FollowCamera != nullptr)
+	{
+		DefaultOrthographicWidth = FMath::Max(1.0f, FollowCamera->OrthoWidth);
+	}
 }
 
 void UUOUCameraControllerComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -226,30 +249,6 @@ void UUOUCameraControllerComponent::ClearAreaCameraOffset()
 	AreaCameraOffset = FVector::ZeroVector;
 }
 
-void UUOUCameraControllerComponent::CacheCameraComponents()
-{
-	if (!bAutoFindCameraComponents)
-	{
-		return;
-	}
-
-	AActor* Owner = GetOwner();
-	if (Owner == nullptr)
-	{
-		return;
-	}
-
-	if (CameraBoom == nullptr)
-	{
-		CameraBoom = Owner->FindComponentByClass<USpringArmComponent>();
-	}
-
-	if (FollowCamera == nullptr)
-	{
-		FollowCamera = Owner->FindComponentByClass<UCameraComponent>();
-	}
-}
-
 void UUOUCameraControllerComponent::InitializeCameraRig()
 {
 	if (CameraBoom == nullptr)
@@ -276,19 +275,6 @@ void UUOUCameraControllerComponent::InitializeCameraRig()
 	TargetCameraOffset = RegularCameraTargetOffset;
 	CameraBoom->TargetArmLength = TargetCameraDistance;
 	CameraBoom->SetWorldRotation(FRotator(CameraPitchAngle, TargetCameraYaw, 0.0f));
-}
-
-void UUOUCameraControllerComponent::ApplyCameraProjection()
-{
-	if (FollowCamera == nullptr)
-	{
-		return;
-	}
-
-	FollowCamera->SetProjectionMode(bUseOrthographicProjection
-		? ECameraProjectionMode::Orthographic
-		: ECameraProjectionMode::Perspective);
-	FollowCamera->SetOrthoWidth(FMath::Max(1.0f, OrthographicWidth));
 }
 
 void UUOUCameraControllerComponent::UpdateSnapCamera(float DeltaSeconds)
@@ -353,7 +339,7 @@ float UUOUCameraControllerComponent::GetEffectiveTargetCameraDistance() const
 
 float UUOUCameraControllerComponent::GetEffectiveTargetOrthoWidth() const
 {
-	return HasTemporaryZoomRequest() ? TemporaryZoomTargetOrthoWidth : OrthographicWidth;
+	return HasTemporaryZoomRequest() ? TemporaryZoomTargetOrthoWidth : DefaultOrthographicWidth;
 }
 
 FVector UUOUCameraControllerComponent::GetEffectiveTargetCameraOffset() const

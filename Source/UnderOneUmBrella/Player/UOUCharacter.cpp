@@ -104,6 +104,8 @@ AUOUCharacter::AUOUCharacter()
 	FollowCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("FollowCamera"));
 	FollowCamera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
 	FollowCamera->bUsePawnControlRotation = false;
+	FollowCamera->SetProjectionMode(ECameraProjectionMode::Orthographic);
+	FollowCamera->SetOrthoWidth(1400.0f);
 
 	AudioListenerComponent = CreateDefaultSubobject<USceneComponent>(TEXT("AudioListener"));
 	AudioListenerComponent->SetupAttachment(RootComponent);
@@ -145,6 +147,16 @@ AUOUCharacter::AUOUCharacter()
 	InteractionOrigin->SetupAttachment(RootComponent);
 	InteractionOrigin->SetRelativeLocation(FVector(50.0f, 0.0f, 40.0f));
 
+}
+
+void AUOUCharacter::PostInitializeComponents()
+{
+	Super::PostInitializeComponents();
+
+	if (CameraControllerComponent != nullptr)
+	{
+		CameraControllerComponent->SetCameraRigComponents(CameraBoom, FollowCamera);
+	}
 }
 
 void AUOUCharacter::BeginPlay()

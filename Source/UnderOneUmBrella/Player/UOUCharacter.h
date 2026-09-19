@@ -130,6 +130,9 @@ public:
 	FOnUOUCharacterJumpedSignature OnCharacterJumped;
 
 protected:
+	// 기본 서브오브젝트 생성이 끝난 뒤 카메라 컨트롤러에 정확한 릭 참조를 연결한다.
+	virtual void PostInitializeComponents() override;
+
 	// 시작 시점에 입력과 필수 참조가 제대로 연결됐는지 확인한다.
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
