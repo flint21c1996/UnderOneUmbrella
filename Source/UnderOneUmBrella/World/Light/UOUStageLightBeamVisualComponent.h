@@ -10,19 +10,20 @@
 
 class AActor;
 class UDecalComponent;
-class ULightComponent;
 class UMaterialInstanceDynamic;
 class UMaterialInterface;
+class UNiagaraSystem;
 class USpotLightComponent;
+class UStaticMesh;
 class UUOULightExposureSourceComponent;
 
-// 기존 경로 계산과 VFX 풀 관리를 복사한 무대 조명 전용 컴포넌트입니다. 기존 외형을 적용하며 우산 차단 시 빔 크기를 유지하고 전체 알파를 보간합니다.
+// 직접광 표현을 관리하고 우산 차단 시 빔 크기를 유지하며 전체 알파를 보간하는 무대 조명 전용 컴포넌트입니다.
 UCLASS(
 	ClassGroup = (Light),
 	meta = (
 		BlueprintSpawnableComponent,
 		DisplayName = "UOU Stage Light Beam Visual",
-		ToolTip = "직접광과 반사 경로를 관리합니다. 기존 빔 외형을 표시하고 우산 차단 시 크기를 유지하며 알파만 보간합니다."))
+		ToolTip = "직접광 빔 외형을 표시하고 우산 차단 시 크기를 유지하며 알파만 보간합니다."))
 class UNDERONEUMBRELLA_API UUOUStageLightBeamVisualComponent : public UActorComponent
 {
 	GENERATED_BODY()
@@ -33,9 +34,30 @@ public:
 	virtual void BeginPlay() override;
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+#if WITH_EDITOR
+	virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
+#endif
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Visual", meta = (ToolTip = "직접광과 반사광에 생성할 VFX 액터 클래스입니다. UOU Light Beam Visual 인터페이스를 통해 기존 외형과 페이드 알파를 적용합니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Visual", meta = (ToolTip = "직접광에 생성할 VFX 액터 클래스입니다. UOU Light Beam Visual 인터페이스를 통해 외형과 페이드 알파를 적용합니다."))
 	TSubclassOf<AActor> VFXActorClass;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light|Visual|Asset Overrides", meta = (DisplayName = "빔 메시 Override", ToolTip = "켜면 BP_SpotRay의 프리셋 메시 대신 아래 메시 하나를 사용합니다."))
+	bool bOverrideBeamMesh = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light|Visual|Asset Overrides", meta = (EditCondition = "bOverrideBeamMesh", DisplayName = "빔 메시", ToolTip = "지정한 메시를 단일 레이어로 사용합니다. None이면 메시 표현을 끄니다."))
+	TObjectPtr<UStaticMesh> BeamMeshOverride;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light|Visual|Asset Overrides", meta = (DisplayName = "빔 머티리얼 Override", ToolTip = "켜면 BP_SpotRay의 머티리얼 대신 아래 머티리얼로 Dynamic Material을 만듭니다."))
+	bool bOverrideBeamMaterial = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light|Visual|Asset Overrides", meta = (EditCondition = "bOverrideBeamMaterial", DisplayName = "빔 머티리얼", ToolTip = "지정한 머티리얼로 Dynamic Material을 만듭니다. None이면 메시 표현을 끄니다."))
+	TObjectPtr<UMaterialInterface> BeamMaterialOverride;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light|Visual|Asset Overrides", meta = (DisplayName = "Niagara System Override", ToolTip = "켜면 BP_SpotRay의 Sparkle Effect 대신 아래 Niagara System을 사용합니다."))
+	bool bOverrideNiagaraSystem = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light|Visual|Asset Overrides", meta = (EditCondition = "bOverrideNiagaraSystem", DisplayName = "Niagara System", ToolTip = "지정한 Niagara System을 사용합니다. None이면 반짝임 표현을 끄니다."))
+	TObjectPtr<UNiagaraSystem> NiagaraSystemOverride;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light|Visual|LazyGodray", meta = (ToolTip = "UOU 인터페이스가 없는 LazyGodray BP의 공개 변수를 이름으로 찾아 자동 갱신합니다."))
 	bool bEnableAutomaticLazyGodrayAdapter = true;
@@ -64,17 +86,8 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light|Visual", meta = (ToolTip = "광원에서 최초 충돌 지점까지의 직접광 VFX를 표시합니다."))
 	bool bEnableDirectVFX = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light|Visual", meta = (ToolTip = "거울 이후의 반사 구간 VFX를 표시합니다."))
-	bool bEnableReflectionVFX = true;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light|Visual", meta = (ClampMin = "0", ClampMax = "64", ToolTip = "동시에 표시할 수 있는 반사 빛줄기 VFX의 최대 개수입니다."))
-	int32 MaxReflectionVFXCount = 16;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light|Visual", meta = (ClampMin = "0.0", Units = "cm", ToolTip = "벽이나 거울 표면과 빛줄기가 겹쳐 보이지 않도록 끝점을 앞당기는 거리입니다."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light|Visual", meta = (ClampMin = "0.0", Units = "cm", ToolTip = "장애물 표면과 빛줄기가 겹쳐 보이지 않도록 끝점을 앞당기는 거리입니다."))
 	float EndPadding = 2.0f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light|Visual", meta = (ClampMin = "0.0", Units = "cm", DisplayName = "반사 연결부 Clip Feather", ToolTip = "반사면 뒤쪽 메시를 평면으로 잘라내고 경계만 부드럽게 만드는 거리입니다. 0이면 경계를 단단하게 자르며, 1~3cm를 권장합니다."))
-	float ReflectionJunctionClipFeather = 2.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light|Visual", meta = (ToolTip = "VFX BP 내부에 포함된 Light 컴포넌트를 끄고 통합 광원 액터의 SpotLight만 사용합니다."))
 	bool bDisableEmbeddedVFXLights = true;
@@ -137,9 +150,6 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light|Visual|Fade", meta = (ToolTip = "Niagara에 같은 이름의 User Float를 만들고 렌더링 알파에 연결해야 합니다. None이면 적용하지 않습니다."))
 	FName NiagaraOpacityParameter = TEXT("User.BeamOpacity");
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Visual|Runtime")
-	int32 ActiveReflectionVFXCount = 0;
-
 	UFUNCTION(BlueprintCallable, Category = "Light|Visual", meta = (ToolTip = "현재 광원 설정과 경로를 이용해 모든 VFX를 즉시 갱신합니다."))
 	void RefreshVisuals();
 
@@ -166,22 +176,10 @@ protected:
 	TObjectPtr<AActor> DirectVFXActor = nullptr;
 
 	UPROPERTY(Transient)
-	TArray<TObjectPtr<AActor>> ReflectionVFXPool;
-
-	UPROPERTY(Transient)
 	TObjectPtr<UDecalComponent> DirectEndRangeDecal = nullptr;
 
 	UPROPERTY(Transient)
-	TArray<TObjectPtr<UDecalComponent>> ReflectionEndRangeDecalPool;
-
-	UPROPERTY(Transient)
 	TObjectPtr<UMaterialInstanceDynamic> DirectEndRangeDecalMaterial = nullptr;
-
-	UPROPERTY(Transient)
-	TArray<TObjectPtr<UMaterialInstanceDynamic>> ReflectionEndRangeDecalMaterials;
-
-	TSet<TWeakObjectPtr<UClass>> WarnedIncompatibleVFXClasses;
-	bool bHasWarnedReflectionVFXLimit = false;
 
 	UFUNCTION()
 	void HandleLightPathsUpdated(const TArray<FUOULightPathData>& LightPaths);
@@ -189,26 +187,20 @@ protected:
 	UUOULightExposureSourceComponent* ResolveSourceComponent() const;
 	USpotLightComponent* ResolveSourceSpotLight() const;
 	AActor* AcquireDirectVFXActor();
-	AActor* AcquireReflectionVFXActor(int32 PoolIndex);
 	AActor* SpawnVFXActor();
 	void ConfigureSpawnedVFXActor(AActor* VFXActor) const;
-	// 메시 초기 설정은 비워 두고 기존 Static Ray 반사 폭 동기화는 재사용합니다.
+	void ApplyVFXAssetOverrides(AActor* VFXActor) const;
+	// 메시 초기 렌더링 설정을 적용합니다.
 	void ConfigureVFXMesh(AActor* VFXActor) const;
-	void SyncReflectionVisualWidth(AActor* VFXActor) const;
 	void UpdateDirectVFX(
 		const TArray<FUOULightPathData>& LightPaths,
 		float ReferenceVisualLength);
-	void UpdateReflectionVFX(
-		const TArray<FUOULightPathData>& LightPaths,
-		float ReferenceVisualLength);
-	void HideUnusedReflectionVFX(int32 FirstUnusedIndex);
 	void UpdateEndRangeDecal(
 		TObjectPtr<UDecalComponent>& DecalComponent,
 		TObjectPtr<UMaterialInstanceDynamic>& DynamicMaterial,
 		const FUOULightPathSegmentData& SegmentData,
 		const FLinearColor& LightColor,
 		int32 SortOrder);
-	void HideUnusedReflectionEndRangeDecals(int32 FirstUnusedIndex);
 	void DestroyEndRangeDecals();
 	// 원본 표현 구간을 저장한 뒤 현재 알파 배율을 적용합니다.
 	void ApplySegmentToVFX(AActor* VFXActor, const FUOULightBeamVisualSegmentData& SegmentData);
@@ -218,9 +210,7 @@ protected:
 	FUOULightBeamVisualSegmentData BuildVisualSegment(
 		const FUOULightPathSegmentData& SegmentData,
 		int32 VisualSegmentIndex,
-		float ReferenceVisualLength,
-		const FUOULightPathSegmentData* PreviousSegment = nullptr,
-		const FUOULightPathSegmentData* NextReflectedSegment = nullptr);
+		float ReferenceVisualLength);
 	FLinearColor ResolveLightColor() const;
 	void DestroyVFXActors();
 };

@@ -5,7 +5,6 @@
 #include "Components/SceneComponent.h"
 #include "Components/SpotLightComponent.h"
 #include "World/Light/UOULightExposureSourceComponent.h"
-#include "World/Light/UOULightReflectionSpotLightComponent.h"
 #include "World/Light/UOUStageLightBeamVisualComponent.h"
 
 AUOUStageLightSourceActor::AUOUStageLightSourceActor()
@@ -24,7 +23,7 @@ AUOUStageLightSourceActor::AUOUStageLightSourceActor()
 	SourceSpotLight->SetIntensity(5000.0f);
 
 	ExposureSource = CreateDefaultSubobject<UUOULightExposureSourceComponent>(TEXT("ExposureSource"));
-	ReflectionSpotLights = CreateDefaultSubobject<UUOULightReflectionSpotLightComponent>(TEXT("ReflectionSpotLights"));
+	ExposureSource->bEnableReflectedLight = false;
 	StageBeamVisual = CreateDefaultSubobject<UUOUStageLightBeamVisualComponent>(TEXT("StageBeamVisual"));
 }
 
@@ -72,7 +71,7 @@ void AUOUStageLightSourceActor::SetLightEnabled(const bool bNewEnabled)
 
 	if (ExposureSource != nullptr)
 	{
-		// ExposureSource는 꺼진 다음 Tick에서 경로를 비우고 전용 빔 컴포넌트와 반사광에 변경을 전파합니다.
+		// ExposureSource는 꺼진 다음 Tick에서 경로를 비우고 전용 빔 컴포넌트에 변경을 전파합니다.
 		ExposureSource->bEmitLight = bLightEnabled;
 	}
 }
@@ -100,7 +99,7 @@ void AUOUStageLightSourceActor::SetSourceLightColor(FLinearColor NewLightColor)
 		SourceSpotLight->SetLightColor(NewLightColor);
 	}
 
-	// Construction Script 중에는 컴포넌트 속성만 갱신합니다. 빔 데이터와 반사 조명 갱신은
+	// Construction Script 중에는 컴포넌트 속성만 갱신합니다. 빔 데이터 갱신은
 	// 실제 플레이가 시작된 뒤 색상이 변경될 때만 필요합니다.
 	if (!HasActorBegunPlay())
 	{
@@ -111,10 +110,6 @@ void AUOUStageLightSourceActor::SetSourceLightColor(FLinearColor NewLightColor)
 	if (StageBeamVisual != nullptr)
 	{
 		StageBeamVisual->RefreshVisuals();
-	}
-	if (ReflectionSpotLights != nullptr)
-	{
-		ReflectionSpotLights->RefreshSpotLights();
 	}
 }
 

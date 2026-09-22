@@ -204,6 +204,30 @@ void AUOULumenStaticRayVisualActor::CopyVisualWidthFrom(
 	bHasAppliedVisualWidth = true;
 }
 
+void AUOULumenStaticRayVisualActor::SetVisualAssetOverrides(
+	const bool bOverrideMesh,
+	UStaticMesh* MeshOverride,
+	const bool bOverrideMaterial,
+	UMaterialInterface* MaterialOverride)
+{
+	const bool bAssetsChanged =
+		bUseRuntimeMeshOverride != bOverrideMesh ||
+		RuntimeMeshOverride != MeshOverride ||
+		bUseRuntimeMaterialOverride != bOverrideMaterial ||
+		RuntimeMaterialOverride != MaterialOverride;
+	if (!bAssetsChanged)
+	{
+		return;
+	}
+
+	bUseRuntimeMeshOverride = bOverrideMesh;
+	RuntimeMeshOverride = MeshOverride;
+	bUseRuntimeMaterialOverride = bOverrideMaterial;
+	RuntimeMaterialOverride = MaterialOverride;
+	bHasAppliedVisualWidth = false;
+	ConfigureComponents();
+}
+
 void AUOULumenStaticRayVisualActor::Tick(const float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
@@ -213,6 +237,7 @@ void AUOULumenStaticRayVisualActor::Tick(const float DeltaSeconds)
 
 void AUOULumenStaticRayVisualActor::ConfigureComponents()
 {
+	UMaterialInterface* EffectiveMaterial = ResolveRayMaterial();
 	DynamicMaterials.SetNum(MaxLayerCount);
 	for (int32 Index = 0; Index < LayerComponents.Num(); ++Index)
 	{
@@ -222,22 +247,38 @@ void AUOULumenStaticRayVisualActor::ConfigureComponents()
 		Layer->SetCastShadow(false);
 		Layer->bReceivesDecals = false;
 		Layer->SetTranslucentSortPriority(30 + Index);
-		Layer->SetMaterial(0, RayMaterial);
+		Layer->SetMaterial(0, EffectiveMaterial);
 		DynamicMaterials[Index] = nullptr;
 	}
+	DynamicMaterialSource = nullptr;
 }
 
 void AUOULumenStaticRayVisualActor::EnsureDynamicMaterials()
 {
+	UMaterialInterface* EffectiveMaterial = ResolveRayMaterial();
 	DynamicMaterials.SetNum(MaxLayerCount);
+	if (DynamicMaterialSource != EffectiveMaterial)
+	{
+		for (int32 Index = 0; Index < LayerComponents.Num(); ++Index)
+		{
+			DynamicMaterials[Index] = nullptr;
+			LayerComponents[Index]->SetMaterial(0, EffectiveMaterial);
+		}
+		DynamicMaterialSource = EffectiveMaterial;
+	}
 	for (int32 Index = 0; Index < LayerComponents.Num(); ++Index)
 	{
-		if (DynamicMaterials[Index] == nullptr && RayMaterial != nullptr)
+		if (DynamicMaterials[Index] == nullptr && EffectiveMaterial != nullptr)
 		{
-			DynamicMaterials[Index] = UMaterialInstanceDynamic::Create(RayMaterial, this);
+			DynamicMaterials[Index] = UMaterialInstanceDynamic::Create(EffectiveMaterial, this);
 			LayerComponents[Index]->SetMaterial(0, DynamicMaterials[Index]);
 		}
 	}
+}
+
+UMaterialInterface* AUOULumenStaticRayVisualActor::ResolveRayMaterial() const
+{
+	return bUseRuntimeMaterialOverride ? RuntimeMaterialOverride.Get() : RayMaterial.Get();
 }
 
 void AUOULumenStaticRayVisualActor::ApplyLightBeamSegment_Implementation(const FUOULightBeamVisualSegmentData& SegmentData)
@@ -303,14 +344,22 @@ void AUOULumenStaticRayVisualActor::ApplyPreset(const FUOULightBeamVisualSegment
 	for (int32 Index = 0; Index < LayerComponents.Num(); ++Index)
 	{
 		UStaticMeshComponent* Component = LayerComponents[Index];
-		const bool bActive = Selected.Layers.IsValidIndex(Index);
+		const bool bHasRenderableMaterial =
+			!bUseRuntimeMaterialOverride || RuntimeMaterialOverride != nullptr;
+		const bool bActive = bHasRenderableMaterial && (bUseRuntimeMeshOverride
+			? Index == 0 && RuntimeMeshOverride != nullptr
+			: Selected.Layers.IsValidIndex(Index));
 		Component->SetVisibility(bActive, true);
 		if (!bActive)
 		{
 			continue;
 		}
-		const FLumenStaticRayLayer& Layer = Selected.Layers[Index];
-		UStaticMesh* Mesh = ShapeMeshes.IsValidIndex(Layer.Shape) ? ShapeMeshes[Layer.Shape] : nullptr;
+		const FLumenStaticRayLayer& Layer = Selected.Layers.IsValidIndex(Index)
+			? Selected.Layers[Index]
+			: Selected.Layers[0];
+		UStaticMesh* Mesh = bUseRuntimeMeshOverride
+			? RuntimeMeshOverride.Get()
+			: (ShapeMeshes.IsValidIndex(Layer.Shape) ? ShapeMeshes[Layer.Shape].Get() : nullptr);
 		Component->SetStaticMesh(Mesh);
 
 		// Unity Y-up 좌표를 Unreal Z-up 좌표로 변환합니다.

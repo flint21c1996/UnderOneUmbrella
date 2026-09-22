@@ -21,8 +21,6 @@
 #include "World/Light/UOULumenStaticRayVisualActor.h"
 #include "World/Light/UOULumenZClippedStaticRayVisualActor.h"
 
-DEFINE_LOG_CATEGORY_STATIC(LogUOUStageLightBeamVisual, Log, All);
-
 namespace
 {
 	// 기존 빛 경로의 활성 우산 충돌만 구분합니다.
@@ -59,37 +57,19 @@ namespace
 		}
 		return ReferenceLength;
 	}
-
-	FVector CalculateStageJunctionPlaneNormal(
-		const FVector& IncomingDirection,
-		const FVector& ReflectedDirection)
-	{
-		const FVector SafeIncomingDirection = IncomingDirection.GetSafeNormal();
-		const FVector SafeReflectedDirection = ReflectedDirection.GetSafeNormal();
-		if (SafeIncomingDirection.IsNearlyZero() || SafeReflectedDirection.IsNearlyZero())
-		{
-			return FVector::ZeroVector;
-		}
-
-		FVector PlaneNormal = (SafeReflectedDirection - SafeIncomingDirection).GetSafeNormal();
-		if (PlaneNormal.IsNearlyZero())
-		{
-			return FVector::ZeroVector;
-		}
-
-		// 입사광이 존재하는 쪽이 양수가 되도록 법선 방향을 고정합니다.
-		if (FVector::DotProduct(-SafeIncomingDirection, PlaneNormal) < 0.0f)
-		{
-			PlaneNormal *= -1.0f;
-		}
-		return PlaneNormal;
-	}
 }
 
 UUOUStageLightBeamVisualComponent::UUOUStageLightBeamVisualComponent()
 {
 	PrimaryComponentTick.bCanEverTick = true;
 	PrimaryComponentTick.bStartWithTickEnabled = false;
+	static ConstructorHelpers::FClassFinder<AUOULumenZClippedStaticRayVisualActor> SpotRayClass(
+		TEXT("/Game/UOU/Effects/StylizedLightFX/Blueprints/BP_SpotRay"));
+	if (SpotRayClass.Succeeded())
+	{
+		VFXActorClass = SpotRayClass.Class;
+	}
+
 	// 기존 BP의 표현 기본값만 복사하며 저장된 Stage BP 설정은 덮어쓰지 않습니다.
 	static ConstructorHelpers::FClassFinder<AUOULightSourceActor> SourcePreset(
 		TEXT("/Game/UOU/BluePrint/World/Lights/BP_LS01_DynamicRay_Spot"));
@@ -98,14 +78,11 @@ UUOUStageLightBeamVisualComponent::UUOUStageLightBeamVisualComponent()
 		const AUOULightSourceActor* Defaults = SourcePreset.Class->GetDefaultObject<AUOULightSourceActor>();
 		if (const UUOULightBeamVisualComponent* Visual = Defaults->BeamVisual)
 		{
-			// StageBeam은 V4 머티리얼을 사용하는 전용 렌더러를 고정 기본값으로 사용합니다.
-			VFXActorClass = AUOULumenZClippedStaticRayVisualActor::StaticClass();
 			VisualBrightnessMultiplier = Visual->VisualBrightnessMultiplier;
 			VisualOpacityMultiplier = Visual->VisualOpacityMultiplier;
 			LumenDynamicRayPreset = Visual->LumenDynamicRayPreset;
 			LumenStaticRayPreset = Visual->LumenStaticRayPreset;
 			EndPadding = Visual->EndPadding;
-			ReflectionJunctionClipFeather = Visual->ReflectionJunctionClipFeather;
 		}
 	}
 
@@ -146,13 +123,24 @@ void UUOUStageLightBeamVisualComponent::EndPlay(const EEndPlayReason::Type EndPl
 	SetComponentTickEnabled(false);
 	DestroyVFXActors();
 	DestroyEndRangeDecals();
-	WarnedIncompatibleVFXClasses.Reset();
-	bHasWarnedReflectionVFXLimit = false;
 	BoundSourceSpotLight = nullptr;
 	BoundSourceComponent = nullptr;
 
 	Super::EndPlay(EndPlayReason);
 }
+
+#if WITH_EDITOR
+void UUOUStageLightBeamVisualComponent::PostEditChangeProperty(
+	FPropertyChangedEvent& PropertyChangedEvent)
+{
+	Super::PostEditChangeProperty(PropertyChangedEvent);
+	if (IsValid(DirectVFXActor))
+	{
+		ApplyVFXAssetOverrides(DirectVFXActor);
+		RefreshVisuals();
+	}
+}
+#endif
 
 void UUOUStageLightBeamVisualComponent::RefreshVisuals()
 {
@@ -173,7 +161,6 @@ void UUOUStageLightBeamVisualComponent::RefreshVisuals()
 		LightPaths,
 		BoundSourceSpotLight);
 	UpdateDirectVFX(LightPaths, ReferenceVisualLength);
-	UpdateReflectionVFX(LightPaths, ReferenceVisualLength);
 }
 
 void UUOUStageLightBeamVisualComponent::HandleLightPathsUpdated(
@@ -184,7 +171,6 @@ void UUOUStageLightBeamVisualComponent::HandleLightPathsUpdated(
 		LightPaths,
 		BoundSourceSpotLight);
 	UpdateDirectVFX(LightPaths, ReferenceVisualLength);
-	UpdateReflectionVFX(LightPaths, ReferenceVisualLength);
 }
 
 UUOULightExposureSourceComponent* UUOUStageLightBeamVisualComponent::ResolveSourceComponent() const
@@ -210,30 +196,6 @@ AActor* UUOUStageLightBeamVisualComponent::AcquireDirectVFXActor()
 		DirectVFXActor = SpawnVFXActor();
 	}
 	return DirectVFXActor;
-}
-
-AActor* UUOUStageLightBeamVisualComponent::AcquireReflectionVFXActor(int32 PoolIndex)
-{
-	if (ReflectionVFXPool.IsValidIndex(PoolIndex) && IsValid(ReflectionVFXPool[PoolIndex]))
-	{
-		return ReflectionVFXPool[PoolIndex];
-	}
-
-	AActor* VFXActor = SpawnVFXActor();
-	if (VFXActor == nullptr)
-	{
-		return nullptr;
-	}
-
-	if (ReflectionVFXPool.IsValidIndex(PoolIndex))
-	{
-		ReflectionVFXPool[PoolIndex] = VFXActor;
-	}
-	else
-	{
-		ReflectionVFXPool.Add(VFXActor);
-	}
-	return VFXActor;
 }
 
 AActor* UUOUStageLightBeamVisualComponent::SpawnVFXActor()
@@ -268,6 +230,7 @@ void UUOUStageLightBeamVisualComponent::ConfigureSpawnedVFXActor(AActor* VFXActo
 	// 표현 액터가 게임플레이 광선과 캐릭터 충돌에 참여하지 않도록 합니다.
 	VFXActor->SetActorEnableCollision(false);
 	ConfigureVFXMesh(VFXActor);
+	ApplyVFXAssetOverrides(VFXActor);
 
 	if (!bDisableEmbeddedVFXLights)
 	{
@@ -281,6 +244,25 @@ void UUOUStageLightBeamVisualComponent::ConfigureSpawnedVFXActor(AActor* VFXActo
 		{
 			EmbeddedLight->SetVisibility(false);
 		}
+	}
+}
+
+void UUOUStageLightBeamVisualComponent::ApplyVFXAssetOverrides(AActor* VFXActor) const
+{
+	if (AUOULumenStaticRayVisualActor* StaticRayVisual = Cast<AUOULumenStaticRayVisualActor>(VFXActor))
+	{
+		StaticRayVisual->SetVisualAssetOverrides(
+			bOverrideBeamMesh,
+			BeamMeshOverride,
+			bOverrideBeamMaterial,
+			BeamMaterialOverride);
+	}
+	if (AUOULumenZClippedStaticRayVisualActor* ZClippedVisual =
+		Cast<AUOULumenZClippedStaticRayVisualActor>(VFXActor))
+	{
+		ZClippedVisual->SetSparkleSystemOverride(
+			bOverrideNiagaraSystem,
+			NiagaraSystemOverride);
 	}
 }
 
@@ -299,25 +281,16 @@ void UUOUStageLightBeamVisualComponent::UpdateDirectVFX(
 	}
 
 	const FUOULightPathSegmentData* DirectSegment = nullptr;
-	const FUOULightPathSegmentData* JunctionReflectedSegment = nullptr;
 	for (const FUOULightPathData& PathData : LightPaths)
 	{
 		DirectSegment = PathData.Segments.FindByPredicate(
 			[](const FUOULightPathSegmentData& SegmentData)
 			{
-				return !SegmentData.bReflected &&
-					SegmentData.Length > KINDA_SMALL_NUMBER &&
+				return SegmentData.Length > KINDA_SMALL_NUMBER &&
 					!SegmentData.Direction.IsNearlyZero();
 			});
 		if (DirectSegment != nullptr)
 		{
-			JunctionReflectedSegment = PathData.Segments.FindByPredicate(
-				[](const FUOULightPathSegmentData& SegmentData)
-				{
-					return SegmentData.bReflected &&
-						SegmentData.Length > KINDA_SMALL_NUMBER &&
-						!SegmentData.Direction.IsNearlyZero();
-				});
 			break;
 		}
 	}
@@ -338,140 +311,19 @@ void UUOUStageLightBeamVisualComponent::UpdateDirectVFX(
 		return;
 	}
 
+	ApplyVFXAssetOverrides(VFXActor);
 	ApplySegmentToVFX(
 		VFXActor,
 		BuildVisualSegment(
 			*DirectSegment,
 			0,
-			ReferenceVisualLength,
-			nullptr,
-			JunctionReflectedSegment));
+			ReferenceVisualLength));
 	UpdateEndRangeDecal(
 		DirectEndRangeDecal,
 		DirectEndRangeDecalMaterial,
 		*DirectSegment,
 		ResolveLightColor(),
 		0);
-}
-
-void UUOUStageLightBeamVisualComponent::UpdateReflectionVFX(
-	const TArray<FUOULightPathData>& LightPaths,
-	const float ReferenceVisualLength)
-{
-	if (!bEnableReflectionVFX || VFXActorClass == nullptr || MaxReflectionVFXCount <= 0)
-	{
-		HideUnusedReflectionVFX(0);
-		HideUnusedReflectionEndRangeDecals(0);
-		return;
-	}
-
-	int32 EligibleSegmentCount = 0;
-	for (const FUOULightPathData& PathData : LightPaths)
-	{
-		for (const FUOULightPathSegmentData& SegmentData : PathData.Segments)
-		{
-			if (SegmentData.bReflected &&
-				SegmentData.Length > KINDA_SMALL_NUMBER &&
-				!SegmentData.Direction.IsNearlyZero())
-			{
-				++EligibleSegmentCount;
-			}
-		}
-	}
-
-	if (EligibleSegmentCount > MaxReflectionVFXCount)
-	{
-		if (!bHasWarnedReflectionVFXLimit)
-		{
-			UE_LOG(
-				LogUOUStageLightBeamVisual,
-				Warning,
-				TEXT("%s: 반사 VFX 구간 %d개 중 최대 %d개만 표시합니다."),
-				*GetNameSafe(GetOwner()),
-				EligibleSegmentCount,
-				MaxReflectionVFXCount);
-			bHasWarnedReflectionVFXLimit = true;
-		}
-	}
-	else
-	{
-		bHasWarnedReflectionVFXLimit = false;
-	}
-
-	const FLinearColor LightColor = ResolveLightColor();
-	int32 VFXIndex = 0;
-	for (const FUOULightPathData& PathData : LightPaths)
-	{
-		for (int32 SegmentIndex = 0; SegmentIndex < PathData.Segments.Num(); ++SegmentIndex)
-		{
-			const FUOULightPathSegmentData& SegmentData = PathData.Segments[SegmentIndex];
-			if (VFXIndex >= MaxReflectionVFXCount)
-			{
-				break;
-			}
-			if (!SegmentData.bReflected ||
-				SegmentData.Length <= KINDA_SMALL_NUMBER ||
-				SegmentData.Direction.IsNearlyZero())
-			{
-				continue;
-			}
-
-			AActor* VFXActor = AcquireReflectionVFXActor(VFXIndex);
-			if (VFXActor == nullptr)
-			{
-				continue;
-			}
-			SyncReflectionVisualWidth(VFXActor);
-			const FUOULightPathSegmentData* NextReflectedSegment =
-				PathData.Segments.IsValidIndex(SegmentIndex + 1) &&
-				PathData.Segments[SegmentIndex + 1].bReflected
-					? &PathData.Segments[SegmentIndex + 1]
-					: nullptr;
-			const FUOULightPathSegmentData* PreviousSegment =
-				PathData.Segments.IsValidIndex(SegmentIndex - 1)
-					? &PathData.Segments[SegmentIndex - 1]
-					: nullptr;
-			FUOULightBeamVisualSegmentData VisualData = BuildVisualSegment(
-				SegmentData,
-				VFXIndex + 1,
-				ReferenceVisualLength,
-				PreviousSegment,
-				NextReflectedSegment);
-			VisualData.Color = LightColor;
-			ApplySegmentToVFX(VFXActor, VisualData);
-
-			if (!ReflectionEndRangeDecalPool.IsValidIndex(VFXIndex))
-			{
-				ReflectionEndRangeDecalPool.SetNum(VFXIndex + 1);
-				ReflectionEndRangeDecalMaterials.SetNum(VFXIndex + 1);
-			}
-			UpdateEndRangeDecal(
-				ReflectionEndRangeDecalPool[VFXIndex],
-				ReflectionEndRangeDecalMaterials[VFXIndex],
-				SegmentData,
-				LightColor,
-				VFXIndex + 1);
-			++VFXIndex;
-		}
-
-		if (VFXIndex >= MaxReflectionVFXCount)
-		{
-			break;
-		}
-	}
-
-	HideUnusedReflectionVFX(VFXIndex);
-	HideUnusedReflectionEndRangeDecals(VFXIndex);
-	ActiveReflectionVFXCount = VFXIndex;
-}
-
-void UUOUStageLightBeamVisualComponent::HideUnusedReflectionVFX(int32 FirstUnusedIndex)
-{
-	for (int32 PoolIndex = FMath::Max(0, FirstUnusedIndex); PoolIndex < ReflectionVFXPool.Num(); ++PoolIndex)
-	{
-		SetVFXActive(ReflectionVFXPool[PoolIndex], false);
-	}
-	ActiveReflectionVFXCount = FMath::Clamp(FirstUnusedIndex, 0, ReflectionVFXPool.Num());
 }
 
 void UUOUStageLightBeamVisualComponent::UpdateEndRangeDecal(
@@ -493,8 +345,7 @@ void UUOUStageLightBeamVisualComponent::UpdateEndRangeDecal(
 	FVector DecalLocation = SegmentData.End;
 	FVector SurfaceNormal = SegmentData.EndSurfaceNormal.GetSafeNormal();
 	bool bHasProjectionSurface = !SurfaceNormal.IsNearlyZero() &&
-		SegmentData.HitType != EUOULightPathHitType::None &&
-		SegmentData.HitType != EUOULightPathHitType::ReflectingSurface;
+		SegmentData.HitType != EUOULightPathHitType::None;
 
 	if (!bHasProjectionSurface &&
 		bProjectRangeEndDecalToGround &&
@@ -590,20 +441,6 @@ void UUOUStageLightBeamVisualComponent::UpdateEndRangeDecal(
 	DecalComponent->SetVisibility(true);
 }
 
-void UUOUStageLightBeamVisualComponent::HideUnusedReflectionEndRangeDecals(
-	const int32 FirstUnusedIndex)
-{
-	for (int32 PoolIndex = FMath::Max(0, FirstUnusedIndex);
-		PoolIndex < ReflectionEndRangeDecalPool.Num();
-		++PoolIndex)
-	{
-		if (ReflectionEndRangeDecalPool[PoolIndex] != nullptr)
-		{
-			ReflectionEndRangeDecalPool[PoolIndex]->SetVisibility(false);
-		}
-	}
-}
-
 void UUOUStageLightBeamVisualComponent::DestroyEndRangeDecals()
 {
 	if (DirectEndRangeDecal != nullptr)
@@ -612,16 +449,6 @@ void UUOUStageLightBeamVisualComponent::DestroyEndRangeDecals()
 	}
 	DirectEndRangeDecal = nullptr;
 	DirectEndRangeDecalMaterial = nullptr;
-
-	for (UDecalComponent* DecalComponent : ReflectionEndRangeDecalPool)
-	{
-		if (DecalComponent != nullptr)
-		{
-			DecalComponent->DestroyComponent();
-		}
-	}
-	ReflectionEndRangeDecalPool.Reset();
-	ReflectionEndRangeDecalMaterials.Reset();
 }
 
 void UUOUStageLightBeamVisualComponent::ApplySegmentToVFX(
@@ -672,14 +499,10 @@ void UUOUStageLightBeamVisualComponent::SetVFXActive(AActor* VFXActor, bool bAct
 FUOULightBeamVisualSegmentData UUOUStageLightBeamVisualComponent::BuildVisualSegment(
 	const FUOULightPathSegmentData& SegmentData,
 	int32 VisualSegmentIndex,
-	const float ReferenceVisualLength,
-	const FUOULightPathSegmentData* PreviousSegment,
-	const FUOULightPathSegmentData* NextReflectedSegment)
+	const float ReferenceVisualLength)
 {
 	FUOULightBeamVisualSegmentData VisualData;
 	VisualData.SegmentIndex = VisualSegmentIndex;
-	VisualData.bReflected = SegmentData.bReflected;
-	VisualData.bEndsAtReflection = SegmentData.HitType == EUOULightPathHitType::ReflectingSurface;
 	VisualData.Color = ResolveLightColor();
 	VisualData.Intensity = SegmentData.Intensity;
 	VisualData.VisualBrightnessMultiplier =
@@ -689,52 +512,18 @@ FUOULightBeamVisualSegmentData UUOUStageLightBeamVisualComponent::BuildVisualSeg
 	VisualData.LumenStaticRayPresetOverride = FMath::Clamp(LumenStaticRayPreset, 0, 19);
 	VisualData.Direction = SegmentData.Direction.GetSafeNormal();
 	VisualData.ReferenceLength = FMath::Max(0.0f, ReferenceVisualLength);
-	VisualData.JunctionClipFeather = FMath::Max(0.0f, ReflectionJunctionClipFeather);
 
-	if (SegmentData.bReflected && PreviousSegment != nullptr)
-	{
-		const FVector StartPlaneNormal = CalculateStageJunctionPlaneNormal(
-			SegmentData.IncomingDirection,
-			SegmentData.Direction);
-		if (!StartPlaneNormal.IsNearlyZero())
-		{
-			VisualData.bUseStartJunctionClip = true;
-			VisualData.StartJunctionPlanePosition = PreviousSegment->End;
-			VisualData.StartJunctionPlaneNormal = StartPlaneNormal;
-		}
-	}
-
-	if (VisualData.bEndsAtReflection && NextReflectedSegment != nullptr)
-	{
-		const FVector EndPlaneNormal = CalculateStageJunctionPlaneNormal(
-			SegmentData.Direction,
-			NextReflectedSegment->Direction);
-		if (!EndPlaneNormal.IsNearlyZero())
-		{
-			VisualData.bUseEndJunctionClip = true;
-			VisualData.EndJunctionPlanePosition = SegmentData.End;
-			VisualData.EndJunctionPlaneNormal = EndPlaneNormal;
-		}
-	}
-
-	// 반사 연결부는 실제 충돌점까지 메시를 이어 붙이고 머티리얼 평면으로 뒤쪽만 자릅니다.
-	// 벽·수신체 종단에만 기존 EndPadding을 적용합니다.
-	const FVector VisualStart = VisualData.bUseStartJunctionClip && PreviousSegment != nullptr
-		? PreviousSegment->End
-		: SegmentData.Start;
-	const float StartExtension = FVector::Distance(VisualStart, SegmentData.Start);
-	const float AppliedEndPadding = VisualData.bEndsAtReflection
-		? 0.0f
-		: FMath::Max(0.0f, EndPadding);
+	const FVector VisualStart = SegmentData.Start;
+	const float AppliedEndPadding = FMath::Max(0.0f, EndPadding);
 	const float VisibleEndDistance = FMath::Max(
 		0.0f,
-		SegmentData.Length + StartExtension - AppliedEndPadding);
+		SegmentData.Length - AppliedEndPadding);
 	VisualData.Start = VisualStart;
 	VisualData.Length = VisibleEndDistance;
 	VisualData.End = VisualData.Start + VisualData.Direction * VisualData.Length;
 	VisualData.StartRadius = SegmentData.StartRadius;
 	const float VisibleEndRatio = SegmentData.Length > KINDA_SMALL_NUMBER
-		? FMath::Clamp((VisibleEndDistance - StartExtension) / SegmentData.Length, 0.0f, 1.0f)
+		? FMath::Clamp(VisibleEndDistance / SegmentData.Length, 0.0f, 1.0f)
 		: 0.0f;
 	VisualData.EndRadius = FMath::Lerp(
 		SegmentData.StartRadius,
@@ -751,8 +540,6 @@ FUOULightBeamVisualSegmentData UUOUStageLightBeamVisualComponent::BuildVisualSeg
 		VisualData.EndRadius = PreviousVisual != nullptr ? PreviousVisual->EndRadius
 			: VisualData.StartRadius + VisualData.Length * FMath::Tan(FMath::DegreesToRadians(SegmentData.ConeAngle));
 		VisualData.End = VisualData.Start + VisualData.Direction * VisualData.Length;
-		VisualData.bUseEndJunctionClip = false;
-		VisualData.bEndsAtReflection = false;
 	}
 	else
 	{
@@ -775,27 +562,8 @@ void UUOUStageLightBeamVisualComponent::DestroyVFXActors()
 		DirectVFXActor->Destroy();
 	}
 	DirectVFXActor = nullptr;
-
-	for (AActor* ReflectionVFXActor : ReflectionVFXPool)
-	{
-		if (IsValid(ReflectionVFXActor))
-		{
-			ReflectionVFXActor->Destroy();
-		}
-	}
-	ReflectionVFXPool.Reset();
-	ActiveReflectionVFXCount = 0;
 	AppliedVisualSegments.Reset();
 	UnblockedVisualSegments.Reset();
-}
-
-void UUOUStageLightBeamVisualComponent::SyncReflectionVisualWidth(AActor* VFXActor) const
-{
-	const AUOULumenStaticRayVisualActor* Direct = Cast<AUOULumenStaticRayVisualActor>(DirectVFXActor);
-	if (AUOULumenStaticRayVisualActor* Reflected = Cast<AUOULumenStaticRayVisualActor>(VFXActor))
-	{
-		Reflected->CopyVisualWidthFrom(Direct);
-	}
 }
 
 void UUOUStageLightBeamVisualComponent::ConfigureVFXMesh(AActor* VFXActor) const
@@ -862,10 +630,6 @@ void UUOUStageLightBeamVisualComponent::TickComponent(
 		? FadeTargetAlpha
 		: FMath::Lerp(FadeStartAlpha, FadeTargetAlpha, EasedProgress);
 	ApplyBeamOpacity(DirectVFXActor);
-	for (AActor* ReflectionVFX : ReflectionVFXPool)
-	{
-		ApplyBeamOpacity(ReflectionVFX);
-	}
 	// 전환 중에만 Tick을 사용하고 목표 알파에 도달하면 중지합니다.
 	if (Progress >= 1.0f)
 	{

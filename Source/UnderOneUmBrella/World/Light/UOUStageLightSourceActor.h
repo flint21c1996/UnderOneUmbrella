@@ -11,10 +11,9 @@
 class USceneComponent;
 class USpotLightComponent;
 class UUOULightExposureSourceComponent;
-class UUOULightReflectionSpotLightComponent;
 class UUOUStageLightBeamVisualComponent;
 
-// 기존 빛 판정과 반사 조명을 재사용하고, 빛기둥 표현은 별도로 연결하는 무대 광원 액터입니다.
+// 직접광 판정과 빛기둥 표현을 제공하는 무대 광원 액터입니다.
 UCLASS(Blueprintable, meta = (DisplayName = "UOU Stage Light Source"))
 class UNDERONEUMBRELLA_API AUOUStageLightSourceActor : public AActor, public IUOUPuzzleResultReceiver
 {
@@ -26,7 +25,7 @@ public:
 	virtual void BeginPlay() override;
 	virtual void ApplyPuzzleResult_Implementation(EOUUPuzzleResultAction Action) override;
 
-	// 실제 조명과 게임플레이 빛 판정을 켜거나 끄고, 경로 변경을 통해 반사 조명에 반영합니다.
+	// 실제 조명과 게임플레이 직접광 판정을 함께 켜거나 끕니다.
 	UFUNCTION(BlueprintCallable, Category = "Light|Activation")
 	void SetLightEnabled(bool bNewEnabled);
 
@@ -39,7 +38,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Light|Activation")
 	void ToggleLight();
 
-	// Source SpotLight, 반사 조명, 게임플레이 색상 판정에 같은 색을 사용합니다.
+	// Source SpotLight와 게임플레이 직접광 판정에 같은 색을 사용합니다.
 	UFUNCTION(BlueprintCallable, Category = "Light|Color")
 	void SetSourceLightColor(FLinearColor NewLightColor);
 
@@ -67,9 +66,6 @@ public:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Components")
 	TObjectPtr<UUOULightExposureSourceComponent> ExposureSource;
-
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Components")
-	TObjectPtr<UUOULightReflectionSpotLightComponent> ReflectionSpotLights;
 
 	// 기존 빛 경로를 무대 조명 전용 표현 컴포넌트로 전달합니다.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light|Components")

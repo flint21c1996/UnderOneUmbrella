@@ -29,6 +29,11 @@ public:
 	virtual void ApplyLightBeamSegment_Implementation(const FUOULightBeamVisualSegmentData& SegmentData) override;
 	virtual void SetLightBeamVisualActive_Implementation(bool bActive) override;
 	void CopyVisualWidthFrom(const AUOULumenStaticRayVisualActor* SourceVisual);
+	void SetVisualAssetOverrides(
+		bool bOverrideMesh,
+		UStaticMesh* MeshOverride,
+		bool bOverrideMaterial,
+		UMaterialInterface* MaterialOverride);
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Lumen Static Ray|Preview", meta = (DisplayName = "에디터 프리뷰", ToolTip = "레벨에 직접 배치했을 때 지정한 길이와 굵기로 Static Ray를 미리 표시합니다."))
 	bool bPreviewInEditor = false;
@@ -103,6 +108,9 @@ private:
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UMaterialInstanceDynamic>> DynamicMaterials;
 
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInterface> DynamicMaterialSource = nullptr;
+
 	UPROPERTY()
 	TArray<TObjectPtr<UStaticMesh>> ShapeMeshes;
 
@@ -112,9 +120,18 @@ private:
 	float CurrentIntensity = 1.0f;
 	float CurrentOpacity = 1.0f;
 	bool bHasAppliedVisualWidth = false;
+	bool bUseRuntimeMeshOverride = false;
+	bool bUseRuntimeMaterialOverride = false;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UStaticMesh> RuntimeMeshOverride = nullptr;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInterface> RuntimeMaterialOverride = nullptr;
 
 	void ConfigureComponents();
 	void EnsureDynamicMaterials();
+	UMaterialInterface* ResolveRayMaterial() const;
 	void ApplyPreset(const FUOULightBeamVisualSegmentData& SegmentData);
 	void UpdateCameraFacing();
 	void UpdateMaterialParameters(float TimeSeconds);
