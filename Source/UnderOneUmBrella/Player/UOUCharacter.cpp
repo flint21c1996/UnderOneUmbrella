@@ -234,6 +234,7 @@ void AUOUCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompon
 		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &ACharacter::StopJumping);
 		EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &AUOUCharacter::Move);
 		EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Completed, this, &AUOUCharacter::Move);
+		EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Canceled, this, &AUOUCharacter::Move);
 
 		if (ContextInteractAction != nullptr)
 		{
@@ -295,6 +296,9 @@ void AUOUCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompon
 
 void AUOUCharacter::Move(const FInputActionValue& Value)
 {
+	// 상호작용이 입력을 가져가거나 키가 해제되면 이전 프레임의 이동을 재사용하지 않는다.
+	AcceptedMovementInput = FVector::ZeroVector;
+	AcceptedMovementInputFrame = GFrameCounter;
 	const FVector2D MovementVector = Value.Get<FVector2D>();
 	const float MovementYaw = CameraControllerComponent != nullptr ? CameraControllerComponent->GetMovementYaw() : 0.0f;
 
@@ -358,10 +362,21 @@ void AUOUCharacter::Move(const FInputActionValue& Value)
 		const FRotator YawRotation(0.0f, MovementYaw, 0.0f);
 		const FVector ForwardDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
 		const FVector RightDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y);
+		if (!IsMoveInputIgnored())
+		{
+			AcceptedMovementInput = ForwardDirection * MovementVector.Y + RightDirection * MovementVector.X;
+		}
 
 		AddMovementInput(ForwardDirection, MovementVector.Y);
 		AddMovementInput(RightDirection, MovementVector.X);
 	}
+}
+
+FVector AUOUCharacter::GetAcceptedMovementInput() const
+{
+	// 포커스 상실 또는 입력 이벤트 중단 시 유령 입력으로 계속 걷지 않게 한다.
+	return AcceptedMovementInputFrame == GFrameCounter && !IsMoveInputIgnored()
+		&& !IsPlayerInteractionInputBlocked() ? AcceptedMovementInput : FVector::ZeroVector;
 }
 
 void AUOUCharacter::Look(const FInputActionValue& Value)
