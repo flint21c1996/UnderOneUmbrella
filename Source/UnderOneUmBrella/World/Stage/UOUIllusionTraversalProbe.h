@@ -165,6 +165,7 @@ private:
 	void ResetVirtualVisual();
 	TWeakObjectPtr<USkeletalMeshComponent> VisualMesh;
 	FVector AppliedVisualOffset = FVector::ZeroVector;
+	float VisualDepthOffset = 0.0f;
 	FVector LastProbeDirection = FVector::ZeroVector;
 	friend class FUOUIllusionVirtualReturnTest;
 	void TickVirtualWalking(float DeltaSeconds);
