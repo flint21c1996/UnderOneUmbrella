@@ -57,7 +57,7 @@ public:
 	FName StoredContentSocketName = TEXT("StoredWaterPoint");
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stored Content Visual|Socket", meta = (ToolTip = "소켓 로컬 축에 물 표면 축을 맞추기 위한 회전 보정값입니다. 소켓 월드 회전 뒤에 적용되며 애니메이션 중에도 같은 상대 방향을 유지합니다."))
-	FRotator StoredContentSocketRotationOffset = FRotator::ZeroRotator;
+	FRotator StoredContentSocketRotationOffset = FRotator(0.0f, 0.0f, 90.0f);
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stored Content Visual", meta = (ClampMin = "0.0", ToolTip = "ContentProfile에서 별도 설정하지 않았을 때 사용할 fill ratio 보간 속도입니다. 0이면 즉시 목표값으로 이동합니다."))
 	float FillVisualInterpSpeed = 2.0f;
