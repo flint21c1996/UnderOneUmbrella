@@ -35,9 +35,6 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Cinematic Camera|Projection", meta = (EditCondition = "bOverrideProjectionMode", DisplayName = "Projection Mode", ToolTip = "이 목표 지점에 도착할 때 사용할 투영 방식입니다."))
 	TEnumAsByte<ECameraProjectionMode::Type> ProjectionMode = ECameraProjectionMode::Orthographic;
 
-	UPROPERTY()
-	bool bUseOrthographicProjection = true;
-
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Cinematic Camera|Projection", meta = (DisplayName = "Override Orthographic Width", ToolTip = "켜면 이 목표 지점의 직교 카메라 화면 폭을 별도로 지정합니다."))
 	bool bOverrideOrthographicWidth = false;
 

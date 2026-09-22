@@ -32,9 +32,37 @@ void UUOUCameraControllerComponent::BeginPlay()
 {
 	Super::BeginPlay();
 
-	CacheCameraComponents();
-	ApplyCameraProjection();
+	if (CameraBoom == nullptr || FollowCamera == nullptr)
+	{
+		UE_LOG(
+			LogTemp,
+			Error,
+			TEXT("[CameraController] Camera rig was not assigned for %s."),
+			*GetNameSafe(GetOwner()));
+		SetComponentTickEnabled(false);
+		return;
+	}
+
+	DefaultOrthographicWidth = FMath::Max(1.0f, FollowCamera->OrthoWidth);
 	InitializeCameraRig();
+}
+
+void UUOUCameraControllerComponent::SetCameraRigComponents(
+	USpringArmComponent* InCameraBoom,
+	UCameraComponent* InFollowCamera)
+{
+	CameraBoom = InCameraBoom;
+	FollowCamera = InFollowCamera;
+	if (CameraBoom)
+	{
+		// 스프링암이 카메라 소켓을 갱신하기 전에 회전 중심과 각도를 확정한다.
+		CameraBoom->AddTickPrerequisiteComponent(this);
+	}
+
+	if (FollowCamera != nullptr)
+	{
+		DefaultOrthographicWidth = FMath::Max(1.0f, FollowCamera->OrthoWidth);
+	}
 }
 
 void UUOUCameraControllerComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -226,30 +254,6 @@ void UUOUCameraControllerComponent::ClearAreaCameraOffset()
 	AreaCameraOffset = FVector::ZeroVector;
 }
 
-void UUOUCameraControllerComponent::CacheCameraComponents()
-{
-	if (!bAutoFindCameraComponents)
-	{
-		return;
-	}
-
-	AActor* Owner = GetOwner();
-	if (Owner == nullptr)
-	{
-		return;
-	}
-
-	if (CameraBoom == nullptr)
-	{
-		CameraBoom = Owner->FindComponentByClass<USpringArmComponent>();
-	}
-
-	if (FollowCamera == nullptr)
-	{
-		FollowCamera = Owner->FindComponentByClass<UCameraComponent>();
-	}
-}
-
 void UUOUCameraControllerComponent::InitializeCameraRig()
 {
 	if (CameraBoom == nullptr)
@@ -276,19 +280,6 @@ void UUOUCameraControllerComponent::InitializeCameraRig()
 	TargetCameraOffset = RegularCameraTargetOffset;
 	CameraBoom->TargetArmLength = TargetCameraDistance;
 	CameraBoom->SetWorldRotation(FRotator(CameraPitchAngle, TargetCameraYaw, 0.0f));
-}
-
-void UUOUCameraControllerComponent::ApplyCameraProjection()
-{
-	if (FollowCamera == nullptr)
-	{
-		return;
-	}
-
-	FollowCamera->SetProjectionMode(bUseOrthographicProjection
-		? ECameraProjectionMode::Orthographic
-		: ECameraProjectionMode::Perspective);
-	FollowCamera->SetOrthoWidth(FMath::Max(1.0f, OrthographicWidth));
 }
 
 void UUOUCameraControllerComponent::UpdateSnapCamera(float DeltaSeconds)
@@ -353,12 +344,20 @@ float UUOUCameraControllerComponent::GetEffectiveTargetCameraDistance() const
 
 float UUOUCameraControllerComponent::GetEffectiveTargetOrthoWidth() const
 {
-	return HasTemporaryZoomRequest() ? TemporaryZoomTargetOrthoWidth : OrthographicWidth;
+	return HasTemporaryZoomRequest() ? TemporaryZoomTargetOrthoWidth : DefaultOrthographicWidth;
+}
+
+void UUOUCameraControllerComponent::PreserveCameraAcrossTeleport(const FVector& TeleportDelta)
+{
+	if (!CameraBoom || TeleportDelta.ContainsNaN()) return;
+	// 월드 좌표 오프셋을 사용해 캐릭터가 회전해도 순간이동 보정 방향은 유지한다.
+	TeleportFollowOffset -= TeleportDelta;
+	CameraBoom->TargetOffset -= TeleportDelta;
 }
 
 FVector UUOUCameraControllerComponent::GetEffectiveTargetCameraOffset() const
 {
-	const FVector AreaAdjustedTargetOffset = TargetCameraOffset + AreaCameraOffset;
+	const FVector AreaAdjustedTargetOffset = TargetCameraOffset + AreaCameraOffset + TeleportFollowOffset;
 
 	return HasTemporaryZoomRequest()
 		? AreaAdjustedTargetOffset + TemporaryZoomWorldFocusOffset
