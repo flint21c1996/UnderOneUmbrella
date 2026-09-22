@@ -53,6 +53,11 @@ void UUOUCameraControllerComponent::SetCameraRigComponents(
 {
 	CameraBoom = InCameraBoom;
 	FollowCamera = InFollowCamera;
+	if (CameraBoom)
+	{
+		// 스프링암이 카메라 소켓을 갱신하기 전에 회전 중심과 각도를 확정한다.
+		CameraBoom->AddTickPrerequisiteComponent(this);
+	}
 
 	if (FollowCamera != nullptr)
 	{
@@ -342,9 +347,17 @@ float UUOUCameraControllerComponent::GetEffectiveTargetOrthoWidth() const
 	return HasTemporaryZoomRequest() ? TemporaryZoomTargetOrthoWidth : DefaultOrthographicWidth;
 }
 
+void UUOUCameraControllerComponent::PreserveCameraAcrossTeleport(const FVector& TeleportDelta)
+{
+	if (!CameraBoom || TeleportDelta.ContainsNaN()) return;
+	// 월드 좌표 오프셋을 사용해 캐릭터가 회전해도 순간이동 보정 방향은 유지한다.
+	TeleportFollowOffset -= TeleportDelta;
+	CameraBoom->TargetOffset -= TeleportDelta;
+}
+
 FVector UUOUCameraControllerComponent::GetEffectiveTargetCameraOffset() const
 {
-	const FVector AreaAdjustedTargetOffset = TargetCameraOffset + AreaCameraOffset;
+	const FVector AreaAdjustedTargetOffset = TargetCameraOffset + AreaCameraOffset + TeleportFollowOffset;
 
 	return HasTemporaryZoomRequest()
 		? AreaAdjustedTargetOffset + TemporaryZoomWorldFocusOffset

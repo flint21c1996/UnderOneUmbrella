@@ -48,6 +48,12 @@ public:
 	// 캐릭터가 소유한 실제 플레이 카메라 릭을 명시적으로 연결한다.
 	void SetCameraRigComponents(USpringArmComponent* InCameraBoom, UCameraComponent* InFollowCamera);
 
+	// 순간이동 변위만 상쇄하여 카메라의 월드 위치와 회전 중심을 유지한다.
+	void PreserveCameraAcrossTeleport(const FVector& TeleportDelta);
+
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "Camera|Teleport")
+	FVector TeleportFollowOffset = FVector::ZeroVector;
+
 	// 카메라를 한 단계 왼쪽으로 돌린다.
 	void RotateCameraLeft();
 
