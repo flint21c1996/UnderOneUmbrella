@@ -45,7 +45,8 @@ public class UnderOneUmBrella : ModuleRules
 		{
 			PrivateDependencyModuleNames.AddRange(new string[]
 			{
-				"UnrealEd"
+				"UnrealEd",
+				"AssetRegistry"
 			});
 		}
 	}

@@ -64,24 +64,6 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Cinematic Camera|Preview")
 	TObjectPtr<USplineComponent> MovePreviewPath = nullptr;
 
-	UPROPERTY()
-	TEnumAsByte<ECameraProjectionMode::Type> ProjectionMode = ECameraProjectionMode::Orthographic;
-
-	UPROPERTY()
-	bool bUseOrthographicProjection = true;
-
-	UPROPERTY()
-	float OrthographicWidth = 1800.0f;
-
-	UPROPERTY()
-	float FieldOfView = 60.0f;
-
-	UPROPERTY()
-	float AspectRatio = 16.0f / 9.0f;
-
-	UPROPERTY()
-	bool bConstrainAspectRatio = false;
-
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Cinematic Camera|Projection", meta = (DisplayName = "Interpolate Camera Settings", ToolTip = "켜면 스텝별 직교 폭, FOV, 화면비를 이동 알파에 맞춰 보간합니다. 투영 방식 변경은 구간 시작 시 적용됩니다."))
 	bool bInterpolateCameraSettings = true;
 
@@ -267,6 +249,7 @@ protected:
 	float ResolveMoveAlpha(float RawAlpha) const;
 	float ResolveMoveDuration(const AUOUCinematicCameraTargetActor* TargetMarker) const;
 
+	void CaptureDefaultCameraSettings();
 	FUOUCinematicCameraResolvedSettings BuildDefaultCameraSettings() const;
 	FUOUCinematicCameraResolvedSettings ReadCurrentCameraSettings() const;
 	FUOUCinematicCameraResolvedSettings ResolveCameraSettingsFromTarget(const AUOUCinematicCameraTargetActor* TargetMarker) const;
@@ -307,6 +290,8 @@ private:
 
 	FUOUCinematicCameraResolvedSettings MoveStartCameraSettings;
 	FUOUCinematicCameraResolvedSettings MoveTargetCameraSettings;
+	FUOUCinematicCameraResolvedSettings DefaultCameraSettings;
+	bool bHasCapturedDefaultCameraSettings = false;
 
 	UPROPERTY(Transient)
 	TObjectPtr<AUOUCinematicCameraTargetActor> ActiveMoveTargetMarker = nullptr;
