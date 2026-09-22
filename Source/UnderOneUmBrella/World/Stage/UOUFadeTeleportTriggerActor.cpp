@@ -10,6 +10,13 @@
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
 #include "TimerManager.h"
+#include "EngineUtils.h"
+#include "Player/UOUCameraControllerComponent.h"
+#if WITH_EDITOR
+#include "Editor.h"
+#include "LevelEditorViewport.h"
+#include "ScopedTransaction.h"
+#endif
 
 AUOUFadeTeleportTriggerActor::AUOUFadeTeleportTriggerActor()
 {
@@ -36,6 +43,7 @@ void AUOUFadeTeleportTriggerActor::BeginPlay()
 	{
 		TriggerVolume->OnComponentBeginOverlap.RemoveDynamic(this, &AUOUFadeTeleportTriggerActor::HandleTriggerBeginOverlap);
 		TriggerVolume->OnComponentBeginOverlap.AddDynamic(this, &AUOUFadeTeleportTriggerActor::HandleTriggerBeginOverlap);
+		TriggerVolume->OnComponentEndOverlap.AddDynamic(this, &AUOUFadeTeleportTriggerActor::HandleTriggerEndOverlap);
 	}
 }
 
@@ -62,6 +70,10 @@ void AUOUFadeTeleportTriggerActor::OnConstruction(const FTransform& Transform)
 
 bool AUOUFadeTeleportTriggerActor::TriggerTransition(AActor* InstigatorActor)
 {
+	if (ArrivalBlockedActors.Contains(InstigatorActor) || TeleportingActors.Contains(InstigatorActor))
+	{
+		return false;
+	}
 	if (bIsTransitioning || (bTriggerOnce && bHasTriggered))
 	{
 		return false;
@@ -70,6 +82,15 @@ bool AUOUFadeTeleportTriggerActor::TriggerTransition(AActor* InstigatorActor)
 	if (!ShouldAcceptTriggerActor(InstigatorActor))
 	{
 		return false;
+	}
+	if (bRestrictCameraAngle)
+	{
+		const APlayerController* CameraController = ResolvePlayerController(InstigatorActor);
+		if (!CameraController || !CameraController->PlayerCameraManager
+			|| !IsCameraRotationAllowed(CameraController->PlayerCameraManager->GetCameraRotation()))
+		{
+			return false;
+		}
 	}
 
 	const bool bUsesTargetLocation = TeleportTargetActor != nullptr && InstigatorActor == TeleportTargetActor;
@@ -148,6 +169,110 @@ void AUOUFadeTeleportTriggerActor::HandleTriggerBeginOverlap(
 	const FHitResult& SweepResult)
 {
 	TriggerTransition(OtherActor);
+}
+
+void AUOUFadeTeleportTriggerActor::HandleTriggerEndOverlap(
+	UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
+	UPrimitiveComponent* OtherComp, int32 OtherBodyIndex)
+{
+	ReleaseArrivalLockIfOutside(OtherActor);
+	// 다른 컴포넌트가 아직 안에 있을 수 있으므로 겹침 목록 갱신 후 다시 확인한다.
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().SetTimerForNextTick(FTimerDelegate::CreateWeakLambda(
+			this, [this, Actor = TWeakObjectPtr<AActor>(OtherActor)]()
+			{ ReleaseArrivalLockIfOutside(Actor); }));
+	}
+}
+
+bool AUOUFadeTeleportTriggerActor::TeleportForIllusion(AActor* Actor, const FVector& Location, bool bPreserveCamera)
+{
+	if (!IsValid(Actor) || !Actor->GetWorld() || Location.ContainsNaN()) return false;
+	TArray<TWeakObjectPtr<AUOUFadeTeleportTriggerActor>> Guards;
+	for (TActorIterator<AUOUFadeTeleportTriggerActor> It(Actor->GetWorld()); It; ++It)
+	{
+		It->TeleportingActors.Add(Actor);
+		Guards.Add(*It);
+	}
+	const FVector Before = Actor->GetActorLocation();
+	const bool bMoved = Actor->SetActorLocation(Location, false, nullptr, ETeleportType::TeleportPhysics);
+	// 하강은 트리거 재진입만 막고 카메라의 영구 오프셋을 더하지 않는다. 기존 호출은 동작을 유지한다.
+	if (bMoved && bPreserveCamera)
+	{
+		if (auto* Camera = Actor->FindComponentByClass<UUOUCameraControllerComponent>())
+			Camera->PreserveCameraAcrossTeleport(Actor->GetActorLocation() - Before);
+	}
+	for (const auto& Weak : Guards)
+	{
+		if (auto* Trigger = Weak.Get())
+		{
+			if (bMoved && IsValid(Actor) && Trigger->TriggerVolume->IsOverlappingActor(Actor))
+				Trigger->ArrivalBlockedActors.Add(Actor);
+			Trigger->TeleportingActors.Remove(Actor);
+			Trigger->ReleaseArrivalLockIfOutside(Actor);
+		}
+	}
+	return bMoved;
+}
+
+bool AUOUFadeTeleportTriggerActor::IsCameraRotationAllowed(FRotator CameraRotation) const
+{
+	if (!bRestrictCameraAngle) return true;
+	if (CameraRotation.ContainsNaN() || AllowedCameraRotation.ContainsNaN()) return false;
+	const float Tolerance = FMath::Clamp(CameraAngleTolerance, 0.0f, 180.0f);
+	return FMath::Abs(FMath::FindDeltaAngleDegrees(CameraRotation.Yaw, AllowedCameraRotation.Yaw)) <= Tolerance
+		&& (!bCheckCameraPitch || FMath::Abs(FMath::FindDeltaAngleDegrees(CameraRotation.Pitch, AllowedCameraRotation.Pitch)) <= Tolerance);
+}
+
+void AUOUFadeTeleportTriggerActor::CaptureCurrentCameraAngle()
+{
+	FRotator Rotation;
+	bool bFound = false;
+	if (GetWorld() && GetWorld()->IsGameWorld())
+	{
+		if (const APlayerController* PC = ResolvePlayerController(nullptr))
+		{
+			if (PC->PlayerCameraManager)
+			{
+				Rotation = PC->PlayerCameraManager->GetCameraRotation();
+				bFound = true;
+			}
+		}
+	}
+#if WITH_EDITOR
+	else if (GCurrentLevelEditingViewportClient)
+	{
+		Rotation = GCurrentLevelEditingViewportClient->GetViewRotation();
+		bFound = true;
+	}
+#endif
+	if (!bFound)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("%s: No active camera available to capture."), *GetName());
+		return;
+	}
+#if WITH_EDITOR
+	const FScopedTransaction Transaction(NSLOCTEXT("UOUTeleport", "CaptureAngle", "Capture teleport camera angle"));
+	Modify();
+#endif
+	AllowedCameraRotation = Rotation.GetNormalized();
+	bRestrictCameraAngle = true;
+#if WITH_EDITOR
+	MarkPackageDirty();
+#endif
+}
+
+void AUOUFadeTeleportTriggerActor::ReleaseArrivalLockIfOutside(TWeakObjectPtr<AActor> Actor)
+{
+	if (!TeleportingActors.Contains(Actor)
+		&& (!Actor.IsValid() || !TriggerVolume || !TriggerVolume->IsOverlappingActor(Actor.Get())))
+	{
+		ArrivalBlockedActors.Remove(Actor);
+	}
+	for (auto It = ArrivalBlockedActors.CreateIterator(); It; ++It)
+	{
+		if (!It->IsValid()) It.RemoveCurrent();
+	}
 }
 
 void AUOUFadeTeleportTriggerActor::ApplyTriggerSettings()
@@ -313,12 +438,42 @@ bool AUOUFadeTeleportTriggerActor::TeleportPendingActor()
 		? TargetActor->GetActorRotation()
 		: Destination->GetActorRotation();
 	const FRotator DestinationRotation = bUseDestinationRotation ? TargetRotation : TargetActor->GetActorRotation();
+	// 위치 변경 중 겹침 이벤트가 즉시 발생할 수 있으므로 먼저 모든 이동 영역을 잠근다.
+	// 도착 액터가 별도 위치 마커인 경우에도 그 위치를 포함하는 영역까지 보호한다.
+	TArray<TWeakObjectPtr<AUOUFadeTeleportTriggerActor>> GuardedTriggers;
+	for (TActorIterator<AUOUFadeTeleportTriggerActor> It(GetWorld()); It; ++It)
+	{
+		It->TeleportingActors.Add(TargetActor);
+		GuardedTriggers.Add(*It);
+	}
+	const FVector PreviousLocation = TargetActor->GetActorLocation();
 	const bool bTeleported = TargetActor->SetActorLocationAndRotation(
 		DestinationLocation,
 		DestinationRotation,
 		false,
 		nullptr,
 		ETeleportType::TeleportPhysics);
+	if (bTeleported && bPreserveCameraOnInstantTeleport && !bUseCameraFade
+		&& !bUseDestinationRotation && TeleportTargetActor == nullptr)
+	{
+		if (auto* CameraController = TargetActor->FindComponentByClass<UUOUCameraControllerComponent>())
+		{
+			CameraController->PreserveCameraAcrossTeleport(TargetActor->GetActorLocation() - PreviousLocation);
+		}
+	}
+	for (const auto& WeakTrigger : GuardedTriggers)
+	{
+		if (AUOUFadeTeleportTriggerActor* Trigger = WeakTrigger.Get())
+		{
+			if (bTeleported && IsValid(TargetActor) && Trigger->TriggerVolume
+				&& Trigger->TriggerVolume->IsOverlappingActor(TargetActor))
+			{
+				Trigger->ArrivalBlockedActors.Add(TargetActor);
+			}
+			Trigger->TeleportingActors.Remove(TargetActor);
+			Trigger->ReleaseArrivalLockIfOutside(TargetActor);
+		}
+	}
 
 	if (bTeleported && TeleportTargetActor != nullptr)
 	{

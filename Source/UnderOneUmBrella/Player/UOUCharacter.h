@@ -125,11 +125,24 @@ public:
 	// 기본 이동 세팅과 공용 컴포넌트 구성을 초기화한다.
 	AUOUCharacter();
 
+	// 이동 컴포넌트의 입력 소비와 무관하게 이번 프레임에 허용된 이동 의도를 읽는다.
+	FVector GetAcceptedMovementInput() const;
+
+private:
+	friend class FUOUIllusionInputTest;
+	FVector AcceptedMovementInput = FVector::ZeroVector;
+	uint64 AcceptedMovementInputFrame = MAX_uint64;
+
+public:
+
 	// 캐릭터의 실제 점프가 성립했을 때 점프 기반 월드 기능에 알립니다.
 	UPROPERTY(BlueprintAssignable, Category = "Movement|Jump")
 	FOnUOUCharacterJumpedSignature OnCharacterJumped;
 
 protected:
+	// 기본 서브오브젝트 생성이 끝난 뒤 카메라 컨트롤러에 정확한 릭 참조를 연결한다.
+	virtual void PostInitializeComponents() override;
+
 	// 시작 시점에 입력과 필수 참조가 제대로 연결됐는지 확인한다.
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;

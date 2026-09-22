@@ -24,11 +24,11 @@ AUOUCinematicCameraActor::AUOUCinematicCameraActor()
 	CameraComponent = CreateDefaultSubobject<UCameraComponent>(TEXT("CameraComponent"));
 	CameraComponent->SetupAttachment(RootScene);
 	CameraComponent->SetMobility(EComponentMobility::Movable);
-	CameraComponent->SetProjectionMode(ProjectionMode);
-	CameraComponent->SetOrthoWidth(OrthographicWidth);
-	CameraComponent->SetFieldOfView(FieldOfView);
-	CameraComponent->AspectRatio = AspectRatio;
-	CameraComponent->bConstrainAspectRatio = bConstrainAspectRatio;
+	CameraComponent->SetProjectionMode(ECameraProjectionMode::Orthographic);
+	CameraComponent->SetOrthoWidth(1800.0f);
+	CameraComponent->SetFieldOfView(60.0f);
+	CameraComponent->AspectRatio = 16.0f / 9.0f;
+	CameraComponent->bConstrainAspectRatio = false;
 
 	MovePreviewPath = CreateDefaultSubobject<USplineComponent>(TEXT("MovePreviewPath"));
 	MovePreviewPath->bEditableWhenInherited = false;
@@ -90,6 +90,7 @@ void AUOUCinematicCameraActor::BeginPlay()
 	bIsPaused = false;
 	bIsAtTarget = false;
 	SetActorTransform(StartTransform, false, nullptr, ETeleportType::TeleportPhysics);
+	CaptureDefaultCameraSettings();
 	ApplyDefaultCameraSettings();
 }
 
@@ -309,13 +310,13 @@ void AUOUCinematicCameraActor::AddCameraStepMarker()
 	}
 
 	NewTargetMarker->SetActorLabel(FString::Printf(TEXT("%s_CameraStep_%d"), *GetActorLabel(), CameraStepMarkers.Num()));
-	const FUOUCinematicCameraResolvedSettings DefaultCameraSettings = BuildDefaultCameraSettings();
+	const FUOUCinematicCameraResolvedSettings NewMarkerCameraSettings = BuildDefaultCameraSettings();
 	NewTargetMarker->SyncPreviewCamera(
-		DefaultCameraSettings.ProjectionMode,
-		DefaultCameraSettings.OrthographicWidth,
-		DefaultCameraSettings.FieldOfView,
-		DefaultCameraSettings.AspectRatio,
-		DefaultCameraSettings.bConstrainAspectRatio);
+		NewMarkerCameraSettings.ProjectionMode,
+		NewMarkerCameraSettings.OrthographicWidth,
+		NewMarkerCameraSettings.FieldOfView,
+		NewMarkerCameraSettings.AspectRatio,
+		NewMarkerCameraSettings.bConstrainAspectRatio);
 	NewTargetMarker->SetTargetCameraPreviewVisible(bShowTargetCameraPreviews);
 
 	CameraStepMarkers.Add(NewTargetMarker);
@@ -759,32 +760,27 @@ float AUOUCinematicCameraActor::ResolveMoveDuration(const AUOUCinematicCameraTar
 		: FMath::Max(0.0f, MoveDuration);
 }
 
+void AUOUCinematicCameraActor::CaptureDefaultCameraSettings()
+{
+	DefaultCameraSettings = ReadCurrentCameraSettings();
+	bHasCapturedDefaultCameraSettings = CameraComponent != nullptr;
+}
+
 FUOUCinematicCameraResolvedSettings AUOUCinematicCameraActor::BuildDefaultCameraSettings() const
 {
-	FUOUCinematicCameraResolvedSettings CameraSettings;
-	if (CameraComponent != nullptr)
+	if (bHasCapturedDefaultCameraSettings)
 	{
-		CameraSettings.ProjectionMode = CameraComponent->ProjectionMode.GetValue();
-		CameraSettings.OrthographicWidth = FMath::Max(1.0f, CameraComponent->OrthoWidth);
-		CameraSettings.FieldOfView = FMath::Clamp(CameraComponent->FieldOfView, 5.0f, 170.0f);
-		CameraSettings.AspectRatio = FMath::Max(0.1f, CameraComponent->AspectRatio);
-		CameraSettings.bConstrainAspectRatio = CameraComponent->bConstrainAspectRatio;
-		return CameraSettings;
+		return DefaultCameraSettings;
 	}
 
-	CameraSettings.ProjectionMode = ProjectionMode.GetValue();
-	CameraSettings.OrthographicWidth = FMath::Max(1.0f, OrthographicWidth);
-	CameraSettings.FieldOfView = FMath::Clamp(FieldOfView, 5.0f, 170.0f);
-	CameraSettings.AspectRatio = FMath::Max(0.1f, AspectRatio);
-	CameraSettings.bConstrainAspectRatio = bConstrainAspectRatio;
-	return CameraSettings;
+	return ReadCurrentCameraSettings();
 }
 
 FUOUCinematicCameraResolvedSettings AUOUCinematicCameraActor::ReadCurrentCameraSettings() const
 {
 	if (CameraComponent == nullptr)
 	{
-		return BuildDefaultCameraSettings();
+		return FUOUCinematicCameraResolvedSettings();
 	}
 
 	FUOUCinematicCameraResolvedSettings CameraSettings;
