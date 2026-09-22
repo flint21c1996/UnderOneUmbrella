@@ -219,7 +219,7 @@ USceneComponent* UUOUStoredContentVisualComponent::FindSocketSourceComponent() c
 	return nullptr;
 }
 
-void UUOUStoredContentVisualComponent::UpdateSocketFollowLocation()
+void UUOUStoredContentVisualComponent::UpdateSocketFollowTransform()
 {
 	ResolveSocketSourceComponent();
 	if (SocketSourceComponent == nullptr)
@@ -233,9 +233,16 @@ void UUOUStoredContentVisualComponent::UpdateSocketFollowLocation()
 		SocketWorldTransform = SocketSourceComponent->GetSocketTransform(StoredContentSocketName, RTS_World);
 	}
 
-	FTransform TargetWorldTransform = GetComponentTransform();
-	TargetWorldTransform.SetLocation(SocketWorldTransform.GetLocation());
-	SetWorldTransform(TargetWorldTransform, false, nullptr, ETeleportType::TeleportPhysics);
+	FQuat TargetWorldRotation =
+		SocketWorldTransform.GetRotation().GetNormalized()
+		* StoredContentSocketRotationOffset.Quaternion();
+	TargetWorldRotation.Normalize();
+	SetWorldLocationAndRotation(
+		SocketWorldTransform.GetLocation(),
+		TargetWorldRotation,
+		false,
+		nullptr,
+		ETeleportType::TeleportPhysics);
 }
 
 void UUOUStoredContentVisualComponent::ResolveStoredVisualComponent()
@@ -453,7 +460,7 @@ void UUOUStoredContentVisualComponent::UpdateStoredVisual(float DeltaTime, bool 
 		return;
 	}
 
-	UpdateSocketFollowLocation();
+	UpdateSocketFollowTransform();
 	if (WaterContainerComponent == nullptr || StoredVisualComponent == nullptr)
 	{
 		return;
