@@ -33,6 +33,8 @@ namespace
 bool AUOUIllusionTraversalProbe::ValidateVirtualSupport(UPrimitiveComponent* Surface, const FVector& Direction, float Speed)
 {
 	if (!bVirtualWalking || Surface == VirtualSupport.Get()) return true;
+	// 전방점이 다른 면을 찍어도 실제 발이 바닥에 닿았다면 낙하보다 착지를 먼저 확정한다.
+	if (TryFinishVirtualWalking()) return false;
 	// 옆으로 벗어나 바닥이 보이더라도 그 깊이로 순간이동하지 않는다.
 	// 실제 발 접촉은 앞서 검사했으므로 여기서는 현재 위치와 입력 속도를 보존하고 일반 이동에 넘긴다.
 	ReleaseVirtualWalking(Direction, Speed, TEXT("목적면 이탈: 깊이 재이동 없이 일반 이동 복구"));
@@ -70,7 +72,8 @@ bool AUOUIllusionTraversalProbe::RetreatVirtualWalking(const FVector& Direction,
 	if (BackDirection.IsNearlyZero()) BackDirection = FVector::VectorPlaneProject(EntryLocation - Current, ViewDirection).GetSafeNormal();
 	if (BackDirection.IsNearlyZero()) BackDirection = -FVector::VectorPlaneProject(EntryTravelDirection, ViewDirection).GetSafeNormal();
 	const FVector ScreenDirection = FVector::VectorPlaneProject(Direction, ViewDirection).GetSafeNormal();
-	if (FVector::DotProduct(ScreenDirection, BackDirection) < 0.5) return false;
+	// 대각선·옆걸음 입력을 과거 경로로 강제하지 않는다. 거의 정확한 역방향만 되짚는다.
+	if (FVector::DotProduct(ScreenDirection, BackDirection) < 0.985) return false;
 	float Remaining = Distance * FVector::VectorPlaneProject(Direction, ViewDirection).Size();
 	FVector Next = Current;
 	while (VirtualTrail.Num() > 1)
@@ -130,7 +133,16 @@ bool AUOUIllusionTraversalProbe::TryPendingDescent(ACharacter* Character, APlaye
 	if (!TraceScreenPoint(Controller, Character, Feet, Landing) || Landing.GetComponent() != DescentTarget.Get()
 		|| !Movement->IsWalkable(Landing) || Landing.ImpactPoint.Z >= Feet.Z - 5) return false;
 	const FVector Velocity = Movement->Velocity;
-	const FVector Destination = Landing.ImpactPoint + FVector::UpVector * (HalfHeight + 2);
+	// 상승과 같은 시선 방향 보정으로 바닥 여유를 확보한다. 월드 위로 올려 화면이 들썩이지 않게 한다.
+	const float Clearance = (UCharacterMovementComponent::MIN_FLOOR_DIST + UCharacterMovementComponent::MAX_FLOOR_DIST) * 0.5f;
+	FVector LandingFeet;
+	if (!CalculateScreenPreservingFeet(Feet, Landing.ImpactPoint, Landing.ImpactNormal,
+		View.Rotation.Vector(), Clearance, LandingFeet)) return false;
+	FHitResult SafeGround;
+	if (!GetWorld()->LineTraceSingleByChannel(SafeGround, LandingFeet + FVector::UpVector * 2,
+		LandingFeet - FVector::UpVector * 3, TraceChannel, Query)
+		|| SafeGround.GetComponent() != Landing.GetComponent() || !Movement->IsWalkable(SafeGround)) return false;
+	const FVector Destination = LandingFeet + FVector::UpVector * HalfHeight;
 	DescentCameraDiagnostics = TEXT("하강 전: ") + CaptureDescentCamera(Character);
 	// 수동 순간이동 트리거와 중첩되어 카메라 오프셋이 누적되는 것을 방지한다.
 	// 착지 시선은 출발 높이로 덮어쓴 점이 아니라 현재 실제 발을 사용해 화면 위치를 보존한다.

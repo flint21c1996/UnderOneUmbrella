@@ -9,6 +9,7 @@ class ACharacter;
 class APlayerController;
 class UPrimitiveComponent;
 class USkeletalMeshComponent;
+class UCharacterMovementComponent;
 
 // 현재 프레임의 충돌 표면으로 계산한 착시 이동 진단 결과다.
 UENUM(BlueprintType)
@@ -71,6 +72,9 @@ public:
 	UPROPERTY(EditAnywhere, Category = "착시 진단", meta = (DisplayName = "전방 검사 거리", ClampMin = "1.0", Units = "cm"))
 	float ProbeDistance = 100.0f;
 
+	UPROPERTY(EditAnywhere, Category = "착시 이동", meta = (DisplayName = "진입 경계 여유", ClampMin = "0.0", ClampMax = "10.0", Units = "cm"))
+	float EntryBoundaryTolerance = 3.0f;
+
 	UPROPERTY(EditAnywhere, Category = "착시 진단", meta = (DisplayName = "시선 검사 길이", ClampMin = "100.0", Units = "cm"))
 	float TraceDistance = 100000.0f;
 
@@ -124,12 +128,17 @@ public:
 	static bool CalculateScreenPreservingFeet(const FVector& ExpectedFeet, const FVector& PlanePoint,
 		const FVector& Normal, const FVector& ViewDirection, float FloorClearance, FVector& OutFeet);
 private:
+	friend class FUOUIllusionBoundaryFlowTest;
+	friend class FUOUIllusionWalkingVelocityTest;
+#if WITH_DEV_AUTOMATION_TESTS
+	// 테스트에서는 화면 역투영만 대체하고 실제 월드 충돌과 이동 판정은 그대로 실행한다.
+	TFunction<bool(const FVector&, FHitResult&)> TestScreenTrace;
+#endif
+	static FVector CalculateWalkingVelocity(UCharacterMovementComponent* Movement, const FVector& Input, float DeltaSeconds);
+	bool IsEntryBoundaryReached(float TravelDistance) const;
 	friend class FUOUIllusionCollisionOnlyTest;
 	// 화면 좌표 역투영과 실제 충돌 질의를 분리하여 렌더링 없이도 동일한 질의를 검증한다.
 	bool TraceViewRay(ACharacter* Character, const FVector& Origin, const FVector& Direction, FHitResult& Hit) const;
-	bool FindAscendingSurface(APlayerController* Controller, ACharacter* Character, UPrimitiveComponent* Source,
-		const FVector& Feet, const FVector& Direction, const FVector& ReferenceNormal,
-		float& OutDistance, FVector& OutExpected, FHitResult& OutHit) const;
 	float ActiveProbeDistance = 100.0f;
 	friend class FUOUIllusionGroundReturnTest;
 	bool ValidateVirtualSupport(UPrimitiveComponent* Surface, const FVector& Direction, float Speed);
@@ -139,6 +148,8 @@ private:
 	bool bHasTraversalBoundary = false;
 	FVector BoundarySourcePoint = FVector::ZeroVector;
 	FVector BoundaryTargetPoint = FVector::ZeroVector;
+	FHitResult BoundaryTargetHit;
+	float BoundaryTravelDistance = 0.0f;
 	bool RetreatVirtualWalking(const FVector& Direction, float Distance, float Speed);
 	void ReleaseVirtualWalking(const FVector& Direction, float Speed, const TCHAR* ReasonText);
 	bool TryPendingDescent(ACharacter* Character, APlayerController* Controller, const FVector& Direction);
@@ -155,8 +166,6 @@ private:
 	TWeakObjectPtr<USkeletalMeshComponent> VisualMesh;
 	FVector AppliedVisualOffset = FVector::ZeroVector;
 	FVector LastProbeDirection = FVector::ZeroVector;
-	float VirtualWalkingSpeed = 0;
-	double LastVirtualInputTime = -1;
 	friend class FUOUIllusionVirtualReturnTest;
 	void TickVirtualWalking(float DeltaSeconds);
 	void RestoreVirtualWalking(bool bReturnToEntry);

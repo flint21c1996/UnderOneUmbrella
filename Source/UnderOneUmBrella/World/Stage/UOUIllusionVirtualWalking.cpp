@@ -51,7 +51,6 @@ void AUOUIllusionTraversalProbe::RestoreVirtualWalking(bool bReturnToEntry)
 	VirtualSupport.Reset();
 	EntryPlatform.Reset();
 	bHasVirtualPrediction = false;
-	VirtualWalkingSpeed = 0;
 	VirtualTrail.Reset();
 }
 
@@ -154,28 +153,27 @@ void AUOUIllusionTraversalProbe::TickVirtualWalking(float DeltaSeconds)
 		: (bVirtualWalking ? Character->GetPendingMovementInputVector() : Character->GetLastMovementInputVector());
 	if (bVirtualWalking) Character->ConsumeMovementInputVector();
 	const bool bHasInput = !Input.GetSafeNormal2D().IsNearlyZero();
-	if (!bHasInput && TryFinishVirtualWalking()) return;
 	if (bHasInput) LastProbeDirection = Input.GetSafeNormal2D();
 	if (LastProbeDirection.IsNearlyZero()) LastProbeDirection = Character->GetActorForwardVector().GetSafeNormal2D();
-	const FVector Direction = LastProbeDirection;
-	const float PreviousSpeed = Movement->Velocity.Size2D();
-	const float DesiredSpeed = Movement->MaxWalkSpeed * FMath::Min(1.0, Input.Size2D());
-	const double InputTime = GetWorld()->GetTimeSeconds();
-	if (InputTime - LastVirtualInputTime > 0.15) VirtualWalkingSpeed = 0;
-	if (bHasInput) LastVirtualInputTime = InputTime;
-	const float Speed = bVirtualWalking
-		? FMath::FInterpConstantTo(VirtualWalkingSpeed, DesiredSpeed, DeltaSeconds, Movement->GetMaxAcceleration()) : PreviousSpeed;
-	if (bVirtualWalking && bHasInput) VirtualWalkingSpeed = Speed;
-	if (bVirtualWalking && !bHasInput) Movement->Velocity = FVector::ZeroVector;
-	if (bVirtualWalking && bHasInput && RetreatVirtualWalking(Direction, Speed * FMath::Max(DeltaSeconds, 0.0f), Speed)) return;
+	const FVector TravelVelocity = bVirtualWalking ? CalculateWalkingVelocity(Movement, Input, DeltaSeconds)
+		: FVector(Movement->Velocity.X, Movement->Velocity.Y, 0);
+	const float Speed = TravelVelocity.Size2D();
+	const bool bHasMotion = bVirtualWalking ? Speed > UE_KINDA_SMALL_NUMBER : bHasInput;
+	const FVector Direction = bVirtualWalking && bHasMotion ? TravelVelocity.GetSafeNormal2D() : LastProbeDirection;
+	if (bVirtualWalking && !bHasMotion)
+	{
+		Movement->Velocity = FVector::ZeroVector;
+		if (TryFinishVirtualWalking()) return;
+	}
+	if (bVirtualWalking && bHasMotion && RetreatVirtualWalking(Direction, Speed * FMath::Max(DeltaSeconds, 0.0f), Speed)) return;
 	if (!bVirtualWalking && TryPendingDescent(Character, PC, bHasInput ? Direction : FVector::ZeroVector)) return;
 	const auto Wait = [this](const TCHAR* Message) { TextureTraversalReason = Message; };
-	// 입력이 없어도 마지막 방향으로 표시를 갱신한다. 실제 이동은 아래에서 별도로 차단한다.
+	// 입력이 없어도 마지막 방향으로 표시를 갱신한다. 제동 중에는 남은 속도만큼 이동한다.
 	if (View.ProjectionMode != ECameraProjectionMode::Orthographic || CameraStableTime < 0.15f)
 	{
 		if (bVirtualWalking)
 		{
-			ReleaseVirtualWalking(Direction, bHasInput ? Speed : 0, TEXT("카메라 조건 변경: 일반 이동 복구"));
+			ReleaseVirtualWalking(Direction, Speed, TEXT("카메라 조건 변경: 일반 이동 복구"));
 			return;
 		}
 		Wait(TEXT("카메라 안정 대기: 일반 보행 유지 / 새 착시 진입 보류")); return;
@@ -184,7 +182,7 @@ void AUOUIllusionTraversalProbe::TickVirtualWalking(float DeltaSeconds)
 	UPrimitiveComponent* Source = bVirtualWalking ? VirtualSupport.Get() : Movement->CurrentFloor.HitResult.GetComponent();
 	if (!Source || !AllowedPlatforms.Contains(Source->GetOwner()))
 	{
-		ReleaseVirtualWalking(Direction, bHasInput ? Speed : 0, TEXT("지지면 해제: 일반 이동 복구")); return;
+		ReleaseVirtualWalking(Direction, Speed, TEXT("지지면 해제: 일반 이동 복구")); return;
 	}
 	if (!bVirtualWalking && (!Movement->IsMovingOnGround() || !Movement->CurrentFloor.IsWalkableFloor())) return;
 	const FVector ReferenceNormal = bVirtualWalking ? VirtualNormal : Movement->CurrentFloor.HitResult.ImpactNormal.GetSafeNormal();
@@ -200,34 +198,47 @@ void AUOUIllusionTraversalProbe::TickVirtualWalking(float DeltaSeconds)
 	}
 	// 입력 방향은 기존 캐릭터 계산을 재사용하고 현재 프레임의 충돌 표면으로 검사한다.
 	// 프레임 시간을 잘라내면 낮은 FPS에서 착시 보행만 느려진다. 경과 시간을 그대로 사용한다.
-	const FVector Step = bVirtualWalking && bHasInput ? Direction * Speed * FMath::Max(DeltaSeconds, 0.0f) : FVector::ZeroVector;
+	const FVector Step = bVirtualWalking && bHasMotion ? TravelVelocity * FMath::Max(DeltaSeconds, 0.0f) : FVector::ZeroVector;
 	float SampleDistance = bVirtualWalking ? ActiveProbeDistance : FMath::Max(1.0f, ProbeDistance);
 	FVector Expected = Feet + Step + Direction * SampleDistance;
 	// 진입 이후에는 출발 경계를 유지하여 실제 발과 경계의 관계를 계속 볼 수 있게 한다.
 	if (!bVirtualWalking) UpdateTraversalBoundary(PC, Character, Source, Feet, Expected);
 	FHitResult Hit;
 	// 캐릭터와 우산 등 부착 액터를 제외한 현재 충돌 표면을 직접 사용한다.
-	bool bHitSurface = TraceScreenPoint(PC, Character, Expected, Hit);
-	if (!bVirtualWalking && (!bHitSurface || Hit.GetComponent() == Source || !AllowedPlatforms.Contains(Hit.GetActor())
-		|| !Movement->IsWalkable(Hit)))
+	bool bHitSurface = false;
+	if (!bVirtualWalking)
 	{
-		// 뒤에서 앞으로 접근할 때 끝점 하나가 윗면을 지나쳐도 가까운 윗면 후보는 놓치지 않는다.
-		bHitSurface = FindAscendingSurface(PC, Character, Source, Feet, Direction, ReferenceNormal,
-			SampleDistance, Expected, Hit) || bHitSurface;
+		// 가장 먼저 만난 연결 경계만 후보로 삼는다. 끝점 뒤의 발판으로 건너뛰지 않는다.
+		bHitSurface = bHasTraversalBoundary;
+		Hit = BoundaryTargetHit;
+		SampleDistance = BoundaryTravelDistance;
+		Expected = Feet + Direction * SampleDistance;
+	}
+	else
+	{
+		bHitSurface = TraceScreenPoint(PC, Character, Expected, Hit);
+		if (!bHitSurface || Hit.GetComponent() != VirtualSupport.Get() || !Movement->IsWalkable(Hit))
+		{
+			// 먼 전방점이 발판 밖이어도 다음 실제 발 위치가 지지되면 현재 표면에서 계속 걷는다.
+			Expected = Feet + Step;
+			SampleDistance = 0;
+			bHitSurface = TraceScreenPoint(PC, Character, Expected, Hit);
+		}
 	}
 	if (!bHitSurface || !Hit.GetComponent()
 		|| !AllowedPlatforms.Contains(Hit.GetActor()) || !Movement->IsWalkable(Hit))
 	{
-		if (bHasInput) ReleaseVirtualWalking(Direction, Speed, TEXT("연결 표면 없음: 입력을 유지하고 일반 이동으로 전환"));
+		if (bVirtualWalking && TryFinishVirtualWalking()) return;
+		if (bHasMotion) ReleaseVirtualWalking(Direction, Speed, TEXT("실제 발 지지면 없음: 입력을 유지하고 일반 이동으로 전환"));
 		else Wait(TEXT("정지 위치 유지: 전방 표면 없음"));
 		return;
 	}
-	// 진행 중 다른 면을 새 목적지로 삼아 깊이를 다시 바꾸지 않는다. 키를 놓은 동안에는 표시만 갱신한다.
-	if (bHasInput && !ValidateVirtualSupport(Hit.GetComponent(), Direction, Speed)) return;
+	// 진행 중 다른 면을 새 목적지로 삼아 깊이를 다시 바꾸지 않는다. 완전히 정지했을 때만 표시를 갱신한다.
+	if (bHasMotion && !ValidateVirtualSupport(Hit.GetComponent(), Direction, Speed)) return;
 	// 발밑과 전방의 충돌 노멀을 비교한다. 재질 노멀이나 과거 프레임에 의존하지 않는다.
 	if (FVector::DotProduct(ReferenceNormal, Hit.ImpactNormal.GetSafeNormal()) < NormalAgreement)
 	{
-		if (bHasInput) ReleaseVirtualWalking(Direction, Speed, TEXT("다른 경사: 착시 연결 대신 일반 이동"));
+		if (bHasMotion) ReleaseVirtualWalking(Direction, Speed, TEXT("다른 경사: 착시 연결 대신 일반 이동"));
 		else Wait(TEXT("정지 위치 유지: 전방 경사 불일치"));
 		return;
 	}
@@ -237,14 +248,14 @@ void AUOUIllusionTraversalProbe::TickVirtualWalking(float DeltaSeconds)
 	CandidateNormal = Hit.ImpactNormal.GetSafeNormal();
 	CandidatePlatform = Hit.GetActor();
 	const float Clearance = (UCharacterMovementComponent::MIN_FLOOR_DIST + UCharacterMovementComponent::MAX_FLOOR_DIST) * 0.5f;
-	const FVector RawFeet = CalculateVirtualFeet(ExactSurface, Direction, SampleDistance);
+	const FVector RawFeet = SampleDistance > 0 ? CalculateVirtualFeet(ExactSurface, Direction, SampleDistance) : ExactSurface;
 	if (!CalculateScreenPreservingFeet(Feet + Step, RawFeet, Hit.ImpactNormal, Ray, Clearance, PredictedFeetLocation))
 	{
-		if (bHasInput) ReleaseVirtualWalking(Direction, Speed, TEXT("시선과 표면이 평행: 일반 이동 유지"));
+		if (bHasMotion) ReleaseVirtualWalking(Direction, Speed, TEXT("시선과 표면이 평행: 일반 이동 유지"));
 		return;
 	}
 	bHasVirtualPrediction = true;
-	if (!bHasInput) { Wait(TEXT("정지 중 검사점 표시: 실제 이동 없음")); return; }
+	if (!bHasMotion) { Wait(TEXT("정지 중 검사점 표시: 실제 이동 없음")); return; }
 	if (!bVirtualWalking && (Hit.GetComponent() == Source
 		|| FMath::Abs(CalculateDepthGap(Expected, ExactSurface, Ray)) < MinimumDepthGap))
 	{
@@ -265,6 +276,14 @@ void AUOUIllusionTraversalProbe::TickVirtualWalking(float DeltaSeconds)
 	}
 	if (!bVirtualWalking)
 	{
+		// 다음 프레임에 걸을 구간까지 포함하여 경계에 닿기 직전에만 깊이를 전환한다.
+		// 전방 검사 거리를 늘려도 진입 시점은 앞당겨지지 않는다.
+		const float NextTravel = CalculateWalkingVelocity(Movement, Input, DeltaSeconds).Size2D() * FMath::Max(DeltaSeconds, 0.0f);
+		if (!IsEntryBoundaryReached(NextTravel))
+		{
+			Wait(TEXT("연결 후보 확보: 발이 진입 경계에 접근할 때까지 일반 보행"));
+			return;
+		}
 		// 일반 이동 설정은 진입할 때만 저장한다. 이후에는 중력과 충돌 보정이 가상 발 위치를 덮어쓰지 않는다.
 		VirtualCharacter = Character;
 		EntryLocation = Character->GetActorLocation();
@@ -279,7 +298,6 @@ void AUOUIllusionTraversalProbe::TickVirtualWalking(float DeltaSeconds)
 		Movement->SetComponentTickEnabled(false);
 		Capsule->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		bVirtualWalking = true;
-		VirtualWalkingSpeed = Speed;
 		ActiveProbeDistance = SampleDistance;
 		VirtualTrail.Reset();
 		VirtualTrail.Add(EntryLocation);

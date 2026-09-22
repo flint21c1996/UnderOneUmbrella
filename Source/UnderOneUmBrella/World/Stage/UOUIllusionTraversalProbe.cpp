@@ -48,6 +48,9 @@ void AUOUIllusionTraversalProbe::SetResult(EUOUIllusionProbeStatus NewStatus, co
 bool AUOUIllusionTraversalProbe::TraceScreenPoint(APlayerController* Controller, ACharacter* Character,
 	const FVector& WorldPoint, FHitResult& Hit) const
 {
+#if WITH_DEV_AUTOMATION_TESTS
+	if (TestScreenTrace) return TestScreenTrace(WorldPoint, Hit);
+#endif
 	FVector2D Pixel;
 	if (!Controller->ProjectWorldLocationToScreen(WorldPoint, Pixel)) return false;
 	int32 Width = 0, Height = 0;

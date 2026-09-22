@@ -378,6 +378,12 @@ bool FUOUIllusionVirtualReturnTest::RunTest(const FString& Parameters)
 	Character->GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	Character->SetActorLocation(Last);
 	TestFalse(TEXT("전진을 후퇴로 처리하지 않음"), Probe->RetreatVirtualWalking(FVector::RightVector, 20, 120));
+	// 화면에서 대각선으로 빠지는 입력까지 이전 경로로 강제하지 않는다.
+	Probe->EntryViewRotation = FRotator(-30, 0, 0);
+	TestFalse(TEXT("대각선 입력을 후퇴 경로에 붙잡지 않음"),
+		Probe->RetreatVirtualWalking(FVector(1, -1, 0).GetSafeNormal(), 20, 120));
+	TestTrue(TEXT("후퇴 처리 거부 시 다른 이동 판정에 위치를 그대로 넘김"), Character->GetActorLocation().Equals(Last));
+	Probe->EntryViewRotation = FRotator::ZeroRotator;
 	TestTrue(TEXT("프레임 없이 후퇴 가능"), Probe->RetreatVirtualWalking(-FVector::RightVector, 20, 120));
 	TestTrue(TEXT("걸어온 선분에서 이동"), Character->GetActorLocation().Equals(Last - FVector(0, 20, 0)));
 	Probe->RetreatVirtualWalking(-FVector::RightVector, 100, 120);
